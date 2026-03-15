@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PROPOS — 에어비앤비 완전 관리 시스템</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js" crossorigin="anonymous"></script>
+<script>
+// Suppress Babel in-browser transformer warning (intentional for demo)
+const _warn = console.warn.bind(console);
+console.warn = (...args) => {
+  if (typeof args[0] === 'string' && args[0].includes('in-browser Babel transformer')) return;
+  _warn(...args);
+};
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body,#root{height:100%;overflow:hidden}
+  body{background:#f0f4f8}
+  ::-webkit-scrollbar{width:4px;height:4px}
+  ::-webkit-scrollbar-track{background:#f0f4f8}
+  ::-webkit-scrollbar-thumb{background:#c8d5e0;border-radius:4px}
+  ::-webkit-scrollbar-thumb:hover{background:#a0b4c0}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- [SEC] Toast 알림 UI (alert() 대체) -->
+<style>
+.toast-wrap{position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{padding:12px 18px;border-radius:10px;font-family:"DM Sans",sans-serif;font-size:13px;font-weight:600;border-left:4px solid;max-width:340px;pointer-events:auto;animation:tIn .25s ease;box-shadow:0 4px 24px rgba(0,0,0,.12)}
+.toast-s{background:#fff;border-color:#10b981;color:#065f46}
+.toast-e{background:#fff;border-color:#ef4444;color:#991b1b}
+.toast-i{background:#fff;border-color:#3b82f6;color:#1e40af}
+.toast-w{background:#fff;border-color:#f59e0b;color:#92400e}
+@keyframes tIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+</style>
+<div id="toast-root" class="toast-wrap"></div>
+<script>
+// [SEC] Toast — alert() 대체. textContent 사용으로 XSS 방지.
+window.Toast = {
+  show(msg, type='i', ms=3000) {
+    const el = document.createElement('div');
+    el.className = 'toast toast-' + type;
+    el.textContent = msg; // textContent = XSS-safe
+    document.getElementById('toast-root').appendChild(el);
+    setTimeout(()=>el.remove(), ms);
+  },
+  success: m => Toast.show(m,'s'),
+  error:   m => Toast.show(m,'e'),
+  info:    m => Toast.show(m,'i'),
+  warn:    m => Toast.show(m,'w'),
+};
+</script>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ═══════════════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════════════
+const CITIES = ["서울 강남","서울 마포","서울 용산","서울 성동","서울 종로","부산 해운대","부산 수영","제주 서귀포","제주 한림","인천 연수","대구 중구","경기 성남"];
+const TYPES = ["펜트하우스","아파트","스튜디오","한옥","빌라","원룸","게스트하우스","복층"];
+const GUESTS_LIST = ["김민준","이지수","박도현","Sarah M.","田中花子","Mike J.","Emma C.","최현아","정준호","王芳","Ana S.","David K."];
+const ISSUES_POOL = ["Wi-Fi 불안정","에어컨 오류","도어락 배터리 부족","온수 문제","청소 미완료","소음 민원"];
+const STATUSES = ["입실중","입실중","입실중","예약됨","예약됨","공실","청소중","점검중"];
+const rand = a => a[Math.floor(Math.random()*a.length)];
+const randN = (min,max) => Math.floor(Math.random()*(max-min+1))+min;
+
+const ALL_PROPS = Array.from({length:48},(_,i)=>{
+  const status=rand(STATUSES), hasG=status==="입실중"||status==="예약됨";
+  return {
+    id:i+1, name:`${rand(CITIES)} ${rand(TYPES)} #${String(i+1).padStart(3,"0")}`,
+    city:rand(CITIES), type:rand(TYPES), status,
+    guest:hasG?rand(GUESTS_LIST):null,
+    checkIn:hasG?`03/${String(randN(1,8)).padStart(2,"0")}`:null,
+    checkOut:hasG?`03/${String(randN(9,20)).padStart(2,"0")}`:null,
+    revenue:randN(80,950)*1000, rating:(4.0+Math.random()).toFixed(2),
+    temp:randN(17,25), humidity:randN(40,70),
+    smartLock:Math.random()>0.2, lockOpen:false,
+    acOn:status==="입실중"&&Math.random()>0.3, acTemp:randN(20,26),
+    lightsOn:status==="입실중",
+    issues:Math.random()<0.18?[rand(ISSUES_POOL)]:[],
+    cleaning:status==="청소중"?"진행중":"완료",
+    priority:Math.random()<0.18?"HIGH":Math.random()<0.25?"MED":"OK",
+    unreadMsg:Math.random()<0.25?randN(1,4):0,
+    platform:rand(["Airbnb","Booking","직접예약"]),
+  };
+});
+
+const SC = {"입실중":"#059669","예약됨":"#2563eb","공실":"#94a3b8","청소중":"#d97706","점검중":"#dc2626"};
+const PC = {HIGH:"#dc2626",MED:"#d97706",OK:"#059669"};
+
+const INIT_ALERTS = [
+  {id:1,type:"error",prop:"서울 강남 아파트 #007",msg:"도어락 배터리 위험 (5%)",time:"00:32",ack:false},
+  {id:2,type:"warn",prop:"제주 서귀포 한옥 #019",msg:"Wi-Fi 연결 끊김 감지",time:"01:14",ack:false},
+  {id:3,type:"warn",prop:"부산 해운대 펜트하우스 #003",msg:"에어컨 설정 온도 미달",time:"01:45",ack:false},
+  {id:4,type:"info",prop:"서울 마포 스튜디오 #011",msg:"체크아웃 완료 — 청소 배정 필요",time:"02:00",ack:false},
+  {id:5,type:"error",prop:"인천 연수 아파트 #024",msg:"온수 보일러 응답 없음",time:"02:18",ack:false},
+];
+const AUTO_RULES = [
+  {id:1,name:"체크아웃 후 자동 청소 배정",trigger:"체크아웃 감지",action:"청소팀 알림 발송",active:true},
+  {id:2,name:"도어락 배터리 < 20% 알림",trigger:"배터리 임계값",action:"관리자 긴급 알림",active:true},
+  {id:3,name:"체크인 2시간 전 PIN 발급",trigger:"체크인 D-0 13:00",action:"게스트 자동 문자",active:true},
+  {id:4,name:"미응답 메시지 30분 자동 답변",trigger:"메시지 미읽음 30분",action:"AI 자동 답변",active:false},
+  {id:5,name:"공실 3일 이상 가격 자동 조정",trigger:"공실 72h 초과",action:"플랫폼 가격 10% 인하",active:true},
+  {id:6,name:"비정상 온도 감지 → 에어컨 ON",trigger:"실내 온도 > 30°C",action:"에어컨 자동 ON",active:true},
+];
+const CLEANERS = [
+  {id:1,name:"김청소",status:"가용",assigned:0,rating:4.9,zone:"서울 강남/마포"},
+  {id:2,name:"이정비",status:"작업중",assigned:2,rating:4.7,zone:"서울 용산/종로"},
+  {id:3,name:"박미화",status:"가용",assigned:0,rating:4.8,zone:"부산 전역"},
+  {id:4,name:"최관리",status:"작업중",assigned:1,rating:4.6,zone:"제주 전역"},
+  {id:5,name:"정세탁",status:"오프",assigned:0,rating:4.5,zone:"인천/경기"},
+];
+const SINGLE_PROP = {
+  id:"hj-001", name:"해운대 오션뷰 펜트하우스",
+  address:"부산시 해운대구 해운대해변로 298, 32F",
+};
+const BOOKING = {
+  guest:{name:"田中 花子",avatar:"🇯🇵",phone:"+81-90-1234-5678"},
+  checkIn:"2026-03-07T15:00:00", checkOut:"2026-03-12T11:00:00",
+  guests:2, nights:5, totalPaid:1250000, platform:"Airbnb",
+  reservationId:"HMC-20260307-4821",
+  specialRequests:"조용한 층 선호, 늦은 체크아웃 희망",
+};
+const DEVICES_INIT = [
+  {id:"lock",label:"현관 도어락",icon:"🔒",type:"lock",state:false,category:"security"},
+  {id:"ac_l",label:"거실 에어컨",icon:"❄️",type:"ac",state:true,temp:22,category:"climate"},
+  {id:"ac_b",label:"침실 에어컨",icon:"❄️",type:"ac",state:false,temp:24,category:"climate"},
+  {id:"light",label:"메인 조명",icon:"💡",type:"light",state:true,brightness:80,category:"lighting"},
+  {id:"mood",label:"무드 조명",icon:"🕯️",type:"light",state:false,brightness:40,category:"lighting"},
+  {id:"tv",label:"스마트 TV",icon:"📺",type:"toggle",state:false,category:"entertainment"},
+  {id:"curtain",label:"전동 커튼",icon:"🪟",type:"curtain",state:true,open:60,category:"comfort"},
+];
+const EXPENSES = [
+  {date:"03/07",desc:"객실 요금 (5박)",amount:1150000,type:"income"},
+  {date:"03/07",desc:"청소비",amount:50000,type:"income"},
+  {date:"03/07",desc:"플랫폼 수수료 (Airbnb)",amount:-138000,type:"expense"},
+  {date:"03/07",desc:"청소 직원 비용",amount:-85000,type:"expense"},
+  {date:"03/07",desc:"소모품 보충",amount:-12000,type:"expense"},
+];
+
+// ═══════════════════════════════════════════════════
+// GLOBAL CSS
+// ═══════════════════════════════════════════════════
+const GLOBAL_CSS = `
+/* ── TOKENS ── */
+:root{
+  --bg:#f0f4f8;--surface:#ffffff;--surface2:#f7f9fc;--surface3:#edf2f7;
+  --border:#e2e8f0;--border2:#cbd5e0;
+  --text:#1a202c;--text2:#4a5568;--text3:#718096;--text4:#a0aec0;
+  --blue:#2563eb;--blue-l:#eff6ff;--blue-m:#bfdbfe;
+  --green:#059669;--green-l:#ecfdf5;--green-m:#a7f3d0;
+  --red:#dc2626;--red-l:#fef2f2;--red-m:#fecaca;
+  --yellow:#d97706;--yellow-l:#fffbeb;--yellow-m:#fde68a;
+  --purple:#7c3aed;--purple-l:#f5f3ff;
+  --shadow:0 1px 3px rgba(0,0,0,0.08),0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:0 4px 12px rgba(0,0,0,0.08),0 2px 6px rgba(0,0,0,0.04);
+  --shadow-lg:0 10px 30px rgba(0,0,0,0.12),0 4px 12px rgba(0,0,0,0.06);
+  --radius:10px;--radius-sm:6px;--radius-lg:14px;
+}
+/* ── BASE ── */
+.app{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.6;transform:scale(1.3)}}
+@keyframes slideIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── LANDING ── */
+.landing{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(145deg,#eff6ff 0%,#f0f9ff 40%,#f0fdf4 100%)}
+.land-title{font-family:'Nunito',sans-serif;font-size:56px;font-weight:800;color:var(--blue);letter-spacing:-1px;margin-bottom:6px}
+.land-title span{color:var(--red)}
+.land-sub{font-size:14px;color:var(--text3);margin-bottom:52px;font-weight:500}
+.land-cards{display:flex;gap:20px;margin-bottom:48px}
+.land-card{width:280px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-lg);padding:32px 26px;cursor:pointer;transition:all 0.22s;text-align:center;box-shadow:var(--shadow)}
+.land-card:hover{border-color:var(--blue);transform:translateY(-5px);box-shadow:var(--shadow-lg),0 0 0 3px var(--blue-m)}
+.land-card-icon{font-size:40px;margin-bottom:16px;display:block}
+.land-card-title{font-size:17px;font-weight:700;color:var(--text);margin-bottom:10px}
+.land-card-desc{font-size:12px;color:var(--text3);line-height:1.8}
+.land-badge{font-family:'DM Mono',monospace;font-size:10px;background:var(--blue-l);color:var(--blue);padding:4px 12px;border-radius:20px;margin-top:14px;display:inline-block;font-weight:500}
+
+/* ── TOP NAV ── */
+.topnav{height:54px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:14px;flex-shrink:0;z-index:100;box-shadow:var(--shadow)}
+.back-btn{font-size:12px;color:var(--text3);cursor:pointer;padding:6px 12px;border:1.5px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface);transition:all 0.15s;font-weight:600;font-family:'DM Sans',sans-serif}
+.back-btn:hover{color:var(--blue);border-color:var(--blue);background:var(--blue-l)}
+.nav-title{font-size:14px;color:var(--text);font-weight:700}
+.nav-title span{color:var(--red)}
+.topnav-clock{font-family:'DM Mono',monospace;font-size:15px;color:var(--blue);margin-left:auto;font-weight:500}
+
+/* ── SHARED COMPONENTS ── */
+.sep{width:1px;height:28px;background:var(--border);flex-shrink:0}
+.tog{width:40px;height:22px;border-radius:11px;background:var(--border2);cursor:pointer;position:relative;transition:background 0.2s;border:none;flex-shrink:0}
+.tog.on{background:var(--blue)}
+.tog-d{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:all 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2)}
+.tog.on .tog-d{left:21px}
+.act-btn{padding:7px 14px;border-radius:var(--radius-sm);border:1.5px solid;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;transition:all 0.15s}
+.badge-sm{font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px}
+
+/* ── HA ── */
+.ha-root{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);flex:1;display:flex;flex-direction:column;overflow:hidden}
+.ha-topbar{background:var(--surface);padding:18px 24px 0;flex-shrink:0;border-bottom:1px solid var(--border);box-shadow:var(--shadow)}
+.ha-tabs{display:flex;gap:0;margin-top:18px}
+.ha-tab{padding:10px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text3);border-bottom:2.5px solid transparent;margin-bottom:-1px;transition:all 0.2s;white-space:nowrap}
+.ha-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.ha-tab:hover:not(.active){color:var(--text2)}
+.ha-content{flex:1;overflow:auto;padding:20px 24px}
+.ha-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:14px;box-shadow:var(--shadow)}
+.ha-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1.5px;color:var(--text4);text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.ha-drow{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)}
+.ha-key{font-size:12px;color:var(--text2)}
+.ha-val{font-family:'DM Mono',monospace;font-size:12px;color:var(--text);font-weight:500}
+.dev-row{display:flex;align-items:center;gap:10px;padding:10px 13px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px}
+.adj{width:26px;height:26px;border-radius:var(--radius-sm);background:var(--surface);border:1.5px solid var(--border2);color:var(--text2);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s}
+.adj:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-l)}
+.chat-msgs{flex:1;overflow:auto;display:flex;flex-direction:column;padding:14px;min-height:0;background:var(--surface2)}
+.chat-b{max-width:78%;padding:10px 14px;border-radius:12px;font-size:13px;line-height:1.55;margin-bottom:6px}
+.chat-g{background:var(--surface);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:3px;align-self:flex-start;box-shadow:var(--shadow)}
+.chat-h{background:var(--blue);color:#fff;border-bottom-right-radius:3px;align-self:flex-end}
+.msg-in{flex:1;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:9px 14px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color 0.15s}
+.msg-in:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-m)}
+
+/* ── CC ── */
+.cc-body{display:flex;flex:1;overflow:hidden}
+.cc-sidenav{width:58px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:4px;flex-shrink:0;box-shadow:var(--shadow)}
+.cc-nav-ic{width:42px;height:42px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;transition:all 0.15s;color:var(--text4);border:1.5px solid transparent}
+.cc-nav-ic.active{background:var(--blue-l);border-color:var(--blue-m);color:var(--blue)}
+.cc-nav-ic:hover:not(.active){color:var(--text2);background:var(--surface2)}
+.cc-main{flex:1;display:flex;overflow:hidden}
+.prop-panel{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.toolbar{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface);flex-shrink:0}
+.srch{background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:7px 13px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;width:170px;transition:all 0.15s}
+.srch:focus{border-color:var(--blue);background:var(--surface);box-shadow:0 0 0 3px var(--blue-m)}
+.srch::placeholder{color:var(--text4)}
+.fb{padding:5px 11px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:var(--surface);color:var(--text3);font-family:'DM Sans',sans-serif;transition:all 0.15s}
+.fb.act{color:var(--blue);border-color:var(--blue);background:var(--blue-l)}
+.fb:hover:not(.act){border-color:var(--border2);color:var(--text2)}
+.prop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:10px;padding:14px;overflow:auto;flex:1;align-content:start}
+.prop-list{display:flex;flex-direction:column;gap:4px;padding:12px 14px;overflow:auto;flex:1}
+.lrow{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;transition:all 0.15s;border-left:3px solid transparent}
+.lrow:hover{border-color:var(--border2);border-left-color:var(--blue-m);box-shadow:var(--shadow)}
+.lrow.sel{border-color:var(--blue-m);background:var(--blue-l);border-left-color:var(--blue)}
+.lrow.HIGH{border-left-color:var(--red)}
+.lrow.MED{border-left-color:var(--yellow)}
+.pcard{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px;cursor:pointer;transition:all 0.18s;position:relative;overflow:hidden;border-top:3px solid transparent;box-shadow:var(--shadow)}
+.pcard:hover{border-color:var(--border2);box-shadow:var(--shadow-md);transform:translateY(-2px)}
+.pcard.sel{border-color:var(--blue-m);background:var(--blue-l);border-top-color:var(--blue)}
+.pcard.HIGH{border-top-color:var(--red)}
+.pcard.MED{border-top-color:var(--yellow)}
+.pcard.OK{border-top-color:var(--green)}
+.detail-panel{width:370px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.dtabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;padding:0 12px}
+.dtab{flex:1;padding:10px 6px;font-size:11px;font-weight:700;text-align:center;cursor:pointer;color:var(--text3);border-bottom:2.5px solid transparent;transition:all 0.15s;white-space:nowrap}
+.dtab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.dbody{flex:1;overflow:auto;padding:14px}
+.d-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1.5px;color:var(--text4);text-transform:uppercase;margin-bottom:8px;padding-bottom:7px;border-bottom:1px solid var(--border)}
+.d-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)}
+.d-k{font-size:12px;color:var(--text2)}
+.d-v{font-family:'DM Mono',monospace;font-size:12px;color:var(--text);font-weight:500}
+.alert-panel{width:290px;flex-shrink:0;background:var(--surface2);border-left:1px solid var(--border);display:flex;flex-direction:column}
+.alert-hdr{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;background:var(--surface)}
+.alert-list-wrap{flex:1;overflow:auto;padding:8px}
+.aitem{padding:10px 12px;border-radius:var(--radius-sm);margin-bottom:5px;border-left:3px solid;cursor:pointer;transition:opacity 0.2s;background:var(--surface);box-shadow:var(--shadow)}
+.aitem.acked{opacity:0.35}
+.kpi-top{display:flex;align-items:center;flex:1;overflow:hidden}
+.kpi-t{padding:0 14px;border-right:1px solid var(--border);display:flex;flex-direction:column;justify-content:center;flex-shrink:0}
+.kv{font-family:'DM Mono',monospace;font-size:16px;font-weight:700;line-height:1}
+.kl{font-size:9px;color:var(--text4);letter-spacing:1px;margin-top:3px;text-transform:uppercase}
+.modal-bg{position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px)}
+.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);width:580px;max-height:80vh;overflow:auto;padding:28px;box-shadow:var(--shadow-lg)}
+.cmd-btn{width:100%;padding:13px 16px;border-radius:var(--radius-sm);border:1.5px solid;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;text-align:left;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;transition:all 0.15s}
+.view-wrap{flex:1;overflow:auto;padding:20px}
+.vt{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--blue);margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid var(--border);text-transform:uppercase}
+.rule-row{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px}
+.cleaner-card{padding:12px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px;display:flex;align-items:center;gap:12px}
+.progress-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:10px}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:3px;transition:width 0.6s}
+.rev-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+.rev-bar{flex:1;height:6px;background:var(--border);border-radius:3px}
+.rev-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--blue),var(--green))}
+.no-sel{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text4);font-size:13px;gap:10px}
+`;
+
+// ═══════════════════════════════════════════════════
+// HOME ASSISTANT
+// ═══════════════════════════════════════════════════
+function HomeAssistant({onBack}) {
+  const [tab, setTab] = useState("overview");
+  const [devs, setDevs] = useState(DEVICES_INIT);
+  const [msgs, setMsgs] = useState([
+    {id:1,from:"guest",text:"체크아웃 11시 맞죠?",time:"09:42"},
+    {id:2,from:"host",text:"네, 맞습니다! 짐 보관 필요하시면 말씀해 주세요 😊",time:"09:45"},
+    {id:3,from:"guest",text:"아리가또! 뷰가 너무 아름다워요 🌊",time:"10:12"},
+  ]);
+  const [msgIn, setMsgIn] = useState("");
+  const [now, setNow] = useState(new Date());
+  const chatRef = useRef(null);
+
+  useEffect(()=>{const t=setInterval(()=>setNow(new Date()),1000);return()=>clearInterval(t);},[]);
+  useEffect(()=>{if(chatRef.current)chatRef.current.scrollTop=chatRef.current.scrollHeight;},[msgs]);
+
+  const toggleDev = id => setDevs(d=>d.map(x=>x.id===id?{...x,state:!x.state}:x));
+  const adjDev = (id,key,delta) => setDevs(d=>d.map(x=>x.id===id?{...x,[key]:Math.max(0,Math.min(100,x[key]+delta))}:x));
+
+  const checkOutDate = new Date(BOOKING.checkOut);
+  const checkInDate = new Date(BOOKING.checkIn);
+  const diff = checkOutDate - now;
+  const cd = {
+    days:Math.max(0,Math.floor(diff/86400000)),
+    hours:Math.max(0,Math.floor((diff%86400000)/3600000)),
+    mins:Math.max(0,Math.floor((diff%3600000)/60000)),
+    secs:Math.max(0,Math.floor((diff%60000)/1000)),
+  };
+  const prog = Math.min(100,Math.max(0,((now-checkInDate)/(checkOutDate-checkInDate))*100));
+  const netRev = EXPENSES.reduce((s,e)=>s+e.amount,0);
+
+  const sendMsg = t => {
+    if(!(t||"").trim())return;
+    setMsgs(m=>[...m,{id:Date.now(),from:"host",text:t,time:now.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"})}]);
+    setMsgIn("");
+  };
+
+  const TABS = [["overview","현황"],["checkinout","체크인/아웃"],["devices","스마트홈"],["messages","메시지"],["cleaning","청소·정비"],["revenue","수익"]];
+
+  return (
+    <div className="ha-root">
+      <div className="ha-topbar">
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+          <div>
+            <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+              <span style={{fontSize:"26px"}}>{SINGLE_PROP.emoji||"🏠"}</span>
+              <div>
+                <div style={{fontFamily:"'Nunito',sans-serif",fontSize:"20px",fontWeight:"800",color:"#1a202c"}}>{SINGLE_PROP.name}</div>
+                <div style={{fontSize:"12px",color:"#718096",marginTop:"2px"}}>{SINGLE_PROP.address}</div>
+              </div>
+            </div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:"22px",color:"#2563eb",fontWeight:"500"}}>{now.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</div>
+            <div style={{fontSize:"11px",color:"#a0aec0",marginTop:"2px"}}>{now.toLocaleDateString("ko-KR",{month:"long",day:"numeric",weekday:"short"})}</div>
+          </div>
+        </div>
+        <div className="ha-tabs">{TABS.map(([id,l])=><div key={id} className={`ha-tab${tab===id?" active":""}`} onClick={()=>setTab(id)}>{l}</div>)}</div>
+      </div>
+
+      <div className="ha-content">
+        {tab==="overview" && <>
+          <div className="ha-card">
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{display:"flex",alignItems:"center",gap:"14px"}}>
+                <div style={{width:"48px",height:"48px",borderRadius:"50%",background:"#eff6ff",border:"2px solid #bfdbfe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px"}}>{BOOKING.guest.avatar}</div>
+                <div>
+                  <div style={{fontSize:"16px",fontWeight:"700",color:"#1a202c"}}>{BOOKING.guest.name}</div>
+                  <div style={{fontSize:"12px",color:"#718096",marginTop:"2px"}}>{BOOKING.guests}명 · {BOOKING.nights}박 · {BOOKING.platform}</div>
+                </div>
+              </div>
+              <span style={{background:"#ecfdf5",color:"#059669",border:"1px solid #a7f3d0",fontSize:"11px",padding:"4px 12px",borderRadius:"20px",fontWeight:"700"}}>● 입실 중</span>
+            </div>
+            <div style={{marginTop:"16px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:"11px",color:"#a0aec0",marginBottom:"6px"}}>
+                <span>체크인 03/07 15:00</span>
+                <span style={{color:"#2563eb",fontWeight:"600"}}>{prog.toFixed(0)}% 경과</span>
+                <span>체크아웃 03/12 11:00</span>
+              </div>
+              <div className="progress-bar"><div className="progress-fill" style={{width:`${prog}%`}} /></div>
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"14px"}}>
+            <div className="ha-card">
+              <div className="ha-label">체크아웃까지</div>
+              <div style={{display:"flex",justifyContent:"space-around"}}>
+                {[[cd.days,"일"],[cd.hours,"시"],[cd.mins,"분"],[cd.secs,"초"]].map(([n,u],i)=>(
+                  <div key={u} style={{display:"flex",alignItems:"center"}}>
+                    <div style={{textAlign:"center"}}>
+                      <div style={{fontFamily:"'DM Mono',monospace",fontSize:"26px",fontWeight:"700",color:"#2563eb"}}>{String(n).padStart(2,"0")}</div>
+                      <div style={{fontSize:"10px",color:"#a0aec0",marginTop:"2px"}}>{u}</div>
+                    </div>
+                    {i<3 && <span style={{color:"#e2e8f0",margin:"0 4px",paddingBottom:"12px",fontSize:"20px"}}>:</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="ha-card">
+              <div className="ha-label">특이사항</div>
+              <div style={{fontSize:"13px",color:"#4a5568",lineHeight:"1.7"}}>{BOOKING.specialRequests}</div>
+            </div>
+          </div>
+          <div className="ha-card" style={{marginTop:"14px"}}>
+            <div className="ha-label">스마트홈 빠른 제어</div>
+            <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+              {devs.map(d=>(
+                <div key={d.id} onClick={()=>toggleDev(d.id)} style={{display:"flex",alignItems:"center",gap:"6px",padding:"7px 14px",borderRadius:"20px",background:d.state?"#eff6ff":"#f7f9fc",border:`1.5px solid ${d.state?"#bfdbfe":"#e2e8f0"}`,cursor:"pointer",transition:"all 0.15s"}}>
+                  <span style={{fontSize:"14px"}}>{d.icon}</span>
+                  <span style={{fontSize:"12px",fontWeight:"600",color:d.state?"#2563eb":"#718096"}}>{d.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>}
+
+        {tab==="checkinout" && <>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"14px",marginBottom:"14px"}}>
+            <div className="ha-card" style={{borderTop:"3px solid #059669"}}>
+              <div className="ha-label">체크인</div>
+              <div style={{fontFamily:"'DM Mono',monospace",fontSize:"26px",fontWeight:"700",color:"#059669"}}>03월 07일</div>
+              <div style={{fontSize:"15px",color:"#718096",marginTop:"6px",fontWeight:"600"}}>15:00 PM</div>
+              <span style={{display:"inline-block",marginTop:"12px",background:"#ecfdf5",color:"#059669",border:"1px solid #a7f3d0",fontSize:"11px",padding:"4px 12px",borderRadius:"20px",fontWeight:"700"}}>✓ 완료</span>
+            </div>
+            <div className="ha-card" style={{borderTop:"3px solid #2563eb"}}>
+              <div className="ha-label">체크아웃</div>
+              <div style={{fontFamily:"'DM Mono',monospace",fontSize:"26px",fontWeight:"700",color:"#2563eb"}}>03월 12일</div>
+              <div style={{fontSize:"15px",color:"#718096",marginTop:"6px",fontWeight:"600"}}>11:00 AM</div>
+              <span style={{display:"inline-block",marginTop:"12px",background:"#eff6ff",color:"#2563eb",border:"1px solid #bfdbfe",fontSize:"11px",padding:"4px 12px",borderRadius:"20px",fontWeight:"700"}}>예정</span>
+            </div>
+          </div>
+          <div className="ha-card">
+            <div className="ha-label">도어 액세스</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"14px"}}>
+              <div style={{background:"#f7f9fc",border:"1px solid #e2e8f0",borderRadius:"10px",padding:"16px"}}>
+                <div style={{fontSize:"11px",color:"#718096",marginBottom:"8px",fontWeight:"600"}}>입장 PIN</div>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:"30px",fontWeight:"700",color:"#2563eb",letterSpacing:"8px"}}>4821</div>
+                <div style={{fontSize:"11px",color:"#a0aec0",marginTop:"6px"}}>체크아웃 후 만료</div>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+                <button className="act-btn" style={{color:"#059669",borderColor:"#a7f3d0",background:"#ecfdf5"}}>🔓 도어락 열기</button>
+                <button className="act-btn" style={{color:"#2563eb",borderColor:"#bfdbfe",background:"#eff6ff"}}>↻ PIN 재발급</button>
+                <button className="act-btn" style={{color:"#d97706",borderColor:"#fde68a",background:"#fffbeb"}}>⏱ 레이트 체크아웃</button>
+              </div>
+            </div>
+          </div>
+          <div className="ha-card" style={{marginTop:"14px"}}>
+            <div className="ha-label">체크인 체크리스트</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
+              {[["청소 완료 확인",true],["비품 체크",true],["어메니티 보충",true],["스마트홈 초기화",true],["긴급연락처 카드",true],["냉장고 웰컴드링크",false]].map(([item,done],i)=>(
+                <div key={i} style={{display:"flex",gap:"10px",alignItems:"center",padding:"10px 13px",background:done?"#f0fdf4":"#f7f9fc",borderRadius:"8px",border:`1px solid ${done?"#a7f3d0":"#e2e8f0"}`}}>
+                  <div style={{width:"18px",height:"18px",borderRadius:"5px",background:done?"#059669":"#e2e8f0",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:"11px",flexShrink:0,fontWeight:"700"}}>{done?"✓":""}</div>
+                  <span style={{fontSize:"12px",color:done?"#065f46":"#718096",fontWeight:done?"600":"400"}}>{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>}
+
+        {tab==="devices" && <>
+          {[{cat:"security",label:"🔒 보안"},{cat:"climate",label:"❄️ 냉·난방"},{cat:"lighting",label:"💡 조명"},{cat:"comfort",label:"🛋️ 편의"},{cat:"entertainment",label:"🎬 엔터테인먼트"}].map(({cat,label})=>{
+            const catDevs = devs.filter(d=>d.category===cat);
+            if(!catDevs.length) return null;
+            return <div key={cat} style={{marginBottom:"16px"}}>
+              <div className="ha-label">{label}</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:"10px"}}>
+                {catDevs.map(d=>(
+                  <div key={d.id} style={{background:d.state?"#eff6ff":"#f7f9fc",border:`1.5px solid ${d.state?"#bfdbfe":"#e2e8f0"}`,borderRadius:"10px",padding:"14px",transition:"all 0.2s"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"8px"}}>
+                      <span style={{fontSize:"22px"}}>{d.icon}</span>
+                      <button className={`tog ${d.state?"on":""}`} onClick={()=>toggleDev(d.id)}><div className="tog-d"/></button>
+                    </div>
+                    <div style={{fontSize:"12px",fontWeight:"600",color:"#4a5568"}}>{d.label}</div>
+                    <div style={{fontSize:"11px",color:d.state?"#2563eb":"#a0aec0",marginTop:"3px",fontWeight:"600"}}>{d.state?"ON":"OFF"}</div>
+                    {d.state&&d.type==="ac"&&<div style={{display:"flex",alignItems:"center",gap:"8px",marginTop:"9px"}}>
+                      <button className="adj" onClick={()=>adjDev(d.id,"temp",-1)}>−</button>
+                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:"13px",color:"#2563eb",flex:1,textAlign:"center",fontWeight:"500"}}>{d.temp}°C</span>
+                      <button className="adj" onClick={()=>adjDev(d.id,"temp",1)}>+</button>
+                    </div>}
+                    {d.state&&d.type==="light"&&<div style={{display:"flex",alignItems:"center",gap:"6px",marginTop:"9px"}}>
+                      <button className="adj" onClick={()=>adjDev(d.id,"brightness",-10)}>−</button>
+                      <div style={{flex:1,height:"4px",background:"#e2e8f0",borderRadius:"2px"}}><div style={{height:"100%",background:"#2563eb",width:`${d.brightness}%`,borderRadius:"2px"}} /></div>
+                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#2563eb"}}>{d.brightness}%</span>
+                      <button className="adj" onClick={()=>adjDev(d.id,"brightness",10)}>+</button>
+                    </div>}
+                  </div>
+                ))}
+              </div>
+            </div>;
+          })}
+          <div className="ha-label" style={{marginTop:"8px"}}>씬 프리셋</div>
+          <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+            {["🌅 아침 모드","🌙 취침 모드","🎬 영화 모드","🏠 퇴실 모드"].map(s=><button key={s} className="act-btn" style={{color:"#2563eb",borderColor:"#bfdbfe",background:"#eff6ff"}}>{s}</button>)}
+          </div>
+        </>}
+
+        {tab==="messages" && (
+          <div style={{height:"calc(100vh - 240px)",display:"flex",flexDirection:"column",background:"#fff",border:"1px solid #e2e8f0",borderRadius:"12px",overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.08)"}}>
+            <div style={{padding:"14px 18px",borderBottom:"1px solid #e2e8f0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:"#f7f9fc"}}>
+              <div style={{fontSize:"14px",fontWeight:"700",color:"#1a202c"}}>{BOOKING.guest.avatar} {BOOKING.guest.name} 님</div>
+              <span style={{background:"#ecfdf5",color:"#059669",border:"1px solid #a7f3d0",fontSize:"11px",padding:"3px 10px",borderRadius:"20px",fontWeight:"700"}}>● 온라인</span>
+            </div>
+            <div ref={chatRef} className="chat-msgs">
+              {msgs.map(m=>(
+                <div key={m.id} style={{display:"flex",flexDirection:"column",alignItems:m.from==="host"?"flex-end":"flex-start"}}>
+                  <div className={`chat-b chat-${m.from}`}>{m.text}</div>
+                  <div style={{fontSize:"10px",color:"#a0aec0",marginBottom:"6px",alignSelf:m.from==="host"?"flex-end":"flex-start"}}>{m.time}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{padding:"12px 14px",borderTop:"1px solid #e2e8f0",flexShrink:0,background:"#f7f9fc"}}>
+              <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"10px"}}>
+                {["체크아웃 안내","와이파이 정보","주변 맛집 추천","불편사항 접수"].map(q=>(
+                  <button key={q} onClick={()=>sendMsg(q)} style={{fontSize:"11px",padding:"4px 10px",borderRadius:"20px",background:"#fff",border:"1.5px solid #e2e8f0",color:"#4a5568",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:"500",transition:"all 0.15s"}}>{q}</button>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:"8px"}}>
+                <input className="msg-in" placeholder="메시지 입력..." value={msgIn} onChange={e=>setMsgIn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMsg(msgIn.slice(0,2000))} />
+                <button className="act-btn" style={{color:"#fff",borderColor:"#2563eb",background:"#2563eb",fontWeight:"700"}} onClick={()=>sendMsg(msgIn)}>전송</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab==="cleaning" && <>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px",marginBottom:"14px"}}>
+            {[{l:"청소 상태",v:"완료",c:"#059669",bg:"#ecfdf5"},{l:"다음 청소",v:"03/09",c:"#2563eb",bg:"#eff6ff"},{l:"퇴실 청소",v:"03/12",c:"#d97706",bg:"#fffbeb"}].map(s=>(
+              <div key={s.l} className="ha-card" style={{marginBottom:0,borderTop:`3px solid ${s.c}`}}>
+                <div className="ha-label">{s.l}</div>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:"24px",fontWeight:"700",color:s.c}}>{s.v}</div>
+              </div>
+            ))}
+          </div>
+          <div className="ha-card">
+            <div className="ha-label">청소 인력</div>
+            {CLEANERS.slice(0,3).map(c=>(
+              <div key={c.id} className="cleaner-card">
+                <div style={{width:"10px",height:"10px",borderRadius:"50%",background:c.status==="가용"?"#059669":c.status==="작업중"?"#d97706":"#cbd5e0",flexShrink:0}} />
+                <div style={{flex:1}}>
+                  <div style={{fontSize:"13px",fontWeight:"700",color:"#1a202c"}}>{c.name}</div>
+                  <div style={{fontSize:"11px",color:"#718096",marginTop:"2px"}}>{c.zone} · {c.status}</div>
+                </div>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:"12px",color:"#d97706",fontWeight:"500"}}>★{c.rating}</div>
+                {c.status==="가용" && <button className="act-btn" style={{color:"#059669",borderColor:"#a7f3d0",background:"#ecfdf5",fontSize:"11px",padding:"5px 10px"}}>배정</button>}
+              </div>
+            ))}
+          </div>
+          <div className="ha-card" style={{marginTop:"14px"}}>
+            <div className="ha-label">유지보수 이슈</div>
+            <div style={{padding:"12px 14px",borderRadius:"8px",background:"#fef2f2",border:"1.5px solid #fecaca",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:"13px",color:"#dc2626",fontWeight:"600"}}>⚠ 욕실 샤워헤드 수압 약함 (게스트 보고)</span>
+              <button className="act-btn" style={{color:"#dc2626",borderColor:"#fecaca",background:"#fff",fontSize:"11px",padding:"5px 10px"}}>처리</button>
+            </div>
+          </div>
+        </>}
+
+        {tab==="revenue" && <>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px",marginBottom:"14px"}}>
+            {[{l:"객실 매출",v:"1,250,000원",c:"#059669",bg:"#ecfdf5"},{l:"총 비용",v:"235,000원",c:"#dc2626",bg:"#fef2f2"},{l:"순수익",v:`${(netRev/10000).toFixed(0)}만원`,c:"#2563eb",bg:"#eff6ff"}].map(s=>(
+              <div key={s.l} className="ha-card" style={{marginBottom:0,borderTop:`3px solid ${s.c}`}}>
+                <div className="ha-label">{s.l}</div>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:"20px",fontWeight:"700",color:s.c}}>{s.v}</div>
+              </div>
+            ))}
+          </div>
+          <div className="ha-card">
+            <div className="ha-label">이번 예약 수익 내역</div>
+            {EXPENSES.map((e,i)=>(
+              <div key={i} className="ha-drow">
+                <div style={{display:"flex",gap:"10px",alignItems:"center"}}>
+                  <div style={{width:"8px",height:"8px",borderRadius:"50%",background:e.type==="income"?"#059669":"#dc2626"}} />
+                  <span style={{fontSize:"13px",color:"#1a202c"}}>{e.desc}</span>
+                </div>
+                <span style={{fontFamily:"'DM Mono',monospace",fontSize:"13px",fontWeight:"700",color:e.type==="income"?"#059669":"#dc2626"}}>
+                  {e.type==="income"?"+":""}{e.amount.toLocaleString()}원
+                </span>
+              </div>
+            ))}
+            <div style={{display:"flex",justifyContent:"space-between",padding:"13px 0 4px",borderTop:"2px solid #e2e8f0",marginTop:"4px"}}>
+              <span style={{fontSize:"14px",fontWeight:"700",color:"#1a202c"}}>최종 순수익</span>
+              <span style={{fontFamily:"'DM Mono',monospace",fontSize:"16px",fontWeight:"700",color:"#2563eb"}}>+{netRev.toLocaleString()}원</span>
+            </div>
+          </div>
+        </>}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════
+// COMMAND CENTER
+// ═══════════════════════════════════════════════════
+function CommandCenter({onBack}) {
+  const [view, setView] = useState("command");
+  const [props, setProps] = useState(ALL_PROPS);
+  const [alerts, setAlerts] = useState(INIT_ALERTS);
+  const [selProp, setSelProp] = useState(null);
+  const [filter, setFilter] = useState("전체");
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("priority");
+  const [rules, setRules] = useState(AUTO_RULES);
+  const [now, setNow] = useState(new Date());
+  const [showGcmd, setShowGcmd] = useState(false);
+  const [dTab, setDTab] = useState("info");
+  const [bulkSel, setBulkSel] = useState([]);
+  const [gMode, setGMode] = useState("grid");
+  const [msgIn, setMsgIn] = useState("");
+  const [chat, setChat] = useState([]);
+  const [cleanerAss, setCleanerAss] = useState({});
+  const [globalMsg, setGlobalMsg] = useState("");
+
+  useEffect(()=>{
+    const t=setInterval(()=>setNow(new Date()),1000);
+    const t2=setInterval(()=>{
+      if(Math.random()<0.12){
+        const p=props[randN(0,props.length-1)];
+        setAlerts(a=>[{id:Date.now(),type:rand(["warn","info"]),prop:p.name,msg:rand(["게스트 메시지 수신","청소 완료 보고","체크인 완료","Wi-Fi 신호 약화"]),time:new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}),ack:false},...a.slice(0,28)]);
+      }
+    },9000);
+    return()=>{clearInterval(t);clearInterval(t2);};
+  },[]);
+
+  const toggleDev = (id,dev) => setProps(p=>p.map(x=>x.id!==id?x:{...x,[dev]:!x[dev]}));
+  const adjAc = (id,delta) => setProps(p=>p.map(x=>x.id!==id?x:{...x,acTemp:Math.max(16,Math.min(30,x.acTemp+delta))}));
+  const ackAlert = id => setAlerts(a=>a.map(x=>x.id===id?{...x,ack:true}:x));
+  const ackAll = () => setAlerts(a=>a.map(x=>({...x,ack:true})));
+  const bulkToggle = (dev,val) => setProps(p=>p.map(x=>bulkSel.includes(x.id)?{...x,[dev]:val}:x));
+
+  const filtered = props.filter(p=>{
+    if(filter!=="전체"&&p.status!==filter)return false;
+    if(search&&!p.name.toLowerCase().includes(search.toLowerCase())&&!(p.guest||"").toLowerCase().includes(search.toLowerCase()))return false;
+    return true;
+  }).sort((a,b)=>{
+    if(sortBy==="priority"){const o={HIGH:0,MED:1,OK:2};return o[a.priority]-o[b.priority];}
+    if(sortBy==="revenue")return b.revenue-a.revenue;
+    if(sortBy==="rating")return b.rating-a.rating;
+    return 0;
+  });
+
+  const occupied=props.filter(p=>p.status==="입실중").length;
+  const vacant=props.filter(p=>p.status==="공실").length;
+  const cleaning=props.filter(p=>p.status==="청소중").length;
+  const highAlert=props.filter(p=>p.priority==="HIGH").length;
+  const totalMsg=props.reduce((s,p)=>s+p.unreadMsg,0);
+  const totalRev=props.reduce((s,p)=>s+p.revenue,0);
+  const unack=alerts.filter(a=>!a.ack).length;
+  const occ=Math.round((occupied/props.length)*100);
+
+  const PCard = ({p}) => {
+    const isSel=selProp?.id===p.id, isBulk=bulkSel.includes(p.id);
+    return (
+      <div className={`pcard ${p.priority} ${isSel?"sel":""}`} onClick={()=>{setSelProp(p);setDTab("info");setChat([]);}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:"8px"}}>
+          <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+            <div style={{width:"16px",height:"16px",borderRadius:"4px",border:`1.5px solid ${isBulk?"#2563eb":"#e2e8f0"}`,background:isBulk?"#eff6ff":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"10px",color:"#2563eb",cursor:"pointer",flexShrink:0}}
+              onClick={e=>{e.stopPropagation();setBulkSel(s=>isBulk?s.filter(x=>x!==p.id):[...s,p.id]);}}>{isBulk?"✓":""}</div>
+            <div style={{width:"8px",height:"8px",borderRadius:"50%",background:SC[p.status]}} />
+          </div>
+          <div style={{display:"flex",gap:"4px"}}>
+            {p.unreadMsg>0&&<span style={{fontSize:"10px",background:"#2563eb",color:"#fff",borderRadius:"10px",padding:"1px 6px",fontWeight:"700",fontFamily:"'DM Mono',monospace"}}>{p.unreadMsg}</span>}
+            {p.issues.length>0&&<span style={{fontSize:"12px"}}>⚠️</span>}
+          </div>
+        </div>
+        <div style={{fontSize:"12px",fontWeight:"700",color:"#1a202c",lineHeight:"1.4",marginBottom:"6px"}}>{p.name}</div>
+        <div style={{display:"flex",gap:"5px",alignItems:"center"}}>
+          <span className="badge-sm" style={{background:SC[p.status]+"18",color:SC[p.status],border:`1px solid ${SC[p.status]}44`}}>{p.status}</span>
+          {p.guest&&<span style={{fontSize:"10px",color:"#718096"}}>{p.guest}</span>}
+        </div>
+        <div style={{display:"flex",gap:"10px",marginTop:"9px",paddingTop:"9px",borderTop:"1px solid #f0f4f8"}}>
+          <span style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#718096"}}>🌡{p.temp}°</span>
+          <span style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#718096"}}>★{p.rating}</span>
+          <span style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#059669",fontWeight:"600"}}>{(p.revenue/10000).toFixed(0)}만원</span>
+        </div>
+        {p.issues.length>0&&<div style={{fontSize:"10px",color:"#dc2626",background:"#fef2f2",border:"1px solid #fecaca",padding:"3px 8px",borderRadius:"4px",marginTop:"6px",display:"inline-block",fontWeight:"600"}}>⚠ {p.issues[0]}</div>}
+      </div>
+    );
+  };
+
+  const LRow = ({p}) => {
+    const isSel=selProp?.id===p.id, isBulk=bulkSel.includes(p.id);
+    return (
+      <div className={`lrow ${p.priority} ${isSel?"sel":""}`} onClick={()=>{setSelProp(p);setDTab("info");setChat([]);}}>
+        <div style={{width:"16px",height:"16px",borderRadius:"4px",border:`1.5px solid ${isBulk?"#2563eb":"#e2e8f0"}`,background:isBulk?"#eff6ff":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"10px",color:"#2563eb",cursor:"pointer",flexShrink:0}}
+          onClick={e=>{e.stopPropagation();setBulkSel(s=>isBulk?s.filter(x=>x!==p.id):[...s,p.id]);}}>{isBulk?"✓":""}</div>
+        <div style={{width:"8px",height:"8px",borderRadius:"50%",background:SC[p.status],flexShrink:0}} />
+        <div style={{flex:2,minWidth:0}}>
+          <div style={{fontSize:"12px",fontWeight:"700",color:"#1a202c",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
+          <div style={{fontSize:"10px",color:"#a0aec0"}}>{p.type}</div>
+        </div>
+        <span className="badge-sm" style={{background:SC[p.status]+"18",color:SC[p.status],border:`1px solid ${SC[p.status]}44`,whiteSpace:"nowrap"}}>{p.status}</span>
+        <div style={{flex:1,fontSize:"11px",color:"#4a5568",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.guest||"—"}</div>
+        <div style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#718096",whiteSpace:"nowrap"}}>🌡{p.temp}° ★{p.rating}</div>
+        <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#059669",fontWeight:"600",whiteSpace:"nowrap",minWidth:"45px"}}>{(p.revenue/10000).toFixed(0)}만</div>
+        <div style={{display:"flex",gap:"3px"}}>{p.issues.length>0&&<span style={{fontSize:"11px"}}>⚠️</span>}{p.unreadMsg>0&&<span style={{fontSize:"10px",background:"#2563eb",color:"#fff",borderRadius:"8px",padding:"0 5px",fontWeight:"700",fontFamily:"'DM Mono',monospace"}}>{p.unreadMsg}</span>}</div>
+      </div>
+    );
+  };
+
+  const DetailPanel = () => {
+    if(!selProp) return <div className="no-sel"><div style={{fontSize:"36px",opacity:0.2}}>🏠</div><div>숙소를 선택하세요</div><div style={{fontSize:"11px",color:"#cbd5e0"}}>목록에서 숙소를 클릭하면<br/>상세 정보가 표시됩니다</div></div>;
+    const p = props.find(x=>x.id===selProp.id)||selProp;
+
+    return <>
+      <div style={{padding:"14px 16px",borderBottom:"1px solid #e2e8f0",flexShrink:0,background:"#f7f9fc"}}>
+        <div style={{fontSize:"11px",color:"#a0aec0",fontFamily:"'DM Mono',monospace",marginBottom:"4px"}}>#{String(p.id).padStart(3,"0")} · {p.type}</div>
+        <div style={{fontSize:"14px",fontWeight:"800",color:"#1a202c",lineHeight:"1.3",fontFamily:"'Nunito',sans-serif"}}>{p.name}</div>
+        <div style={{display:"flex",gap:"6px",marginTop:"8px"}}>
+          <span className="badge-sm" style={{background:SC[p.status]+"18",color:SC[p.status],border:`1px solid ${SC[p.status]}44`}}>{p.status}</span>
+          <span className="badge-sm" style={{background:p.priority==="HIGH"?"#fef2f2":p.priority==="MED"?"#fffbeb":"#ecfdf5",color:PC[p.priority],border:`1px solid ${PC[p.priority]}44`}}>{p.priority==="HIGH"?"🚨 긴급":p.priority==="MED"?"⚠ 주의":"✓ 정상"}</span>
+        </div>
+      </div>
+      <div className="dtabs">
+        {[["info","정보"],["iot","IoT"],["msg","메시지"],["clean","청소"]].map(([id,l])=>(
+          <div key={id} className={`dtab ${dTab===id?"active":""}`} onClick={()=>setDTab(id)}>{l}</div>
+        ))}
+      </div>
+
+      {dTab==="info" && <div className="dbody">
+        <div className="d-label">숙소 정보</div>
+        {[["위치",p.city],["유형",p.type],["상태",p.status],["플랫폼",p.platform],["평점",`★ ${p.rating}`],["수익",`${p.revenue.toLocaleString()}원`]].map(([k,v])=>(
+          <div className="d-row" key={k}><span className="d-k">{k}</span><span className="d-v">{v}</span></div>
+        ))}
+        {p.guest && <>
+          <div className="d-label" style={{marginTop:"14px"}}>현재 게스트</div>
+          {[["이름",p.guest],["체크인",p.checkIn],["체크아웃",p.checkOut]].map(([k,v])=>(
+            <div className="d-row" key={k}><span className="d-k">{k}</span><span className="d-v">{v}</span></div>
+          ))}
+        </>}
+        {p.issues.length>0 && <div style={{marginTop:"14px",padding:"12px 14px",borderRadius:"8px",background:"#fef2f2",border:"1.5px solid #fecaca"}}>
+          <div style={{fontSize:"11px",color:"#dc2626",fontWeight:"700",marginBottom:"6px"}}>🚨 이슈</div>
+          {p.issues.map((iss,i)=>(
+            <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:"12px",color:"#dc2626",fontWeight:"600"}}>{iss}</span>
+              <button className="act-btn" style={{color:"#dc2626",borderColor:"#fecaca",background:"#fff",fontSize:"10px",padding:"4px 9px"}}
+                onClick={()=>setProps(prev=>prev.map(x=>x.id===p.id?{...x,issues:[],priority:"OK"}:x))}>처리</button>
+            </div>
+          ))}
+        </div>}
+        <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginTop:"14px"}}>
+          <button className="act-btn" style={{color:"#d97706",borderColor:"#fde68a",background:"#fffbeb",fontSize:"11px"}} onClick={()=>setDTab("clean")}>🧹 청소 배정</button>
+          <button className="act-btn" style={{color:"#2563eb",borderColor:"#bfdbfe",background:"#eff6ff",fontSize:"11px"}} onClick={()=>setDTab("msg")}>💬 메시지</button>
+          <button className="act-btn" style={{color:"#059669",borderColor:"#a7f3d0",background:"#ecfdf5",fontSize:"11px"}} onClick={()=>setDTab("iot")}>🔌 IoT 제어</button>
+        </div>
+      </div>}
+
+      {dTab==="iot" && <div className="dbody">
+        <div className="d-label">IoT 디바이스</div>
+        {[
+          {icon:"🔒",name:"현관 도어락",dev:"lockOpen",val:p.lockOpen?"열림":"잠김",valC:p.lockOpen?"#dc2626":"#059669"},
+          {icon:"❄️",name:"에어컨",dev:"acOn",val:p.acOn?`${p.acTemp}°C`:"OFF",valC:p.acOn?"#2563eb":"#a0aec0"},
+          {icon:"💡",name:"조명",dev:"lightsOn",val:p.lightsOn?"ON":"OFF",valC:p.lightsOn?"#d97706":"#a0aec0"},
+        ].map(d=>(
+          <div key={d.dev} className="dev-row">
+            <span style={{fontSize:"18px",width:"26px",textAlign:"center"}}>{d.icon}</span>
+            <span style={{fontSize:"12px",color:"#4a5568",flex:1,fontWeight:"500"}}>{d.name}</span>
+            {d.dev==="acOn"&&p.acOn&&<button className="adj" onClick={()=>adjAc(p.id,-1)}>−</button>}
+            <span style={{fontFamily:"'DM Mono',monospace",fontSize:"12px",color:d.valC,minWidth:"42px",textAlign:"center",fontWeight:"600"}}>{d.val}</span>
+            {d.dev==="acOn"&&p.acOn&&<button className="adj" onClick={()=>adjAc(p.id,1)}>+</button>}
+            <button className={`tog ${(p[d.dev])?"on":""}`} onClick={()=>toggleDev(p.id,d.dev)}><div className="tog-d"/></button>
+          </div>
+        ))}
+        <div className="d-label" style={{marginTop:"14px"}}>센서 데이터</div>
+        {[["실내 온도",`${p.temp}°C`,"#2563eb"],["습도",`${p.humidity}%`,"#4a5568"],["스마트락",p.smartLock?"연결됨":"미설치","#718096"]].map(([k,v,c])=>(
+          <div className="d-row" key={k}><span className="d-k">{k}</span><span className="d-v" style={{color:c}}>{v}</span></div>
+        ))}
+        <div className="d-label" style={{marginTop:"14px"}}>씬 프리셋</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
+          {[["취침 모드","🌙"],["외출 모드","🚪"],["환영 모드","👋"],["청소 모드","🧹"]].map(([s,ic])=>(
+            <button key={s} className="act-btn" style={{color:"#2563eb",borderColor:"#bfdbfe",background:"#eff6ff",fontSize:"11px"}}>{ic} {s}</button>
+          ))}
+        </div>
+      </div>}
+
+      {dTab==="msg" && <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+        <div style={{flex:1,overflow:"auto",padding:"12px",display:"flex",flexDirection:"column",minHeight:0,background:"#f7f9fc"}}>
+          {p.guest ? <>
+            <div className="chat-b chat-g">안녕하세요! 체크인은 몇 시인가요?</div>
+            <div style={{fontSize:"10px",color:"#a0aec0",marginBottom:"8px"}}>09:21</div>
+            <div className="chat-b chat-h" style={{alignSelf:"flex-end"}}>오후 3시부터 입실 가능합니다 😊</div>
+            <div style={{fontSize:"10px",color:"#a0aec0",textAlign:"right",marginBottom:"8px"}}>09:23</div>
+            {chat.map((m,i)=>(
+              <div key={i} style={{display:"flex",flexDirection:"column",alignItems:m.from==="host"?"flex-end":"flex-start"}}>
+                <div className={`chat-b chat-${m.from}`} style={{alignSelf:m.from==="host"?"flex-end":"flex-start"}}>{m.text}</div>
+                <div style={{fontSize:"10px",color:"#a0aec0",marginBottom:"6px",textAlign:m.from==="host"?"right":"left"}}>{m.time}</div>
+              </div>
+            ))}
+          </> : <div style={{color:"#a0aec0",fontSize:"13px",textAlign:"center",marginTop:"30px"}}>현재 게스트 없음</div>}
+        </div>
+        <div style={{padding:"10px 12px",borderTop:"1px solid #e2e8f0",flexShrink:0,background:"#fff"}}>
+          <div style={{display:"flex",gap:"5px",flexWrap:"wrap",marginBottom:"8px"}}>
+            {["체크아웃 안내","와이파이 정보","불편사항 접수"].map(q=>(
+              <button key={q} onClick={()=>setMsgIn(q)} style={{fontSize:"10px",padding:"4px 9px",borderRadius:"20px",background:"#f7f9fc",border:"1.5px solid #e2e8f0",color:"#4a5568",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:"500"}}>{q}</button>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:"6px"}}>
+            <input className="msg-in" placeholder="메시지..." value={msgIn} onChange={e=>setMsgIn(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&msgIn.trim()){setChat(c=>[...c,{from:"host",text:msgIn,time:now.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"})}]);setMsgIn("");}}} />
+            <button className="act-btn" style={{color:"#fff",borderColor:"#2563eb",background:"#2563eb",fontSize:"11px"}} onClick={()=>{if(msgIn.trim()){setChat(c=>[...c,{from:"host",text:msgIn,time:now.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"})}]);setMsgIn("");;}}}>전송</button>
+          </div>
+        </div>
+      </div>}
+
+      {dTab==="clean" && <div className="dbody">
+        <div className="d-label">청소 배정</div>
+        {CLEANERS.map(c=>(
+          <div className="cleaner-card" key={c.id}>
+            <div style={{width:"10px",height:"10px",borderRadius:"50%",background:c.status==="가용"?"#059669":c.status==="작업중"?"#d97706":"#cbd5e0",flexShrink:0}} />
+            <div style={{flex:1}}>
+              <div style={{fontSize:"13px",fontWeight:"700",color:"#1a202c"}}>{c.name}</div>
+              <div style={{fontSize:"10px",color:"#718096",marginTop:"2px"}}>{c.zone} · <span style={{color:c.status==="가용"?"#059669":c.status==="작업중"?"#d97706":"#94a3b8",fontWeight:"600"}}>{c.status}</span></div>
+            </div>
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#d97706",fontWeight:"600"}}>★{c.rating}</div>
+            {c.status==="가용"&&<button className="act-btn" style={{color:"#059669",borderColor:"#a7f3d0",background:"#ecfdf5",fontSize:"10px",padding:"4px 9px"}}
+              onClick={()=>{setCleanerAss(prev=>({...prev,[p.id]:c.name}));Toast.show(`${c.name}님을 ${p.name.split("#")[0].trim()}에 배정했습니다!`,"s");}}>배정</button>}
+          </div>
+        ))}
+        {cleanerAss[p.id]&&<div style={{marginTop:"10px",padding:"11px 14px",borderRadius:"8px",background:"#ecfdf5",border:"1.5px solid #a7f3d0",fontSize:"13px",color:"#059669",fontWeight:"700"}}>✓ {cleanerAss[p.id]} 배정 완료</div>}
+      </div>}
+    </>;
+  };
+
+  const renderAutomation = () => (
+    <div className="view-wrap">
+      <div className="vt">자동화 규칙 관리</div>
+      {rules.map(r=>(
+        <div className="rule-row" key={r.id}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:"13px",fontWeight:"700",color:"#1a202c"}}>{r.name}</div>
+            <div style={{fontSize:"11px",color:"#718096",marginTop:"3px"}}>트리거: {r.trigger} → {r.action}</div>
+          </div>
+          <button className={`tog ${r.active?"on":""}`} onClick={()=>setRules(rs=>rs.map(x=>x.id===r.id?{...x,active:!x.active}:x))}><div className="tog-d"/></button>
+        </div>
+      ))}
+      <div style={{marginTop:"24px"}}><div className="vt">AI 인사이트</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px"}}>
+          {[{ic:"🤖",t:"AI 권장사항",d:"서울 강남 지역 주말 가격 최적화 시 예상 수익 +18%",c:"#2563eb",bg:"#eff6ff"},{ic:"📊",t:"패턴 감지",d:"화~목 공실률 32% — 주중 할인 자동화 권장",c:"#d97706",bg:"#fffbeb"},{ic:"⚡",t:"효율 알림",d:"자동화로 이번 달 절약 시간: 약 14.3시간",c:"#059669",bg:"#ecfdf5"},{ic:"🔮",t:"예측 모델",d:"제주 다음 주 예약률 82% — 청소 인력 사전 배치 권장",c:"#7c3aed",bg:"#f5f3ff"}].map(x=>(
+            <div key={x.t} style={{padding:"16px",background:x.bg,border:`1.5px solid ${x.c}22`,borderRadius:"10px",borderLeft:`4px solid ${x.c}`}}>
+              <div style={{fontSize:"20px",marginBottom:"8px"}}>{x.ic}</div>
+              <div style={{fontSize:"12px",fontWeight:"700",color:x.c,marginBottom:"5px"}}>{x.t}</div>
+              <div style={{fontSize:"12px",color:"#4a5568",lineHeight:"1.6"}}>{x.d}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderRevenue = () => {
+    const top = [...props].sort((a,b)=>b.revenue-a.revenue).slice(0,10);
+    const maxR = top[0]?.revenue||1;
+    const total = props.reduce((s,p)=>s+p.revenue,0);
+    return (
+      <div className="view-wrap">
+        <div className="vt">수익 분석 센터</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"12px",marginBottom:"20px"}}>
+          {[{l:"총 월 수익",v:`${(total/10000).toFixed(0)}만원`,c:"#059669",bg:"#ecfdf5"},{l:"숙소당 평균",v:`${(total/props.length/10000).toFixed(0)}만원`,c:"#2563eb",bg:"#eff6ff"},{l:"점유율",v:`${occ}%`,c:"#d97706",bg:"#fffbeb"},{l:"수수료 추산",v:`${(total*0.11/10000).toFixed(0)}만원`,c:"#dc2626",bg:"#fef2f2"}].map(k=>(
+            <div key={k.l} style={{background:k.bg,border:`1.5px solid ${k.c}22`,borderRadius:"12px",padding:"16px",borderTop:`4px solid ${k.c}`}}>
+              <div style={{fontFamily:"'DM Mono',monospace",fontSize:"24px",fontWeight:"700",color:k.c}}>{k.v}</div>
+              <div style={{fontSize:"11px",color:"#718096",marginTop:"6px",fontWeight:"600"}}>{k.l}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:"12px",padding:"20px",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+          <div className="d-label">TOP 10 수익 숙소</div>
+          {top.map(p=>(
+            <div key={p.id} className="rev-row">
+              <span style={{fontSize:"11px",color:"#4a5568",fontWeight:"500",width:"80px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name.split(" ").slice(-1)[0]}</span>
+              <div className="rev-bar"><div className="rev-fill" style={{width:`${(p.revenue/maxR)*100}%`}} /></div>
+              <span style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#059669",fontWeight:"600",width:"55px",textAlign:"right"}}>{(p.revenue/10000).toFixed(0)}만</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderCleaning = () => {
+    const needC = props.filter(p=>p.status==="청소중");
+    const issues = props.filter(p=>p.issues.length>0);
+    return (
+      <div className="view-wrap">
+        <div className="vt">청소 · 유지보수 관제</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"18px"}}>
+          <div>
+            <div className="d-label">청소 인력 현황</div>
+            {CLEANERS.map(c=>(
+              <div className="cleaner-card" key={c.id}>
+                <div style={{width:"10px",height:"10px",borderRadius:"50%",background:c.status==="가용"?"#059669":c.status==="작업중"?"#d97706":"#cbd5e0",flexShrink:0}} />
+                <div style={{flex:1}}>
+                  <div style={{fontSize:"13px",fontWeight:"700",color:"#1a202c"}}>{c.name}</div>
+                  <div style={{fontSize:"10px",color:"#718096",marginTop:"2px"}}>{c.zone}</div>
+                  <div style={{fontSize:"11px",color:c.status==="가용"?"#059669":c.status==="작업중"?"#d97706":"#94a3b8",fontWeight:"600"}}>{c.status}</div>
+                </div>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#d97706",fontWeight:"600"}}>★{c.rating}</div>
+              </div>
+            ))}
+          </div>
+          <div>
+            <div className="d-label">청소 대기 ({needC.length})</div>
+            {needC.slice(0,7).map(p=>(
+              <div key={p.id} style={{padding:"10px 13px",background:"#fff",border:"1px solid #e2e8f0",borderRadius:"8px",marginBottom:"5px",display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
+                <div>
+                  <div style={{fontSize:"12px",fontWeight:"700",color:"#1a202c"}}>{p.name.split(" ").slice(-2).join(" ")}</div>
+                  <div style={{fontSize:"10px",color:"#a0aec0",marginTop:"2px"}}>{p.city}</div>
+                </div>
+                <button className="act-btn" style={{color:"#d97706",borderColor:"#fde68a",background:"#fffbeb",fontSize:"11px",padding:"5px 10px"}}>배정</button>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{marginTop:"18px"}}>
+          <div className="d-label">유지보수 이슈 ({issues.length}건)</div>
+          {issues.map(p=>(
+            <div key={p.id} style={{padding:"10px 14px",background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:"8px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:"12px",color:"#dc2626",fontWeight:"700"}}>{p.name}</div>
+                <div style={{fontSize:"11px",color:"#dc2626",opacity:0.7,marginTop:"3px"}}>⚠ {p.issues[0]}</div>
+              </div>
+              <button className="act-btn" style={{color:"#dc2626",borderColor:"#fecaca",background:"#fff",fontSize:"11px",padding:"5px 10px"}}
+                onClick={()=>setProps(prev=>prev.map(x=>x.id===p.id?{...x,issues:[],priority:"OK"}:x))}>처리완료</button>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="app" style={{fontFamily:"'DM Sans',sans-serif"}}>
+      {/* KPI TOPBAR */}
+      <div style={{height:"54px",background:"#fff",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",padding:"0 18px",gap:"12px",flexShrink:0,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+        <div style={{fontFamily:"'Nunito',sans-serif",fontSize:"18px",fontWeight:"800",color:"#2563eb",whiteSpace:"nowrap"}}>PROP<span style={{color:"#dc2626"}}>OS</span></div>
+        <div style={{width:"1px",height:"26px",background:"#e2e8f0",flexShrink:0}} />
+        <div style={{fontFamily:"'DM Mono',monospace",fontSize:"14px",color:"#4a5568",fontWeight:"500"}}>{now.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</div>
+        <div style={{width:"1px",height:"26px",background:"#e2e8f0",flexShrink:0}} />
+        <div className="kpi-top">
+          {[[props.length,"전체","#4a5568"],[occupied,"입실중","#059669"],[props.filter(p=>p.status==="예약됨").length,"예약됨","#2563eb"],[vacant,"공실","#94a3b8"],[cleaning,"청소중","#d97706"],[highAlert,"긴급","#dc2626"],[totalMsg,"미읽","#7c3aed"],[`${(totalRev/10000).toFixed(0)}만`,"수익","#059669"],[`${occ}%`,"점유율","#2563eb"]].map(([v,l,c])=>(
+            <div key={l} className="kpi-t"><div className="kv" style={{color:c}}>{v}</div><div className="kl">{l}</div></div>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:"8px",alignItems:"center",marginLeft:"auto"}}>
+          {bulkSel.length>0&&<div style={{fontSize:"11px",color:"#2563eb",fontFamily:"'DM Mono',monospace",border:"1px solid #bfdbfe",padding:"4px 10px",borderRadius:"20px",background:"#eff6ff",fontWeight:"600"}}>
+            {bulkSel.length}개 선택 <span style={{cursor:"pointer",color:"#dc2626",marginLeft:"4px"}} onClick={()=>setBulkSel([])}>×</span>
+          </div>}
+          <div style={{position:"relative",cursor:"pointer",padding:"6px 12px",borderRadius:"20px",background:unack>0?"#fef2f2":"#f7f9fc",border:`1.5px solid ${unack>0?"#fecaca":"#e2e8f0"}`,display:"flex",alignItems:"center",gap:"6px",fontSize:"12px",color:unack>0?"#dc2626":"#718096",fontWeight:"700"}} onClick={()=>setView(v=>v==="alerts"?"command":"alerts")}>
+            🔔 {unack}
+            {unack>0&&<div style={{position:"absolute",top:"-2px",right:"-2px",width:"8px",height:"8px",background:"#dc2626",borderRadius:"50%",animation:"pulse 1.5s infinite"}} />}
+          </div>
+          <button onClick={()=>setShowGcmd(true)} style={{padding:"7px 14px",borderRadius:"20px",background:"#2563eb",border:"none",color:"#fff",fontSize:"12px",fontWeight:"700",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>⚡ 전체 제어</button>
+          <button onClick={onBack} className="back-btn">← 홈</button>
+        </div>
+      </div>
+
+      {/* BODY */}
+      <div className="cc-body">
+        <div className="cc-sidenav">
+          {[["command","◈","지휘"],["automation","⚙","자동화"],["revenue","💰","수익"],["cleaning","🧹","청소"]].map(([id,ic,tip])=>(
+            <div key={id} className={`cc-nav-ic ${view===id?"active":""}`} onClick={()=>setView(id)} title={tip}>{ic}</div>
+          ))}
+        </div>
+
+        <div className="cc-main">
+          {view==="command" && <>
+            {/* PROP PANEL */}
+            <div className="prop-panel">
+              <div className="toolbar">
+                <input className="srch" placeholder="숙소 검색..." value={search} onChange={e=>setSearch(e.target.value)} />
+                <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
+                  {["전체","입실중","예약됨","공실","청소중","점검중"].map(f=>(
+                    <button key={f} className={`fb ${filter===f?"act":""}`} onClick={()=>setFilter(f)}>{f}</button>
+                  ))}
+                </div>
+                <select style={{background:"#f7f9fc",border:"1.5px solid #e2e8f0",color:"#4a5568",padding:"6px 10px",borderRadius:"20px",fontSize:"12px",fontFamily:"'DM Sans',sans-serif",outline:"none",cursor:"pointer",fontWeight:"600"}} value={sortBy} onChange={e=>setSortBy(e.target.value)}>
+                  <option value="priority">우선순위</option>
+                  <option value="revenue">수익순</option>
+                  <option value="rating">평점순</option>
+                </select>
+                <div style={{flex:1}} />
+                <span style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#a0aec0",fontWeight:"500"}}>{filtered.length}개</span>
+                <div style={{display:"flex",border:"1.5px solid #e2e8f0",borderRadius:"20px",overflow:"hidden"}}>
+                  {[["grid","▦"],["list","≡"]].map(([m,ic])=>(
+                    <button key={m} onClick={()=>setGMode(m)} style={{padding:"5px 10px",fontSize:"14px",cursor:"pointer",border:"none",background:gMode===m?"#2563eb":"transparent",color:gMode===m?"#fff":"#a0aec0",transition:"all 0.15s"}}>{ic}</button>
+                  ))}
+                </div>
+              </div>
+              {gMode==="grid" ? (
+                <div className="prop-grid">{filtered.map(p=><PCard key={p.id} p={p}/>)}</div>
+              ) : (
+                <div className="prop-list">
+                  <div className="lrow" style={{cursor:"default",background:"transparent",border:"none",borderBottom:"1px solid #e2e8f0",borderRadius:0,padding:"3px 12px"}}>
+                    {[["14px",""],["8px",""],["flex-2","숙소"],["50px","상태"],["flex-1","게스트"],["auto","센서"],["40px","수익"],["30px",""]].map(([w,l],i)=>(
+                      <div key={i} style={{[w.includes("flex")?"flex":"width"]:w.replace("flex-",""),fontSize:"10px",color:"#a0aec0",fontWeight:"600"}}>{l}</div>
+                    ))}
+                  </div>
+                  {filtered.map(p=><LRow key={p.id} p={p}/>)}
+                </div>
+              )}
+            </div>
+
+            {/* DETAIL PANEL */}
+            <div className="detail-panel">
+              <DetailPanel/>
+            </div>
+
+            {/* ALERT FEED */}
+            <div className="alert-panel">
+              <div className="alert-hdr">
+                <span style={{fontSize:"12px",fontWeight:"700",color:"#dc2626"}}>🔴 LIVE 알림</span>
+                <button onClick={ackAll} style={{fontSize:"10px",color:"#718096",background:"none",border:"1.5px solid #e2e8f0",borderRadius:"20px",padding:"3px 10px",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:"600"}}>전체 확인</button>
+              </div>
+              <div className="alert-list-wrap">
+                {alerts.map(a=>(
+                  <div key={a.id} className={`aitem ${a.acked?"acked":""}`}
+                    style={{borderLeftColor:{"error":"#dc2626","warn":"#d97706","info":"#2563eb"}[a.type],background:{"error":"#fef2f2","warn":"#fffbeb","info":"#eff6ff"}[a.type]}}>
+                    <div style={{fontSize:"10px",fontWeight:"700",color:{"error":"#dc2626","warn":"#d97706","info":"#2563eb"}[a.type],marginBottom:"3px"}}>{a.prop}</div>
+                    <div style={{fontSize:"12px",color:"#4a5568",fontWeight:"500"}}>{a.msg}</div>
+                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#a0aec0",marginTop:"3px"}}>{a.time}</div>
+                    {!a.acked&&<button style={{fontSize:"10px",padding:"3px 9px",borderRadius:"20px",border:`1.5px solid ${{error:"#fecaca",warn:"#fde68a",info:"#bfdbfe"}[a.type]}`,cursor:"pointer",background:"#fff",color:{"error":"#dc2626","warn":"#d97706","info":"#2563eb"}[a.type],fontFamily:"'DM Sans',sans-serif",marginTop:"5px",fontWeight:"600"}} onClick={()=>ackAlert(a.id)}>확인</button>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>}
+
+          {view==="automation" && renderAutomation()}
+          {view==="revenue" && renderRevenue()}
+          {view==="cleaning" && renderCleaning()}
+        </div>
+      </div>
+
+      {/* GLOBAL CMD MODAL */}
+      {showGcmd && (
+        <div className="modal-bg" onClick={()=>setShowGcmd(false)}>
+          <div className="modal-box" onClick={e=>e.stopPropagation()}>
+            <div style={{fontFamily:"'Nunito',sans-serif",fontSize:"18px",fontWeight:"800",color:"#1a202c",marginBottom:"6px"}}>⚡ 글로벌 지휘 센터</div>
+            <div style={{fontSize:"12px",color:"#718096",marginBottom:"20px"}}>{bulkSel.length>0?`선택된 ${bulkSel.length}개 숙소에 적용`:`전체 ${props.length}개 숙소에 적용`}</div>
+            <div className="d-label">일괄 IoT 제어</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginBottom:"20px"}}>
+              {[["🔒 전체 도어락 잠금",()=>bulkToggle("lockOpen",false),"#059669","#ecfdf5","#a7f3d0"],["🔓 전체 도어락 해제",()=>bulkToggle("lockOpen",true),"#dc2626","#fef2f2","#fecaca"],["❄️ 에어컨 전체 ON",()=>bulkToggle("acOn",true),"#2563eb","#eff6ff","#bfdbfe"],["❄️ 에어컨 전체 OFF",()=>bulkToggle("acOn",false),"#718096","#f7f9fc","#e2e8f0"],["💡 조명 전체 ON",()=>bulkToggle("lightsOn",true),"#d97706","#fffbeb","#fde68a"],["💡 조명 전체 OFF",()=>bulkToggle("lightsOn",false),"#718096","#f7f9fc","#e2e8f0"]].map(([l,fn,c,bg,bc])=>(
+                <button key={l} className="cmd-btn" style={{color:c,borderColor:bc,background:bg}} onClick={()=>{fn();setShowGcmd(false);}}>
+                  {l} <span style={{fontSize:"14px"}}>→</span>
+                </button>
+              ))}
+            </div>
+            <div className="d-label">전체 메시지 발송</div>
+            <div style={{display:"flex",gap:"8px",marginBottom:"10px"}}>
+              <input className="msg-in" placeholder={`입실 중 ${occupied}개 숙소 게스트에게...`} value={globalMsg} onChange={e=>setGlobalMsg(e.target.value)} style={{flex:1}} />
+              <button className="act-btn" style={{color:"#fff",borderColor:"#2563eb",background:"#2563eb",fontWeight:"700"}} onClick={()=>{if(globalMsg.trim()){Toast.show(`${occupied}개 숙소 게스트에게 발송: "${globalMsg}"`,"s");setGlobalMsg("");setShowGcmd(false);}}}>전송</button>
+            </div>
+            <div className="d-label" style={{marginTop:"16px"}}>긴급 액션</div>
+            <div style={{display:"flex",gap:"8px"}}>
+              <button className="cmd-btn" style={{color:"#dc2626",borderColor:"#fecaca",background:"#fef2f2",flex:1}} onClick={()=>{Toast.show("전체 긴급 알림 발송!","e");setShowGcmd(false);}}>🚨 전체 긴급 알림</button>
+              <button className="cmd-btn" style={{color:"#d97706",borderColor:"#fde68a",background:"#fffbeb",flex:1}} onClick={()=>{Toast.show("청소팀 전체 소집!","s");setShowGcmd(false);}}>🧹 청소팀 전체 소집</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════
+// LANDING + ROUTER
+// ═══════════════════════════════════════════════════
+function App() {
+  const [screen, setScreen] = useState("landing");
+  const [now, setNow] = useState(new Date());
+  useEffect(()=>{const t=setInterval(()=>setNow(new Date()),1000);return()=>clearInterval(t);},[]);
+
+  if(screen==="ha") return (
+    <div className="app" style={{fontFamily:"'DM Sans',sans-serif"}}>
+      <div className="topnav">
+        <button className="back-btn" onClick={()=>setScreen("landing")}>← 홈</button>
+        <div style={{width:"1px",height:"22px",background:"#e2e8f0"}} />
+        <div className="nav-title">HOME<span>OS</span> · 개별 숙소 어시스턴트</div>
+        <div className="topnav-clock">{now.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</div>
+      </div>
+      <HomeAssistant onBack={()=>setScreen("landing")}/>
+    </div>
+  );
+
+  if(screen==="cc") return <CommandCenter onBack={()=>setScreen("landing")}/>;
+
+  return (
+    <>
+      <style>{GLOBAL_CSS}</style>
+      <div className="app">
+        <div className="landing">
+          <div style={{textAlign:"center",marginBottom:"20px",animation:"slideIn 0.4s ease"}}>
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#a0aec0",letterSpacing:"4px",marginBottom:"12px",fontWeight:"500"}}>DEMO v0.1</div>
+            <div className="land-title">PROP<span>OS</span></div>
+            <div className="land-sub">에어비앤비 완전 관리 시스템</div>
+          </div>
+          <div className="land-cards" style={{animation:"slideIn 0.4s ease 0.1s both"}}>
+            <div className="land-card" onClick={()=>setScreen("ha")}>
+              <span className="land-card-icon">🏠</span>
+              <div className="land-card-title">홈 어시스턴트</div>
+              <div className="land-card-desc">개별 숙소 관리 · 체크인/아웃<br/>스마트홈 IoT 제어 · 게스트 메시지 · 수익 분석</div>
+              <div className="land-badge">HOME ASSISTANT →</div>
+            </div>
+            <div className="land-card" onClick={()=>setScreen("cc")}>
+              <span className="land-card-icon">🛰️</span>
+              <div className="land-card-title">커맨드 센터</div>
+              <div className="land-card-desc">48개+ 숙소 동시 관제 · 일괄 IoT 제어<br/>실시간 알림 · 자동화 · 수익 분석 · 청소 배정</div>
+              <div className="land-badge">COMMAND CENTER →</div>
+            </div>
+          </div>
+          <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#c8d5e0",letterSpacing:"1px",textAlign:"center",animation:"slideIn 0.4s ease 0.2s both"}}>
+            {now.toLocaleString("ko-KR")}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
