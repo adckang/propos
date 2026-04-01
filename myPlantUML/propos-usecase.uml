@@ -1,0 +1,179 @@
+@startuml PROPOS_UseCases
+
+left to right direction
+
+skinparam actorStyle awesome
+skinparam defaultFontName "DM Sans"
+skinparam backgroundColor #f0f4f8
+skinparam ArrowColor #64748b
+skinparam ArrowThickness 1.2
+
+skinparam usecase {
+  BackgroundColor #ffffff
+  BorderColor #94a3b8
+  FontColor #1e293b
+}
+skinparam actor {
+  BackgroundColor #e0f2fe
+  BorderColor #0284c7
+  FontColor #0c4a6e
+}
+skinparam note {
+  BackgroundColor #fefce8
+  BorderColor #d97706
+  FontColor #78350f
+}
+skinparam package {
+  FontStyle bold
+  FontColor #1e293b
+}
+
+' ============================================================
+' ACTORS — Human (왼쪽) / System (오른쪽)
+' ============================================================
+actor "관리자" as Admin
+actor "게스트" as Guest
+actor "청소팀" as Cleaner
+actor "Home Assistant\n(IoT 허브)" as HA <<system>>
+actor "AI 엔진" as AI <<system>>
+
+' ============================================================
+' 공통 요소 — 시나리오 간 공유 서비스 (Shared Layer)
+' loosely coupled: 각 시나리오는 이 서비스에만 의존, 서로 직접 의존 X
+' ============================================================
+package "공통 서비스 (Shared)" #f1f5f9 {
+  usecase "PIN 생명주기 관리\n(발급 / 만료)" as UC_PIN
+  usecase "IoT 씬 제어" as UC_IOT
+  usecase "메시지 채널 관리" as UC_MSG
+}
+
+' ============================================================
+' S01 — 체크인 전날 (D-1)   color: blue
+' ============================================================
+package "S01  체크인 전날 (D-1 자동)" #dbeafe {
+  usecase "PIN 자동 발급" as UC01_1
+  usecase "웰컴 메시지 자동 발송" as UC01_2
+  usecase "스마트홈 초기화" as UC01_3
+}
+
+' ============================================================
+' S02 — 체크인 당일   color: green
+' ============================================================
+package "S02  체크인 당일 (입실 감지)" #dcfce7 {
+  usecase "비대면 입실 처리" as UC02_1
+  usecase "IoT 체크인 씬 실행" as UC02_2
+  usecase "게스트 채팅 채널 오픈" as UC02_3
+}
+
+' ============================================================
+' S03 — 체류 중   color: yellow
+' ============================================================
+package "S03  체류 중 (상시 모니터링)" #fef9c3 {
+  usecase "실시간 센싱\n(온도·습도·소음·전력)" as UC03_1
+  usecase "이상 감지 & 관리자 알림" as UC03_2
+  usecase "AI 메시지 자동 답장" as UC03_3
+}
+
+' ============================================================
+' S04 — 체크아웃 & 청소   color: orange
+' ============================================================
+package "S04  체크아웃 & 청소 (퇴실 감지)" #ffedd5 {
+  usecase "PIN 즉시 만료\n(5초 이내)" as UC04_1
+  usecase "청소팀 자동 배정" as UC04_2
+  usecase "청소 체크리스트 생성" as UC04_3
+}
+
+' ============================================================
+' S05 — 수익 정산   color: purple
+' ============================================================
+package "S05  수익 정산 (월말)" #f3e8ff {
+  usecase "멀티플랫폼 수익 통합" as UC05_1
+  usecase "AI 가격 최적화" as UC05_2
+  usecase "세금 리포트 자동 생성" as UC05_3
+}
+
+' ============================================================
+' 공통 서비스 의존 관계 (Shared ← Scenarios)
+' 각 시나리오는 공통 서비스를 <<include>>로 호출
+' 시나리오끼리는 직접 의존 없음 → Loosely Coupled
+' ============================================================
+UC01_1 ..> UC_PIN : <<include>>
+UC04_1 ..> UC_PIN : <<include>>
+
+UC01_3 ..> UC_IOT : <<include>>
+UC02_2 ..> UC_IOT : <<include>>
+
+UC01_2 ..> UC_MSG : <<include>>
+UC02_3 ..> UC_MSG : <<include>>
+UC03_3 ..> UC_MSG : <<include>>
+
+' ============================================================
+' 시나리오 내부 관계
+' ============================================================
+' 이상 감지는 센싱 중 조건부 발생 → extend
+UC03_1 ..> UC03_2 : <<extend>>
+
+' PIN 만료 후 청소팀 배정은 항상 연쇄 발생 → include
+UC04_1 ..> UC04_2 : <<include>>
+
+' 수익 통합 후 세금 리포트는 항상 생성 → include
+UC05_1 ..> UC05_3 : <<include>>
+
+' ============================================================
+' Actor 관계
+' ============================================================
+' 관리자 — 모든 시나리오의 주 이해관계자
+Admin --> UC01_1
+Admin --> UC03_2
+Admin --> UC04_2
+Admin --> UC05_1
+Admin --> UC05_2
+Admin --> UC05_3
+
+' 게스트 — 수신자 역할 (UC → Guest) + 직접 참여
+UC01_2 --> Guest
+Guest --> UC02_1
+UC02_3 --> Guest
+UC03_3 --> Guest
+
+' 청소팀 — S04 실행 주체
+UC04_2 --> Cleaner
+UC04_3 --> Cleaner
+
+' HA — IoT 자동화 실행 주체
+HA --> UC01_3
+HA --> UC02_2
+HA --> UC03_1
+HA --> UC04_1
+
+' AI — 지능형 자동화 주체
+AI --> UC03_3
+AI --> UC05_2
+
+' ============================================================
+' Notes
+' ============================================================
+note right of UC_PIN
+  PIN은 S01에서 발급,
+  S04에서 만료.
+  공통 서비스로 분리하여
+  중복 로직 제거
+end note
+
+note right of UC03_2
+  <<extend>>:
+  센싱 중 임계값 초과 시
+  조건부로 알림 트리거
+end note
+
+note bottom of UC05_2
+  AI 가격 최적화
+  목표: +18% 수익 향상
+end note
+
+note bottom of UC04_1
+  퇴실 감지 후
+  5초 이내 자동 만료
+end note
+
+@enduml
