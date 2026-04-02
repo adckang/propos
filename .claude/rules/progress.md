@@ -6,9 +6,9 @@
 ---
 
 ## 현재 상태
-- **버전**: v0.4 (UC-001 완성 + iCal 연동)
+- **버전**: v0.6 (UC-003 완성 + TDD 146개 통과)
 - **배포**: Netlify Drop (dist/index.html)
-- **업데이트**: 2026-04-02
+- **업데이트**: 2026-04-03
 
 ## 완료된 마일스톤
 
@@ -48,26 +48,44 @@
   - 실데이터 / 목업 데이터 자동 전환 + 데이터 소스 뱃지 표시
 - dist/index.html 동기화 완료
 
+### ✅ M5: UC-002 체크인 당일 자동화 (2026-04-02)
+- `.claude/rules/s02-module-boundary.md` — 모듈 경계 정의
+- `.claude/rules/s02-interface-definitions.md` — 인터페이스 정의
+- `src/domain/checkinDomain.js` — isCheckinEvent, getCheckinWindow
+- `src/domain/messageDomain.js` — buildCheckinConfirmMessage, buildPinLockoutAlert 추가
+- `src/application/checkinService.js` — handleDoorUnlocked, handlePinLockout
+- `tests/unit/s02.domain.test.js` — 34개 통과
+- `tests/functional/s02.functional.test.js` — TC-F-011~023, 27개 통과 (TC-F-023: haEvent.time 누락 fallback 버그 수정 검증 포함)
+- `src/components/S02CheckinPanel.jsx` — 이벤트 시뮬레이터 + 숙소 상태 뱃지 + 알림 피드
+- `dist/index.html` 동기화 + 랜딩 UC-002 카드 추가
+- 버그 수정 2건: handleEvent try/finally 누락, buildCheckinConfirmMessage unguarded call
+- **전체 테스트 112개 통과 (fail 0)**
+
+### ✅ M6: UC-003 체류 중 모니터링 (2026-04-03)
+- `.claude/rules/s03-module-boundary.md` — 모듈 경계 정의 (완료)
+- `.claude/rules/s03-interface-definitions.md` — 인터페이스 정의 (완료)
+- `src/domain/sensorDomain.js` — isAnomaly, buildAnomalyAlert, getDefaultThresholds
+- `src/domain/messageDomain.js` — buildReplyDraft 추가 (키워드 매칭 4종)
+- `src/application/monitoringService.js` — pollSensors, pollAll, handleGuestMessage
+- `tests/unit/s03.domain.test.js` — 35개 통과
+- `tests/functional/s03.functional.test.js` — TC-F-024~036, 19개 통과
+- `src/components/S03MonitoringPanel.jsx` — 센서 LIVE 카드, 이상 감지 알림, AI 답장 초안, 폴링 ON/OFF 토글, Mock/HA 모드 전환
+- `dist/index.html` 동기화 + 랜딩 UC-003 카드 추가
+- **전체 테스트 146개 통과 (fail 0)**
+
 ## 진행 중
 없음
 
 ## 다음 작업 (우선순위 순)
 
-### 🔜 UC-002: 체크인 당일 자동화
-> 시퀀스 다이어그램: `myPlantUML/propos-scenario02-sequence.uml` (미작성 — 먼저 작성 필요)
+### 🔜 UC-004: 체크아웃 & 청소 자동화
+> 시나리오: 퇴실 감지 → PIN 만료 → 청소팀 자동 배정 → 체크리스트
 
 핵심 자동화:
-- [ ] 입실 감지 (도어락 열림 이벤트 또는 수동 트리거)
-- [ ] IoT 씬 자동 실행 (체크인 씬: 조명/에어컨/TV)
-- [ ] 게스트 채팅 오픈 (웰컴 채팅 메시지)
-- [ ] 관리자 알림 (입실 완료)
-
-구현 순서:
-1. 시퀀스 다이어그램 작성 (`.uml` 파일)
-2. 모듈 경계 정의 (`.claude/rules/s02-module-boundary.md`)
-3. 인터페이스 정의 (`.claude/rules/s02-interface-definitions.md`)
-4. `src/components/CheckinDayPanel.jsx` 구현
-5. `dist/index.html` 반영
+- [ ] 퇴실 감지 (체크아웃 시간 + 도어락 이벤트)
+- [ ] 5초 이내 PIN 즉시 만료 처리
+- [ ] 청소팀 자동 배정 알림
+- [ ] 청소 체크리스트 생성
 
 ### 🔜 HA CORS 설정 (사용자 직접)
 - HA configuration.yaml에 추가 필요:
