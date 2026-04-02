@@ -2135,15 +2135,16 @@ const _s03 = (() => {
 })();
 
 // ── Mock Infrastructure ──────────────────────────────────────
-function makeMockSensorInfra(haMode = false) {
-  // Mock: 30초마다 약간씩 변동하는 센서값 반환
+// [R1] haMode 파라미터 제거 — 내부에서 미사용이었음
+function makeMockSensorInfra() {
+  // Mock: 폴링 횟수를 누적해 5번째마다 이상값 주입
   const base = { temp: 24, humidity: 62, noise: 42, power: 850 };
   let callCount = 0;
 
   async function getSensorStates(propId) {
     await new Promise(r => setTimeout(r, 300 + Math.random() * 200));
     callCount++;
-    // 시뮬레이션: 5번째 폴링마다 이상값 주입
+    // 시뮬레이션: 5번째 폴링마다 이상값 주입 (callCount가 누적되어야 발동)
     const anomalyMode = callCount % 5 === 0;
     return {
       propId,
@@ -2154,8 +2155,11 @@ function makeMockSensorInfra(haMode = false) {
       power:    base.power    + (Math.random() * 200 - 100),
     };
   }
-  return { getSensorStates, getCallCount: () => callCount };
+  return { getSensorStates };
 }
+
+// [R2] getDefaultThresholds() 반환값은 상수 — 렌더마다 재생성 방지
+const _DEFAULT_THRESHOLDS = _s03.getDefaultThresholds();
 
 // ── Real HA Infrastructure ───────────────────────────────────
 const _haS03 = (() => {
@@ -2239,10 +2243,10 @@ function SensorCard({ label, value, unit, warn, critical, icon }) {
 // ============================================================
 function PropMonitorBadge({ prop, readings, onSelect, selected }) {
   const r = readings[prop.propId];
-  const T = _s03.getDefaultThresholds();
+  // [R2] 모듈 레벨 상수 _DEFAULT_THRESHOLDS 사용 — 렌더마다 재생성 방지
   let anomaly = null;
   if (r) {
-    const a = _s03.isAnomaly(r, T);
+    const a = _s03.isAnomaly(r, _DEFAULT_THRESHOLDS);
     if (a.isAnomaly) anomaly = a;
   }
 
@@ -2307,9 +2311,13 @@ function GuestMessagePanel({ booking, draft, onDraftApply, onNewMessage }) {
   async function handleSend() {
     if (!draft) return;
     setSending(true);
-    await new Promise(r => setTimeout(r, 500));
-    onDraftApply(draft);
-    setSending(false);
+    try {
+      await new Promise(r => setTimeout(r, 500));
+      onDraftApply(draft);
+    } finally {
+      // [B3] 예외 발생 시에도 반드시 "발송 중..." 상태 해제
+      setSending(false);
+    }
   }
 
   return (
@@ -2460,8 +2468,6 @@ function AlertFeedS03({ alerts, onAck }) {
 // S03MonitoringPanel — 메인 컴포넌트
 // ============================================================
 function S03MonitoringPanel({ onBack }) {
-  const T = _s03.getDefaultThresholds();
-
   // ── 목업 숙소 목록 ──
   const PROPS = [
     { propId: 'P-001', propName: '해운대 오션뷰', guestName: '김민준', guestId: 'g-001', checkIn: '2026-04-05T15:00:00', checkOut: '2026-04-07T11:00:00', status: 'confirmed', wifi: { ssid: 'PROPOS_G1', pw: 'pw1234' } },
@@ -2483,13 +2489,15 @@ function S03MonitoringPanel({ onBack }) {
 
   const timerRef    = React.useRef(null);
   const countRef    = React.useRef(null);
+  // [B1] Mock 인스턴스를 ref로 유지 — 매 pollAll 호출마다 새 인스턴스 생성 방지
+  const infraRef    = React.useRef(makeMockSensorInfra());
 
   const currentProp = PROPS.find(p => p.propId === selectedProp) || PROPS[0];
 
-  // ── 인프라 선택 ──
-  function getInfra() {
-    return haMode ? _haS03 : makeMockSensorInfra(false);
-  }
+  // ── haMode 변경 시 인프라 교체 ──
+  React.useEffect(() => {
+    infraRef.current = haMode ? _haS03 : makeMockSensorInfra();
+  }, [haMode]);
 
   // ── 알림 추가 ──
   function addAlert(alert) {
@@ -2507,7 +2515,7 @@ function S03MonitoringPanel({ onBack }) {
       const reading = await infra.getSensorStates(prop.propId);
       updateReadings(prop.propId, reading);
 
-      const anomaly = _s03.isAnomaly(reading, T);
+      const anomaly = _s03.isAnomaly(reading, _DEFAULT_THRESHOLDS);
       if (anomaly.isAnomaly) {
         const msg = _s03.buildAnomalyAlert(prop.propId, reading, anomaly);
         addAlert({
@@ -2531,7 +2539,7 @@ function S03MonitoringPanel({ onBack }) {
 
   // ── 전체 숙소 일괄 폴링 ──
   async function pollAll() {
-    const infra = getInfra();
+    const infra = infraRef.current;  // [B1] 유지된 인스턴스 사용
     for (const prop of PROPS) {
       await pollOneProp(prop, infra);
     }
@@ -2578,7 +2586,8 @@ function S03MonitoringPanel({ onBack }) {
   // ── 게스트 메시지 처리 ──
   function handleGuestMessage(msgText) {
     const booking = PROPS.find(p => p.propId === selectedProp);
-    if (!booking || !msgText) return;
+    // [B2] msg.text 검증 — 빈 문자열이면 buildReplyDraft에서 throw 발생하므로 조기 종료
+    if (!booking || !msgText || !msgText.trim()) return;
 
     addAlert({
       type: 'info',

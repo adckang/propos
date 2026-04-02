@@ -112,9 +112,11 @@ function handlePinLockout(haEvent, deps) {
 }
 
 function _nowHHMM() {
+  // [B4] getUTCHours() → getHours() 수정
+  // KST는 UTC+9이므로 UTC 기준이면 체크인 윈도우 비교 시 9시간 오차 발생
   const d = new Date();
-  return d.getUTCHours().toString().padStart(2, '0') + ':' +
-         d.getUTCMinutes().toString().padStart(2, '0');
+  return d.getHours().toString().padStart(2, '0') + ':' +
+         d.getMinutes().toString().padStart(2, '0');
 }
 
 module.exports = { handleDoorUnlocked, handlePinLockout };
