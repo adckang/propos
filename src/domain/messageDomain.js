@@ -149,4 +149,31 @@ function buildReplyDraft(guestMessage, booking) {
   return `안녕하세요 ${booking.guestName}님!\n문의 주셔서 감사합니다.\n확인 후 빠르게 답변 드리겠습니다.`;
 }
 
-module.exports = { buildWelcomeMessage, buildCheckinConfirmMessage, buildPinLockoutAlert, buildReplyDraft };
+// ── S04 메시지 함수 ──────────────────────────────────────────
+
+/**
+ * 체크아웃 감사 메시지 텍스트 조립 (순수 문자열 반환)
+ * @param {{ guestName: string, propName?: string }} booking
+ * @returns {string}
+ */
+function buildCheckoutThankYouMessage(booking) {
+  if (!booking)          throw new Error('booking is required');
+  if (!booking.guestName) throw new Error('booking.guestName is required');
+
+  const { guestName, propName } = booking;
+
+  return [
+    `${guestName}님, 퇴실이 확인되었습니다.`,
+    `${propName ? propName + ' ' : ''}이용해 주셔서 감사합니다.`,
+    ``,
+    `다음에 또 방문해 주세요! 좋은 하루 보내세요.`,
+  ].join('\n');
+}
+
+module.exports = {
+  buildWelcomeMessage,
+  buildCheckinConfirmMessage,
+  buildPinLockoutAlert,
+  buildReplyDraft,
+  buildCheckoutThankYouMessage,
+};

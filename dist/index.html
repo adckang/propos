@@ -62,6 +62,12 @@ window.Toast = {
 const { useState, useEffect, useRef, useCallback } = React;
 
 // ═══════════════════════════════════════════════════
+// HA 설정 (공통) — 프로덕션 전환 시 환경변수로 이동
+// ═══════════════════════════════════════════════════
+const _HA_BASE  = 'http://192.168.45.76:8123';
+const _HA_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw';
+
+// ═══════════════════════════════════════════════════
 // DATA
 // ═══════════════════════════════════════════════════
 const CITIES = ["서울 강남","서울 마포","서울 용산","서울 성동","서울 종로","부산 해운대","부산 수영","제주 서귀포","제주 한림","인천 연수","대구 중구","경기 성남"];
@@ -1097,6 +1103,14 @@ function App() {
     <S03MonitoringPanel onBack={()=>setScreen("landing")}/>
   );
 
+  if(screen==="s04") return (
+    <S04CheckoutPanel onBack={()=>setScreen("landing")}/>
+  );
+
+  if(screen==="s05") return (
+    <S05RevenuePanel onBack={()=>setScreen("landing")}/>
+  );
+
   return (
     <>
       <style>{GLOBAL_CSS}</style>
@@ -1137,6 +1151,18 @@ function App() {
               <div className="land-card-title">체류 중 모니터링</div>
               <div className="land-card-desc">센서 LIVE 폴링 · 이상 감지<br/>AI 답장 초안 · 긴급 알림</div>
               <div className="land-badge">UC-003 →</div>
+            </div>
+            <div className="land-card" onClick={()=>setScreen("s04")} style={{borderTop:"3px solid var(--red)"}}>
+              <span className="land-card-icon">🧹</span>
+              <div className="land-card-title">체크아웃 & 청소 자동화</div>
+              <div className="land-card-desc">퇴실 감지 · PIN 즉시 만료<br/>청소팀 자동 배정 · 체크리스트</div>
+              <div className="land-badge">UC-004 →</div>
+            </div>
+            <div className="land-card" onClick={()=>setScreen("s05")} style={{borderTop:"3px solid #7c3aed"}}>
+              <span className="land-card-icon">💰</span>
+              <div className="land-card-title">수익 정산 자동화</div>
+              <div className="land-card-desc">멀티플랫폼 수익 수집 · AI 가격 최적화<br/>세금 리포트 · 월말 자동 정산</div>
+              <div className="land-badge">UC-005 →</div>
             </div>
           </div>
           <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#c8d5e0",letterSpacing:"1px",textAlign:"center",animation:"slideIn 0.4s ease 0.2s both"}}>
@@ -1271,8 +1297,8 @@ function makeMockInfra(onAlert, failPropId) {
 }
 
 const _ha = (() => {
-  const BASE  = 'http://192.168.45.76:8123';
-  const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw';
+  const BASE  = _HA_BASE;
+  const TOKEN = _HA_TOKEN;
   const TV_LIGHT = 'light.rgbcct_8002';
   const TV_PLUG  = 'switch.tv_smart_plug_socket_1';
   async function post(path, data) {
@@ -1690,8 +1716,8 @@ function makeMockInfraS02(onAlert, onUpdateStatus, sceneFail, channelFail) {
 
 // ── Real HA Infrastructure ───────────────────────────────────
 const _haS02 = (() => {
-  const BASE  = 'http://192.168.45.76:8123';
-  const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw';
+  const BASE  = _HA_BASE;
+  const TOKEN = _HA_TOKEN;
   async function post(path, data) {
     const res = await fetch(`${BASE}${path}`, { method:'POST', headers:{'Authorization':`Bearer ${TOKEN}`,'Content-Type':'application/json'}, body:JSON.stringify(data) });
     if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HA ${res.status}: ${t}`); }
@@ -2163,8 +2189,8 @@ const _DEFAULT_THRESHOLDS = _s03.getDefaultThresholds();
 
 // ── Real HA Infrastructure ───────────────────────────────────
 const _haS03 = (() => {
-  const BASE  = 'http://192.168.45.76:8123';
-  const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw';
+  const BASE  = _HA_BASE;
+  const TOKEN = _HA_TOKEN;
 
   async function getState(entityId) {
     const res = await fetch(`${BASE}/api/states/${entityId}`, {
@@ -2869,6 +2895,829 @@ function S03MonitoringPanel({ onBack }) {
   );
 }
 
+
+
+// ═══════════════════════════════════════════════════
+// UC-004 S04CheckoutPanel
+// ═══════════════════════════════════════════════════
+
+// S04CheckoutPanel.jsx — UC-004 체크아웃 & 청소 자동화 UI
+// 퇴실 감지 → PIN 즉시 만료 → 청소팀 자동 배정 → 체크리스트
+
+const _s04 = (() => {
+  function getCheckoutWindow(checkOut) {
+    const d = new Date(checkOut);
+    const from  = new Date(d.getTime() - 2 * 60 * 60 * 1000);
+    const until = new Date(d.getTime() + 3 * 60 * 60 * 1000);
+    const fmt = (dt) =>
+      dt.getHours().toString().padStart(2, '0') + ':' +
+      dt.getMinutes().toString().padStart(2, '0');
+    return { from: fmt(from), until: fmt(until) };
+  }
+
+  function isCheckoutEvent(event, booking, now) {
+    const validEvents = ['door_locked', 'manual_checkout'];
+    if (!validEvents.includes(event.event)) return false;
+    if (!['confirmed', 'occupied'].includes(booking.status)) return false;
+    const w = getCheckoutWindow(booking.checkOut);
+    const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+    const n = toMin(now), f = toMin(w.from), u = toMin(w.until);
+    return n >= f && n <= u;
+  }
+
+  function assignCleaner(cleaners, propId, checkoutTime) {
+    const available = cleaners.filter(c => c.available);
+    if (available.length === 0) throw new Error('가용 청소팀 없음');
+    const selected = available.reduce((min, c) => c.activeJobs < min.activeJobs ? c : min, available[0]);
+    const [h, m] = checkoutTime.split(':').map(Number);
+    const total = h * 60 + m + 30;
+    const arrival = `${Math.floor(total / 60) % 24}`.padStart(2, '0') + ':' + `${total % 60}`.padStart(2, '0');
+    return { propId, cleanerId: selected.id, cleanerName: selected.name, assignedAt: checkoutTime, estimatedArrival: arrival, status: 'assigned' };
+  }
+
+  function buildChecklist(propId) {
+    return [
+      { id: `${propId}-cl-01`, label: '침구 교체',              done: false, priority: 'required' },
+      { id: `${propId}-cl-02`, label: '화장실 청소',             done: false, priority: 'required' },
+      { id: `${propId}-cl-03`, label: '주방 청소',               done: false, priority: 'required' },
+      { id: `${propId}-cl-04`, label: '바닥 청소',               done: false, priority: 'required' },
+      { id: `${propId}-cl-05`, label: '쓰레기 비우기',           done: false, priority: 'required' },
+      { id: `${propId}-cl-06`, label: '도어락 PIN 초기화 확인',  done: false, priority: 'required' },
+      { id: `${propId}-cl-07`, label: '에어컨 필터 청소',        done: false, priority: 'optional' },
+      { id: `${propId}-cl-08`, label: '창문 닦기',               done: false, priority: 'optional' },
+    ];
+  }
+
+  function hhmm() {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }
+
+  return { isCheckoutEvent, getCheckoutWindow, assignCleaner, buildChecklist, hhmm };
+})();
+
+const _haMockS04 = {
+  async expirePin(entityId) {
+    await new Promise(r => setTimeout(r, 400 + Math.random() * 300));
+  },
+};
+
+const _haRealS04 = (() => {
+  const BASE  = _HA_BASE;
+  const TOKEN = _HA_TOKEN;
+  async function expirePin(entityId) {
+    const res = await fetch(`${BASE}/api/services/persistent_notification/create`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: `[PROPOS] PIN 만료 처리: ${entityId}`, title: 'PIN 만료' }),
+    });
+    if (!res.ok) throw new Error(`HA PIN 만료 실패 (${res.status})`);
+  }
+  return { expirePin };
+})();
+
+function _mockCheckOut(offsetMin) {
+  const d = new Date(Date.now() + offsetMin * 60 * 1000);
+  return d.toISOString().slice(0, 19);
+}
+
+const _S04_PROPS = [
+  { propId: 'P-001', propName: '해운대 오션뷰',    guestName: '김민준', guestId: 'g-001', checkIn: '2026-04-05T15:00:00', checkOut: _mockCheckOut(30),  status: 'occupied' },
+  { propId: 'P-002', propName: '광안리 스튜디오', guestName: '이지수', guestId: 'g-002', checkIn: '2026-04-04T16:00:00', checkOut: _mockCheckOut(60),  status: 'occupied' },
+  { propId: 'P-003', propName: '남포동 투룸',      guestName: '박서준', guestId: 'g-003', checkIn: '2026-04-03T14:00:00', checkOut: _mockCheckOut(120), status: 'occupied' },
+];
+
+const _S04_CLEANERS = [
+  { id: 'C-01', name: '김청소', available: true,  activeJobs: 1, phone: '010-1111-0001' },
+  { id: 'C-02', name: '이청소', available: true,  activeJobs: 0, phone: '010-1111-0002' },
+  { id: 'C-03', name: '박청소', available: false, activeJobs: 0, phone: '010-1111-0003' },
+  { id: 'C-04', name: '최청소', available: true,  activeJobs: 2, phone: '010-1111-0004' },
+];
+
+function PropStatusBadgeS04({ status }) {
+  const statusMap = {
+    occupied: { label: '입실 중',   bg: '#dbeafe', color: '#1d4ed8' },
+    cleaning: { label: '청소 중',   bg: '#fef9c3', color: '#a16207' },
+    vacant:   { label: '준비 완료', bg: '#dcfce7', color: '#15803d' },
+  };
+  const s = statusMap[status] || { label: status, bg: '#f1f5f9', color: '#475569' };
+  return (
+    <span style={{ display:'inline-block', padding:'2px 10px', borderRadius:20, background:s.bg, color:s.color, fontSize:11, fontWeight:700 }}>
+      {s.label}
+    </span>
+  );
+}
+
+function PinExpireCountdown({ active, onDone }) {
+  const [count, setCount] = React.useState(5);
+  React.useEffect(() => {
+    if (!active) return;
+    setCount(5);
+    const iv = setInterval(() => {
+      setCount(prev => {
+        if (prev <= 1) { clearInterval(iv); onDone(); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [active]);
+  if (!active) return null;
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:10, background:'#fef2f2', border:'2px solid #fca5a5', borderRadius:10, padding:'10px 16px' }}>
+      <div style={{ fontFamily:"'DM Mono',monospace", fontSize:32, fontWeight:700, color:'#dc2626', minWidth:36, textAlign:'center' }}>{count}</div>
+      <div>
+        <div style={{ fontSize:13, fontWeight:700, color:'#dc2626' }}>PIN 만료 처리 중</div>
+        <div style={{ fontSize:11, color:'#991b1b' }}>도어락 PIN이 {count}초 내 비활성화됩니다</div>
+      </div>
+      <div style={{ marginLeft:'auto' }}>
+        <div style={{ width:8, height:8, borderRadius:'50%', background:'#dc2626', animation:'pulse 0.8s infinite' }} />
+      </div>
+    </div>
+  );
+}
+
+function CleanerAssignCard({ assignment }) {
+  if (!assignment) return null;
+  const statusStyle = {
+    assigned:    { bg:'#fffbeb', border:'#fde68a', badge:'#d97706', text:'배정됨' },
+    in_progress: { bg:'#eff6ff', border:'#bfdbfe', badge:'#2563eb', text:'청소 중' },
+    done:        { bg:'#f0fdf4', border:'#bbf7d0', badge:'#16a34a', text:'완료' },
+  };
+  const s = statusStyle[assignment.status] || statusStyle.assigned;
+  return (
+    <div style={{ background:s.bg, border:`2px solid ${s.border}`, borderRadius:12, padding:'16px 20px' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
+        <span style={{ fontSize:20 }}>🧹</span>
+        <span style={{ fontWeight:700, fontSize:14, color:'#1e293b' }}>청소팀 배정 완료</span>
+        <span style={{ marginLeft:'auto', fontSize:11, fontWeight:700, color:s.badge, background:'#ffffff', border:`1px solid ${s.border}`, padding:'2px 8px', borderRadius:20 }}>{s.text}</span>
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+        <div><div style={{ fontSize:11, color:'#64748b', marginBottom:2 }}>담당자</div><div style={{ fontWeight:700, fontSize:15, color:'#1e293b' }}>{assignment.cleanerName}</div></div>
+        <div><div style={{ fontSize:11, color:'#64748b', marginBottom:2 }}>예상 도착</div><div style={{ fontFamily:"'DM Mono',monospace", fontWeight:700, fontSize:15, color:s.badge }}>{assignment.estimatedArrival}</div></div>
+        <div><div style={{ fontSize:11, color:'#64748b', marginBottom:2 }}>배정 시각</div><div style={{ fontFamily:"'DM Mono',monospace", fontSize:13, color:'#475569' }}>{assignment.assignedAt}</div></div>
+        <div><div style={{ fontSize:11, color:'#64748b', marginBottom:2 }}>숙소</div><div style={{ fontSize:13, color:'#475569' }}>{assignment.propId}</div></div>
+      </div>
+    </div>
+  );
+}
+
+function ChecklistRowS04({ item, onToggle }) {
+  return (
+    <div onClick={() => onToggle(item.id)} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 8px', borderRadius:6, cursor:'pointer', background:item.done?'#f0fdf4':'transparent', transition:'background 0.2s', marginBottom:2 }}>
+      <div style={{ width:18, height:18, borderRadius:4, border:`2px solid ${item.done?'#16a34a':'#cbd5e1'}`, background:item.done?'#16a34a':'#ffffff', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, transition:'all 0.15s' }}>
+        {item.done && <span style={{ color:'#ffffff', fontSize:11, fontWeight:700 }}>✓</span>}
+      </div>
+      <span style={{ fontSize:13, color:item.done?'#16a34a':'#1e293b', textDecoration:item.done?'line-through':'none', fontWeight:item.done?400:500 }}>{item.label}</span>
+    </div>
+  );
+}
+
+function CleaningChecklistS04({ items, onToggle, onFinalize, propStatus }) {
+  if (!items || items.length === 0) return null;
+  const required = items.filter(i => i.priority === 'required');
+  const optional = items.filter(i => i.priority === 'optional');
+  const doneCount = items.filter(i => i.done).length;
+  const requiredDone = required.every(i => i.done);
+  const progress = Math.round((doneCount / items.length) * 100);
+  return (
+    <div style={{ background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px 20px' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
+        <span style={{ fontSize:18 }}>📋</span>
+        <span style={{ fontWeight:700, fontSize:14, color:'#1e293b' }}>청소 체크리스트</span>
+        <span style={{ marginLeft:'auto', fontFamily:"'DM Mono',monospace", fontSize:12, color:'#64748b' }}>{doneCount}/{items.length}</span>
+      </div>
+      <div style={{ height:6, background:'#f1f5f9', borderRadius:3, marginBottom:14 }}>
+        <div style={{ height:'100%', width:`${progress}%`, background:progress===100?'#16a34a':'#2563eb', borderRadius:3, transition:'width 0.4s ease' }} />
+      </div>
+      <div style={{ marginBottom:10 }}>
+        <div style={{ fontSize:11, fontWeight:600, color:'#dc2626', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:6 }}>필수 항목</div>
+        {required.map(item => <ChecklistRowS04 key={item.id} item={item} onToggle={onToggle} />)}
+      </div>
+      <div style={{ marginBottom:14 }}>
+        <div style={{ fontSize:11, fontWeight:600, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:6 }}>선택 항목</div>
+        {optional.map(item => <ChecklistRowS04 key={item.id} item={item} onToggle={onToggle} />)}
+      </div>
+      {propStatus === 'cleaning' && (
+        <button onClick={onFinalize} disabled={!requiredDone} style={{ width:'100%', padding:'10px 0', borderRadius:8, border:`1.5px solid ${requiredDone?'#16a34a':'#e2e8f0'}`, background:requiredDone?'#16a34a':'#f8fafc', color:requiredDone?'#ffffff':'#94a3b8', fontSize:13, fontWeight:700, cursor:requiredDone?'pointer':'default', transition:'all 0.2s' }}>
+          {requiredDone ? '✓ 청소 완료 — 숙소 준비 완료 처리' : `필수 항목 ${required.filter(i=>!i.done).length}개 남음`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function AlertFeedS04({ alerts, onAck, onAckAll }) {
+  if (alerts.length === 0) return (
+    <div style={{ textAlign:'center', padding:'24px 0', color:'#94a3b8', fontSize:13 }}>알림 없음 — 대기 중</div>
+  );
+  const typeStyle = {
+    error: { bg:'#fef2f2', border:'#fecaca', badge:'#dc2626', text:'[긴급]' },
+    warn:  { bg:'#fffbeb', border:'#fde68a', badge:'#d97706', text:'[경고]' },
+    info:  { bg:'#f0f9ff', border:'#bae6fd', badge:'#0284c7', text:'[정보]' },
+  };
+  return (
+    <div>
+      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:8 }}>
+        <button onClick={onAckAll} style={{ fontSize:11, padding:'3px 10px', borderRadius:6, border:'1px solid #e2e8f0', background:'#f8fafc', color:'#64748b', cursor:'pointer' }}>전체 확인</button>
+      </div>
+      <div style={{ display:'flex', flexDirection:'column', gap:8, maxHeight:300, overflowY:'auto' }}>
+        {alerts.map((a, i) => {
+          const s = typeStyle[a.type] || typeStyle.info;
+          return (
+            <div key={i} style={{ background:s.bg, border:`1px solid ${s.border}`, borderRadius:8, padding:'10px 12px', display:'flex', alignItems:'flex-start', gap:8 }}>
+              <span style={{ fontSize:11, fontWeight:700, color:s.badge, whiteSpace:'nowrap', paddingTop:1 }}>{s.text}</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:12, color:'#1e293b', fontWeight:500 }}>{a.prop}</div>
+                <div style={{ fontSize:12, color:'#475569', marginTop:2 }}>{a.msg}</div>
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4, whiteSpace:'nowrap' }}>
+                <span style={{ fontSize:11, color:'#94a3b8', fontFamily:"'DM Mono',monospace" }}>{a.time}</span>
+                <button onClick={() => onAck(i)} style={{ fontSize:11, padding:'2px 8px', borderRadius:4, border:'1px solid #e2e8f0', background:'#ffffff', color:'#64748b', cursor:'pointer' }}>확인</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function S04CheckoutPanel({ onBack }) {
+  const [haMode,       setHaMode]       = React.useState(false);
+  const [selectedProp, setSelectedProp] = React.useState(_S04_PROPS[0].propId);
+  const [propStatuses, setPropStatuses] = React.useState(() =>
+    Object.fromEntries(_S04_PROPS.map(p => [p.propId, p.status]))
+  );
+  const [assignments,  setAssignments]  = React.useState({});
+  const [checklists,   setChecklists]   = React.useState({});
+  const [alerts,       setAlerts]       = React.useState([]);
+  const [processing,   setProcessing]   = React.useState(false);
+  const [pinCountdown, setPinCountdown] = React.useState(false);
+  const [pinDone,      setPinDone]      = React.useState({});
+
+  const currentBooking = _S04_PROPS.find(p => p.propId === selectedProp);
+  const currentStatus  = propStatuses[selectedProp] || 'occupied';
+  const currentAssign  = assignments[selectedProp] || null;
+  const currentItems   = checklists[selectedProp] || null;
+
+  function getInfra() { return haMode ? _haRealS04 : _haMockS04; }
+
+  function addAlert(alert) {
+    setAlerts(prev => [alert, ...prev].slice(0, 50));
+  }
+
+  async function handleCheckoutEvent(eventType) {
+    if (processing) return;
+    setProcessing(true);
+    const now = _s04.hhmm();
+    const event = { event: eventType, propId: selectedProp, time: now };
+    const booking = currentBooking;
+
+    if (!booking) {
+      addAlert({ type:'warn', prop:selectedProp, msg:'예약 정보 없음', time:now });
+      setProcessing(false);
+      return;
+    }
+
+    if (!_s04.isCheckoutEvent(event, booking, now)) {
+      const w = _s04.getCheckoutWindow(booking.checkOut);
+      addAlert({ type:'warn', prop:booking.propName, msg:`체크아웃 이벤트 아님 — 시간창(${w.from}~${w.until}) 밖이거나 상태 불일치`, time:now });
+      setProcessing(false);
+      return;
+    }
+
+    setPinCountdown(true);
+    try {
+      await getInfra().expirePin(`lock.front_door_${selectedProp.toLowerCase().replace('-','_')}`);
+      setPinDone(prev => ({ ...prev, [selectedProp]: true }));
+      addAlert({ type:'info', prop:booking.propName, msg:'PIN 만료 완료 — 도어락 비활성화', time:_s04.hhmm() });
+
+      const assignment = _s04.assignCleaner(_S04_CLEANERS, selectedProp, now);
+      setAssignments(prev => ({ ...prev, [selectedProp]: assignment }));
+      addAlert({ type:'info', prop:booking.propName, msg:`청소팀 배정 완료 — ${assignment.cleanerName} 도착예정 ${assignment.estimatedArrival}`, time:_s04.hhmm() });
+
+      const items = _s04.buildChecklist(selectedProp);
+      setChecklists(prev => ({ ...prev, [selectedProp]: items }));
+
+      setPropStatuses(prev => ({ ...prev, [selectedProp]: 'cleaning' }));
+      addAlert({ type:'info', prop:booking.propName, msg:`${selectedProp} 체크아웃 완료 — ${booking.guestName}님 퇴실 (${now})`, time:now });
+    } catch (err) {
+      addAlert({ type:'error', prop:booking.propName, msg:`체크아웃 자동화 오류: ${err.message}`, time:_s04.hhmm() });
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  function toggleChecklistItem(itemId) {
+    setChecklists(prev => {
+      const items = prev[selectedProp] || [];
+      return { ...prev, [selectedProp]: items.map(i => i.id === itemId ? { ...i, done: !i.done } : i) };
+    });
+  }
+
+  function handleFinalizeClean() {
+    setPropStatuses(prev => ({ ...prev, [selectedProp]: 'vacant' }));
+    addAlert({ type:'info', prop:currentBooking ? currentBooking.propName : selectedProp, msg:`${selectedProp} 청소 완료 — 숙소 준비 완료`, time:_s04.hhmm() });
+  }
+
+  function ackAlert(idx)  { setAlerts(prev => prev.filter((_,i) => i !== idx)); }
+  function ackAllAlerts() { setAlerts([]); }
+
+  const errorCount = alerts.filter(a => a.type === 'error').length;
+  const infoCount  = alerts.filter(a => a.type === 'info').length;
+
+  return (
+    <div style={{ minHeight:'100vh', background:'#f0f4f8', fontFamily:"'DM Sans','Nunito',sans-serif" }}>
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}} @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
+
+      {/* 헤더 */}
+      <div style={{ background:'#ffffff', borderBottom:'1px solid #e2e8f0', padding:'16px 24px', display:'flex', alignItems:'center', gap:16 }}>
+        <button onClick={onBack} style={{ padding:'6px 16px', borderRadius:8, border:'1.5px solid #e2e8f0', background:'#f8fafc', color:'#475569', fontSize:13, fontWeight:600, cursor:'pointer' }}>← 뒤로</button>
+        <div>
+          <div style={{ fontWeight:800, fontSize:18, color:'#1e293b' }}>UC-004 — 체크아웃 & 청소 자동화</div>
+          <div style={{ fontSize:12, color:'#64748b' }}>퇴실 감지 · PIN 즉시 만료 · 청소팀 자동 배정 · 체크리스트</div>
+        </div>
+        <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:10 }}>
+          {errorCount > 0 && <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:20, padding:'3px 10px', fontSize:12, color:'#dc2626', fontWeight:700 }}>긴급 {errorCount}</div>}
+          {infoCount > 0 && <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:20, padding:'3px 10px', fontSize:12, color:'#2563eb', fontWeight:600 }}>알림 {infoCount}</div>}
+          {/* Mock/HA 토글 */}
+          <div style={{ display:'flex', alignItems:'center', gap:6, background:'#f8fafc', border:'1.5px solid #e2e8f0', borderRadius:8, padding:'5px 12px' }}>
+            <span style={{ fontSize:12, color:'#64748b', fontWeight:500 }}>Mock</span>
+            <div onClick={() => setHaMode(m => !m)} style={{ width:36, height:18, borderRadius:9, cursor:'pointer', background:haMode?'#2563eb':'#cbd5e1', position:'relative', transition:'background 0.2s' }}>
+              <div style={{ position:'absolute', top:2, left:haMode?20:2, width:14, height:14, borderRadius:'50%', background:'#ffffff', transition:'left 0.2s' }} />
+            </div>
+            <span style={{ fontSize:12, color:haMode?'#2563eb':'#64748b', fontWeight:haMode?700:500 }}>HA</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 메인 레이아웃 */}
+      <div style={{ display:'grid', gridTemplateColumns:'260px 1fr 340px', gap:20, padding:24, maxWidth:1400, margin:'0 auto' }}>
+
+        {/* 왼쪽: 숙소 목록 + 청소팀 현황 */}
+        <div>
+          <div style={{ fontWeight:700, fontSize:13, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10 }}>숙소 현황</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {_S04_PROPS.map(prop => {
+              const status   = propStatuses[prop.propId] || 'occupied';
+              const selected = selectedProp === prop.propId;
+              const hasAssign = !!assignments[prop.propId];
+              return (
+                <div key={prop.propId} onClick={() => setSelectedProp(prop.propId)} style={{ background:selected?'#eff6ff':'#ffffff', border:`2px solid ${selected?'#2563eb':'#e2e8f0'}`, borderRadius:10, padding:'12px 14px', cursor:'pointer', transition:'all 0.2s' }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
+                    <span style={{ fontWeight:700, fontSize:13, color:'#1e293b' }}>{prop.propName}</span>
+                    <PropStatusBadgeS04 status={status} />
+                  </div>
+                  <div style={{ fontSize:11, color:'#64748b' }}>{prop.guestName}님</div>
+                  {hasAssign && <div style={{ fontSize:11, color:'#d97706', marginTop:4, fontWeight:600 }}>🧹 {assignments[prop.propId].cleanerName} 배정됨</div>}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ marginTop:20 }}>
+            <div style={{ fontWeight:700, fontSize:13, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10 }}>청소팀 현황</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+              {_S04_CLEANERS.map(c => (
+                <div key={c.id} style={{ background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 12px', display:'flex', alignItems:'center', gap:8 }}>
+                  <div style={{ width:8, height:8, borderRadius:'50%', background:c.available?'#16a34a':'#94a3b8', animation:c.available?'pulse 2s infinite':'none' }} />
+                  <span style={{ fontSize:13, color:'#1e293b', fontWeight:500 }}>{c.name}</span>
+                  <span style={{ marginLeft:'auto', fontSize:11, color:'#64748b' }}>{c.available?`진행 ${c.activeJobs}건`:'비가용'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* 가운데: 체크아웃 제어 & 체크리스트 */}
+        <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+          {/* 현재 숙소 정보 */}
+          <div style={{ background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px 20px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
+              <span style={{ fontWeight:700, fontSize:16, color:'#1e293b' }}>{currentBooking?.propName}</span>
+              <PropStatusBadgeS04 status={currentStatus} />
+              {pinDone[selectedProp] && <span style={{ fontSize:11, fontWeight:700, color:'#dc2626', background:'#fef2f2', border:'1px solid #fecaca', padding:'2px 8px', borderRadius:20 }}>🔒 PIN 만료됨</span>}
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+              <div><div style={{ fontSize:11, color:'#64748b', marginBottom:2 }}>게스트</div><div style={{ fontWeight:600, fontSize:13, color:'#1e293b' }}>{currentBooking?.guestName}님</div></div>
+              <div><div style={{ fontSize:11, color:'#64748b', marginBottom:2 }}>체크아웃</div><div style={{ fontFamily:"'DM Mono',monospace", fontSize:13, color:'#1e293b' }}>{currentBooking?.checkOut?.slice(11,16)||'—'}</div></div>
+              <div>
+                <div style={{ fontSize:11, color:'#64748b', marginBottom:2 }}>가능 시간창</div>
+                <div style={{ fontFamily:"'DM Mono',monospace", fontSize:12, color:'#475569' }}>
+                  {currentBooking ? (() => { try { const d=new Date(currentBooking.checkOut); const f=new Date(d.getTime()-7200000); const u=new Date(d.getTime()+10800000); return `${f.getHours().toString().padStart(2,'0')}:${f.getMinutes().toString().padStart(2,'0')}~${u.getHours().toString().padStart(2,'0')}:${u.getMinutes().toString().padStart(2,'0')}`; } catch(_){return '—';} })() : '—'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* PIN 만료 카운트다운 */}
+          <PinExpireCountdown active={pinCountdown && !pinDone[selectedProp]} onDone={() => setPinCountdown(false)} />
+
+          {/* 이벤트 시뮬레이터 */}
+          {currentStatus === 'occupied' && (
+            <div style={{ background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px 20px' }}>
+              <div style={{ fontWeight:700, fontSize:13, color:'#1e293b', marginBottom:12, display:'flex', alignItems:'center', gap:6 }}>
+                <span>🎮</span> 이벤트 시뮬레이터
+                <span style={{ fontSize:11, color:'#94a3b8', fontWeight:400, marginLeft:4 }}>테스트용</span>
+              </div>
+              <div style={{ display:'flex', gap:10 }}>
+                <button
+                  onClick={() => handleCheckoutEvent('door_locked')}
+                  disabled={processing}
+                  style={{ flex:1, padding:'10px 0', borderRadius:8, border:`1.5px solid ${processing?'#e2e8f0':'#dc2626'}`, background:processing?'#f8fafc':'#dc2626', color:processing?'#94a3b8':'#ffffff', fontSize:13, fontWeight:700, cursor:processing?'default':'pointer', transition:'all 0.2s', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}
+                >
+                  {processing ? (<><div style={{ width:14, height:14, border:'2px solid #94a3b8', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />처리 중...</>) : '🔒 도어락 잠금 (퇴실 감지)'}
+                </button>
+                <button
+                  onClick={() => handleCheckoutEvent('manual_checkout')}
+                  disabled={processing}
+                  style={{ flex:1, padding:'10px 0', borderRadius:8, border:`1.5px solid ${processing?'#e2e8f0':'#d97706'}`, background:processing?'#f8fafc':'#fffbeb', color:processing?'#94a3b8':'#d97706', fontSize:13, fontWeight:700, cursor:processing?'default':'pointer', transition:'all 0.2s' }}
+                >
+                  📋 수동 체크아웃
+                </button>
+              </div>
+              <div style={{ marginTop:8, fontSize:11, color:'#94a3b8' }}>* 실제 환경에서는 HA WebSocket 이벤트로 자동 수신됩니다</div>
+            </div>
+          )}
+
+          {currentAssign && <CleanerAssignCard assignment={currentAssign} />}
+
+          {currentItems && (
+            <CleaningChecklistS04
+              items={currentItems}
+              onToggle={toggleChecklistItem}
+              onFinalize={handleFinalizeClean}
+              propStatus={currentStatus}
+            />
+          )}
+
+          {currentStatus === 'vacant' && (
+            <div style={{ background:'#f0fdf4', border:'2px solid #bbf7d0', borderRadius:12, padding:'20px 24px', textAlign:'center' }}>
+              <div style={{ fontSize:32, marginBottom:8 }}>✅</div>
+              <div style={{ fontWeight:800, fontSize:16, color:'#15803d' }}>숙소 준비 완료</div>
+              <div style={{ fontSize:13, color:'#16a34a', marginTop:4 }}>다음 게스트 입실 대기 중</div>
+            </div>
+          )}
+        </div>
+
+        {/* 오른쪽: 알림 피드 */}
+        <div>
+          <div style={{ fontWeight:700, fontSize:13, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10 }}>자동화 알림</div>
+          <div style={{ background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px' }}>
+            <AlertFeedS04 alerts={alerts} onAck={ackAlert} onAckAll={ackAllAlerts} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════
+// UC-005 S05RevenuePanel
+// ═══════════════════════════════════════════════════
+
+// ── 도메인 함수 (인라인) ─────────────────────────────────────
+const _s05 = (() => {
+  function aggregateRevenue(platforms, operatingCost = 0) {
+    let totalGross = 0, totalFee = 0, totalNet = 0;
+    const byPlatform = {};
+    for (const [platform, data] of Object.entries(platforms)) {
+      totalGross += data.gross; totalFee += data.platformFee; totalNet += data.net;
+      byPlatform[platform] = { ...data };
+    }
+    return { totalGross, totalFee, totalNet, byPlatform, operatingCost, operatingProfit: totalNet - operatingCost };
+  }
+  function calcTax(rev) {
+    const { operatingProfit, totalGross, totalFee } = rev;
+    const vat = Math.round(operatingProfit * 0.10), incomeTaxEstimate = Math.round(operatingProfit * 0.15);
+    return { vat, incomeTaxEstimate, netAfterTax: operatingProfit - vat, deductions: [
+      { item:'플랫폼 수수료', amount:totalFee },
+      { item:'청소비', amount:Math.round(totalGross*0.03) },
+      { item:'유지보수비', amount:Math.round(totalGross*0.02) },
+    ]};
+  }
+  const _TREND = { spring_peak:1.10, summer_peak:1.15, off_season:0.90, normal:1.00 };
+  function getPricingRecommendations(propDataList, marketTrend='normal') {
+    const mult = _TREND[marketTrend]??1.00;
+    let sumCurrent=0, sumSuggested=0;
+    const recommendations = propDataList.map(({propId,occupancy,avgNightlyRate,competitorAvg})=>{
+      let suggestedRate;
+      if(occupancy>0.85) suggestedRate=Math.round(competitorAvg*mult);
+      else if(occupancy>0.70) suggestedRate=Math.round(Math.max(avgNightlyRate,competitorAvg)*mult);
+      else suggestedRate=Math.round(avgNightlyRate*mult);
+      let confidence=0.60;
+      if(occupancy>0.85) confidence+=0.15;
+      if(avgNightlyRate<competitorAvg) confidence+=0.10;
+      if(marketTrend!=='normal') confidence+=0.10;
+      confidence=Math.min(confidence,0.95);
+      const rp=[];
+      if(occupancy>0.85) rp.push('높은 점유율');
+      if(avgNightlyRate<competitorAvg) rp.push('경쟁사 대비 저평가');
+      if(marketTrend!=='normal'){const tl={spring_peak:'봄 성수기',summer_peak:'여름 성수기',off_season:'비수기'};rp.push(tl[marketTrend]||marketTrend);}
+      sumCurrent+=avgNightlyRate; sumSuggested+=suggestedRate;
+      return {propId,currentRate:avgNightlyRate,suggestedRate,confidence,reason:rp.join(' + ')||'성수기 보정'};
+    });
+    const pct=sumCurrent>0?Math.round((sumSuggested-sumCurrent)/sumCurrent*100):0;
+    return {recommendations,projectedRevenueIncrease:`+${pct}%`,totalProjected:Math.round(sumSuggested)};
+  }
+  function won(n){return n.toLocaleString('ko-KR')+'원';}
+  function hhmm(){const d=new Date();return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
+  return {aggregateRevenue,calcTax,getPricingRecommendations,won,hhmm};
+})();
+
+const _mockPlatform = {
+  async fetchAirbnb(){await new Promise(r=>setTimeout(r,600+Math.random()*400));return{gross:12_400_000,platformFee:744_000,net:11_656_000};},
+  async fetchYanolja(){await new Promise(r=>setTimeout(r,500+Math.random()*300));return{gross:3_200_000,platformFee:192_000,net:3_008_000};},
+  async updateAirbnbPricing(){await new Promise(r=>setTimeout(r,400+Math.random()*200));},
+  async updateYanoljaPricing(){await new Promise(r=>setTimeout(r,350+Math.random()*200));},
+};
+
+const _PROP_DATA_S05 = [
+  {propId:'P-001',name:'해운대 오션뷰',    occupancy:0.87,avgNightlyRate:85_000, competitorAvg:92_000},
+  {propId:'P-002',name:'광안리 스튜디오',  occupancy:0.72,avgNightlyRate:65_000, competitorAvg:70_000},
+  {propId:'P-003',name:'남포동 투룸',       occupancy:0.91,avgNightlyRate:78_000, competitorAvg:95_000},
+  {propId:'P-004',name:'서울 강남 아파트', occupancy:0.68,avgNightlyRate:120_000,competitorAvg:118_000},
+  {propId:'P-005',name:'제주 서귀포 펜션', occupancy:0.55,avgNightlyRate:95_000, competitorAvg:110_000},
+  {propId:'P-006',name:'인천 송도 스튜디오',occupancy:0.80,avgNightlyRate:58_000, competitorAvg:62_000},
+];
+
+async function _fetchWithRetryS05(fetchFn,maxRetries,platform,addAlert){
+  let lastErr;
+  for(let attempt=1;attempt<=maxRetries;attempt++){
+    try{return await fetchFn();}
+    catch(err){
+      lastErr=err;
+      const time=_s05.hhmm();
+      if(attempt<maxRetries) addAlert({type:'warn',prop:'SYSTEM',msg:`${platform} API 응답 없음\n5분 후 재시도 예정 (${attempt}/${maxRetries})`,time});
+      else addAlert({type:'error',prop:'SYSTEM',msg:`${platform} API ${maxRetries}회 시도 실패 — 수동 처리 필요`,time});
+    }
+  }
+  throw new Error(`${platform} API 실패 (${maxRetries}회): ${lastErr?.message}`);
+}
+
+function SettlementProgress({steps,running}){
+  const STEPS=[{key:'start',label:'정산 시작'},{key:'data',label:'수익 수집'},{key:'pricing',label:'AI 최적화'},{key:'tax',label:'세금 리포트'}];
+  return(
+    <div style={{display:'flex',alignItems:'center',gap:0,marginBottom:16}}>
+      {STEPS.map((s,i)=>{
+        const done=steps[s.key];
+        const active=running&&!done&&((s.key==='start'&&!steps.start)||(s.key==='data'&&steps.start&&!steps.data)||(s.key==='pricing'&&steps.data&&!steps.pricing)||(s.key==='tax'&&steps.pricing&&!steps.tax));
+        return(
+          <React.Fragment key={s.key}>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4,minWidth:80}}>
+              <div style={{width:32,height:32,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',background:done?'#059669':active?'#2563eb':'#e2e8f0',color:done||active?'#fff':'#94a3b8',fontSize:14,fontWeight:700,boxShadow:active?'0 0 0 3px #bfdbfe':'none',transition:'all 0.3s'}}>
+                {done?'✓':active?(<div style={{width:14,height:14,border:'2px solid #fff',borderTopColor:'transparent',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>):(i+1)}
+              </div>
+              <span style={{fontSize:11,color:done?'#059669':active?'#2563eb':'#94a3b8',fontWeight:600}}>{s.label}</span>
+            </div>
+            {i<STEPS.length-1&&<div style={{flex:1,height:2,background:done?'#059669':'#e2e8f0',transition:'background 0.4s',margin:'0 4px',marginBottom:16}}/>}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function PlatformCardS05({platform,data,icon,color}){
+  if(!data)return(<div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:10,padding:'14px 16px',opacity:0.5}}><div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}><span style={{fontSize:18}}>{icon}</span><span style={{fontWeight:700,fontSize:13,color:'#64748b'}}>{platform}</span></div><div style={{fontSize:12,color:'#94a3b8'}}>데이터 수집 대기 중...</div></div>);
+  return(
+    <div style={{background:'#ffffff',border:`1.5px solid ${color}30`,borderTop:`3px solid ${color}`,borderRadius:10,padding:'14px 16px'}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}><span style={{fontSize:18}}>{icon}</span><span style={{fontWeight:700,fontSize:13,color:'#1e293b'}}>{platform}</span></div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+        {[{label:'총 매출',value:_s05.won(data.gross),color:'#1e293b'},{label:'플랫폼 수수료',value:`-${_s05.won(data.platformFee)}`,color:'#dc2626'},{label:'순수익',value:_s05.won(data.net),color:'#059669'}].map(r=>(
+          <div key={r.label}><div style={{fontSize:10,color:'#94a3b8',marginBottom:2}}>{r.label}</div><div style={{fontFamily:"'DM Mono',monospace",fontSize:12,fontWeight:700,color:r.color}}>{r.value}</div></div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RevenueSummaryCardS05({revenueData}){
+  if(!revenueData)return null;
+  const {totalGross,totalFee,totalNet,operatingCost,operatingProfit}=revenueData;
+  const rows=[{label:'총 매출',value:totalGross,color:'#1e293b',sign:''},{label:'플랫폼 수수료',value:totalFee,color:'#dc2626',sign:'-'},{label:'순수익',value:totalNet,color:'#2563eb',sign:''},{label:'운영비',value:operatingCost,color:'#d97706',sign:'-'},{label:'영업이익',value:operatingProfit,color:'#059669',sign:''}];
+  return(
+    <div style={{background:'#ffffff',border:'1.5px solid #bbf7d0',borderTop:'3px solid #059669',borderRadius:10,padding:'16px'}}>
+      <div style={{fontWeight:700,fontSize:13,color:'#1e293b',marginBottom:12}}>수익 집계 요약</div>
+      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+        {rows.map((r,i)=>(
+          <div key={r.label} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 10px',borderRadius:6,background:i===rows.length-1?'#f0fdf4':'#f8fafc',border:i===rows.length-1?'1px solid #bbf7d0':'1px solid #f1f5f9'}}>
+            <span style={{fontSize:12,color:'#64748b',fontWeight:i===rows.length-1?700:400}}>{r.label}</span>
+            <span style={{fontFamily:"'DM Mono',monospace",fontSize:13,fontWeight:700,color:r.color}}>{r.sign}{_s05.won(r.value)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TaxReportCardS05({taxData}){
+  if(!taxData)return null;
+  const {vat,incomeTaxEstimate,deductions,netAfterTax}=taxData;
+  return(
+    <div style={{background:'#ffffff',border:'1.5px solid #fde68a',borderTop:'3px solid #d97706',borderRadius:10,padding:'16px'}}>
+      <div style={{fontWeight:700,fontSize:13,color:'#1e293b',marginBottom:12}}>세금 리포트</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+        {[{label:'VAT (부가세)',value:vat,color:'#d97706'},{label:'소득세 추정',value:incomeTaxEstimate,color:'#dc2626'},{label:'실수령액',value:netAfterTax,color:'#059669'}].map(r=>(
+          <div key={r.label} style={{background:'#fffbeb',border:'1px solid #fde68a',borderRadius:8,padding:'10px 12px'}}>
+            <div style={{fontSize:10,color:'#92400e',marginBottom:4}}>{r.label}</div>
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:13,fontWeight:700,color:r.color}}>{_s05.won(r.value)}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{fontSize:11,color:'#64748b',fontWeight:700,marginBottom:6}}>공제 항목</div>
+      <div style={{display:'flex',flexDirection:'column',gap:4}}>
+        {deductions.map(d=>(
+          <div key={d.item} style={{display:'flex',justifyContent:'space-between',fontSize:12,color:'#475569',padding:'4px 8px',background:'#f8fafc',borderRadius:4}}>
+            <span>{d.item}</span><span style={{fontFamily:"'DM Mono',monospace",fontWeight:600}}>{_s05.won(d.amount)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PricingRecommendationListS05({pricingData,selectedProps,onToggleProp,onApply,applying}){
+  if(!pricingData)return null;
+  const {recommendations,projectedRevenueIncrease,totalProjected}=pricingData;
+  return(
+    <div style={{background:'#ffffff',border:'1.5px solid #bfdbfe',borderTop:'3px solid #2563eb',borderRadius:10,padding:'16px'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+        <div>
+          <div style={{fontWeight:700,fontSize:13,color:'#1e293b'}}>AI 가격 최적화 추천</div>
+          <div style={{fontSize:11,color:'#64748b',marginTop:2}}>예상 수익 향상: <span style={{color:'#059669',fontWeight:700}}>{projectedRevenueIncrease}</span><span style={{marginLeft:8,fontFamily:"'DM Mono',monospace"}}>({_s05.won(totalProjected)})</span></div>
+        </div>
+        <button onClick={onApply} disabled={applying||selectedProps.length===0} style={{padding:'7px 14px',borderRadius:7,border:`1.5px solid ${applying||selectedProps.length===0?'#e2e8f0':'#2563eb'}`,background:applying||selectedProps.length===0?'#f8fafc':'#2563eb',color:applying||selectedProps.length===0?'#94a3b8':'#fff',fontSize:12,fontWeight:700,cursor:applying||selectedProps.length===0?'default':'pointer',display:'flex',alignItems:'center',gap:6,transition:'all 0.2s'}}>
+          {applying?<><div style={{width:12,height:12,border:'2px solid #94a3b8',borderTopColor:'transparent',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>적용 중...</>:`✓ ${selectedProps.length}개 적용`}
+        </button>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+        {recommendations.map(r=>{
+          const selected=selectedProps.includes(r.propId);
+          const diff=r.suggestedRate-r.currentRate;
+          const propInfo=_PROP_DATA_S05.find(p=>p.propId===r.propId);
+          return(
+            <div key={r.propId} onClick={()=>onToggleProp(r.propId)} style={{display:'grid',gridTemplateColumns:'auto 1fr auto auto',gap:10,alignItems:'center',padding:'10px 12px',borderRadius:8,cursor:'pointer',background:selected?'#eff6ff':'#f8fafc',border:`1px solid ${selected?'#bfdbfe':'#e2e8f0'}`,transition:'all 0.15s'}}>
+              <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${selected?'#2563eb':'#cbd5e1'}`,background:selected?'#2563eb':'transparent',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                {selected&&<span style={{color:'#fff',fontSize:11,fontWeight:700}}>✓</span>}
+              </div>
+              <div>
+                <div style={{fontSize:12,fontWeight:600,color:'#1e293b'}}>{propInfo?.name||r.propId}</div>
+                <div style={{fontSize:10,color:'#94a3b8',marginTop:1}}>{r.reason}</div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'#94a3b8',textDecoration:'line-through'}}>{r.currentRate.toLocaleString()}원</div>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:13,fontWeight:700,color:'#059669'}}>{r.suggestedRate.toLocaleString()}원</div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <div style={{fontSize:11,fontWeight:700,color:diff>0?'#059669':'#dc2626'}}>{diff>0?'+':''}{diff.toLocaleString()}원</div>
+                <div style={{fontSize:10,color:'#94a3b8',marginTop:1}}>신뢰도 {Math.round(r.confidence*100)}%</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{marginTop:8,fontSize:11,color:'#94a3b8'}}>* 체크박스 클릭으로 적용 대상 선택</div>
+    </div>
+  );
+}
+
+function AlertFeedS05({alerts,onAck}){
+  if(alerts.length===0)return(<div style={{textAlign:'center',padding:'24px 0',color:'#94a3b8',fontSize:12}}>알림 없음</div>);
+  const ts={info:{bg:'#eff6ff',border:'#bfdbfe',color:'#1d4ed8',icon:'ℹ'},warn:{bg:'#fffbeb',border:'#fde68a',color:'#d97706',icon:'⚠'},error:{bg:'#fef2f2',border:'#fecaca',color:'#dc2626',icon:'✕'}};
+  return(
+    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+      {alerts.map(a=>{const s=ts[a.type]||ts.info;return(
+        <div key={a.id} style={{background:s.bg,border:`1px solid ${s.border}`,borderRadius:8,padding:'10px 12px',display:'flex',gap:8}}>
+          <span style={{fontSize:13,color:s.color,fontWeight:700,flexShrink:0}}>{s.icon}</span>
+          <div style={{flex:1}}>
+            <div style={{fontSize:12,color:'#1e293b',whiteSpace:'pre-line'}}>{a.msg}</div>
+            <div style={{fontSize:10,color:'#94a3b8',marginTop:3}}>{a.time}</div>
+          </div>
+          <button onClick={()=>onAck(a.id)} style={{background:'none',border:'none',cursor:'pointer',color:'#94a3b8',fontSize:14,padding:'0 4px',flexShrink:0}}>×</button>
+        </div>
+      );})}
+    </div>
+  );
+}
+
+function S05RevenuePanel({onBack}){
+  const nowD=new Date();
+  const [month]=React.useState(nowD.getMonth()===0?12:nowD.getMonth());
+  const [marketTrend,setMarketTrend]=React.useState('spring_peak');
+  const OPERATING_COST=2_100_000;
+  const [running,setRunning]=React.useState(false);
+  const [applying,setApplying]=React.useState(false);
+  const [steps,setSteps]=React.useState({start:false,data:false,pricing:false,tax:false});
+  const [airbnbData,setAirbnbData]=React.useState(null);
+  const [yanoljaData,setYanoljaData]=React.useState(null);
+  const [revenueData,setRevenueData]=React.useState(null);
+  const [pricingData,setPricingData]=React.useState(null);
+  const [taxData,setTaxData]=React.useState(null);
+  const [alerts,setAlerts]=React.useState([]);
+  const [selectedProps,setSelectedProps]=React.useState([]);
+  const [failMode,setFailMode]=React.useState(false);
+  const alertIdRef=React.useRef(1);
+
+  function addAlert(alert){const id=alertIdRef.current++;setAlerts(prev=>[{...alert,id,time:alert.time||_s05.hhmm()},...prev]);}
+  function ackAlert(id){setAlerts(prev=>prev.filter(a=>a.id!==id));}
+  function resetAll(){setSteps({start:false,data:false,pricing:false,tax:false});setAirbnbData(null);setYanoljaData(null);setRevenueData(null);setPricingData(null);setTaxData(null);setAlerts([]);setSelectedProps([]);alertIdRef.current=1;}
+
+  async function runSettlement(){
+    resetAll();setRunning(true);
+    const period=`${month}월`,propCount=_PROP_DATA_S05.length;
+    addAlert({type:'info',prop:'SYSTEM',msg:`${period} 수익 정산 시작 (${propCount}개 숙소)`,time:_s05.hhmm()});
+    setSteps(s=>({...s,start:true}));
+    try{
+      const airbnbFetch=()=>failMode?Promise.reject(new Error('503 Service Unavailable')):_mockPlatform.fetchAirbnb(period);
+      let ab,ya;
+      try{
+        [ab,ya]=await Promise.all([_fetchWithRetryS05(airbnbFetch,3,'에어비앤비',addAlert),_fetchWithRetryS05(()=>_mockPlatform.fetchYanolja(period),3,'야놀자',addAlert)]);
+      }catch(err){addAlert({type:'error',prop:'SYSTEM',msg:`데이터 수집 실패: ${err.message}`,time:_s05.hhmm()});setRunning(false);return;}
+      setAirbnbData(ab);setYanoljaData(ya);
+      const rev=_s05.aggregateRevenue({airbnb:ab,yanolja:ya},OPERATING_COST);
+      setRevenueData(rev);setSteps(s=>({...s,data:true}));
+      addAlert({type:'info',prop:'SYSTEM',msg:`수익 데이터 수집 완료\n총 수익: ${_s05.won(rev.totalGross)} (${propCount}개 숙소)`,time:_s05.hhmm()});
+      await new Promise(r=>setTimeout(r,500));
+      const pricing=_s05.getPricingRecommendations(_PROP_DATA_S05,marketTrend);
+      setPricingData(pricing);setSelectedProps(_PROP_DATA_S05.map(p=>p.propId));setSteps(s=>({...s,pricing:true}));
+      addAlert({type:'info',prop:'SYSTEM',msg:`AI 가격 최적화 완료\n예상 수익 향상: ${pricing.projectedRevenueIncrease} (${_s05.won(pricing.totalProjected)})`,time:_s05.hhmm()});
+      await new Promise(r=>setTimeout(r,300));
+      const tax=_s05.calcTax(rev);
+      setTaxData(tax);setSteps(s=>({...s,tax:true}));
+      addAlert({type:'info',prop:'SYSTEM',msg:`세금 리포트 생성 완료\n(VAT: ${_s05.won(tax.vat)} / 소득세 추정: ${_s05.won(tax.incomeTaxEstimate)})`,time:_s05.hhmm()});
+    }finally{setRunning(false);}
+  }
+
+  async function applyPricing(){
+    if(!pricingData||selectedProps.length===0)return;
+    setApplying(true);
+    try{
+      const targets=pricingData.recommendations.filter(r=>selectedProps.includes(r.propId));
+      const listings=targets.map(r=>({propId:r.propId,suggestedRate:r.suggestedRate}));
+      await _mockPlatform.updateAirbnbPricing(listings);await _mockPlatform.updateYanoljaPricing(listings);
+      addAlert({type:'info',prop:'SYSTEM',msg:`AI 가격 최적화 적용 완료 (${targets.length}개 숙소)`,time:_s05.hhmm()});
+    }catch(err){addAlert({type:'error',prop:'SYSTEM',msg:`가격 업데이트 오류: ${err.message}`,time:_s05.hhmm()});}
+    finally{setApplying(false);}
+  }
+
+  function toggleProp(propId){setSelectedProps(prev=>prev.includes(propId)?prev.filter(p=>p!==propId):[...prev,propId]);}
+  const allDone=steps.start&&steps.data&&steps.pricing&&steps.tax;
+
+  return(
+    <div style={{height:'100vh',display:'flex',flexDirection:'column',background:'#f0f4f8',fontFamily:"'DM Sans',sans-serif",overflow:'hidden'}}>
+      <div style={{background:'#ffffff',borderBottom:'1px solid #e2e8f0',padding:'0 20px',height:48,display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
+        <button onClick={onBack} style={{background:'none',border:'1px solid #e2e8f0',borderRadius:6,padding:'4px 10px',fontSize:12,color:'#64748b',cursor:'pointer',fontWeight:600}}>← 홈</button>
+        <div style={{width:1,height:22,background:'#e2e8f0'}}/>
+        <div style={{fontWeight:800,fontSize:14,color:'#1e293b'}}>PROP<span style={{color:'#059669'}}>OS</span> · S05 수익 정산 자동화</div>
+        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:10}}>
+          <select value={marketTrend} onChange={e=>setMarketTrend(e.target.value)} disabled={running} style={{fontSize:11,border:'1px solid #e2e8f0',borderRadius:6,padding:'4px 8px',background:'#f8fafc',color:'#475569',fontWeight:600,cursor:'pointer'}}>
+            <option value="spring_peak">봄 성수기 (+10%)</option>
+            <option value="summer_peak">여름 성수기 (+15%)</option>
+            <option value="normal">보통</option>
+            <option value="off_season">비수기 (-10%)</option>
+          </select>
+          <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:failMode?'#dc2626':'#94a3b8',cursor:'pointer',userSelect:'none'}}>
+            <button className={`tog${failMode?' on':''}`} onClick={()=>setFailMode(f=>!f)} style={{background:failMode?'var(--red)':undefined}}><div className="tog-d"/></button>API 오류 시뮬
+          </label>
+          <button onClick={running?undefined:runSettlement} disabled={running} style={{padding:'6px 16px',borderRadius:7,border:`1.5px solid ${running?'#e2e8f0':'#059669'}`,background:running?'#f8fafc':'#059669',color:running?'#94a3b8':'#fff',fontSize:12,fontWeight:700,cursor:running?'default':'pointer',display:'flex',alignItems:'center',gap:6,transition:'all 0.2s'}}>
+            {running?<><div style={{width:12,height:12,border:'2px solid #94a3b8',borderTopColor:'transparent',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>정산 중...</>:`▶ ${month}월 정산 실행`}
+          </button>
+          {allDone&&<button onClick={resetAll} style={{padding:'6px 12px',borderRadius:7,border:'1.5px solid #e2e8f0',background:'#f8fafc',color:'#64748b',fontSize:12,fontWeight:600,cursor:'pointer'}}>↺ 초기화</button>}
+        </div>
+      </div>
+      <div style={{flex:1,overflow:'auto',padding:20}}>
+        <div style={{background:'#ffffff',border:'1px solid #e2e8f0',borderRadius:12,padding:'16px 24px',marginBottom:16}}>
+          <SettlementProgress steps={steps} running={running}/>
+          {allDone&&<div style={{textAlign:'center',color:'#059669',fontSize:13,fontWeight:700,marginTop:4}}>✓ {month}월 정산 완료 — 모든 단계 성공</div>}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:16}}>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <div style={{fontWeight:700,fontSize:12,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.05em'}}>플랫폼별 수익</div>
+            <PlatformCardS05 platform="에어비앤비" data={airbnbData}  icon="🏠" color="#FF5A5F"/>
+            <PlatformCardS05 platform="야놀자"     data={yanoljaData} icon="🌙" color="#0078FF"/>
+            {revenueData&&<RevenueSummaryCardS05 revenueData={revenueData}/>}
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <div style={{fontWeight:700,fontSize:12,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.05em'}}>AI 가격 최적화</div>
+            {pricingData?(<PricingRecommendationListS05 pricingData={pricingData} selectedProps={selectedProps} onToggleProp={toggleProp} onApply={applyPricing} applying={applying}/>):(
+              <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:10,padding:'24px',textAlign:'center',color:'#94a3b8',fontSize:12}}>정산 실행 후 AI 분석 결과가 표시됩니다</div>
+            )}
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <div style={{fontWeight:700,fontSize:12,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.05em'}}>세금 리포트</div>
+            {taxData?(<TaxReportCardS05 taxData={taxData}/>):(
+              <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:10,padding:'24px',textAlign:'center',color:'#94a3b8',fontSize:12}}>정산 실행 후 세금 리포트가 표시됩니다</div>
+            )}
+            <div style={{fontWeight:700,fontSize:12,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.05em',marginTop:4}}>자동화 알림</div>
+            <div style={{background:'#ffffff',border:'1px solid #e2e8f0',borderRadius:12,padding:'12px',maxHeight:280,overflowY:'auto'}}>
+              <AlertFeedS05 alerts={alerts} onAck={ackAlert}/>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>

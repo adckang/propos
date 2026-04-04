@@ -6,9 +6,9 @@
 ---
 
 ## 현재 상태
-- **버전**: v0.6 (UC-003 완성 + TDD 146개 통과)
+- **버전**: v0.8 (UC-005 완성 + TDD 342개 통과)
 - **배포**: Netlify Drop (dist/index.html)
-- **업데이트**: 2026-04-03
+- **업데이트**: 2026-04-04
 
 ## 완료된 마일스톤
 
@@ -73,19 +73,34 @@
 - `dist/index.html` 동기화 + 랜딩 UC-003 카드 추가
 - **전체 테스트 146개 통과 (fail 0)**
 
+### ✅ M7: UC-004 체크아웃 & 청소 자동화 (2026-04-03)
+- `.claude/rules/s04-module-boundary.md` — 모듈 경계 정의
+- `.claude/rules/s04-interface-definitions.md` — 인터페이스 정의
+- `src/domain/checkoutDomain.js` — isCheckoutEvent, getCheckoutWindow, assignCleaner, buildChecklist, buildCheckoutAlert, buildCleanerAssignAlert
+- `src/domain/messageDomain.js` — buildCheckoutThankYouMessage 추가
+- `src/application/checkoutService.js` — handleCheckout, completeChecklistItem, finalizeClean
+- `tests/unit/s04.domain.test.js` — 52개 통과
+- `tests/functional/s04.functional.test.js` — TC-F-037~054, 25개 통과
+- `src/components/S04CheckoutPanel.jsx` — 이벤트 시뮬레이터 + PIN 만료 카운트다운 + 청소팀 배정 카드 + 체크리스트 + Mock/HA 모드 전환
+- `dist/index.html` 동기화 + 랜딩 UC-004 카드 추가
+- 버그 수정 1건: UTC vs 로컬 타임 불일치 (`getUTCHours` → `getHours`)
+- **전체 테스트 243개 통과 (fail 0)**
+
+### ✅ M8: UC-005 수익 정산 자동화 (2026-04-04)
+- `.claude/rules/s05-module-boundary.md` — 모듈 경계 정의
+- `.claude/rules/s05-interface-definitions.md` — 인터페이스 정의
+- `src/domain/revenueDomain.js` — aggregateRevenue, calcTax, getPricingRecommendations, 알림 텍스트 함수 6개
+- `src/application/settlementService.js` — runMonthlySettlement, applyPricingRecommendations, fetchWithRetry
+- `tests/unit/s05.domain.test.js` — 61개 통과
+- `tests/functional/s05.functional.test.js` — TC-F-055~065, 38개 통과
+- `src/components/S05RevenuePanel.jsx` — 진행 단계 표시, 플랫폼별 수익 카드, AI 가격 최적화 체크박스, 세금 리포트, 알림 피드, API 오류 시뮬 토글
+- `dist/index.html` 동기화 + 랜딩 UC-005 카드 추가
+- **전체 테스트 342개 통과 (fail 0)**
+
 ## 진행 중
 없음
 
 ## 다음 작업 (우선순위 순)
-
-### 🔜 UC-004: 체크아웃 & 청소 자동화
-> 시나리오: 퇴실 감지 → PIN 만료 → 청소팀 자동 배정 → 체크리스트
-
-핵심 자동화:
-- [ ] 퇴실 감지 (체크아웃 시간 + 도어락 이벤트)
-- [ ] 5초 이내 PIN 즉시 만료 처리
-- [ ] 청소팀 자동 배정 알림
-- [ ] 청소 체크리스트 생성
 
 ### 🔜 HA CORS 설정 (사용자 직접)
 - HA configuration.yaml에 추가 필요:
