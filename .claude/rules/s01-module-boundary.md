@@ -73,7 +73,7 @@ Business Logic   Infrastructure
 ---
 
 ## 다음 단계
-- [ ] 각 모듈 인터페이스 정의
-- [ ] Business Logic 단위 테스트 작성
-- [ ] Infrastructure mock 구현
-- [ ] Application 통합
+- [x] 각 모듈 인터페이스 정의
+- [x] Business Logic 단위 테스트 작성
+- [x] Infrastructure mock 구현
+- [x] Application 통합

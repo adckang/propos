@@ -113,7 +113,7 @@ setInterval(30s)
 ---
 
 ## 다음 단계
-- [ ] 인터페이스 정의 (s03-interface-definitions.md)
-- [ ] Business Logic 단위 테스트 작성 (`node:test`)
-- [ ] Infrastructure mock 구현
-- [ ] Application 통합 테스트
+- [x] 인터페이스 정의 (s03-interface-definitions.md)
+- [x] Business Logic 단위 테스트 작성 (`node:test`)
+- [x] Infrastructure mock 구현
+- [x] Application 통합 테스트

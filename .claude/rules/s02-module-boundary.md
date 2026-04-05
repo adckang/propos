@@ -101,6 +101,6 @@ Business Logic        Infrastructure
 ---
 
 ## 다음 단계
-- [ ] Business Logic 단위 테스트 작성 (`node:test`)
-- [ ] Infrastructure mock 구현 (haWebSocket, messageClient)
-- [ ] Application 통합 테스트
+- [x] Business Logic 단위 테스트 작성 (`node:test`)
+- [x] Infrastructure mock 구현 (haWebSocket, messageClient)
+- [x] Application 통합 테스트
