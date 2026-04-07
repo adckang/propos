@@ -68,49 +68,79 @@ function App() {
       <style>{GLOBAL_CSS}</style>
       <div className="app">
         <div className="landing">
-          <div style={{textAlign:"center",marginBottom:"20px",animation:"slideIn 0.4s ease"}}>
-            <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#a0aec0",letterSpacing:"4px",marginBottom:"12px",fontWeight:"500"}}>DEMO v0.1</div>
+
+          {/* 헤더 */}
+          <div style={{textAlign:"center",marginBottom:"32px",animation:"slideIn 0.4s ease"}}>
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#a0aec0",letterSpacing:"4px",marginBottom:"10px",fontWeight:"500"}}>DEMO v0.1</div>
             <div className="land-title">PROP<span>OS</span></div>
             <div className="land-sub">에어비앤비 완전 관리 시스템</div>
           </div>
-          <div className="land-cards" style={{animation:"slideIn 0.4s ease 0.1s both",display:"flex",gap:"16px",flexWrap:"wrap",justifyContent:"center"}}>
-            <div className="land-card" onClick={()=>setScreen("ha")}>
-              <span className="land-card-icon">🏠</span>
-              <div className="land-card-title">홈 어시스턴트</div>
-              <div className="land-card-desc">개별 숙소 관리 · 체크인/아웃<br/>스마트홈 IoT 제어 · 게스트 메시지 · 수익 분석</div>
-              <div className="land-badge">HOME ASSISTANT →</div>
-            </div>
-            <div className="land-card" onClick={()=>setScreen("cc")}>
-              <span className="land-card-icon">🛰️</span>
-              <div className="land-card-title">커맨드 센터</div>
-              <div className="land-card-desc">48개+ 숙소 동시 관제 · 일괄 IoT 제어<br/>실시간 알림 · 자동화 · 수익 분석 · 청소 배정</div>
-              <div className="land-badge">COMMAND CENTER →</div>
-            </div>
-            <div className="land-card" onClick={()=>setScreen("d1")}
-              style={{borderTop:"3px solid var(--blue)"}}>
-              <span className="land-card-icon">⚡</span>
-              <div className="land-card-title">D-1 자동화</div>
-              <div className="land-card-desc">체크인 전날 자동화 · PIN 발급<br/>웰컴 메시지 · 스마트홈 초기화</div>
-              <div className="land-badge">UC-001 →</div>
-            </div>
-            <div className="land-card" onClick={()=>setScreen("s02")}
-              style={{borderTop:"3px solid var(--green)"}}>
-              <span className="land-card-icon">🚪</span>
-              <div className="land-card-title">체크인 당일 자동화</div>
-              <div className="land-card-desc">입실 감지 · IoT 씬 실행<br/>게스트 채팅 오픈 · 숙소 상태 갱신</div>
-              <div className="land-badge">UC-002 →</div>
-            </div>
-            <div className="land-card" onClick={()=>setScreen("s03")}
-              style={{borderTop:"3px solid var(--yellow)"}}>
-              <span className="land-card-icon">📡</span>
-              <div className="land-card-title">체류 중 모니터링</div>
-              <div className="land-card-desc">센서 LIVE 폴링 · 이상 감지<br/>AI 답장 초안 · 긴급 알림</div>
-              <div className="land-badge">UC-003 →</div>
+
+          {/* 섹션 1: 시스템 */}
+          <div style={{animation:"slideIn 0.35s ease 0.05s both",width:"100%",maxWidth:660,marginBottom:32}}>
+            <div className="land-section-label">시스템</div>
+            <div style={{display:"flex",gap:16}}>
+              <div className="land-tool-card" style={{flex:1}} onClick={()=>setScreen("ha")}>
+                <span className="land-tool-icon">🏠</span>
+                <div className="land-tool-title">홈 어시스턴트</div>
+                <div className="land-tool-desc">개별 숙소 관리 · 체크인/아웃<br/>스마트홈 IoT 제어 · 게스트 메시지 · 수익 분석</div>
+                <div className="land-tool-badge">HOME ASSISTANT →</div>
+              </div>
+              <div className="land-tool-card" style={{flex:1}} onClick={()=>setScreen("cc")}>
+                <span className="land-tool-icon">🛰️</span>
+                <div className="land-tool-title">커맨드 센터</div>
+                <div className="land-tool-desc">48개+ 숙소 동시 관제 · 일괄 IoT 제어<br/>실시간 알림 · 자동화 · 수익 분석 · 청소 배정</div>
+                <div className="land-tool-badge">COMMAND CENTER →</div>
+              </div>
             </div>
           </div>
-          <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#c8d5e0",letterSpacing:"1px",textAlign:"center",animation:"slideIn 0.4s ease 0.2s both"}}>
+
+          {/* 섹션 2: 자동화 시나리오 5단계 */}
+          <div style={{animation:"slideIn 0.35s ease 0.12s both",width:"100%",maxWidth:930,marginBottom:28}}>
+            <div className="land-section-label">자동화 시나리오 — 5단계</div>
+            <div style={{display:"flex",alignItems:"flex-start",gap:6}}>
+              <div className="land-sc-card" style={{borderTop:"3px solid var(--blue)"}} onClick={()=>setScreen("d1")}>
+                <span className="land-sc-icon">⚡</span>
+                <div className="land-sc-title">D-1 자동화</div>
+                <div className="land-sc-desc">PIN 발급<br/>웰컴 메시지<br/>스마트홈 초기화</div>
+                <span className="land-sc-badge">UC-001</span>
+              </div>
+              <div className="land-sc-arrow">›</div>
+              <div className="land-sc-card" style={{borderTop:"3px solid var(--green)"}} onClick={()=>setScreen("s02")}>
+                <span className="land-sc-icon">🚪</span>
+                <div className="land-sc-title">체크인 당일</div>
+                <div className="land-sc-desc">입실 감지<br/>IoT 씬 실행<br/>채팅 오픈</div>
+                <span className="land-sc-badge">UC-002</span>
+              </div>
+              <div className="land-sc-arrow">›</div>
+              <div className="land-sc-card" style={{borderTop:"3px solid var(--yellow)"}} onClick={()=>setScreen("s03")}>
+                <span className="land-sc-icon">📡</span>
+                <div className="land-sc-title">체류 중 모니터링</div>
+                <div className="land-sc-desc">센서 LIVE<br/>이상 감지<br/>AI 답장 초안</div>
+                <span className="land-sc-badge">UC-003</span>
+              </div>
+              <div className="land-sc-arrow">›</div>
+              <div className="land-sc-card" style={{borderTop:"3px solid var(--red)"}} onClick={()=>setScreen("s04")}>
+                <span className="land-sc-icon">🧹</span>
+                <div className="land-sc-title">체크아웃 & 청소</div>
+                <div className="land-sc-desc">PIN 즉시 만료<br/>청소팀 배정<br/>체크리스트</div>
+                <span className="land-sc-badge">UC-004</span>
+              </div>
+              <div className="land-sc-arrow">›</div>
+              <div className="land-sc-card" style={{borderTop:"3px solid var(--purple)"}} onClick={()=>setScreen("s05")}>
+                <span className="land-sc-icon">💰</span>
+                <div className="land-sc-title">수익 정산</div>
+                <div className="land-sc-desc">멀티플랫폼 통합<br/>AI 가격 최적화<br/>세금 리포트</div>
+                <span className="land-sc-badge">UC-005</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 시계 */}
+          <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#c8d5e0",letterSpacing:"1px",textAlign:"center",animation:"slideIn 0.35s ease 0.18s both"}}>
             {now.toLocaleString("ko-KR")}
           </div>
+
         </div>
       </div>
     </>

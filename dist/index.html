@@ -177,25 +177,41 @@ const GLOBAL_CSS = `
 @keyframes slideIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 
 /* ── LANDING ── */
-.landing{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(145deg,#eff6ff 0%,#f0f9ff 40%,#f0fdf4 100%)}
-.land-title{font-family:'Nunito',sans-serif;font-size:56px;font-weight:800;color:var(--blue);letter-spacing:-1px;margin-bottom:6px}
+.landing{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(160deg,#f0f7ff 0%,#f8fafc 50%,#f0fdf6 100%);padding:32px 20px;overflow:auto}
+.land-title{font-family:'Nunito',sans-serif;font-size:52px;font-weight:800;color:var(--blue);letter-spacing:-1.5px;margin-bottom:4px}
 .land-title span{color:var(--red)}
-.land-sub{font-size:14px;color:var(--text3);margin-bottom:52px;font-weight:500}
-.land-cards{display:flex;gap:20px;margin-bottom:48px}
-.land-card{width:280px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-lg);padding:32px 26px;cursor:pointer;transition:all 0.22s;text-align:center;box-shadow:var(--shadow)}
-.land-card:hover{border-color:var(--blue);transform:translateY(-5px);box-shadow:var(--shadow-lg),0 0 0 3px var(--blue-m)}
-.land-card-icon{font-size:40px;margin-bottom:16px;display:block}
-.land-card-title{font-size:17px;font-weight:700;color:var(--text);margin-bottom:10px}
-.land-card-desc{font-size:12px;color:var(--text3);line-height:1.8}
-.land-badge{font-family:'DM Mono',monospace;font-size:10px;background:var(--blue-l);color:var(--blue);padding:4px 12px;border-radius:20px;margin-top:14px;display:inline-block;font-weight:500}
+.land-sub{font-size:13px;color:var(--text3);margin-bottom:36px;font-weight:500;letter-spacing:0.3px}
+.land-section-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--text4);text-transform:uppercase;margin-bottom:14px;align-self:flex-start;padding-left:2px}
+/* 메인 도구 카드 (HA / CC) */
+.land-tool-card{width:300px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-lg);padding:28px 26px;cursor:pointer;transition:all 0.22s;text-align:left;box-shadow:var(--shadow-md)}
+.land-tool-card:hover{border-color:var(--blue);transform:translateY(-4px);box-shadow:var(--shadow-lg),0 0 0 3px var(--blue-m)}
+.land-tool-icon{font-size:36px;margin-bottom:14px;display:block}
+.land-tool-title{font-size:17px;font-weight:700;color:var(--text);margin-bottom:8px}
+.land-tool-desc{font-size:12px;color:var(--text3);line-height:1.8}
+.land-tool-badge{font-family:'DM Mono',monospace;font-size:10px;background:var(--blue-l);color:var(--blue);padding:4px 12px;border-radius:20px;margin-top:14px;display:inline-block;font-weight:600;border:1px solid var(--blue-m)}
+/* 시나리오 단계 카드 (UC-001~005) */
+.land-sc-card{width:168px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:18px 14px;cursor:pointer;transition:all 0.2s;text-align:center;box-shadow:var(--shadow);flex-shrink:0}
+.land-sc-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:var(--border2)}
+.land-sc-icon{font-size:28px;margin-bottom:10px;display:block}
+.land-sc-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px;line-height:1.3}
+.land-sc-desc{font-size:11px;color:var(--text3);line-height:1.7}
+.land-sc-badge{font-family:'DM Mono',monospace;font-size:10px;color:var(--text4);margin-top:10px;display:block;font-weight:500}
+.land-sc-arrow{color:var(--border2);font-size:16px;display:flex;align-items:center;flex-shrink:0;padding-top:2px}
 
 /* ── TOP NAV ── */
-.topnav{height:54px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:14px;flex-shrink:0;z-index:100;box-shadow:var(--shadow)}
-.back-btn{font-size:12px;color:var(--text3);cursor:pointer;padding:6px 12px;border:1.5px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface);transition:all 0.15s;font-weight:600;font-family:'DM Sans',sans-serif}
+.topnav{height:52px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0;z-index:100;box-shadow:var(--shadow)}
+.back-btn{font-size:12px;color:var(--text2);cursor:pointer;padding:5px 12px;border:1.5px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface);transition:all 0.15s;font-weight:600;font-family:'DM Sans',sans-serif}
 .back-btn:hover{color:var(--blue);border-color:var(--blue);background:var(--blue-l)}
-.nav-title{font-size:14px;color:var(--text);font-weight:700}
+.nav-title{font-size:14px;color:var(--text);font-weight:700;letter-spacing:-0.2px}
 .nav-title span{color:var(--red)}
-.topnav-clock{font-family:'DM Mono',monospace;font-size:15px;color:var(--blue);margin-left:auto;font-weight:500}
+.topnav-clock{font-family:'DM Mono',monospace;font-size:13px;color:var(--text3);margin-left:auto;font-weight:500;background:var(--surface2);padding:4px 10px;border-radius:var(--radius-sm);border:1px solid var(--border)}
+/* ── PANEL SECTION LABEL (공통) ── */
+.panel-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--text4);text-transform:uppercase;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.panel-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;box-shadow:var(--shadow)}
+.status-ok{color:var(--green);background:var(--green-l);border-color:var(--green-m)}
+.status-warn{color:var(--yellow);background:var(--yellow-l);border-color:var(--yellow-m)}
+.status-error{color:var(--red);background:var(--red-l);border-color:var(--red-m)}
+.status-info{color:var(--blue);background:var(--blue-l);border-color:var(--blue-m)}
 
 /* ── SHARED COMPONENTS ── */
 .sep{width:1px;height:28px;background:var(--border);flex-shrink:0}
@@ -1116,58 +1132,79 @@ function App() {
       <style>{GLOBAL_CSS}</style>
       <div className="app">
         <div className="landing">
-          <div style={{textAlign:"center",marginBottom:"20px",animation:"slideIn 0.4s ease"}}>
-            <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#a0aec0",letterSpacing:"4px",marginBottom:"12px",fontWeight:"500"}}>DEMO v0.1</div>
+
+          {/* 헤더 */}
+          <div style={{textAlign:"center",marginBottom:"32px",animation:"slideIn 0.4s ease"}}>
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#a0aec0",letterSpacing:"4px",marginBottom:"10px",fontWeight:"500"}}>DEMO v0.1</div>
             <div className="land-title">PROP<span>OS</span></div>
             <div className="land-sub">에어비앤비 완전 관리 시스템</div>
           </div>
-          <div className="land-cards" style={{animation:"slideIn 0.4s ease 0.1s both",display:"flex",gap:"16px",flexWrap:"wrap",justifyContent:"center"}}>
-            <div className="land-card" onClick={()=>setScreen("ha")}>
-              <span className="land-card-icon">🏠</span>
-              <div className="land-card-title">홈 어시스턴트</div>
-              <div className="land-card-desc">개별 숙소 관리 · 체크인/아웃<br/>스마트홈 IoT 제어 · 게스트 메시지 · 수익 분석</div>
-              <div className="land-badge">HOME ASSISTANT →</div>
-            </div>
-            <div className="land-card" onClick={()=>setScreen("cc")}>
-              <span className="land-card-icon">🛰️</span>
-              <div className="land-card-title">커맨드 센터</div>
-              <div className="land-card-desc">48개+ 숙소 동시 관제 · 일괄 IoT 제어<br/>실시간 알림 · 자동화 · 수익 분석 · 청소 배정</div>
-              <div className="land-badge">COMMAND CENTER →</div>
-            </div>
-            <div className="land-card" onClick={()=>setScreen("d1")} style={{borderTop:"3px solid var(--blue)"}}>
-              <span className="land-card-icon">⚡</span>
-              <div className="land-card-title">D-1 자동화</div>
-              <div className="land-card-desc">체크인 전날 자동화 · PIN 발급<br/>웰컴 메시지 · 스마트홈 초기화</div>
-              <div className="land-badge">UC-001 →</div>
-            </div>
-            <div className="land-card" onClick={()=>setScreen("s02")} style={{borderTop:"3px solid var(--green)"}}>
-              <span className="land-card-icon">🚪</span>
-              <div className="land-card-title">체크인 당일 자동화</div>
-              <div className="land-card-desc">입실 감지 · IoT 씬 실행<br/>게스트 채팅 오픈 · 숙소 상태 갱신</div>
-              <div className="land-badge">UC-002 →</div>
-            </div>
-            <div className="land-card" onClick={()=>setScreen("s03")} style={{borderTop:"3px solid var(--yellow)"}}>
-              <span className="land-card-icon">📡</span>
-              <div className="land-card-title">체류 중 모니터링</div>
-              <div className="land-card-desc">센서 LIVE 폴링 · 이상 감지<br/>AI 답장 초안 · 긴급 알림</div>
-              <div className="land-badge">UC-003 →</div>
-            </div>
-            <div className="land-card" onClick={()=>setScreen("s04")} style={{borderTop:"3px solid var(--red)"}}>
-              <span className="land-card-icon">🧹</span>
-              <div className="land-card-title">체크아웃 & 청소 자동화</div>
-              <div className="land-card-desc">퇴실 감지 · PIN 즉시 만료<br/>청소팀 자동 배정 · 체크리스트</div>
-              <div className="land-badge">UC-004 →</div>
-            </div>
-            <div className="land-card" onClick={()=>setScreen("s05")} style={{borderTop:"3px solid #7c3aed"}}>
-              <span className="land-card-icon">💰</span>
-              <div className="land-card-title">수익 정산 자동화</div>
-              <div className="land-card-desc">멀티플랫폼 수익 수집 · AI 가격 최적화<br/>세금 리포트 · 월말 자동 정산</div>
-              <div className="land-badge">UC-005 →</div>
+
+          {/* 섹션 1: 시스템 */}
+          <div style={{animation:"slideIn 0.35s ease 0.05s both",width:"100%",maxWidth:660,marginBottom:32}}>
+            <div className="land-section-label">시스템</div>
+            <div style={{display:"flex",gap:16}}>
+              <div className="land-tool-card" style={{flex:1}} onClick={()=>setScreen("ha")}>
+                <span className="land-tool-icon">🏠</span>
+                <div className="land-tool-title">홈 어시스턴트</div>
+                <div className="land-tool-desc">개별 숙소 관리 · 체크인/아웃<br/>스마트홈 IoT 제어 · 게스트 메시지 · 수익 분석</div>
+                <div className="land-tool-badge">HOME ASSISTANT →</div>
+              </div>
+              <div className="land-tool-card" style={{flex:1}} onClick={()=>setScreen("cc")}>
+                <span className="land-tool-icon">🛰️</span>
+                <div className="land-tool-title">커맨드 센터</div>
+                <div className="land-tool-desc">48개+ 숙소 동시 관제 · 일괄 IoT 제어<br/>실시간 알림 · 자동화 · 수익 분석 · 청소 배정</div>
+                <div className="land-tool-badge">COMMAND CENTER →</div>
+              </div>
             </div>
           </div>
-          <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#c8d5e0",letterSpacing:"1px",textAlign:"center",animation:"slideIn 0.4s ease 0.2s both"}}>
+
+          {/* 섹션 2: 자동화 시나리오 5단계 */}
+          <div style={{animation:"slideIn 0.35s ease 0.12s both",width:"100%",maxWidth:930,marginBottom:28}}>
+            <div className="land-section-label">자동화 시나리오 — 5단계</div>
+            <div style={{display:"flex",alignItems:"flex-start",gap:6}}>
+              <div className="land-sc-card" style={{borderTop:"3px solid var(--blue)"}} onClick={()=>setScreen("d1")}>
+                <span className="land-sc-icon">⚡</span>
+                <div className="land-sc-title">D-1 자동화</div>
+                <div className="land-sc-desc">PIN 발급<br/>웰컴 메시지<br/>스마트홈 초기화</div>
+                <span className="land-sc-badge">UC-001</span>
+              </div>
+              <div className="land-sc-arrow">›</div>
+              <div className="land-sc-card" style={{borderTop:"3px solid var(--green)"}} onClick={()=>setScreen("s02")}>
+                <span className="land-sc-icon">🚪</span>
+                <div className="land-sc-title">체크인 당일</div>
+                <div className="land-sc-desc">입실 감지<br/>IoT 씬 실행<br/>채팅 오픈</div>
+                <span className="land-sc-badge">UC-002</span>
+              </div>
+              <div className="land-sc-arrow">›</div>
+              <div className="land-sc-card" style={{borderTop:"3px solid var(--yellow)"}} onClick={()=>setScreen("s03")}>
+                <span className="land-sc-icon">📡</span>
+                <div className="land-sc-title">체류 중 모니터링</div>
+                <div className="land-sc-desc">센서 LIVE<br/>이상 감지<br/>AI 답장 초안</div>
+                <span className="land-sc-badge">UC-003</span>
+              </div>
+              <div className="land-sc-arrow">›</div>
+              <div className="land-sc-card" style={{borderTop:"3px solid var(--red)"}} onClick={()=>setScreen("s04")}>
+                <span className="land-sc-icon">🧹</span>
+                <div className="land-sc-title">체크아웃 & 청소</div>
+                <div className="land-sc-desc">PIN 즉시 만료<br/>청소팀 배정<br/>체크리스트</div>
+                <span className="land-sc-badge">UC-004</span>
+              </div>
+              <div className="land-sc-arrow">›</div>
+              <div className="land-sc-card" style={{borderTop:"3px solid var(--purple)"}} onClick={()=>setScreen("s05")}>
+                <span className="land-sc-icon">💰</span>
+                <div className="land-sc-title">수익 정산</div>
+                <div className="land-sc-desc">멀티플랫폼 통합<br/>AI 가격 최적화<br/>세금 리포트</div>
+                <span className="land-sc-badge">UC-005</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 시계 */}
+          <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#c8d5e0",letterSpacing:"1px",textAlign:"center",animation:"slideIn 0.35s ease 0.18s both"}}>
             {now.toLocaleString("ko-KR")}
           </div>
+
         </div>
       </div>
     </>
