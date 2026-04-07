@@ -2,10 +2,10 @@
 
 title PROPOS — S01 체크인 전날 (D-1 자동화)\nPIN 발급 · 웰컴 메시지 · 스마트홈 초기화
 
-skinparam defaultFontName "DM Sans"
 skinparam backgroundColor #f0f4f8
 skinparam sequenceMessageAlign center
 skinparam responseMessageBelowArrow true
+skinparam wrapWidth 400
 
 skinparam participant {
   BackgroundColor #ffffff
@@ -39,17 +39,16 @@ skinparam sequence {
 ' PARTICIPANTS
 ' ============================================================
 
-participant "D-1 스케줄러\n(자동 트리거)"       as Scheduler  #dbeafe
 actor       "관리자"                            as Admin
-participant "PROPOS\nCommandCenter"             as UI         #dbeafe
-participant "PIN 관리 서비스"                   as PINSvc     #fef9c3
-participant "메시지 서비스"                     as MsgSvc     #ffedd5
-participant "HA REST API\n(Tailscale VPN)"      as HA         #dcfce7
-participant "Home Assistant\n(라즈베리파이)"    as HACore     #dcfce7
-participant "도어락\n(스마트락)"                as DoorLock   #e0f2fe
-participant "조명\n(스마트기기)"                as Light      #e0f2fe
-participant "에어컨\n(스마트기기)"              as AC         #e0f2fe
-participant "알림 피드"                         as AlertFeed  #ffedd5
+participant "D1AutomationPanel\n(UI + 스케줄러)" as Panel     #dbeafe
+participant "PIN 관리 서비스"                   as PINSvc    #fef9c3
+participant "메시지 서비스"                     as MsgSvc    #ffedd5
+participant "HA REST API\n(Tailscale VPN)"      as HA        #dcfce7
+participant "Home Assistant\n(라즈베리파이)"    as HACore    #dcfce7
+participant "도어락\n(스마트락)"                as DoorLock  #e0f2fe
+participant "조명\n(스마트기기)"                as Light     #e0f2fe
+participant "에어컨\n(스마트기기)"              as AC        #e0f2fe
+participant "알림 피드"                         as AlertFeed #ffedd5
 actor       "게스트"                            as Guest
 
 ' ============================================================
@@ -58,15 +57,28 @@ actor       "게스트"                            as Guest
 
 == 0. D-1 자동 트리거 — 예약 정보 확인 ==
 
-Scheduler -> UI : checkTomorrowBookings()\n(익일 체크인 예약 전체 조회)
-note right of Scheduler : 매일 오후 6시 자동 실행\ncron: "0 18 * * *"
+alt 자동 트리거 (18:00)
+  Panel -> Panel : useEffect: countdown.secs === 0\n→ handleRun()
+  note right of Panel : 매일 오후 6시 자동 실행\nuseCountdownTo1800()
+else 수동 트리거 (관리자 버튼)
+  Admin -> Panel : 실행 버튼 클릭\n→ handleRun()
+end
 
-UI -> UI : filterBookings({\n  checkIn: tomorrow,\n  status: "confirmed"\n})
-note right of UI : 대상 숙소 필터링\n(내일 체크인 + 확정 상태)
+Panel -> Panel : useMemo: filterTomorrowCheckIns(syncedBookings, today)\n→ targets (익일 체크인 confirmed 예약 목록)
 
-UI --> Scheduler : [{ propId: "P-042",\n  guestName: "김민준",\n  checkIn: "2026-03-28 15:00",\n  checkOut: "2026-03-30 11:00",\n  pinRequired: true }]
+note over Panel
+  [src] bookingDomain.js
+  [fn]  filterTomorrowCheckIns(bookings, today)
+  TC-F-002 복수숙소 필터링 | TC-F-004 대상없음 -> 빈배열, deps 미호출
+  Unit 7개
+end note
 
-note over Scheduler, UI : 대상 숙소 N개에 대해\n아래 절차 반복 (loop)
+note over Panel
+  [src] D1AutomationPanel.jsx
+  [fn]  handleRun() -> runD1Automation(targets, deps, onProgress)
+  deps: makeHAInfra(onAlert) 또는 makeMockInfra(onAlert)
+  TC-F-001~F-010 전범위 커버 (정상 2 / 순서검증 1 / 예외 4 / 알림 3)
+end note
 
 ' ============================================================
 ' 1. PIN 자동 발급
@@ -76,19 +88,34 @@ note over Scheduler, UI : 대상 숙소 N개에 대해\n아래 절차 반복 (lo
 
 loop 내일 체크인 숙소 N개
 
-  Scheduler -> PINSvc : generatePIN({\n  propId: "P-042",\n  guestName: "김민준",\n  validFrom: "2026-03-28 14:00",\n  validUntil: "2026-03-30 11:00"\n})
-  note right of PINSvc : 6자리 랜덤 PIN 생성\n유효기간: 체크인 1시간 전 ~\n체크아웃 시각
+  Panel -> PINSvc : generatePIN()\ncalcExpiry(checkIn, checkOut)
 
-  PINSvc --> Scheduler : { pin: "492817",\n  expiry: "2026-03-30 11:00" }
+  note over PINSvc
+    [src] pinDomain.js
+    [fn]  generatePIN() / calcExpiry()
+    TC-F-001 steps.pin=true | TC-F-003 setLockCode에 6자리 PIN 전달 검증
+    Unit 11개
+  end note
 
-  Scheduler -> HA : POST /api/services/lock/set_code\n{ entity_id: "lock.front_door_p042",\n  code: "492817",\n  name: "guest_김민준" }
+  PINSvc --> Panel : { pin: "492817",\n  expiry: "2026-03-30 11:00" }
+
+  Panel -> HA : POST /api/services/lock/set_code\n{ entity_id: "lock.front_door_p042",\n  code: "492817",\n  name: "guest_김민준" }
+
+  note over HA
+    [src] haClient.js
+    [fn]  setLockCode(entityId, code, name)
+    TC-F-003 호출순서: setLockCode -> sendMessage -> activateScene
+    TC-F-005 throw -> status=failed, 후속단계 중단 / 다음 숙소는 계속 처리
+    TC-F-009 throw -> error 알림 1개, info 알림 0개
+  end note
+
   HA -> HACore : 서비스 호출
   HACore -> DoorLock : PIN 등록
   DoorLock --> HACore : OK
   HACore --> HA : 200 OK
-  HA --> Scheduler : PIN 도어락 등록 완료
+  HA --> Panel : PIN 도어락 등록 완료
 
-  Scheduler -> AlertFeed : addAlert({\n  type: "info",\n  prop: "P-042",\n  msg: "PIN 발급 완료 (492817)\n유효: 03-28 14:00 ~ 03-30 11:00",\n  time: "18:00"\n})
+  Panel -> AlertFeed : addAlert({\n  type: "info",\n  prop: "P-042",\n  msg: "PIN 발급 완료 (492817)\n유효: 03-28 14:00 ~ 03-30 11:00",\n  time: "18:00"\n})
 
 end
 
@@ -98,15 +125,22 @@ end
 
 == 2. 웰컴 메시지 자동 발송 ==
 
-Scheduler -> MsgSvc : sendWelcomeMessage({\n  guestName: "김민준",\n  propName: "해운대 오션뷰 펜트하우스",\n  checkIn: "2026-03-28 15:00",\n  pin: "492817",\n  wifiSSID: "ProposGuest_5G",\n  wifiPW: "1234567890"\n})
-note right of MsgSvc : 에어비앤비 메시지 채널\n또는 카카오톡 알림톡 발송
+Panel -> MsgSvc : buildWelcomeMessage(booking, pinRecord)\nsendMessage(guestId, text)
+
+note over MsgSvc
+  [src] messageDomain.js
+  [fn]  buildWelcomeMessage(booking, pinRecord)
+  TC-F-003 guestId, 이름, 6자리 PIN 포함 텍스트 검증
+  TC-F-006 throw -> status=partial, activateScene은 계속 실행됨
+  Unit 10개
+end note
 
 MsgSvc -> Guest : 웰컴 메시지 발송\n"안녕하세요 김민준님!\n내일 체크인 안내드립니다.\n도어락 PIN: 492817\nWiFi: ProposGuest_5G / 1234567890\n체크인: 15:00 이후 입실 가능합니다."
 
 Guest --> MsgSvc : 메시지 수신 확인
-MsgSvc --> Scheduler : 발송 완료
+MsgSvc --> Panel : 발송 완료
 
-Scheduler -> AlertFeed : addAlert({\n  type: "info",\n  prop: "P-042",\n  msg: "웰컴 메시지 발송 완료 (김민준)",\n  time: "18:01"\n})
+Panel -> AlertFeed : addAlert({\n  type: "info",\n  prop: "P-042",\n  msg: "웰컴 메시지 발송 완료 (김민준)",\n  time: "18:01"\n})
 
 ' ============================================================
 ' 3. 스마트홈 초기화
@@ -114,12 +148,19 @@ Scheduler -> AlertFeed : addAlert({\n  type: "info",\n  prop: "P-042",\n  msg: "
 
 == 3. 스마트홈 초기화 (체크인 전 환경 세팅) ==
 
-Scheduler -> HA : POST /api/services/scene/turn_on\n{ entity_id: "scene.checkin_ready_p042" }
-note right of HA : HA 씬(Scene):\n조명 100% + 에어컨 26°C 대기\n+ 도어락 활성화 상태로 일괄 설정
+Panel -> HA : POST /api/services/scene/turn_on\n{ entity_id: "scene.checkin_ready_p042" }
+
+note over HA
+  [src] haClient.js
+  [fn]  activateScene(entityId)  씬 ID: "scene.checkin_ready_{propId}"
+  TC-F-003 id.startsWith("scene.checkin_ready_") 검증
+  TC-F-006 메시지 실패 후에도 activateScene 반드시 호출됨
+  TC-F-007 throw -> status=partial, steps.pin/message=true 유지
+end note
 
 HA -> HACore : 씬 실행
 HACore -> Light   : 조명 켜기 (100%)
-HACore -> AC      : 에어컨 대기 모드 (26°C)
+HACore -> AC      : 에어컨 대기 모드 (26도C)
 HACore -> DoorLock : 도어락 활성화 확인
 
 Light    --> HACore : OK
@@ -127,9 +168,9 @@ AC       --> HACore : OK
 DoorLock --> HACore : OK (PIN 492817 등록 확인)
 
 HACore --> HA : 씬 실행 완료
-HA --> Scheduler : 200 OK
+HA --> Panel : 200 OK
 
-Scheduler -> AlertFeed : addAlert({\n  type: "info",\n  prop: "P-042",\n  msg: "스마트홈 초기화 완료\n(조명·에어컨·도어락 준비 완료)",\n  time: "18:02"\n})
+Panel -> AlertFeed : addAlert({\n  type: "info",\n  prop: "P-042",\n  msg: "스마트홈 초기화 완료\n(조명·에어컨·도어락 준비 완료)",\n  time: "18:02"\n})
 
 ' ============================================================
 ' 4. 관리자 확인
@@ -139,8 +180,8 @@ Scheduler -> AlertFeed : addAlert({\n  type: "info",\n  prop: "P-042",\n  msg: "
 
 AlertFeed -> Admin : [알림] D-1 자동화 완료\n(PIN 발급 + 메시지 + 스마트홈)
 
-Admin -> UI : 알림 피드 확인
-UI --> Admin : 처리 결과 요약 표시\n{ 대상: 3개 숙소,\n  PIN 발급: 3/3,\n  메시지: 3/3,\n  스마트홈: 3/3 }
+Admin -> Panel : 알림 피드 확인
+Panel --> Admin : 처리 결과 요약 표시\n{ 대상: 3개 숙소,\n  PIN 발급: 3/3,\n  메시지: 3/3,\n  스마트홈: 3/3 }
 
 note over Admin : 모든 처리 자동 완료\n관리자 개입 불필요\n(이상 시에만 알림)
 
@@ -153,14 +194,23 @@ AlertFeed --> Admin : 뱃지 해제
 
 == 5. 예외 처리 — 도어락 통신 오류 ==
 
-Scheduler -> HA : POST /api/services/lock/set_code\n{ entity_id: "lock.front_door_p007", ... }
+Panel -> HA : POST /api/services/lock/set_code\n{ entity_id: "lock.front_door_p007", ... }
 HA -> HACore : 서비스 호출
 HACore -> DoorLock : PIN 등록 시도
 DoorLock --> HACore : TIMEOUT (응답 없음)
 HACore --> HA : 503 Service Unavailable
-HA --> Scheduler : PIN 등록 실패
+HA --> Panel : PIN 등록 실패
 
-Scheduler -> AlertFeed : addAlert({\n  type: "error",\n  prop: "P-007",\n  msg: "PIN 등록 실패 — 도어락 응답 없음\n수동 확인 필요",\n  time: "18:00"\n})
+note over Panel
+  [src] D1AutomationPanel.jsx — 예외 흐름
+  TC-F-005 status=failed, steps 전부 false
+           sendMessage/activateScene 미호출
+           실패 숙소 건너뛰고 다음 숙소 계속 처리
+  TC-F-009 error 알림 1개, info 알림 0개
+  TC-F-010 2숙소 성공 -> info 2개 / 1성공+1실패 -> info 1개 + error 1개
+end note
+
+Panel -> AlertFeed : addAlert({\n  type: "error",\n  prop: "P-007",\n  msg: "PIN 등록 실패 — 도어락 응답 없음\n수동 확인 필요",\n  time: "18:00"\n})
 
 AlertFeed -> Admin : [긴급 알림] PIN 등록 실패 (P-007)
 
@@ -171,15 +221,26 @@ note over Admin : 긴급 알림 수신 시\n관리자가 직접 확인 후\n수�
 ' ============================================================
 
 legend right
-  | <#dbeafe>   | PROPOS 프론트엔드 / 스케줄러 |
+  | <#dbeafe>   | D1AutomationPanel (UI + 스케줄러) |
   | <#dcfce7>   | Home Assistant / Tailscale VPN |
   | <#e0f2fe>   | IoT 스마트기기 |
   | <#ffedd5>   | 알림·메시지 레이어 |
   | <#fef9c3>   | PIN 관리 서비스 |
   ----
-  트리거: 매일 오후 6시 자동 실행 (D-1)
-  대상: 익일 체크인 확정 예약 전체
+  트리거: useEffect countdown=0 (18:00) 또는 관리자 버튼
+  대상: filterTomorrowCheckIns() -> 익일 체크인 confirmed 예약
   Tailscale VPN으로 집 밖에서도 동일 실행
+  ----
+  소스 파일 매핑
+  D1AutomationPanel.jsx         handleRun() / runD1Automation()
+  bookingDomain.js              filterTomorrowCheckIns
+  pinDomain.js                  generatePIN / calcExpiry
+  messageDomain.js              buildWelcomeMessage
+  haClient.js                   setLockCode / activateScene
+  ----
+  테스트 커버리지
+  Unit 28개  (booking 7 / pin 11 / message 10)
+  Functional TC-F-001 ~ TC-F-010  (10그룹)
 endlegend
 
 @enduml

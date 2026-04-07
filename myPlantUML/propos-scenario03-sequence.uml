@@ -1,11 +1,11 @@
 @startuml PROPOS_S03_Sequence
 
-title PROPOS — S03 체류 중 실시간 모니터링 (MVP)\n관리자 1명 · 100개+ 숙소 · IoT 완전 자동화
+title PROPOS — S03 체류 중 (실시간 모니터링)\n센서 LIVE 센싱 · 이상 감지 알림 · AI 답장 초안
 
-skinparam defaultFontName "DM Sans"
 skinparam backgroundColor #f0f4f8
 skinparam sequenceMessageAlign center
 skinparam responseMessageBelowArrow true
+skinparam wrapWidth 400
 
 skinparam participant {
   BackgroundColor #ffffff
@@ -39,17 +39,13 @@ skinparam sequence {
 ' PARTICIPANTS
 ' ============================================================
 
-actor       "관리자"                  as Admin
-participant "PROPOS\nCommandCenter"   as UI        #dbeafe
-participant "Auto Rules\n엔진"        as Rules     #fef9c3
-participant "HA REST API\n(Tailscale VPN)" as HA  #dcfce7
-participant "Home Assistant\n(라즈베리파이)" as HACore #dcfce7
-participant "온도·습도\n센서"          as TempSensor #e0f2fe
-participant "도어락\n(스마트락)"       as DoorLock  #e0f2fe
-participant "에어컨\n(스마트기기)"     as AC        #e0f2fe
-participant "알림 피드"               as AlertFeed  #ffedd5
-actor       "게스트"                  as Guest
-participant "AI 엔진"                 as AI        #f3e8ff
+actor       "관리자"                              as Admin
+participant "S03MonitoringPanel\n(UI + 폴링 루프)" as Panel     #dbeafe
+participant "HA REST API\n(Tailscale VPN)"        as HA        #dcfce7
+participant "Home Assistant\n(라즈베리파이)"      as HACore    #dcfce7
+participant "센서\n(온도·습도·소음·전력)"         as Sensor    #e0f2fe
+participant "알림 피드"                           as AlertFeed #ffedd5
+actor       "게스트"                              as Guest
 
 ' ============================================================
 ' 0. 앱 초기화 — 폴링 루프 시작
@@ -57,18 +53,35 @@ participant "AI 엔진"                 as AI        #f3e8ff
 
 == 0. 앱 초기화 (React useEffect 마운트) ==
 
-UI -> HA : GET /api/states\n(전체 센서 초기값 요청)
-note right of HA : Authorization: Bearer {HA_TOKEN}\nTailscale 터널 경유
+alt Real HA 모드 (useRealHA = true)
+  note over Panel
+    [src] S03MonitoringPanel.jsx
+    useEffect(useRealHA) → _haS03.getSensorStates(propId)
+    Promise.all([getTemp, getHumidity]) 초기 로딩
+  end note
 
-HA -> HACore : 상태 조회
-HACore -> TempSensor : 현재값 읽기
-HACore -> DoorLock   : 현재값 읽기
-HACore --> HA : { temp: 22, humidity: 58,\n  door: "locked" }
-HA --> UI : 200 OK — 초기 센서값 반환
+  Panel -> HA : GET /api/states/sensor.temperature_{propId}\nGET /api/states/sensor.humidity_{propId} (외 2개)
+  HA -> HACore : 상태 조회
+  HACore -> Sensor : 현재값 읽기 (온도·습도·소음·전력)
+  Sensor --> HACore : { temp: 22, humidity: 58,\n  noise: 42, power: 800 }
+  HACore --> HA : 센서값 응답
+  HA --> Panel : 200 OK — 초기 SensorReading
 
-UI -> UI : ALL_PROPS 상태 갱신\n(실제 센서값으로 덮어쓰기)
+else Mock 모드 (시뮬레이터)
+  Panel -> Panel : makeMockSensorInfra()\n→ 가상 센서값 (랜덤 생성)\n→ 5회마다 이상 감지 주입
+end
 
-note over UI : setInterval(poll, 30_000)\n→ 30초마다 자동 폴링 시작\n\nsetInterval(alertCheck, 9_000)\n→ 9초마다 임계값 체크
+Panel -> Panel : setInterval(pollAll, intervalMs)\n→ 30초마다 자동 폴링 시작
+
+note over Panel
+  [src] S03MonitoringPanel.jsx / monitoringService.js
+  [fn]  pollAll(propIds, thresholds, deps)
+        getDefaultThresholds() — temp{30,35} / humidity{80,90} / noise{60,75} / power{3000,5000}
+  TC-F-024 정상 폴링 — updateReadings 호출 검증
+  TC-F-029 pollAll — 복수 숙소 순차 처리
+  TC-F-035 S03PollResult 구조 검증 (propId/status/reading/anomaly)
+  Unit 35개
+end note
 
 ' ============================================================
 ' 1. 정상 상태 — 30초 폴링 루프
@@ -77,155 +90,177 @@ note over UI : setInterval(poll, 30_000)\n→ 30초마다 자동 폴링 시작\n
 == 1. 정상 폴링 루프 (30초 간격, 이상 없음) ==
 
 loop 매 30초
-  UI -> HA : GET /api/states/sensor.room_temp\nGET /api/states/sensor.room_humidity
+  Panel -> Panel : setInterval 트리거\n→ pollSensors(propId, thresholds, deps)
+
+  Panel -> HA : GET /api/states/sensor.temperature_{propId}\nGET /api/states/sensor.humidity_{propId}\nGET /api/states/sensor.noise_{propId}\nGET /api/states/sensor.power_{propId}
   HA -> HACore : 센서 폴링
-  HACore -> TempSensor : 현재값 읽기
-  TempSensor --> HACore : { temp: 24, humidity: 61 }
+  HACore -> Sensor : 현재값 읽기
+  Sensor --> HACore : { temp: 24, humidity: 61,\n  noise: 45, power: 1200 }
   HACore --> HA : 센서값 응답
-  HA --> UI : 200 OK — { temp: 24, humidity: 61 }
+  HA --> Panel : 200 OK — SensorReading
 
-  UI -> Rules : checkThresholds({ temp: 24, humidity: 61 })
-  note right of Rules : 임계값 기준\n온도 > 30°C → 에어컨 자동 켜기\n습도 > 80% → 제습 알림\n온도 < 15°C → 난방 알림
+  Panel -> Panel : isAnomaly(reading, thresholds)\n→ { isAnomaly: false }
+  Panel -> Panel : updateReadings(propId, reading)\n→ 센서 카드 실시간 갱신
 
-  Rules --> UI : NORMAL (이상 없음)
-  UI -> UI : 숙소 카드 센서값 업데이트\n(DM Mono 폰트 실시간 표시)
+  note over Panel
+    [src] sensorDomain.js / monitoringService.js
+    [fn]  isAnomaly(reading, thresholds) — 임계값 비교, null 센서 스킵
+          updateReadings(propId, reading) — sensorStore 갱신 (항상 호출)
+    TC-F-024 정상 폴링 — isAnomaly=false, updateReadings 호출
+    TC-F-034 updateReadings 이상 없어도 반드시 호출
+    Unit 35개
+  end note
 end
 
 ' ============================================================
 ' 2. 이상 감지 — 온도 임계값 초과
 ' ============================================================
 
-== 2. 이상 감지 — 온도 임계값 초과 (자동 에어컨 제어) ==
+== 2. 이상 감지 — 온도 임계값 초과 (경고 알림 생성) ==
 
-UI -> HA : GET /api/states/sensor.room_temp
+Panel -> HA : GET /api/states/sensor.temperature_{propId} ...
 HA -> HACore : 센서 폴링
-HACore -> TempSensor : 현재값 읽기
-TempSensor --> HACore : { temp: 32 }
+HACore -> Sensor : 현재값 읽기
+Sensor --> HACore : { temp: 32, humidity: 61,\n  noise: 45, power: 1200 }
 HACore --> HA : 센서값 응답
-HA --> UI : 200 OK — { temp: 32 }
+HA --> Panel : 200 OK — { temp: 32, ... }
 
-UI -> Rules : checkThresholds({ temp: 32 })
-note right of Rules : AUTO_RULES[5]:\n"온도 > 30°C → 에어컨 자동 켜기"\nactive: true → 트리거
+Panel -> Panel : isAnomaly(reading, thresholds)\n→ { isAnomaly: true,\n    severity: "warn",\n    sensors: ["temp"] }
 
-Rules --> UI : TRIGGER — AC_AUTO_ON
-Rules -> AlertFeed : addAlert({\n  type: "warn",\n  prop: "해운대 오션뷰 펜트하우스",\n  msg: "실내 온도 32°C 초과 감지\n→ 에어컨 자동 실행",\n  time: "14:32"\n})
+note over Panel
+  [src] sensorDomain.js
+  [fn]  isAnomaly(reading, thresholds)
+        thresholds.temp = { warn: 30, critical: 35 }
+        32°C > warn(30) → severity = "warn"
+        buildAnomalyAlert(propId, reading, anomaly)
+        → "[경고] P-042 — 온도 32°C 초과 (임계: 30°C)"
+  TC-F-025 warn 감지 (30 < temp ≤ 35)
+  TC-F-026 critical 감지 (temp > 35) → severity="critical"
+  TC-F-027 복합 센서 이상 — 최고 severity 적용
+  TC-F-036 addAlert 시각 포함 검증
+  Unit 35개
+end note
 
-UI -> HA : POST /api/services/climate/set_hvac_mode\n{ entity_id: "climate.room_ac",\n  hvac_mode: "cool",\n  temperature: 22 }
-HA -> HACore : 서비스 호출
-HACore -> AC : 에어컨 켜기 (냉방 22°C)
-AC --> HACore : OK
-HACore --> HA : 200 OK
-HA --> UI : 에어컨 제어 완료
+Panel -> Panel : buildAnomalyAlert(propId, reading, anomaly)\n→ "[경고] P-042 — 온도 32°C 초과 (임계: 30°C)"
+Panel -> Panel : updateReadings(propId, reading)\n→ 센서 카드 갱신 (경고 색상 표시)
 
-UI -> AlertFeed : addAlert({\n  type: "info",\n  msg: "에어컨 자동 실행 완료 (22°C)",\n  time: "14:32"\n})
+Panel -> AlertFeed : addAlert({\n  type: "warn",\n  prop: "P-042",\n  msg: "[경고] P-042 — 온도 32°C 초과 (임계: 30°C)",\n  time: "14:32"\n})
 
-AlertFeed -> Admin : [알림] 피드 뱃지 갱신\n(빨간 원 표시)
+AlertFeed -> Admin : [알림] 이상 감지 — 확인 요청
 
-note over Admin : 관리자는 개입 없이\n자동 처리 완료 확인만 함
+note over Admin : 관리자가 직접 조치\n(에어컨 수동 제어 → Section 4 참조)
 
 Admin -> AlertFeed : 알림 확인 (ack 클릭)
 AlertFeed --> Admin : 뱃지 해제
 
 ' ============================================================
-' 3. 도어락 이벤트 — 체크아웃 감지
+' 3. 게스트 메시지 → AI 답장 초안 즉시 생성
 ' ============================================================
 
-== 3. 도어락 이벤트 감지 — 체크아웃 트리거 ==
+== 3. 게스트 메시지 수신 → AI 답장 초안 즉시 생성 ==
 
-HACore -> DoorLock : WebSocket 이벤트 구독\n(state_changed)
-note right of HACore : HA WebSocket API:\nsubscribe_events — state_changed\n도어락 상태 변화 실시간 수신
+Guest -> Panel : 메시지 수신\n"와이파이 비밀번호가 뭐예요?"
 
-DoorLock --> HACore : { entity_id: "lock.front_door",\n  new_state: "unlocked",\n  old_state: "locked",\n  time: "11:03" }
+Panel -> Panel : handleGuestMessage(msg, booking, deps)\n→ buildReplyDraft(guestMessage, booking)\n→ 키워드 "와이파이" 감지 → WiFi 안내 템플릿
 
-HACore -> HA : WebSocket push — lock event
-HA -> UI : WebSocket 메시지 수신\n{ event: "door_unlocked", time: "11:03" }
+note over Panel
+  [src] monitoringService.js / S03MonitoringPanel.jsx
+  [fn]  handleGuestMessage(msg, booking, deps)
+        buildReplyDraft(guestMessage, booking)  ← 즉시 호출 (타이머 없음)
+  키워드 매칭 (우선순위 순):
+    wifi / 와이파이 / 인터넷 → WiFi 안내 템플릿
+    덥 / 뜨겁 / 춥 / cold / hot → 온도 조절 안내
+    청소 / clean / 더럽 → 청소 요청 처리 안내
+    체크아웃 / checkout / 퇴실 → 체크아웃 안내
+    매칭 없음 → 일반 응대 템플릿
+  TC-F-030 wifi 키워드 → WiFi 안내 템플릿
+  TC-F-031 온도 키워드 → 온도 조절 안내 템플릿
+  TC-F-032 청소 키워드 → 청소 요청 안내 템플릿
+  TC-F-033 키워드 없음 → 일반 응대 템플릿
+  Unit 35개
+end note
 
-UI -> Rules : checkDoorEvent({\n  time: "11:03",\n  checkoutTime: "11:00"\n})
-note right of Rules : 체크아웃 시간(11:00) 이후\n도어락 열림 = 퇴실 감지\n→ S04 체크아웃 트리거 조건
+Panel -> Panel : deps.setDraft(propId, draftText)\n→ "안녕하세요! 와이파이 정보입니다.\nSSID: ProposGuest_5G / PW: 1234567890"
 
-Rules --> UI : CHECKOUT_DETECTED
-UI -> AlertFeed : addAlert({\n  type: "info",\n  msg: "퇴실 감지 → S04 체크아웃 시퀀스 시작",\n  time: "11:03"\n})
+Panel -> AlertFeed : addAlert({\n  type: "info",\n  prop: "P-042",\n  msg: "게스트 메시지 수신 — AI 답장 초안 생성 완료",\n  time: "15:10"\n})
 
-note over UI, Rules : [S04 시퀀스 연계]\nPIN 즉시 만료 (5초 이내)\n청소팀 자동 배정\n→ 별도 시퀀스 다이어그램 참조
+AlertFeed -> Admin : [알림] 게스트 메시지 + 초안 확인 요청
+Admin -> Panel : 초안 확인 → 수정 또는 [발송] 클릭
+Panel -> Guest : 답장 발송\n"안녕하세요! 와이파이 정보입니다.\nSSID: ProposGuest_5G / PW: 1234567890\n불편하신 점은 언제든 알려주세요."
 
-' ============================================================
-' 4. 게스트 메시지 무응답 — AI 자동 답장
-' ============================================================
-
-== 4. 게스트 메시지 무응답 → AI 자동 답장 ==
-
-Guest -> UI : 메시지 수신\n"와이파이 비밀번호가 뭐예요?"
-UI -> AlertFeed : addAlert({\n  type: "info",\n  msg: "게스트 메시지 수신 (미답변)",\n  time: "15:10"\n})
-AlertFeed -> Admin : 🔔 알림
-
-note over Admin : 관리자가 30분간 미확인
-
-UI -> Rules : checkUnreadTimer({\n  lastMsg: "15:10",\n  now: "15:40"\n})
-note right of Rules : AUTO_RULES[3]:\n"미수신 메시지 > 30분\n→ AI 자동 답장"
-
-Rules --> UI : TRIGGER — AI_AUTO_REPLY
-UI -> AI : generateReply({\n  question: "와이파이 비밀번호가 뭐예요?",\n  propInfo: { wifi: "ProposGuest_5G",\n              pw: "1234567890" }\n})
-note right of AI : 다국어 감지 + 번역\n(한국어·영어·일본어·중국어)
-
-AI --> UI : "안녕하세요! 와이파이 정보입니다.\nSSID: ProposGuest_5G\nPW: 1234567890\n불편하신 점 있으면 언제든 연락 주세요 😊"
-
-UI -> Guest : 자동 답장 전송
-UI -> AlertFeed : addAlert({\n  type: "info",\n  msg: "AI 자동 답장 발송 완료",\n  time: "15:40"\n})
+note over Admin, Guest : 자동 발송이 아님\n관리자 검토·확인 후 발송 확정\n(초안 수정 가능)
 
 ' ============================================================
-' 5. 관리자 수동 개입 — 기기 직접 제어
+' 4. 관리자 수동 개입 — 기기 직접 제어
 ' ============================================================
 
-== 5. 관리자 수동 개입 — CommandCenter에서 직접 기기 제어 ==
+== 4. 관리자 수동 개입 — 기기 직접 제어 ==
 
-Admin -> UI : 숙소 카드 클릭 → 상세 패널 오픈
-Admin -> UI : IoT 탭 선택
-UI -> HA : GET /api/states\n(해당 숙소 전체 기기 상태)
-HA --> UI : { ac: on/22°C, lights: 80%,\n  door: locked, tv: off }
-UI --> Admin : IoT 상태 실시간 표시
+Admin -> Panel : 숙소 카드 클릭 → 상세 패널 오픈
+Admin -> Panel : IoT 탭 선택
+Panel -> HA : GET /api/states\n(해당 숙소 전체 기기 상태)
+HA --> Panel : { ac: on/22°C, lights: 80%,\n  door: locked, tv: off }
+Panel --> Admin : IoT 상태 실시간 표시
 
-Admin -> UI : 조명 밝기 조절 (80% → 50%)
-UI -> HA : POST /api/services/light/turn_on\n{ entity_id: "light.room_main",\n  brightness_pct: 50 }
+Admin -> Panel : 조명 밝기 조절 (80% → 50%)
+Panel -> HA : POST /api/services/light/turn_on\n{ entity_id: "light.room_main",\n  brightness_pct: 50 }
 HA -> HACore : 서비스 호출
 HACore --> HA : OK
-HA --> UI : 200 OK
-UI --> Admin : 조명 상태 즉시 반영
+HA --> Panel : 200 OK
+Panel --> Admin : 조명 상태 즉시 반영
 
 ' ============================================================
-' 6. 네트워크 단절 — 오프라인 복구
+' 5. 예외 — 네트워크 장애 복구
 ' ============================================================
 
-== 6. 네트워크 장애 복구 (Tailscale 단절 시나리오) ==
+== 5. 예외 처리 — HA 서버 응답 없음 (Tailscale 단절) ==
 
-UI -> HA : GET /api/states (30초 폴링)
-HA --> UI : ❌ Connection timeout (Tailscale 단절)
+Panel -> HA : GET /api/states (30초 폴링)
+HA --> Panel : ❌ Connection timeout (Tailscale 단절)
 
-UI -> UI : 재시도 카운터 +1\n(최대 3회 재시도)
-note over UI : 라즈베리파이는\nHome Assistant 자체적으로 동작 유지\n(엣지 컴퓨팅 — 인터넷 없이도 IoT 작동)
+Panel -> Panel : S03PollResult.status = "error"\n→ stale 데이터 유지 (마지막 정상값 표시)
 
-UI -> AlertFeed : addAlert({\n  type: "error",\n  prop: "시스템",\n  msg: "HA 서버 연결 끊김 (Tailscale)\n마지막 센서값으로 표시 중",\n  time: "16:22"\n})
-AlertFeed -> Admin : 🔴 긴급 알림
+note over Panel
+  [src] monitoringService.js
+  [fn]  pollSensors() → catch(err) → status:"error"
+        stale 데이터 유지 — 마지막 정상 SensorReading 표시
+        개별 숙소 실패 → 다음 숙소 계속 처리 (pollAll)
+  TC-F-028 폴링 실패 — status="error", updateReadings 미호출
+  Unit 35개
+end note
 
-note over HACore, AC : 인터넷 단절되어도\n라즈베리파이 내 자동화 규칙은\n계속 로컬 실행 (엣지 컴퓨팅)
+Panel -> AlertFeed : addAlert({\n  type: "warn",\n  prop: "시스템",\n  msg: "HA 서버 응답 없음\n마지막 센서값으로 표시 중",\n  time: "16:22"\n})
+AlertFeed -> Admin : [알림] HA 연결 오류
 
-UI -> HA : 재연결 시도 (30초 후)
-HA --> UI : 200 OK — 연결 복구
-UI -> AlertFeed : addAlert({\n  type: "info",\n  msg: "HA 서버 재연결 완료",\n  time: "16:23"\n})
+note over HACore : 인터넷 단절되어도\n라즈베리파이 내 자동화 규칙은\n계속 로컬 실행 (엣지 컴퓨팅)
+
+Panel -> HA : 재연결 시도 (다음 30초 주기)
+HA --> Panel : 200 OK — 연결 복구
+Panel -> AlertFeed : addAlert({\n  type: "info",\n  msg: "HA 서버 재연결 완료",\n  time: "16:23"\n})
 
 ' ============================================================
 ' 범례
 ' ============================================================
 
 legend right
-  | <#dbeafe>   | PROPOS 프론트엔드 (React) |
+  | <#dbeafe>   | S03MonitoringPanel (UI + 폴링 루프) |
   | <#dcfce7>   | Home Assistant / Tailscale VPN |
-  | <#e0f2fe>   | IoT 스마트기기 |
-  | <#ffedd5>   | 알림·자동화 레이어 |
-  | <#f3e8ff>   | AI 엔진 |
+  | <#e0f2fe>   | IoT 센서 (온도·습도·소음·전력) |
+  | <#ffedd5>   | 알림·메시지 레이어 |
   ----
-  폴링 주기: 30초 (REST API)
-  이벤트 수신: 실시간 (WebSocket)
+  폴링 주기: 30초 (setInterval)
   Tailscale VPN으로 집 밖에서도 동일 접근
+  체크아웃 감지 → S04 시퀀스 참조
+  ----
+  소스 파일 매핑
+  S03MonitoringPanel.jsx  pollAll() / handleGuestMessage()
+  sensorDomain.js         isAnomaly / buildAnomalyAlert / getDefaultThresholds
+  messageDomain.js        buildReplyDraft (키워드 4종)
+  monitoringService.js    pollSensors / pollAll / handleGuestMessage
+  ----
+  테스트 커버리지
+  Unit 35개  (sensorDomain + messageDomain)
+  Functional TC-F-024 ~ TC-F-036  (13그룹)
 endlegend
 
 @enduml

@@ -2,10 +2,10 @@
 
 title PROPOS — S04 체크아웃 & 청소 (퇴실 감지)\nPIN 즉시 만료 · 청소팀 자동 배정 · 체크리스트
 
-skinparam defaultFontName "DM Sans"
 skinparam backgroundColor #f0f4f8
 skinparam sequenceMessageAlign center
 skinparam responseMessageBelowArrow true
+skinparam wrapWidth 400
 
 skinparam participant {
   BackgroundColor #ffffff
@@ -39,18 +39,13 @@ skinparam sequence {
 ' PARTICIPANTS
 ' ============================================================
 
-actor       "게스트"                            as Guest
-participant "Home Assistant\n(라즈베리파이)"    as HACore     #dcfce7
-participant "HA REST API\n(Tailscale VPN)"      as HA         #dcfce7
-participant "도어락\n(스마트락)"                as DoorLock   #e0f2fe
-participant "PROPOS\nCommandCenter"             as UI         #dbeafe
-participant "Auto Rules\n엔진"                  as Rules      #fef9c3
-participant "PIN 관리 서비스"                   as PINSvc     #fef9c3
-participant "청소 배정 서비스"                  as CleanSvc   #ffedd5
-participant "메시지 서비스"                     as MsgSvc     #ffedd5
-participant "알림 피드"                         as AlertFeed  #ffedd5
-actor       "청소팀"                            as Cleaner
-actor       "관리자"                            as Admin
+actor       "게스트"                              as Guest
+participant "도어락\n(스마트락)"                  as DoorLock  #e0f2fe
+participant "Home Assistant\n(라즈베리파이)"      as HACore    #dcfce7
+participant "HA REST API\n(Tailscale VPN)"        as HA        #dcfce7
+participant "S04CheckoutPanel\n(UI + 이벤트 처리)" as Panel     #dbeafe
+participant "알림 피드"                           as AlertFeed #ffedd5
+actor       "관리자"                              as Admin
 
 ' ============================================================
 ' 0. 퇴실 감지 — 도어락 이벤트
@@ -58,20 +53,44 @@ actor       "관리자"                            as Admin
 
 == 0. 퇴실 감지 — 도어락 이벤트 수신 ==
 
-Guest -> DoorLock : 문 열고 나감\n(체크아웃 시각 전후)
-note right of Guest : 체크아웃: 11:00\n실제 퇴실: 11:03
+alt Real HA 모드 (useRealHA = true)
+  note over Panel
+    [src] S04CheckoutPanel.jsx
+    useEffect(useRealHA) → _haWsS04.connect(onEvent, setWsStatus)
+    HA state_changed (locked) → handleEventRef.current(haEvent)
+  end note
 
-DoorLock -> HACore : state_changed\n{ entity_id: "lock.front_door_p042",\n  new_state: "unlocked",\n  old_state: "locked",\n  time: "11:03" }
+  Guest -> DoorLock : 퇴실 후 문 닫힘 (도어락 잠김)
+  note right of Guest : 체크아웃: 11:00\n실제 퇴실: 11:03
 
-HACore -> HA : WebSocket push — lock event
-HA -> UI : WebSocket 메시지\n{ event: "door_unlocked",\n  propId: "P-042",\n  time: "11:03" }
+  DoorLock -> HACore : state_changed\n{ entity_id: "lock.front_door_p042",\n  new_state: "locked",\n  old_state: "unlocked",\n  time: "11:03" }
 
-UI -> Rules : checkCheckoutEvent({\n  propId: "P-042",\n  time: "11:03",\n  checkoutTime: "11:00"\n})
-note right of Rules : 체크아웃 시각(11:00) 이후\n도어락 열림 = 퇴실 감지\n→ S04 체크아웃 시퀀스 트리거
+  HACore -> HA : WebSocket push — lock event
+  HA -> Panel : WebSocket 메시지\n{ event: "door_locked",\n  propId: "P-042",\n  time: "11:03" }
 
-Rules --> UI : CHECKOUT_DETECTED\n{ propId: "P-042", guestName: "김민준" }
+else Mock 모드 (시뮬레이터)
+  Admin -> Panel : 시뮬레이터 버튼 클릭\n→ simulate() → handleEvent(mockEvent)
+end
 
-UI -> AlertFeed : addAlert({\n  type: "info",\n  prop: "해운대 오션뷰 펜트하우스",\n  msg: "퇴실 감지 — 김민준님 체크아웃 (11:03)",\n  time: "11:03"\n})
+Panel -> Panel : handleCheckout(event, allBookings, cleaners, deps, now)\n→ isCheckoutEvent(event, booking, now)
+
+note over Panel
+  [src] checkoutDomain.js / S04CheckoutPanel.jsx
+  [fn]  isCheckoutEvent(event, booking, now)
+        getCheckoutWindow(checkOut)  체크아웃 -2h ~ +3h
+  판별: event.event === "door_locked" (또는 "manual_checkout")
+        AND booking.status === "confirmed" || "occupied"
+        AND now가 checkoutWindow 범위 내
+  TC-F-037 정상 체크아웃 전체 흐름 (status=success)
+  TC-F-038 시간창 내/외 판별 / booking 없는 propId → failed
+  TC-F-043 manual_checkout 이벤트도 처리됨
+  TC-F-047 인수 누락 예외 (event/allBookings/cleaners)
+  Unit 52개
+end note
+
+Panel -> AlertFeed : addAlert({\n  type: "info",\n  prop: "P-042",\n  msg: "퇴실 감지 — 김민준님 체크아웃 (11:03)",\n  time: "11:03"\n})
+
+AlertFeed -> Admin : [알림] 퇴실 감지 (P-042)
 
 ' ============================================================
 ' 1. PIN 즉시 만료 (5초 이내)
@@ -79,21 +98,24 @@ UI -> AlertFeed : addAlert({\n  type: "info",\n  prop: "해운대 오션뷰 펜�
 
 == 1. PIN 즉시 만료 (5초 이내) ==
 
-UI -> PINSvc : expirePIN({\n  propId: "P-042",\n  pin: "492817",\n  reason: "checkout_detected"\n})
-note right of PINSvc : 퇴실 감지 후 즉시 실행\n목표: 5초 이내 완료
+Panel -> HA : POST /api/services/persistent_notification/create\n{ title: "[PROPOS] PIN 만료",\n  message: "PIN 만료 처리: lock.front_door_p042" }
 
-PINSvc -> HA : POST /api/services/lock/clear_code\n{ entity_id: "lock.front_door_p042",\n  code: "492817" }
-HA -> HACore : PIN 삭제 서비스 호출
-HACore -> DoorLock : PIN 492817 삭제
-DoorLock --> HACore : OK
-HACore --> HA : 200 OK
-HA --> PINSvc : PIN 삭제 완료
+note over HA
+  [src] haClient.js / S04CheckoutPanel.jsx
+  [fn]  deps.expirePin(entityId)
+        실 도어락 없음 → HA persistent_notification으로 기록
+        entityId = "lock.front_door_p042" (propId 변환)
+  TC-F-039 expirePin — entityId 전달 검증
+  TC-F-039 expirePin 실패 → status=partial, error 알림
+  Unit 52개
+end note
 
-PINSvc --> UI : PIN 만료 완료\n{ elapsed: "3.2s" }
+HA -> HACore : 영구 알림 생성 (PIN 만료 기록)
+HACore --> HA : OK
+HA --> Panel : 200 OK
+Panel -> Panel : steps.pinExpired = true
 
-UI -> AlertFeed : addAlert({\n  type: "info",\n  prop: "P-042",\n  msg: "PIN 만료 완료 (3.2초 소요)\n도어락 접근 차단",\n  time: "11:03"\n})
-
-note over DoorLock : 기존 PIN으로\n재입실 불가 상태
+Panel -> AlertFeed : addAlert({\n  type: "info",\n  prop: "P-042",\n  msg: "PIN 만료 완료 — 도어락 접근 차단",\n  time: "11:03"\n})
 
 ' ============================================================
 ' 2. 청소팀 자동 배정
@@ -101,91 +123,146 @@ note over DoorLock : 기존 PIN으로\n재입실 불가 상태
 
 == 2. 청소팀 자동 배정 ==
 
-UI -> CleanSvc : assignCleaner({\n  propId: "P-042",\n  propName: "해운대 오션뷰 펜트하우스",\n  checkoutTime: "11:03",\n  nextCheckin: "2026-03-29 15:00"\n})
-note right of CleanSvc : 가용 청소팀 조회\n우선순위: 거리 + 가용 시간 + 평점
+Panel -> Panel : assignCleaner(cleaners, propId, checkoutTime)\n→ available 필터 → activeJobs 최소 팀 선택\n→ estimatedArrival = checkoutTime + 30분
 
-CleanSvc -> CleanSvc : selectCleaner([\n  { name: "김청소", available: true, rating: 4.9 },\n  { name: "이정리", available: false },\n  { name: "박깔끔", available: true, rating: 4.7 }\n])
-note right of CleanSvc : 가용 + 최고 평점 우선\n→ 김청소 배정
+note over Panel
+  [src] checkoutDomain.js
+  [fn]  assignCleaner(cleaners, propId, checkoutTime)
+  배정 규칙:
+    1. available === true 인 청소팀만 후보
+    2. activeJobs 가장 적은 팀 선택 (동률이면 첫 번째)
+    3. estimatedArrival = checkoutTime + 30분
+  반환: { propId, cleanerId, cleanerName,\n         assignedAt, estimatedArrival, status:"assigned" }
+  TC-F-040 가용 청소팀 중 activeJobs 최소 팀 배정
+  TC-F-040 가용 청소팀 없으면 → partial
+  Unit 52개
+end note
 
-CleanSvc --> UI : { assigned: "김청소",\n  eta: "12:00",\n  nextCheckin: "15:00" }
+Panel -> Panel : deps.setAssignment(propId, assignment)\n→ 배정 결과 UI 상태 저장
 
-UI -> MsgSvc : notifyCleaner({\n  cleaner: "김청소",\n  prop: "해운대 오션뷰 펜트하우스",\n  address: "부산시 해운대구 ...",\n  eta: "12:00",\n  checklist: ["침구 교체", "욕실 청소",\n              "주방 정리", "쓰레기 수거"]\n})
+Panel -> AlertFeed : addAlert({\n  type: "info",\n  prop: "P-042",\n  msg: "청소팀 배정 완료 — 이청소 도착예정 11:33",\n  time: "11:03"\n})
 
-MsgSvc -> Cleaner : 청소 배정 알림\n"김청소님, 배정 안내드립니다.\n숙소: 해운대 오션뷰 펜트하우스\n입장 가능: 11:03부터\n다음 체크인: 15:00 (여유: 3시간 57분)"
-
-Cleaner --> MsgSvc : 수락 확인
-MsgSvc --> UI : 청소팀 배정 확정
-
-UI -> AlertFeed : addAlert({\n  type: "info",\n  prop: "P-042",\n  msg: "청소팀 배정 완료 (김청소, 12:00 도착 예정)",\n  time: "11:03"\n})
-
-' ============================================================
-' 3. 청소 체크리스트 생성
-' ============================================================
-
-== 3. 청소 체크리스트 생성 및 전달 ==
-
-UI -> CleanSvc : generateChecklist({\n  propId: "P-042",\n  stayDuration: "2박",\n  guestCount: 2\n})
-note right of CleanSvc : 체류 기간 + 인원수 기반\n체크리스트 자동 생성
-
-CleanSvc --> UI : [\n  { task: "침구 전체 교체", priority: "high" },\n  { task: "욕실 청소 및 소모품 보충", priority: "high" },\n  { task: "주방 기구 세척", priority: "medium" },\n  { task: "바닥 청소기 + 물걸레", priority: "medium" },\n  { task: "쓰레기 수거 및 분리배출", priority: "medium" },\n  { task: "스마트기기 정상 작동 확인", priority: "low" }\n]
-
-UI -> MsgSvc : sendChecklist({\n  cleaner: "김청소",\n  checklist: [...]\n})
-MsgSvc -> Cleaner : 청소 체크리스트 전달\n(항목별 완료 체크 가능)
-
-Cleaner --> MsgSvc : 수신 확인
+AlertFeed -> Admin : [알림] 청소팀 배정 완료 (P-042)
 
 ' ============================================================
-' 4. 청소 진행 및 완료 보고
+' 3. 청소 체크리스트 생성 및 숙소 상태 갱신
 ' ============================================================
 
-== 4. 청소 완료 보고 — 관리자 최종 확인 ==
+== 3. 청소 체크리스트 생성 및 숙소 상태 갱신 ==
 
-Cleaner -> MsgSvc : 체크리스트 완료 보고\n{ completed: 6/6, photo: true,\n  finishTime: "13:45" }
-MsgSvc --> UI : 청소 완료 수신
+Panel -> Panel : buildChecklist(propId)\n→ 8개 표준 항목 반환
 
-UI -> AlertFeed : addAlert({\n  type: "info",\n  prop: "P-042",\n  msg: "청소 완료 — 김청소 (13:45)\n다음 체크인까지 여유: 1시간 15분",\n  time: "13:45"\n})
+note over Panel
+  [src] checkoutDomain.js
+  [fn]  buildChecklist(propId)
+  표준 항목 (required 6개):
+    - 침구 교체
+    - 화장실 청소
+    - 주방 청소
+    - 바닥 청소
+    - 쓰레기 비우기
+    - 도어락 PIN 초기화 확인
+  표준 항목 (optional 2개):
+    - 에어컨 필터 청소
+    - 창문 닦기
+  TC-F-041 setChecklist에 8개 항목 전달 (done: false)
+  TC-F-041 체크리스트 id에 propId 포함
+  Unit 52개
+end note
+
+Panel -> Panel : deps.setChecklist(propId, items)\ndeps.updateStatus(propId, "cleaning")
+
+Panel --> Admin : 숙소 카드 상태 갱신\n(청소 중 — 노란 뱃지)
+
+' ============================================================
+' 4. 청소 완료 확인 — 관리자 최종 처리
+' ============================================================
+
+== 4. 청소 완료 확인 — 관리자 최종 처리 ==
+
+Admin -> Panel : 체크리스트 항목 완료 체크 (항목별)
+Panel -> Panel : completeChecklistItem(propId, itemId, deps)\n→ deps.updateChecklistItem(propId, itemId, true)
+
+note over Panel
+  [src] checkoutService.js
+  [fn]  completeChecklistItem(propId, itemId, deps)
+        → deps.updateChecklistItem(propId, itemId, true)
+  TC-F-044 updateChecklistItem(propId, itemId, true) 호출 검증
+  TC-F-044 propId/itemId 없으면 에러
+  Unit 52개
+end note
+
+Admin -> Panel : 전체 청소 완료 버튼 클릭
+Panel -> Panel : finalizeClean(propId, deps)\n→ deps.updateStatus(propId, "vacant")\n→ deps.addAlert("청소 완료 — 숙소 준비 완료")
+
+note over Panel
+  [src] checkoutService.js
+  [fn]  finalizeClean(propId, deps)
+        deps.updateStatus(propId, "vacant")
+        deps.addAlert({ type:"info", msg:"P-042 청소 완료 — 숙소 준비 완료" })
+  TC-F-045 updateStatus(propId, "vacant") 호출
+  TC-F-045 info 알림 생성 (propId 포함)
+  Unit 52개
+end note
+
+Panel -> AlertFeed : addAlert({\n  type: "info",\n  prop: "P-042",\n  msg: "P-042 청소 완료 — 숙소 준비 완료",\n  time: "13:45"\n})
 
 AlertFeed -> Admin : [알림] 청소 완료 (P-042)
 
-UI -> UI : propStatus 업데이트\n{ P-042: "ready",\n  cleanedAt: "13:45",\n  nextCheckin: "15:00" }
-note right of UI : 숙소 카드 상태:\n"청소 완료 / 입실 대기" (파란 뱃지)
+Panel --> Admin : 숙소 카드 상태 갱신\n(준비 완료 — 초록 뱃지)
+
+note over Admin : 퇴실 → PIN 만료 → 청소 배정\n→ 청소 완료까지 전 과정 인앱 관리\n관리자 개입 최소화
 
 Admin -> AlertFeed : 알림 확인 (ack 클릭)
 AlertFeed --> Admin : 뱃지 해제
 
-note over Admin : 퇴실 → PIN 만료 → 청소 배정\n→ 청소 완료까지 전 과정 자동화\n관리자 개입 최소화
-
 ' ============================================================
-' 5. 예외 — 청소팀 미수락
+' 5. 예외 처리 — 가용 청소팀 없음
 ' ============================================================
 
-== 5. 예외 처리 — 청소팀 미수락 ==
+== 5. 예외 처리 — 가용 청소팀 없음 ==
 
-CleanSvc -> Cleaner : 배정 알림 발송
-note right of CleanSvc : 15분 내 미수락 시\n다음 가용 청소팀으로 자동 재배정
+Panel -> Panel : assignCleaner(cleaners, propId, checkoutTime)\n→ available 청소팀 0명\n→ throw new Error("가용 청소팀 없음")
 
-Cleaner --> CleanSvc : 미응답 (15분 경과)
+Panel -> Panel : try/catch → status = "partial"\n→ error: "가용 청소팀 없음"
 
-CleanSvc -> CleanSvc : reassignCleaner()\n→ 2순위 박깔끔 배정
+note over Panel
+  [src] checkoutDomain.js / checkoutService.js
+  [fn]  assignCleaner() throw → handleCheckout() catch
+        → status="partial", error 알림 생성
+  TC-F-040 가용 청소팀 없으면 → partial status
+  Unit 52개
+end note
 
-CleanSvc -> AlertFeed : addAlert({\n  type: "warn",\n  prop: "P-042",\n  msg: "청소팀 재배정 (박깔끔)\n1순위 미응답으로 자동 변경",\n  time: "11:18"\n})
+Panel -> AlertFeed : addAlert({\n  type: "error",\n  prop: "P-042",\n  msg: "체크아웃 자동화 오류 (P-042): 가용 청소팀 없음",\n  time: "11:03"\n})
 
-AlertFeed -> Admin : [경고 알림] 청소팀 재배정 (P-042)
+AlertFeed -> Admin : [긴급 알림] 청소팀 배정 실패 (P-042)
+
+note over Admin : 긴급 알림 수신 시\n관리자가 직접 청소팀 수동 배정
 
 ' ============================================================
 ' 범례
 ' ============================================================
 
 legend right
-  | <#dbeafe>   | PROPOS 프론트엔드 |
+  | <#dbeafe>   | S04CheckoutPanel (UI + 이벤트 처리) |
   | <#dcfce7>   | Home Assistant / Tailscale VPN |
   | <#e0f2fe>   | IoT 스마트기기 |
-  | <#ffedd5>   | 알림·청소·메시지 레이어 |
-  | <#fef9c3>   | Auto Rules / PIN 서비스 |
+  | <#ffedd5>   | 알림 레이어 |
   ----
-  트리거: 도어락 열림 (체크아웃 시각 이후)
-  PIN 만료 목표: 5초 이내
-  청소 배정: 가용 + 최고 평점 우선 자동 선택
+  트리거: Real HA (WebSocket door_locked) 또는 Mock (시뮬레이터 버튼)
+  PIN 만료: HA persistent_notification 기록 (도어락 entity 없음)
+  청소팀 배정: activeJobs 최소 가용 팀 자동 선택
+  ----
+  소스 파일 매핑
+  S04CheckoutPanel.jsx     handleEvent() / 인라인 _s04 도메인
+  checkoutDomain.js        isCheckoutEvent / assignCleaner / buildChecklist
+  checkoutService.js       handleCheckout / completeChecklistItem / finalizeClean
+  haClient.js              expirePin (persistent_notification 대체)
+  ----
+  테스트 커버리지
+  Unit 52개  (checkoutDomain + messageDomain)
+  Functional TC-F-037 ~ TC-F-047  (11그룹, 25개 테스트)
 endlegend
 
 @enduml
