@@ -80,6 +80,56 @@ const _haRealS04 = (() => {
   return { expirePin };
 })();
 
+// ── Real HA WebSocket — 퇴실 감지용 ──────────────────────────
+const _haWsS04 = (() => {
+  const HA_WS_URL = 'ws://192.168.45.76:8123/api/websocket';
+  const HA_TOKEN  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw';
+  const MAX_RECONNECT = 5;
+
+  let ws = null, msgId = 1, intentionalClose = false;
+  let reconnectCount = 0, reconnectTimer = null;
+  let _onEvent = null, _onStatus = null;
+
+  function connect(onEvent, onStatusChange) {
+    intentionalClose = false;
+    _onEvent = onEvent; _onStatus = onStatusChange;
+    _onStatus('connecting');
+    try { ws = new WebSocket(HA_WS_URL); } catch(_) { _onStatus('error'); return; }
+
+    ws.onmessage = (e) => {
+      let msg; try { msg = JSON.parse(e.data); } catch(_) { return; }
+      if (msg.type === 'auth_required') {
+        ws.send(JSON.stringify({ type: 'auth', access_token: HA_TOKEN }));
+      } else if (msg.type === 'auth_ok') {
+        reconnectCount = 0; _onStatus('connected');
+        ws.send(JSON.stringify({ id: msgId++, type: 'subscribe_events', event_type: 'state_changed' }));
+      } else if (msg.type === 'auth_invalid') {
+        intentionalClose = true; _onStatus('error'); ws.close();
+      } else if (msg.type === 'event' && msg.event?.event_type === 'state_changed') {
+        const { entity_id, new_state, old_state } = msg.event.data || {};
+        _onEvent({ entityId: entity_id, newState: new_state?.state, oldState: old_state?.state });
+      }
+    };
+    ws.onerror = () => _onStatus('error');
+    ws.onclose = () => {
+      if (intentionalClose) { _onStatus('disconnected'); return; }
+      if (reconnectCount < MAX_RECONNECT) {
+        reconnectCount++;
+        _onStatus('reconnecting');
+        reconnectTimer = setTimeout(() => connect(_onEvent, _onStatus), Math.min(1000 * reconnectCount, 30000));
+      } else { _onStatus('error'); }
+    };
+  }
+
+  function disconnect() {
+    intentionalClose = true;
+    clearTimeout(reconnectTimer);
+    if (ws) { ws.close(); ws = null; }
+  }
+
+  return { connect, disconnect };
+})();
+
 // ── 목업 숙소/청소팀 데이터 ─────────────────────────────────
 // checkOut = 현재 시각 +30분 → 시간창(checkOut -2h ~ +3h) 안에 항상 포함되어 데모 시간 무관
 function _mockCheckOut(offsetMin) {
@@ -394,16 +444,20 @@ function AlertFeedS04({ alerts, onAck, onAckAll }) {
 function S04CheckoutPanel({ onBack }) {
   // ── 상태 ──
   const [haMode,       setHaMode]       = React.useState(false);
+  const [wsStatus,     setWsStatus]     = React.useState('disconnected');
   const [selectedProp, setSelectedProp] = React.useState(_S04_PROPS[0].propId);
   const [propStatuses, setPropStatuses] = React.useState(() =>
     Object.fromEntries(_S04_PROPS.map(p => [p.propId, p.status]))
   );
-  const [assignments,   setAssignments]  = React.useState({});   // propId → CleanerAssignment
-  const [checklists,    setChecklists]   = React.useState({});   // propId → ChecklistItem[]
+  const [assignments,   setAssignments]  = React.useState({});
+  const [checklists,    setChecklists]   = React.useState({});
   const [alerts,        setAlerts]       = React.useState([]);
   const [processing,    setProcessing]   = React.useState(false);
   const [pinCountdown,  setPinCountdown] = React.useState(false);
-  const [pinDone,       setPinDone]      = React.useState({});   // propId → bool
+  const [pinDone,       setPinDone]      = React.useState({});
+
+  const wsConnRef        = React.useRef(null);
+  const handleCheckoutRef = React.useRef(null);   // 최신 handleCheckoutEvent 참조
 
   const currentBooking = _S04_PROPS.find(p => p.propId === selectedProp);
   const currentStatus  = propStatuses[selectedProp] || 'occupied';
@@ -511,8 +565,35 @@ function S04CheckoutPanel({ onBack }) {
   function ackAlert(idx)  { setAlerts(prev => prev.filter((_, i) => i !== idx)); }
   function ackAllAlerts() { setAlerts([]); }
 
+  // ── handleCheckoutRef: WS 콜백이 항상 최신 함수 호출하도록 ──
+  handleCheckoutRef.current = handleCheckoutEvent;
+
+  // ── HA WebSocket — haMode 켤 때만 연결 ──
+  React.useEffect(() => {
+    if (!haMode) {
+      if (wsConnRef.current) { wsConnRef.current.disconnect(); wsConnRef.current = null; }
+      setWsStatus('disconnected');
+      return;
+    }
+    const onWsEvent = ({ newState, oldState }) => {
+      // lock entity가 locked로 바뀌면 → 퇴실(도어락 잠금) 이벤트
+      if (newState === 'locked' && oldState === 'unlocked') {
+        handleCheckoutRef.current('door_locked');
+      }
+    };
+    _haWsS04.connect(onWsEvent, setWsStatus);
+    wsConnRef.current = _haWsS04;
+    return () => { if (wsConnRef.current) { wsConnRef.current.disconnect(); wsConnRef.current = null; } };
+  }, [haMode]);
+
   const errorCount = alerts.filter(a => a.type === 'error').length;
   const infoCount  = alerts.filter(a => a.type === 'info').length;
+
+  // WS 상태 뱃지 텍스트
+  const wsLabel = {
+    connected: '● HA 연결됨', connecting: '◌ 연결 중', reconnecting: '◌ 재연결 중',
+    disconnected: '○ 연결 해제', error: '✕ 연결 오류',
+  }[wsStatus] || '○ Mock';
 
   // ── 렌더 ──
   return (
@@ -552,6 +633,16 @@ function S04CheckoutPanel({ onBack }) {
             <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 20, padding: '3px 10px', fontSize: 12, color: '#2563eb', fontWeight: 600 }}>
               알림 {infoCount}
             </div>
+          )}
+
+          {/* WS 상태 뱃지 (HA 모드일 때) */}
+          {haMode && (
+            <div style={{
+              fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
+              background: wsStatus === 'connected' ? '#dcfce7' : wsStatus === 'error' ? '#fee2e2' : '#fffbeb',
+              border: `1px solid ${wsStatus === 'connected' ? '#86efac' : wsStatus === 'error' ? '#fca5a5' : '#fde68a'}`,
+              color: wsStatus === 'connected' ? '#059669' : wsStatus === 'error' ? '#dc2626' : '#d97706',
+            }}>{wsLabel}</div>
           )}
 
           {/* Mock/HA 모드 */}

@@ -374,12 +374,30 @@ function AlertFeedS05({ alerts, onAck }) {
 
 // ── 메인 컴포넌트 ────────────────────────────────────────────
 
+// ── 정산 스케줄 유틸 (인라인 — 단일 HTML 번들 호환) ─────────
+const _schedule = {
+  isSettlementDay(date) {
+    const d = date instanceof Date ? date : new Date();
+    return d.getDate() === 1;
+  },
+  getSettlementPeriod(date) {
+    const d = date instanceof Date ? date : new Date();
+    const year  = d.getMonth() === 0 ? d.getFullYear() - 1 : d.getFullYear();
+    const month = d.getMonth() === 0 ? 12 : d.getMonth();
+    return { year, month, label: `${year}년 ${month}월` };
+  },
+};
+
 function S05RevenuePanel({ onBack }) {
   const now = new Date();
-  const [year]  = React.useState(now.getFullYear());
-  const [month] = React.useState(now.getMonth() === 0 ? 12 : now.getMonth()); // 전월
+  const settlementPeriod = _schedule.getSettlementPeriod(now);
+  const [year]  = React.useState(settlementPeriod.year);
+  const [month] = React.useState(settlementPeriod.month);
   const [marketTrend, setMarketTrend] = React.useState('spring_peak');
   const OPERATING_COST = 2_100_000;
+
+  // 오늘이 정산일(매월 1일)이면 자동 실행 배너 표시
+  const [autoBanner, setAutoBanner] = React.useState(() => _schedule.isSettlementDay(now));
 
   const [running,   setRunning]   = React.useState(false);
   const [applying,  setApplying]  = React.useState(false);
@@ -491,6 +509,32 @@ function S05RevenuePanel({ onBack }) {
 
   return (
     <div style={{ height:'100vh', display:'flex', flexDirection:'column', background:'#f0f4f8', fontFamily:"'DM Sans',sans-serif", overflow:'hidden' }}>
+
+      {/* 월말 정산일 자동 트리거 배너 */}
+      {autoBanner && !running && !allDone && (
+        <div style={{ background:'#eff6ff', borderBottom:'2px solid #3b82f6', padding:'10px 20px',
+          display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+          <span style={{ fontSize:18 }}>📅</span>
+          <div style={{ flex:1 }}>
+            <span style={{ fontWeight:700, color:'#1d4ed8', fontSize:13 }}>
+              오늘은 정산일입니다 — {settlementPeriod.label} 수익 정산을 자동 실행할까요?
+            </span>
+          </div>
+          <button
+            onClick={() => { setAutoBanner(false); runSettlement(); }}
+            style={{ padding:'6px 16px', borderRadius:7, background:'#2563eb', border:'1.5px solid #1d4ed8',
+              color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+            지금 실행
+          </button>
+          <button
+            onClick={() => setAutoBanner(false)}
+            style={{ padding:'6px 12px', borderRadius:7, background:'#f8fafc', border:'1.5px solid #e2e8f0',
+              color:'#64748b', fontSize:12, fontWeight:600, cursor:'pointer' }}>
+            나중에
+          </button>
+        </div>
+      )}
+
       {/* 상단 네비게이션 */}
       <div style={{ background:'#ffffff', borderBottom:'1px solid #e2e8f0', padding:'0 20px', height:48, display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
         <button

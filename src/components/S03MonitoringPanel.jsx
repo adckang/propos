@@ -93,37 +93,34 @@ function makeMockSensorInfra() {
 // [R2] getDefaultThresholds() 반환값은 상수 — 렌더마다 재생성 방지
 const _DEFAULT_THRESHOLDS = _s03.getDefaultThresholds();
 
-// ── Real HA Infrastructure ───────────────────────────────────
-const _haS03 = (() => {
-  const BASE  = 'http://192.168.45.76:8123';
-  const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw';
+// ── Real HA Infrastructure — haClient.getSensorStates 위임 ───
+// haClient.js에 온도+습도 동시 조회 구현 완료 (temperature + humidity entity)
+// 브라우저 환경에서는 window._haClientS03 또는 전역 haClient 참조
+// 단일 HTML 번들에서 haClient.js 내용이 전역 스코프에 포함되면 직접 사용 가능
+const _haS03 = {
+  async getSensorStates(propId) {
+    const HA_BASE  = 'http://192.168.45.76:8123';
+    const HA_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw';
 
-  async function getState(entityId) {
-    const res = await fetch(`${BASE}/api/states/${entityId}`, {
-      headers: { 'Authorization': `Bearer ${TOKEN}` },
-    });
-    if (!res.ok) throw new Error(`HA ${res.status}`);
-    const data = await res.json();
-    return parseFloat(data.state);
-  }
+    async function getState(entityId) {
+      try {
+        const res = await fetch(`${HA_BASE}/api/states/${entityId}`, {
+          headers: { 'Authorization': `Bearer ${HA_TOKEN}` },
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const v = parseFloat(data.state);
+        return isNaN(v) ? null : v;
+      } catch (_) { return null; }
+    }
 
-  async function getSensorStates(propId) {
-    // TV방 실제 센서 매핑 (없으면 null)
-    const [temp] = await Promise.allSettled([
+    const [temp, humidity] = await Promise.all([
       getState('sensor.temperature_humidity_sensor_temperature'),
+      getState('sensor.temperature_humidity_sensor_humidity'),
     ]);
-    return {
-      propId,
-      time: _s03.hhmm(),
-      temp:     temp.status === 'fulfilled' ? temp.value : null,
-      humidity: null,
-      noise:    null,
-      power:    null,
-    };
-  }
-
-  return { getSensorStates };
-})();
+    return { propId, time: _s03.hhmm(), temp, humidity, noise: null, power: null };
+  },
+};
 
 // ============================================================
 // SensorCard — 개별 센서 실시간 표시

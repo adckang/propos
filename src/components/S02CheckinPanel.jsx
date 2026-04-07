@@ -340,13 +340,67 @@ function AlertItem({ alert, onAck }) {
   );
 }
 
+// ── Real HA WebSocket 연결 관리 (브라우저 전용) ───────────────
+const _haWsS02 = (() => {
+  const HA_WS_URL = 'ws://192.168.45.76:8123/api/websocket';
+  const HA_TOKEN  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw';
+  const MAX_RECONNECT = 5;
+
+  let ws = null, msgId = 1, intentionalClose = false;
+  let reconnectCount = 0, reconnectTimer = null;
+  let _onEvent = null, _onStatus = null;
+
+  function connect(onEvent, onStatusChange) {
+    intentionalClose = false;
+    _onEvent  = onEvent;
+    _onStatus = onStatusChange;
+    _onStatus('connecting');
+    try { ws = new WebSocket(HA_WS_URL); } catch(_) { _onStatus('error'); return; }
+
+    ws.onmessage = (e) => {
+      let msg; try { msg = JSON.parse(e.data); } catch(_) { return; }
+      if (msg.type === 'auth_required') {
+        ws.send(JSON.stringify({ type: 'auth', access_token: HA_TOKEN }));
+      } else if (msg.type === 'auth_ok') {
+        reconnectCount = 0;
+        _onStatus('connected');
+        ws.send(JSON.stringify({ id: msgId++, type: 'subscribe_events', event_type: 'state_changed' }));
+      } else if (msg.type === 'auth_invalid') {
+        intentionalClose = true; _onStatus('error'); ws.close();
+      } else if (msg.type === 'event' && msg.event?.event_type === 'state_changed') {
+        const { entity_id, new_state, old_state } = msg.event.data || {};
+        _onEvent({ entityId: entity_id, newState: new_state?.state, oldState: old_state?.state });
+      }
+    };
+    ws.onerror = () => _onStatus('error');
+    ws.onclose = () => {
+      if (intentionalClose) { _onStatus('disconnected'); return; }
+      if (reconnectCount < MAX_RECONNECT) {
+        reconnectCount++;
+        _onStatus('reconnecting');
+        reconnectTimer = setTimeout(() => connect(_onEvent, _onStatus), Math.min(1000 * reconnectCount, 30000));
+      } else { _onStatus('error'); }
+    };
+  }
+
+  function disconnect() {
+    intentionalClose = true;
+    clearTimeout(reconnectTimer);
+    if (ws) { ws.close(); ws = null; }
+  }
+
+  return { connect, disconnect };
+})();
+
 // ── WebSocket Status Indicator ────────────────────────────────
 function WsStatusBadge({ status }) {
   const MAP = {
-    connected:    { color:'#059669', bg:'#dcfce7', border:'#86efac', label:'WebSocket 연결됨', dot: true },
-    connecting:   { color:'#d97706', bg:'#fffbeb', border:'#fde68a', label:'연결 중...',       dot: true },
-    disconnected: { color:'#dc2626', bg:'#fee2e2', border:'#fca5a5', label:'연결 끊김',        dot: false },
-    simulating:   { color:'#7c3aed', bg:'#ede9fe', border:'#c4b5fd', label:'시뮬레이션 모드',  dot: false },
+    connected:    { color:'#059669', bg:'#dcfce7', border:'#86efac', label:'HA WebSocket 연결됨', dot: true },
+    connecting:   { color:'#d97706', bg:'#fffbeb', border:'#fde68a', label:'연결 중...',          dot: true },
+    reconnecting: { color:'#d97706', bg:'#fffbeb', border:'#fde68a', label:'재연결 중...',        dot: true },
+    disconnected: { color:'#64748b', bg:'#f8fafc', border:'#e2e8f0', label:'연결 해제됨',         dot: false },
+    error:        { color:'#dc2626', bg:'#fee2e2', border:'#fca5a5', label:'연결 오류',            dot: false },
+    simulating:   { color:'#7c3aed', bg:'#ede9fe', border:'#c4b5fd', label:'시뮬레이션 모드',     dot: false },
   };
   const s = MAP[status] || MAP.disconnected;
   return (
@@ -382,6 +436,8 @@ function S02CheckinPanel({ bookings: propBookings }) {
   const [sceneFail,     setSceneFail]     = useState(false);
   const [channelFail,   setChannelFail]   = useState(false);
   const [useRealHA,     setUseRealHA]     = useState(false);
+  const wsConnRef  = useRef(null);   // _haWsS02 연결 핸들
+  const handleEventRef = useRef(null); // 최신 handleEvent 참조 (WS 콜백용)
 
   // ── 알림 추가 ──
   const addAlert = (alert) => {
@@ -443,18 +499,42 @@ function S02CheckinPanel({ bookings: propBookings }) {
     addAlert({ type:'error', prop:propId, msg:text, time });
   };
 
-  // ── 체크인 시뮬레이션 ──
+  // ── handleEventRef: WS 콜백에서 항상 최신 handleEvent 호출 ──
+  handleEventRef.current = handleEvent;
+
+  // ── 실제 HA WebSocket — useRealHA 켤 때만 연결 ──
+  useEffect(() => {
+    if (!useRealHA) {
+      if (wsConnRef.current) { wsConnRef.current.disconnect(); wsConnRef.current = null; }
+      setWsStatus('simulating');
+      return;
+    }
+    // HA state_changed → 체크인 이벤트 매핑
+    const onWsEvent = ({ entityId, newState, oldState }) => {
+      // lock entity가 unlocked로 바뀌면 → 도어락 열림 이벤트
+      if (newState === 'unlocked' && oldState === 'locked') {
+        // entity_id에서 propId 추출 (lock.front_door_p_042 → P-042)
+        const match = entityId?.match(/p[_-](\d+)/i);
+        const propId = match ? `P-${match[1].padStart(3,'0')}` : simPropId;
+        handleEventRef.current({
+          event: 'door_unlocked', propId, context: 'guest_checkin', time: _s02.hhmm(),
+        });
+      }
+    };
+    _haWsS02.connect(onWsEvent, setWsStatus);
+    wsConnRef.current = _haWsS02;
+    return () => { if (wsConnRef.current) { wsConnRef.current.disconnect(); wsConnRef.current = null; } };
+  }, [useRealHA]);
+
+  // ── 체크인 시뮬레이션 (수동) ──
   const simulate = () => {
     const event = { event:'door_unlocked', propId:simPropId, time:simTime, context:simContext, failCount:0 };
     handleEvent(event);
   };
 
-  // ── WebSocket 연결 시뮬레이션 ──
-  const connectWS = () => {
-    setWsStatus('connecting');
-    setTimeout(() => setWsStatus('connected'), 1200);
-  };
-  const disconnectWS = () => setWsStatus('simulating');
+  // ── WS 수동 연결/해제 버튼 핸들러 ──
+  const connectWS    = () => setUseRealHA(true);
+  const disconnectWS = () => setUseRealHA(false);
 
   const _inp = { border:'1px solid var(--border)', borderRadius:6, padding:'5px 8px',
     fontSize:11, background:'var(--surface)', color:'var(--text)',

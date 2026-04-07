@@ -78,4 +78,50 @@ async function sendMessage(guestId, text) {
   });
 }
 
-module.exports = { setLockCode, activateScene, sendMessage, HA_BASE, TV_ROOM };
+// ── 센서 엔티티 매핑 (TV방 실제 센서) ─────────────────────────
+const SENSOR_ENTITIES = {
+  temperature: 'sensor.temperature_humidity_sensor_temperature',
+  humidity:    'sensor.temperature_humidity_sensor_humidity',
+  // noise/power: 미연동 (센서 없음)
+};
+
+/**
+ * HA REST API로 센서 상태 조회
+ * @param {string}   entityId
+ * @param {Function} [fetchImpl]  - 테스트 주입용 (기본: global fetch)
+ * @returns {Promise<number|null>}  파싱 실패 / 404 / unavailable → null
+ */
+async function _getState(entityId, fetchImpl) {
+  const f = fetchImpl || fetch;
+  let res;
+  try {
+    res = await f(`${HA_BASE}/api/states/${entityId}`, {
+      headers: { 'Authorization': `Bearer ${HA_TOKEN}` },
+    });
+  } catch (_) {
+    return null;
+  }
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => null);
+  if (!data) return null;
+  const v = parseFloat(data.state);
+  return isNaN(v) ? null : v;
+}
+
+/**
+ * 숙소 센서 상태 일괄 조회
+ * @param {string}   propId
+ * @param {Function} [fetchImpl]  - 테스트 주입용
+ * @returns {Promise<SensorReading>}
+ */
+async function getSensorStates(propId, fetchImpl) {
+  const [temp, humidity] = await Promise.all([
+    _getState(SENSOR_ENTITIES.temperature, fetchImpl),
+    _getState(SENSOR_ENTITIES.humidity,    fetchImpl),
+  ]);
+  const now = new Date();
+  const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  return { propId, time: hhmm, temp, humidity, noise: null, power: null };
+}
+
+module.exports = { setLockCode, activateScene, sendMessage, getSensorStates, HA_BASE, HA_TOKEN, TV_ROOM };

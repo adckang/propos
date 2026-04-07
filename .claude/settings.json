@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --test tests/unit/s02.domain.test.js tests/functional/s02.functional.test.js)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "Bash(node --test tests/unit/s05.domain.test.js)",
+      "Bash(node --test tests/functional/s05.functional.test.js)",
+      "Bash(node --test tests/unit/s01.domain.test.js tests/unit/s02.domain.test.js tests/unit/s03.domain.test.js tests/unit/s04.domain.test.js tests/unit/s05.domain.test.js tests/functional/s01.functional.test.js tests/functional/s02.functional.test.js tests/functional/s03.functional.test.js tests/functional/s04.functional.test.js tests/functional/s05.functional.test.js)",
+      "Bash(node -e \"const m=require\\('./src/domain/revenueDomain.js'\\); console.log\\(Object.keys\\(m\\)\\);\")",
+      "Bash(node -e \"const m=require\\('./src/domain/messageDomain.js'\\); console.log\\(Object.keys\\(m\\)\\);\")",
+      "Bash(node -e \"const m=require\\('./src/domain/sensorDomain.js'\\); console.log\\(Object.keys\\(m\\)\\);\")",
+      "Bash(node -e \"const m=require\\('./src/domain/checkoutDomain.js'\\); console.log\\(Object.keys\\(m\\)\\);\")",
+      "Bash(node -e \"const m=require\\('./src/domain/checkinDomain.js'\\); console.log\\(Object.keys\\(m\\)\\);\")",
+      "Bash(python3 -c ':*)",
+      "Bash(git restore:*)",
+      "Bash(node --test tests/unit/s06.hawebsocket.test.js)"
+    ]
+  }
+}
