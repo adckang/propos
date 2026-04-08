@@ -673,7 +673,11 @@ function S04CheckoutPanel({ onBack }) {
 
         {/* 왼쪽: 숙소 목록 */}
         <div>
-          <div style={{ fontWeight: 700, fontSize: 13, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8,
+            fontSize: 11, fontWeight: 700, color: '#475569',
+            textTransform: 'uppercase', letterSpacing: '0.06em',
+            marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
+            <span style={{ width: 3, height: 13, background: '#059669', borderRadius: 2, flexShrink: 0 }} />
             숙소 현황
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -709,7 +713,11 @@ function S04CheckoutPanel({ onBack }) {
 
           {/* 청소팀 현황 */}
           <div style={{ marginTop: 20 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 11, fontWeight: 700, color: '#475569',
+              textTransform: 'uppercase', letterSpacing: '0.06em',
+              marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
+              <span style={{ width: 3, height: 13, background: '#d97706', borderRadius: 2, flexShrink: 0 }} />
               청소팀 현황
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -856,7 +864,11 @@ function S04CheckoutPanel({ onBack }) {
 
         {/* 오른쪽: 알림 피드 */}
         <div>
-          <div style={{ fontWeight: 700, fontSize: 13, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8,
+            fontSize: 11, fontWeight: 700, color: '#475569',
+            textTransform: 'uppercase', letterSpacing: '0.06em',
+            marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
+            <span style={{ width: 3, height: 13, background: '#dc2626', borderRadius: 2, flexShrink: 0 }} />
             자동화 알림
           </div>
           <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px' }}>

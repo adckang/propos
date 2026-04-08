@@ -669,9 +669,13 @@ function S03MonitoringPanel({ onBack }) {
         {/* 좌측: 숙소 목록 + 알림 피드 */}
         <div style={{ width: 280, background: '#ffffff', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
           {/* 숙소 목록 */}
-          <div style={{ padding: '16px', borderBottom: '1px solid #e2e8f0' }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b', marginBottom: 12 }}>
-              모니터링 중인 숙소 ({PROPS.length})
+          <div style={{ padding: '16px', borderBottom: '1.5px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 11, fontWeight: 700, color: '#475569',
+              textTransform: 'uppercase', letterSpacing: '0.06em',
+              marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
+              <span style={{ width: 3, height: 13, background: '#2563eb', borderRadius: 2, flexShrink: 0 }} />
+              모니터링 중 ({PROPS.length})
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {PROPS.map(prop => (
@@ -688,12 +692,18 @@ function S03MonitoringPanel({ onBack }) {
 
           {/* 알림 피드 */}
           <div style={{ flex: 1, padding: 16, overflowY: 'auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b' }}>알림 피드</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 11, fontWeight: 700, color: '#475569',
+              textTransform: 'uppercase', letterSpacing: '0.06em',
+              marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
+              <span style={{ width: 3, height: 13, background: '#d97706', borderRadius: 2, flexShrink: 0 }} />
+              <span style={{ flex: 1 }}>알림 피드</span>
               {alerts.length > 0 && (
                 <button
                   onClick={ackAllAlerts}
-                  style={{ fontSize: 11, padding: '3px 8px', borderRadius: 5, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', cursor: 'pointer' }}
+                  style={{ fontSize: 10, padding: '3px 9px', borderRadius: 5,
+                    border: '1.5px solid #e2e8f0', background: '#f8fafc',
+                    color: '#64748b', cursor: 'pointer', fontWeight: 600 }}
                 >
                   전체 확인
                 </button>
@@ -724,8 +734,14 @@ function S03MonitoringPanel({ onBack }) {
           </div>
 
           {/* 센서 카드 그리드 */}
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#1e293b', marginBottom: 12 }}>실시간 센서 현황</div>
+          <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 11, fontWeight: 700, color: '#475569',
+              textTransform: 'uppercase', letterSpacing: '0.06em',
+              marginBottom: 14, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
+              <span style={{ width: 3, height: 13, background: '#2563eb', borderRadius: 2, flexShrink: 0 }} />
+              실시간 센서 현황
+            </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <SensorCard
                 label="온도" icon="🌡"
@@ -765,8 +781,14 @@ function S03MonitoringPanel({ onBack }) {
           </div>
 
           {/* 임계값 안내 */}
-          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16 }}>
-            <div style={{ fontWeight: 600, fontSize: 13, color: '#475569', marginBottom: 10 }}>이상 감지 임계값</div>
+          <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 11, fontWeight: 700, color: '#475569',
+              textTransform: 'uppercase', letterSpacing: '0.06em',
+              marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
+              <span style={{ width: 3, height: 13, background: '#d97706', borderRadius: 2, flexShrink: 0 }} />
+              이상 감지 임계값
+            </div>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               {[
                 { label:'온도', warn:`${T.temp.warn}°C`, critical:`${T.temp.critical}°C` },

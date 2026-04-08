@@ -595,8 +595,11 @@ function S02CheckinPanel({ bookings: propBookings }) {
 
           {/* 숙소 상태 카드 */}
           <div style={{ flex:1, overflow:'auto', padding:12 }}>
-            <div style={{ fontSize:11, fontWeight:700, color:'var(--text3)',
-              textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:8 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8,
+              fontSize:11, fontWeight:700, color:'#475569',
+              textTransform:'uppercase', letterSpacing:'0.06em',
+              marginBottom:12, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
+              <span style={{ width:3, height:13, background:'var(--green)', borderRadius:2, flexShrink:0 }} />
               숙소 현황
             </div>
             {bookings.map(b => (
@@ -605,11 +608,18 @@ function S02CheckinPanel({ bookings: propBookings }) {
           </div>
 
           {/* 이벤트 시뮬레이터 */}
-          <div style={{ borderTop:'1px solid var(--border)', padding:12, flexShrink:0,
-            background:'#fafbfc' }}>
-            <div style={{ fontSize:11, fontWeight:700, color:'var(--text3)',
-              textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10 }}>
+          <div style={{ borderTop:'2px solid #e2e8f0', padding:'12px 14px', flexShrink:0,
+            background:'var(--bg)' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8,
+              fontSize:11, fontWeight:700, color:'#475569',
+              textTransform:'uppercase', letterSpacing:'0.06em',
+              marginBottom:12, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
+              <span style={{ width:3, height:13, background:'#7c3aed', borderRadius:2, flexShrink:0 }} />
               이벤트 시뮬레이터
+              <span style={{ marginLeft:'auto', fontSize:9, fontWeight:600, padding:'2px 6px',
+                borderRadius:4, background:'#f5f3ff', border:'1px solid #c4b5fd', color:'#7c3aed' }}>
+                테스트용
+              </span>
             </div>
 
             {/* 숙소 선택 */}
@@ -711,14 +721,17 @@ function S02CheckinPanel({ bookings: propBookings }) {
 
           {/* 이벤트 처리 결과 */}
           <div style={{ flex:1, overflow:'auto', padding:14 }}>
-            <div style={{ fontSize:11, fontWeight:700, color:'var(--text3)',
-              textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8,
+              fontSize:11, fontWeight:700, color:'#475569',
+              textTransform:'uppercase', letterSpacing:'0.06em',
+              marginBottom:12, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
+              <span style={{ width:3, height:13, background:'var(--blue)', borderRadius:2, flexShrink:0 }} />
               이벤트 처리 결과
               {eventResults.length > 0 && (
                 <button onClick={() => setEventResults([])}
-                  style={{ marginLeft:10, padding:'1px 7px', borderRadius:4,
-                    background:'var(--surface)', border:'1px solid var(--border)',
-                    color:'var(--text3)', fontSize:10, cursor:'pointer', fontWeight:400 }}>
+                  style={{ marginLeft:'auto', padding:'3px 9px', borderRadius:5,
+                    background:'var(--surface)', border:'1.5px solid var(--border)',
+                    color:'var(--text3)', fontSize:10, cursor:'pointer', fontWeight:600 }}>
                   초기화
                 </button>
               )}
@@ -738,26 +751,27 @@ function S02CheckinPanel({ bookings: propBookings }) {
           </div>
 
           {/* 알림 피드 */}
-          <div style={{ height:220, borderTop:'1px solid var(--border)',
+          <div style={{ height:240, borderTop:'2px solid #e2e8f0',
             display:'flex', flexDirection:'column', flexShrink:0 }}>
-            <div style={{ padding:'8px 14px', borderBottom:'1px solid var(--border)',
-              display:'flex', justifyContent:'space-between', alignItems:'center',
+            <div style={{ padding:'8px 14px', borderBottom:'1.5px solid #e2e8f0',
+              display:'flex', alignItems:'center', gap:8,
               background:'var(--surface)', flexShrink:0 }}>
-              <span style={{ fontSize:11, fontWeight:700, color:'var(--text3)',
-                textTransform:'uppercase', letterSpacing:'0.05em' }}>
+              <span style={{ width:3, height:13, background:'var(--yellow)', borderRadius:2, flexShrink:0 }} />
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569',
+                textTransform:'uppercase', letterSpacing:'0.06em', flex:1 }}>
                 알림 피드
-                {alerts.length > 0 && (
-                  <span style={{ marginLeft:6, background:'#dc2626', color:'#fff',
-                    borderRadius:10, padding:'0 5px', fontSize:10, fontWeight:700 }}>
-                    {alerts.length}
-                  </span>
-                )}
               </span>
               {alerts.length > 0 && (
+                <span style={{ background:'#dc2626', color:'#fff',
+                  borderRadius:10, padding:'1px 7px', fontSize:10, fontWeight:700 }}>
+                  {alerts.length}
+                </span>
+              )}
+              {alerts.length > 0 && (
                 <button onClick={() => setAlerts([])}
-                  style={{ padding:'2px 8px', borderRadius:4, background:'var(--bg)',
-                    border:'1px solid var(--border)', color:'var(--text3)',
-                    fontSize:10, cursor:'pointer' }}>
+                  style={{ padding:'3px 9px', borderRadius:5, background:'var(--bg)',
+                    border:'1.5px solid var(--border)', color:'var(--text3)',
+                    fontSize:10, cursor:'pointer', fontWeight:600 }}>
                   전체 확인
                 </button>
               )}

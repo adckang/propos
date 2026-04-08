@@ -614,7 +614,13 @@ function S05RevenuePanel({ onBack }) {
 
           {/* 왼쪽: 플랫폼 수익 + 수익 요약 */}
           <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-            <div style={{ fontWeight:700, fontSize:12, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em' }}>플랫폼별 수익</div>
+            <div style={{ display:'flex', alignItems:'center', gap:8,
+              fontSize:11, fontWeight:700, color:'#475569',
+              textTransform:'uppercase', letterSpacing:'0.06em',
+              paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
+              <span style={{ width:3, height:13, background:'#FF5A5F', borderRadius:2, flexShrink:0 }} />
+              플랫폼별 수익
+            </div>
             <PlatformCard platform="에어비앤비" data={airbnbData}  icon="🏠" color="#FF5A5F" />
             <PlatformCard platform="야놀자"     data={yanoljaData} icon="🌙" color="#0078FF" />
             {revenueData && <RevenueSummaryCard revenueData={revenueData} />}
@@ -622,7 +628,13 @@ function S05RevenuePanel({ onBack }) {
 
           {/* 가운데: AI 가격 최적화 */}
           <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-            <div style={{ fontWeight:700, fontSize:12, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em' }}>AI 가격 최적화</div>
+            <div style={{ display:'flex', alignItems:'center', gap:8,
+              fontSize:11, fontWeight:700, color:'#475569',
+              textTransform:'uppercase', letterSpacing:'0.06em',
+              paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
+              <span style={{ width:3, height:13, background:'#7c3aed', borderRadius:2, flexShrink:0 }} />
+              AI 가격 최적화
+            </div>
             {pricingData ? (
               <PricingRecommendationList
                 pricingData={pricingData}
@@ -632,7 +644,7 @@ function S05RevenuePanel({ onBack }) {
                 applying={applying}
               />
             ) : (
-              <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'24px', textAlign:'center', color:'#94a3b8', fontSize:12 }}>
+              <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:10, padding:'24px', textAlign:'center', color:'#94a3b8', fontSize:12 }}>
                 정산 실행 후 AI 분석 결과가 표시됩니다
               </div>
             )}
@@ -640,15 +652,27 @@ function S05RevenuePanel({ onBack }) {
 
           {/* 오른쪽: 세금 리포트 + 알림 피드 */}
           <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-            <div style={{ fontWeight:700, fontSize:12, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em' }}>세금 리포트</div>
+            <div style={{ display:'flex', alignItems:'center', gap:8,
+              fontSize:11, fontWeight:700, color:'#475569',
+              textTransform:'uppercase', letterSpacing:'0.06em',
+              paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
+              <span style={{ width:3, height:13, background:'#059669', borderRadius:2, flexShrink:0 }} />
+              세금 리포트
+            </div>
             {taxData ? (
               <TaxReportCard taxData={taxData} />
             ) : (
-              <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'24px', textAlign:'center', color:'#94a3b8', fontSize:12 }}>
+              <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:10, padding:'24px', textAlign:'center', color:'#94a3b8', fontSize:12 }}>
                 정산 실행 후 세금 리포트가 표시됩니다
               </div>
             )}
-            <div style={{ fontWeight:700, fontSize:12, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em', marginTop:4 }}>자동화 알림</div>
+            <div style={{ display:'flex', alignItems:'center', gap:8,
+              fontSize:11, fontWeight:700, color:'#475569',
+              textTransform:'uppercase', letterSpacing:'0.06em',
+              marginTop:4, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
+              <span style={{ width:3, height:13, background:'#d97706', borderRadius:2, flexShrink:0 }} />
+              자동화 알림
+            </div>
             <div style={{ background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:12, padding:'12px', maxHeight:280, overflowY:'auto' }}>
               <AlertFeedS05 alerts={alerts} onAck={ackAlert} />
             </div>

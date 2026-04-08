@@ -2078,13 +2078,20 @@ function S02CheckinPanel({bookings:propBookings}) {
         {/* 좌측: 숙소 상태 + 시뮬레이터 */}
         <div style={{width:300,flexShrink:0,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
           <div style={{flex:1,overflow:'auto',padding:12}}>
-            <div style={{fontSize:11,fontWeight:700,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:8}}>숙소 현황</div>
+            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:12,paddingBottom:8,borderBottom:'1.5px solid #e2e8f0'}}>
+              <span style={{width:3,height:13,background:'var(--green)',borderRadius:2,flexShrink:0}} />
+              숙소 현황
+            </div>
             {bookings.map(b=><S02PropStatusCard key={b.propId} booking={b} status={propStatuses[b.propId]||'vacant'} />)}
           </div>
 
           {/* 시뮬레이터 */}
-          <div style={{borderTop:'1px solid var(--border)',padding:12,flexShrink:0,background:'#fafbfc'}}>
-            <div style={{fontSize:11,fontWeight:700,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:10}}>이벤트 시뮬레이터</div>
+          <div style={{borderTop:'2px solid #e2e8f0',padding:'12px 14px',flexShrink:0,background:'var(--bg)'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:12,paddingBottom:8,borderBottom:'1.5px solid #e2e8f0'}}>
+              <span style={{width:3,height:13,background:'#7c3aed',borderRadius:2,flexShrink:0}} />
+              이벤트 시뮬레이터
+              <span style={{marginLeft:'auto',fontSize:9,fontWeight:600,padding:'2px 6px',borderRadius:4,background:'#f5f3ff',border:'1px solid #c4b5fd',color:'#7c3aed'}}>테스트용</span>
+            </div>
 
             <div style={{marginBottom:7}}>
               <div style={{fontSize:10,color:'var(--text3)',marginBottom:3}}>숙소</div>
@@ -2139,9 +2146,10 @@ function S02CheckinPanel({bookings:propBookings}) {
         {/* 우측: 처리 결과 + 알림 피드 */}
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
           <div style={{flex:1,overflow:'auto',padding:14}}>
-            <div style={{fontSize:11,fontWeight:700,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:10}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:12,paddingBottom:8,borderBottom:'1.5px solid #e2e8f0'}}>
+              <span style={{width:3,height:13,background:'var(--blue)',borderRadius:2,flexShrink:0}} />
               이벤트 처리 결과
-              {eventResults.length>0 && <button onClick={()=>setEventResults([])} style={{marginLeft:10,padding:'1px 7px',borderRadius:4,background:'var(--surface)',border:'1px solid var(--border)',color:'var(--text3)',fontSize:10,cursor:'pointer',fontWeight:400}}>초기화</button>}
+              {eventResults.length>0 && <button onClick={()=>setEventResults([])} style={{marginLeft:'auto',padding:'3px 9px',borderRadius:5,background:'var(--surface)',border:'1.5px solid var(--border)',color:'var(--text3)',fontSize:10,cursor:'pointer',fontWeight:600}}>초기화</button>}
             </div>
             {eventResults.length===0 ? (
               <div style={{textAlign:'center',padding:'40px 20px',color:'var(--text3)',fontSize:12}}>
@@ -2152,13 +2160,12 @@ function S02CheckinPanel({bookings:propBookings}) {
           </div>
 
           {/* 알림 피드 */}
-          <div style={{height:220,borderTop:'1px solid var(--border)',display:'flex',flexDirection:'column',flexShrink:0}}>
-            <div style={{padding:'8px 14px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',background:'var(--surface)',flexShrink:0}}>
-              <span style={{fontSize:11,fontWeight:700,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.05em'}}>
-                알림 피드
-                {alerts.length>0 && <span style={{marginLeft:6,background:'#dc2626',color:'#fff',borderRadius:10,padding:'0 5px',fontSize:10,fontWeight:700}}>{alerts.length}</span>}
-              </span>
-              {alerts.length>0 && <button onClick={()=>setAlerts([])} style={{padding:'2px 8px',borderRadius:4,background:'var(--bg)',border:'1px solid var(--border)',color:'var(--text3)',fontSize:10,cursor:'pointer'}}>전체 확인</button>}
+          <div style={{height:240,borderTop:'2px solid #e2e8f0',display:'flex',flexDirection:'column',flexShrink:0}}>
+            <div style={{padding:'8px 14px',borderBottom:'1.5px solid #e2e8f0',display:'flex',alignItems:'center',gap:8,background:'var(--surface)',flexShrink:0}}>
+              <span style={{width:3,height:13,background:'var(--yellow)',borderRadius:2,flexShrink:0}} />
+              <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',flex:1}}>알림 피드</span>
+              {alerts.length>0 && <span style={{background:'#dc2626',color:'#fff',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{alerts.length}</span>}
+              {alerts.length>0 && <button onClick={()=>setAlerts([])} style={{padding:'3px 9px',borderRadius:5,background:'var(--bg)',border:'1.5px solid var(--border)',color:'var(--text3)',fontSize:10,cursor:'pointer',fontWeight:600}}>전체 확인</button>}
             </div>
             <div style={{flex:1,overflow:'auto',padding:'8px 12px'}}>
               {alerts.length===0
@@ -2854,9 +2861,10 @@ function S03MonitoringPanel({ onBack }) {
         {/* 좌측: 숙소 목록 + 알림 피드 */}
         <div style={{ width: 280, background: '#ffffff', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
           {/* 숙소 목록 */}
-          <div style={{ padding: '16px', borderBottom: '1px solid #e2e8f0' }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b', marginBottom: 12 }}>
-              모니터링 중인 숙소 ({PROPS.length})
+          <div style={{ padding: '16px', borderBottom: '1.5px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
+              <span style={{ width: 3, height: 13, background: '#2563eb', borderRadius: 2, flexShrink: 0 }} />
+              모니터링 중 ({PROPS.length})
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {PROPS.map(prop => (
@@ -2873,13 +2881,11 @@ function S03MonitoringPanel({ onBack }) {
 
           {/* 알림 피드 */}
           <div style={{ flex: 1, padding: 16, overflowY: 'auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b' }}>알림 피드</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
+              <span style={{ width: 3, height: 13, background: '#d97706', borderRadius: 2, flexShrink: 0 }} />
+              <span style={{ flex: 1 }}>알림 피드</span>
               {alerts.length > 0 && (
-                <button
-                  onClick={ackAllAlerts}
-                  style={{ fontSize: 11, padding: '3px 8px', borderRadius: 5, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', cursor: 'pointer' }}
-                >
+                <button onClick={ackAllAlerts} style={{ fontSize: 10, padding: '3px 9px', borderRadius: 5, border: '1.5px solid #e2e8f0', background: '#f8fafc', color: '#64748b', cursor: 'pointer', fontWeight: 600 }}>
                   전체 확인
                 </button>
               )}
@@ -2909,8 +2915,11 @@ function S03MonitoringPanel({ onBack }) {
           </div>
 
           {/* 센서 카드 그리드 */}
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#1e293b', marginBottom: 12 }}>실시간 센서 현황</div>
+          <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
+              <span style={{ width: 3, height: 13, background: '#2563eb', borderRadius: 2, flexShrink: 0 }} />
+              실시간 센서 현황
+            </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <SensorCard
                 label="온도" icon="🌡"
@@ -2950,8 +2959,11 @@ function S03MonitoringPanel({ onBack }) {
           </div>
 
           {/* 임계값 안내 */}
-          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16 }}>
-            <div style={{ fontWeight: 600, fontSize: 13, color: '#475569', marginBottom: 10 }}>이상 감지 임계값</div>
+          <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
+              <span style={{ width: 3, height: 13, background: '#d97706', borderRadius: 2, flexShrink: 0 }} />
+              이상 감지 임계값
+            </div>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               {[
                 { label:'온도', warn:`${T.temp.warn}°C`, critical:`${T.temp.critical}°C` },
@@ -3423,7 +3435,10 @@ function S04CheckoutPanel({ onBack }) {
 
         {/* 왼쪽: 숙소 목록 + 청소팀 현황 */}
         <div>
-          <div style={{ fontWeight:700, fontSize:13, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10 }}>숙소 현황</div>
+          <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:12, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
+            <span style={{ width:3, height:13, background:'#059669', borderRadius:2, flexShrink:0 }} />
+            숙소 현황
+          </div>
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
             {_S04_PROPS.map(prop => {
               const status   = propStatuses[prop.propId] || 'occupied';
@@ -3442,7 +3457,10 @@ function S04CheckoutPanel({ onBack }) {
             })}
           </div>
           <div style={{ marginTop:20 }}>
-            <div style={{ fontWeight:700, fontSize:13, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10 }}>청소팀 현황</div>
+            <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:12, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
+              <span style={{ width:3, height:13, background:'#d97706', borderRadius:2, flexShrink:0 }} />
+              청소팀 현황
+            </div>
             <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
               {_S04_CLEANERS.map(c => (
                 <div key={c.id} style={{ background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 12px', display:'flex', alignItems:'center', gap:8 }}>
@@ -3528,8 +3546,11 @@ function S04CheckoutPanel({ onBack }) {
 
         {/* 오른쪽: 알림 피드 */}
         <div>
-          <div style={{ fontWeight:700, fontSize:13, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10 }}>자동화 알림</div>
-          <div style={{ background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:12, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
+            <span style={{ width:3, height:13, background:'#dc2626', borderRadius:2, flexShrink:0 }} />
+            자동화 알림
+          </div>
+          <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'16px' }}>
             <AlertFeedS04 alerts={alerts} onAck={ackAlert} onAckAll={ackAllAlerts} />
           </div>
         </div>
@@ -3877,24 +3898,36 @@ function S05RevenuePanel({onBack}){
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:16}}>
           <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <div style={{fontWeight:700,fontSize:12,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.05em'}}>플랫폼별 수익</div>
+            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',paddingBottom:8,borderBottom:'1.5px solid #e2e8f0'}}>
+              <span style={{width:3,height:13,background:'#FF5A5F',borderRadius:2,flexShrink:0}}/>
+              플랫폼별 수익
+            </div>
             <PlatformCardS05 platform="에어비앤비" data={airbnbData}  icon="🏠" color="#FF5A5F"/>
             <PlatformCardS05 platform="야놀자"     data={yanoljaData} icon="🌙" color="#0078FF"/>
             {revenueData&&<RevenueSummaryCardS05 revenueData={revenueData}/>}
           </div>
           <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <div style={{fontWeight:700,fontSize:12,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.05em'}}>AI 가격 최적화</div>
+            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',paddingBottom:8,borderBottom:'1.5px solid #e2e8f0'}}>
+              <span style={{width:3,height:13,background:'#7c3aed',borderRadius:2,flexShrink:0}}/>
+              AI 가격 최적화
+            </div>
             {pricingData?(<PricingRecommendationListS05 pricingData={pricingData} selectedProps={selectedProps} onToggleProp={toggleProp} onApply={applyPricing} applying={applying}/>):(
-              <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:10,padding:'24px',textAlign:'center',color:'#94a3b8',fontSize:12}}>정산 실행 후 AI 분석 결과가 표시됩니다</div>
+              <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:10,padding:'24px',textAlign:'center',color:'#94a3b8',fontSize:12}}>정산 실행 후 AI 분석 결과가 표시됩니다</div>
             )}
           </div>
           <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <div style={{fontWeight:700,fontSize:12,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.05em'}}>세금 리포트</div>
+            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',paddingBottom:8,borderBottom:'1.5px solid #e2e8f0'}}>
+              <span style={{width:3,height:13,background:'#059669',borderRadius:2,flexShrink:0}}/>
+              세금 리포트
+            </div>
             {taxData?(<TaxReportCardS05 taxData={taxData}/>):(
-              <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:10,padding:'24px',textAlign:'center',color:'#94a3b8',fontSize:12}}>정산 실행 후 세금 리포트가 표시됩니다</div>
+              <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:10,padding:'24px',textAlign:'center',color:'#94a3b8',fontSize:12}}>정산 실행 후 세금 리포트가 표시됩니다</div>
             )}
-            <div style={{fontWeight:700,fontSize:12,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.05em',marginTop:4}}>자동화 알림</div>
-            <div style={{background:'#ffffff',border:'1px solid #e2e8f0',borderRadius:12,padding:'12px',maxHeight:280,overflowY:'auto'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',marginTop:4,paddingBottom:8,borderBottom:'1.5px solid #e2e8f0'}}>
+              <span style={{width:3,height:13,background:'#d97706',borderRadius:2,flexShrink:0}}/>
+              자동화 알림
+            </div>
+            <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:12,padding:'12px',maxHeight:280,overflowY:'auto'}}>
               <AlertFeedS05 alerts={alerts} onAck={ackAlert}/>
             </div>
           </div>
