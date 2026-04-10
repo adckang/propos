@@ -571,9 +571,10 @@ function D1AutomationPanel({ onBack }) {
   const [running,  setRunning]  = useState(false);
   const [results,  setResults]  = useState([]);
   const [alerts,   setAlerts]   = useState([]);
-  const [failMode, setFailMode] = useState(false);
-  const [haMode,   setHaMode]   = useState(false);
-  const [lastRun,  setLastRun]  = useState(null);
+  const [failMode,   setFailMode]   = useState(false);
+  const [haMode,     setHaMode]     = useState(false);
+  const [lastRun,    setLastRun]    = useState(null);
+  const [devOpen,    setDevOpen]    = useState(false);
 
   const countdown  = useCountdownTo1800();
   const ranAtZero  = useRef(false);
@@ -672,168 +673,72 @@ function D1AutomationPanel({ onBack }) {
   const ackAlert    = id  => setAlerts(prev => prev.filter(a => a.id !== id));
   const ackAllAlerts = () => setAlerts([]);
 
+  const anyPin       = results.some(r => r.steps?.pin       === true);
+  const anyMsg       = results.some(r => r.steps?.message   === true);
+  const anySmartHome = results.some(r => r.steps?.smartHome === true);
+  const pinRunning   = running && results.length > 0 && !anyPin;
+  const msgRunning   = running && anyPin   && !anyMsg;
+  const shRunning    = running && anyMsg   && !anySmartHome;
+
+  function getStepSC(done, isRun, num) {
+    if (done)  return { b:'#86efac', hBg:'#f0fdf4', cBg:'#16a34a', cFg:'#fff', tc:'#15803d', lbl:'✓' };
+    if (isRun) return { b:'#93c5fd', hBg:'#eff6ff', cBg:'#2563eb', cFg:'#fff', tc:'#2563eb', lbl:'↻' };
+    return          { b:'#e2e8f0', hBg:'#f8fafc', cBg:'#e2e8f0', cFg:'#64748b', tc:'#94a3b8', lbl:String(num) };
+  }
+  const sc1 = getStepSC(targets.length > 0, false, 1);
+  const sc2 = getStepSC(anyPin,       pinRunning, 2);
+  const sc3 = getStepSC(anyMsg,       msgRunning, 3);
+  const sc4 = getStepSC(anySmartHome, shRunning,  4);
+
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%',
-      fontFamily:"'DM Sans',sans-serif", background:'var(--bg)', overflow:'hidden' }}>
+      fontFamily:"'DM Sans',sans-serif", background:'#f0f4f8', overflow:'hidden' }}>
+      <style>{`@keyframes d1spin { from { transform:rotate(0deg) } to { transform:rotate(360deg) } } @keyframes d1pulse { 0%,100%{opacity:1}50%{opacity:0.3} }`}</style>
 
-      {/* ── 헤더 ─────────────────────────────────────────── */}
-      <div style={{ background:'var(--surface)', borderBottom:'1px solid var(--border)',
-        flexShrink:0, boxShadow:'var(--shadow)' }}>
-
-        {/* ① 제목 행 — 이 페이지가 무엇인지 */}
-        <div style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 20px',
-          borderBottom:'1px solid var(--border)' }}>
-          {onBack && <button className="back-btn" onClick={onBack}>← 뒤로</button>}
-          <div style={{ width:1, height:28, background:'var(--border)' }} />
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', lineHeight:1.2, letterSpacing:'-0.3px' }}>
-              D-1 체크인 전날 자동화
-            </div>
-            <div style={{ fontSize:12, color:'var(--text3)', marginTop:3 }}>
-              체크인 하루 전 — PIN 자동 발급 · 웰컴 메시지 발송 · 스마트홈 초기화
-            </div>
-          </div>
-          {/* 우측: 보조 액션 버튼들 */}
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <button onClick={handleSync} disabled={syncing || !propConfigs.some(c=>c.icalUrl)}
-              style={{ padding:'6px 14px', borderRadius:7,
-                background: (syncing||!propConfigs.some(c=>c.icalUrl)) ? 'var(--surface2)' : '#ecfdf5',
-                border:`1.5px solid ${(syncing||!propConfigs.some(c=>c.icalUrl)) ? 'var(--border)' : '#a7f3d0'}`,
-                color: (syncing||!propConfigs.some(c=>c.icalUrl)) ? 'var(--text4)' : '#059669',
-                fontSize:12, fontWeight:600,
-                cursor:(syncing||!propConfigs.some(c=>c.icalUrl))?'not-allowed':'pointer',
-                display:'flex', alignItems:'center', gap:5 }}>
-              {syncing ? <><span style={{ display:'inline-block', animation:'d1spin 1s linear infinite' }}>↻</span> 동기화 중</> : '🔄 iCal 동기화'}
-            </button>
-            <button onClick={() => setView(v => v==='settings'?'auto':'settings')}
-              style={{ padding:'6px 14px', borderRadius:7,
-                background: view==='settings' ? 'var(--blue)' : 'var(--surface2)',
-                border:`1.5px solid ${view==='settings' ? '#1d4ed8' : 'var(--border)'}`,
-                color: view==='settings' ? '#fff' : 'var(--text2)',
-                fontSize:12, fontWeight:600, cursor:'pointer' }}>
-              ⚙ 숙소 설정
-            </button>
-          </div>
+      {/* ── 헤더 ── */}
+      <div style={{ background:'#ffffff', borderBottom:'1px solid #e2e8f0', padding:'16px 24px',
+        display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+        {onBack && <button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}>← 홈</button>}
+        {onBack && <div style={{ width:1, height:22, background:'#e2e8f0' }} />}
+        <div style={{ flex:1 }}>
+          <div style={{ fontWeight:800, fontSize:18, color:'#1e293b', lineHeight:1.2 }}>D-1 체크인 전날 자동화</div>
+          <div style={{ fontSize:12, color:'#64748b', marginTop:3 }}>PIN 자동 발급 · 웰컴 메시지 발송 · 스마트홈 초기화</div>
         </div>
-
-        {/* ② 현재 상태 행 — 데이터 소스 + 다음 실행 카운트다운 */}
-        <div style={{ display:'flex', alignItems:'center', gap:16, padding:'10px 20px',
-          borderBottom:'1px solid var(--border)', background:'var(--bg)' }}>
-          {/* 데이터 소스 */}
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <span style={{ fontSize:11, color:'var(--text3)', fontWeight:500 }}>데이터 소스</span>
-            <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20,
-              background: isRealData ? '#ecfdf5' : '#f1f5f9',
-              color: isRealData ? '#059669' : '#94a3b8',
-              border: `1.5px solid ${isRealData ? '#a7f3d0' : '#e2e8f0'}` }}>
-              {isRealData ? `● 실데이터 ${syncedBookings.length}건` : '○ 목업 데이터'}
-            </span>
-          </div>
-          <div style={{ width:1, height:16, background:'var(--border)' }} />
-          {/* 다음 실행 카운트다운 */}
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <span style={{ fontSize:11, color:'var(--text3)', fontWeight:500 }}>다음 자동 실행</span>
-            <span style={{ fontFamily:"'DM Mono',monospace", fontSize:13, fontWeight:700,
-              color: countdown.secs<300?'var(--red)':countdown.secs<3600?'var(--yellow)':'var(--green)',
-              background: countdown.secs<300?'var(--red-l)':countdown.secs<3600?'var(--yellow-l)':'var(--green-l)',
-              border: `1.5px solid ${countdown.secs<300?'var(--red-m)':countdown.secs<3600?'var(--yellow-m)':'var(--green-m)'}`,
-              borderRadius:6, padding:'2px 10px' }}>
-              ⏱ {countdown.label}
-            </span>
-            <span style={{ fontSize:11, color:'var(--text4)' }}>매일 오후 6:00 (UC-001)</span>
-          </div>
-          {/* HA / 오류 토글 — 우측으로 */}
-          {view === 'auto' && (
-            <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:12 }}>
-              <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:11,
-                color:haMode?'#059669':'var(--text3)', cursor:'pointer', userSelect:'none',
-                background: haMode ? '#ecfdf5' : 'var(--surface)',
-                border: `1.5px solid ${haMode ? '#a7f3d0' : 'var(--border)'}`,
-                borderRadius:7, padding:'4px 10px' }}>
-                <button className={`tog ${haMode?'on':''}`} onClick={()=>setHaMode(m=>!m)}
-                  style={{ background:haMode?'var(--green)':undefined }}><div className="tog-d"/></button>
-                <span style={{ fontWeight:600 }}>{haMode ? '● HA 연결됨' : '○ Mock 모드'}</span>
-              </label>
-              {!haMode && (
-                <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:11,
-                  color:failMode?'var(--red)':'var(--text3)', cursor:'pointer', userSelect:'none',
-                  background: failMode ? 'var(--red-l)' : 'var(--surface)',
-                  border: `1.5px solid ${failMode ? 'var(--red-m)' : 'var(--border)'}`,
-                  borderRadius:7, padding:'4px 10px' }}>
-                  <button className={`tog ${failMode?'on':''}`} onClick={()=>setFailMode(f=>!f)}
-                    style={{ background:failMode?'var(--red)':undefined }}><div className="tog-d"/></button>
-                  <span style={{ fontWeight:600 }}>오류 시뮬</span>
-                </label>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* ③ 실행 결과 요약 + ④ 실행 버튼 — 항상 표시 */}
+        <button onClick={handleSync} disabled={syncing || !propConfigs.some(c=>c.icalUrl)}
+          style={{ padding:'7px 14px', borderRadius:8,
+            background:(syncing||!propConfigs.some(c=>c.icalUrl))?'#f8fafc':'#f0fdf4',
+            border:`1.5px solid ${(syncing||!propConfigs.some(c=>c.icalUrl))?'#e2e8f0':'#86efac'}`,
+            color:(syncing||!propConfigs.some(c=>c.icalUrl))?'#94a3b8':'#059669',
+            fontSize:12, fontWeight:600,
+            cursor:(syncing||!propConfigs.some(c=>c.icalUrl))?'not-allowed':'pointer',
+            display:'flex', alignItems:'center', gap:5 }}>
+          {syncing ? <><span style={{ display:'inline-block', animation:'d1spin 1s linear infinite' }}>↻</span> 동기화 중</> : '🔄 iCal 동기화'}
+        </button>
+        <button onClick={() => setView(v => v==='settings'?'auto':'settings')}
+          style={{ padding:'7px 14px', borderRadius:8,
+            background: view==='settings' ? '#2563eb' : '#f8fafc',
+            border:`1.5px solid ${view==='settings' ? '#1d4ed8' : '#e2e8f0'}`,
+            color: view==='settings' ? '#fff' : '#64748b',
+            fontSize:12, fontWeight:600, cursor:'pointer' }}>
+          ⚙ 숙소 설정
+        </button>
         {view === 'auto' && (
-          <div style={{ display:'flex', alignItems:'center', gap:20, padding:'12px 20px' }}>
-            {/* 결과 요약 카드들 */}
-            <div style={{ flex:1 }}>
-              <div style={{ fontSize:11, fontWeight:700, color:'var(--text3)',
-                textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:8 }}>
-                {results.length > 0
-                  ? `실행 결과 요약${lastRun ? ` — 마지막 실행 ${lastRun}` : ''}`
-                  : `처리 대상 — 내일 체크인 ${targets.length}개 숙소`}
-              </div>
-              <div style={{ display:'flex', gap:8 }}>
-                {results.length > 0 ? [
-                  { label:'총 대상',   val:targets.length,   accent:'#94a3b8', bg:'#f8fafc',  border:'#e2e8f0' },
-                  { label:'완료',     val:summary.success,  accent:'#059669', bg:'#ecfdf5',  border:'#a7f3d0' },
-                  { label:'부분 완료', val:summary.partial,  accent:'#d97706', bg:'#fffbeb',  border:'#fde68a' },
-                  { label:'실패',     val:summary.failed,   accent:'#dc2626', bg:'#fef2f2',  border:'#fecaca' },
-                ].map(({ label, val, accent, bg, border }) => (
-                  <div key={label} style={{ display:'flex', alignItems:'center', gap:10,
-                    background:bg, border:`1.5px solid ${border}`, borderRadius:8,
-                    padding:'8px 14px', borderLeft:`4px solid ${accent}` }}>
-                    <span style={{ fontFamily:"'DM Mono',monospace", fontSize:20, fontWeight:800, color:accent, lineHeight:1 }}>{val}</span>
-                    <span style={{ fontSize:11, color:accent, fontWeight:600, lineHeight:1.3 }}>{label}</span>
-                  </div>
-                )) : (
-                  /* 아직 실행 전 — 대상 숙소 미리보기 */
-                  targets.length === 0 ? (
-                    <div style={{ fontSize:12, color:'var(--text4)', padding:'6px 0' }}>내일 체크인 예정 숙소 없음</div>
-                  ) : targets.map(t => (
-                    <div key={t.propId} style={{ display:'flex', alignItems:'center', gap:6,
-                      background:'var(--surface)', border:'1.5px solid var(--border)', borderRadius:8,
-                      padding:'6px 12px', borderLeft:'4px solid var(--blue)' }}>
-                      <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11, color:'var(--blue)', fontWeight:700 }}>{t.propId}</span>
-                      <span style={{ fontSize:12, color:'var(--text)', fontWeight:500 }}>{t.propName}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* ④ 주요 액션 버튼 — 명확하게 우측 */}
-            <button onClick={handleRun} disabled={running}
-              style={{ padding:'12px 28px', borderRadius:9,
-                background: running ? 'var(--surface2)' : 'var(--blue)',
-                border: `2px solid ${running ? 'var(--border)' : '#1d4ed8'}`,
-                color: running ? 'var(--text4)' : '#fff',
-                fontSize:14, fontWeight:800,
-                cursor: running ? 'not-allowed' : 'pointer',
-                fontFamily:"'DM Sans',sans-serif", transition:'all 0.15s',
-                display:'flex', alignItems:'center', gap:8,
-                boxShadow: running ? 'none' : '0 2px 8px rgba(37,99,235,0.35)',
-                flexShrink:0 }}>
-              {running
-                ? <><span style={{ display:'inline-block', animation:'d1spin 1s linear infinite' }}>↻</span> 처리 중...</>
-                : <><span style={{ fontSize:16 }}>▶</span> D-1 자동화 실행</>}
-            </button>
-          </div>
+          <button onClick={handleRun} disabled={running}
+            style={{ padding:'9px 20px', borderRadius:8,
+              background: running ? '#e2e8f0' : '#2563eb',
+              border:`2px solid ${running ? '#cbd5e1' : '#1d4ed8'}`,
+              color: running ? '#94a3b8' : '#fff',
+              fontSize:13, fontWeight:800, cursor: running?'not-allowed':'pointer',
+              display:'flex', alignItems:'center', gap:8,
+              boxShadow: running ? 'none' : '0 2px 8px rgba(37,99,235,0.4)' }}>
+            {running ? <><span style={{ display:'inline-block', animation:'d1spin 1s linear infinite' }}>↻</span> 처리 중...</> : '▶ D-1 자동화 실행'}
+          </button>
         )}
       </div>
 
-      {/* ── 바디 ─────────────────────────────────────────── */}
-      <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
-
-        {/* 왼쪽: 자동화 뷰 or 설정 뷰 */}
-        {view === 'settings' ? (
+      {/* ── 바디 ── */}
+      {view === 'settings' ? (
+        <div style={{ flex:1, overflow:'auto' }}>
           <SettingsView
             propConfigs={propConfigs}
             onChange={handleConfigChange}
@@ -845,99 +750,173 @@ function D1AutomationPanel({ onBack }) {
             lastSyncTime={lastSyncTime}
             syncError={syncError}
           />
-        ) : (
-          <div style={{ flex:1, overflow:'auto', padding:16 }}>
-            {/* 대기 화면 */}
-            {results.length === 0 && !running && (
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center',
-                justifyContent:'center', height:'100%', gap:12, color:'var(--text4)', textAlign:'center' }}>
-                <div style={{ fontSize:40 }}>🏠</div>
-                <div style={{ fontSize:15, fontWeight:600, color:'var(--text3)' }}>D-1 자동화 대기 중</div>
-                <div style={{ fontSize:12, lineHeight:1.8 }}>
-                  {`내일 체크인 대상: ${targets.length}개 숙소`}<br/>
-                  {targets.map(t=>t.propName).join(' · ')}
-                </div>
-                {!isRealData && (
-                  <div style={{ fontSize:11, color:'#d97706', background:'#fffbeb',
-                    border:'1px solid #fde68a', borderRadius:6, padding:'6px 12px',
-                    display:'flex', alignItems:'center', gap:6 }}>
-                    ⚠ 목업 데이터 사용 중 —
-                    <button onClick={()=>setView('settings')}
-                      style={{ color:'var(--blue)', background:'none', border:'none',
-                        cursor:'pointer', fontWeight:700, fontSize:11, padding:0 }}>
-                      ⚙ iCal 설정
-                    </button>
-                    후 동기화하면 실데이터를 사용합니다
+        </div>
+      ) : (
+        <div style={{ flex:1, display:'grid', gridTemplateColumns:'260px 1fr 340px', gap:20, padding:20, overflow:'hidden' }}>
+
+          {/* ── 좌측 260px ── */}
+          <div style={{ display:'flex', flexDirection:'column', gap:16, overflow:'hidden' }}>
+
+            {/* 숙소 현황 */}
+            <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, overflow:'hidden', flexShrink:0 }}>
+              <div style={{ padding:'12px 16px', borderBottom:'1.5px solid #e2e8f0', display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ width:3, height:13, background:'#059669', borderRadius:2, flexShrink:0 }} />
+                <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1 }}>숙소 현황</span>
+                {isRealData && <span style={{ width:7, height:7, borderRadius:'50%', background:'#059669', animation:'d1pulse 2s ease-in-out infinite' }} />}
+              </div>
+              <div style={{ padding:'10px 14px' }}>
+                {isRealData ? (
+                  <div style={{ fontSize:12, fontWeight:600, color:'#059669', marginBottom:8 }}>
+                    에어비앤비 {syncedBookings.length}건 연동됨
+                  </div>
+                ) : (
+                  <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
+                    <span style={{ fontSize:11, color:'#94a3b8', fontWeight:600 }}>⚠ 예약 미연동 (목업)</span>
                   </div>
                 )}
-                <div style={{ fontSize:12, color:'var(--text3)', fontFamily:"'DM Mono',monospace",
-                  background:'var(--surface)', border:'1px solid var(--border)',
-                  borderRadius:8, padding:'8px 16px' }}>
-                  자동 실행까지 <span style={{ color:'var(--blue)', fontWeight:700 }}>{countdown.label}</span>
+                {targets.length === 0 ? (
+                  <div style={{ fontSize:11, color:'#94a3b8', padding:'6px 0' }}>내일 체크인 없음</div>
+                ) : targets.map(t => (
+                  <div key={t.propId} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 10px', background:'#f8fafc', borderRadius:7, marginBottom:5, border:'1px solid #e2e8f0' }}>
+                    <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11, color:'#2563eb', fontWeight:700 }}>{t.propId}</span>
+                    <span style={{ fontSize:12, color:'#1e293b', fontWeight:500, flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.propName}</span>
+                  </div>
+                ))}
+                {/* 카운트다운 */}
+                <div style={{ marginTop:8, display:'flex', alignItems:'center', gap:6, padding:'7px 10px', background:'#eff6ff', borderRadius:7, border:'1px solid #bfdbfe' }}>
+                  <span style={{ fontSize:10, color:'#64748b' }}>자동 실행까지</span>
+                  <span style={{ fontFamily:"'DM Mono',monospace", fontSize:12, fontWeight:700, color: countdown.secs<300?'#dc2626':countdown.secs<3600?'#d97706':'#2563eb' }}>⏱ {countdown.label}</span>
                 </div>
-                <button onClick={handleRun}
-                  style={{ marginTop:4, padding:'9px 22px', borderRadius:7, background:'var(--blue)',
-                    border:'1.5px solid #1d4ed8', color:'#fff', fontSize:13, fontWeight:700,
-                    cursor:'pointer', fontFamily:"'DM Sans',sans-serif" }}>
-                  ▶ 지금 실행
-                </button>
               </div>
-            )}
+            </div>
 
-            {/* 결과 카드 */}
-            {results.length > 0 && (
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(230px,1fr))', gap:10 }}>
-                {results.map(r => <PropResultCard key={r.propId} result={r} />)}
-                {running && targets.slice(results.length).map(t => (
-                  <div key={t.propId} style={{ background:'var(--surface)', border:'1.5px solid var(--border)',
-                    borderRadius:10, padding:'14px 16px', opacity:0.5 }}>
-                    <div style={{ fontSize:12, fontWeight:700, color:'var(--text3)', marginBottom:4 }}>{t.propName}</div>
-                    <div style={{ fontSize:11, color:'var(--text4)' }}>{t.guestName}</div>
-                    <div style={{ display:'flex', gap:5, marginTop:8, flexWrap:'wrap' }}>
-                      <StepChip label="PIN 발급" state={null}/>
-                      <StepChip label="메시지"   state={null}/>
-                      <StepChip label="스마트홈" state={null}/>
+            {/* 개발 옵션 */}
+            <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, overflow:'hidden', flexShrink:0 }}>
+              <button onClick={() => setDevOpen(v => !v)} style={{ width:'100%', padding:'11px 16px', background:'none', border:'none', cursor:'pointer', display:'flex', alignItems:'center', gap:8, textAlign:'left' }}>
+                <span style={{ width:3, height:13, background:'#7c3aed', borderRadius:2, flexShrink:0 }} />
+                <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1 }}>개발 옵션</span>
+                <span style={{ fontSize:10, fontWeight:600, padding:'2px 6px', borderRadius:4, background:'#f5f3ff', border:'1px solid #c4b5fd', color:'#7c3aed' }}>테스트용</span>
+                <span style={{ fontSize:10, color:'#94a3b8' }}>{devOpen ? '▲' : '▼'}</span>
+              </button>
+              {devOpen && (
+                <div style={{ padding:'0 14px 14px', background:'#fefce8', borderTop:'1px solid #fef08a' }}>
+                  <div style={{ marginTop:10, marginBottom:10 }}>
+                    <div style={{ fontSize:10, color:'#78716c', fontWeight:600, marginBottom:6 }}>HA 연동 모드</div>
+                    <button onClick={() => setHaMode(m => !m)} style={{ width:'100%', padding:'6px 8px', borderRadius:6, fontSize:11, fontWeight:600, cursor:'pointer', background:haMode?'#f0fdf4':'#ffffff', border:`1.5px solid ${haMode?'#86efac':'#e2e8f0'}`, color:haMode?'#059669':'#64748b' }}>
+                      {haMode ? '⚡ 실제 HA 연동' : '○ Mock 모드'}
+                    </button>
+                  </div>
+                  {!haMode && (
+                    <div>
+                      <div style={{ fontSize:10, color:'#78716c', fontWeight:600, marginBottom:6 }}>오류 시뮬레이션</div>
+                      <button onClick={() => setFailMode(f => !f)} style={{ width:'100%', padding:'6px 8px', borderRadius:6, fontSize:11, fontWeight:600, cursor:'pointer', background:failMode?'#fee2e2':'#ffffff', border:`1.5px solid ${failMode?'#fca5a5':'#e2e8f0'}`, color:failMode?'#dc2626':'#64748b' }}>
+                        {failMode ? '✕ 에러 시뮬 ON' : '○ 정상 동작'}
+                      </button>
                     </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 실행 결과 요약 (실행 후) */}
+            {results.length > 0 && (
+              <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'14px', flexShrink:0 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
+                  <span style={{ width:3, height:13, background:'#0ea5e9', borderRadius:2, flexShrink:0 }} />
+                  <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>실행 결과</span>
+                  {lastRun && <span style={{ marginLeft:'auto', fontSize:10, color:'#94a3b8', fontFamily:"'DM Mono',monospace" }}>{lastRun}</span>}
+                </div>
+                {[
+                  { label:'총 대상', val:targets.length, c:'#94a3b8', bg:'#f8fafc', b:'#e2e8f0' },
+                  { label:'완료',    val:summary.success,  c:'#059669', bg:'#f0fdf4', b:'#86efac' },
+                  { label:'부분완료',val:summary.partial,  c:'#d97706', bg:'#fffbeb', b:'#fde68a' },
+                  { label:'실패',    val:summary.failed,   c:'#dc2626', bg:'#fef2f2', b:'#fca5a5' },
+                ].map(({ label, val, c, bg, b }) => (
+                  <div key={label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 10px', background:bg, borderRadius:6, border:`1px solid ${b}`, marginBottom:5 }}>
+                    <span style={{ fontSize:12, color:c, fontWeight:600 }}>{label}</span>
+                    <span style={{ fontFamily:"'DM Mono',monospace", fontSize:16, fontWeight:800, color:c }}>{val}</span>
                   </div>
                 ))}
               </div>
             )}
           </div>
-        )}
 
-        {/* 오른쪽: 알림 피드 */}
-        <div style={{ width:280, flexShrink:0, background:'var(--surface2)',
-          borderLeft:'1px solid var(--border)', display:'flex', flexDirection:'column', overflow:'hidden' }}>
-          <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--border)',
-            background:'var(--surface)', flexShrink:0,
-            display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            <span style={{ fontSize:12, fontWeight:700, color:'var(--text)' }}>자동화 알림</span>
-            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-              {alerts.length > 0 && (
-                <button onClick={ackAllAlerts}
-                  style={{ fontSize:10, color:'var(--text3)', background:'var(--surface2)',
-                    border:'1px solid var(--border)', borderRadius:4, padding:'2px 8px',
-                    cursor:'pointer', fontWeight:600 }}>
-                  전체 확인
-                </button>
-              )}
-              <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11,
-                background:'var(--blue-l)', color:'var(--blue)',
-                borderRadius:20, padding:'2px 8px', fontWeight:700 }}>
-                {alerts.length}
-              </span>
+          {/* ── 중앙 flex:1 ── */}
+          <div style={{ display:'flex', flexDirection:'column', gap:16, overflow:'hidden' }}>
+
+            {/* 자동화 흐름 */}
+            <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, overflow:'hidden', flexShrink:0 }}>
+              <div style={{ padding:'12px 16px', borderBottom:'1.5px solid #e2e8f0', display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ width:3, height:13, background:'#2563eb', borderRadius:2, flexShrink:0 }} />
+                <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>D-1 자동화 흐름</span>
+              </div>
+              <div style={{ padding:'16px', display:'flex', flexDirection:'column', gap:10 }}>
+                {[
+                  { sc:sc1, title:'숙소 확인', desc:`내일 체크인 대상 ${targets.length}개 숙소 필터링`, tag:'확인' },
+                  { sc:sc2, title:'PIN 발급',  desc:'6자리 도어락 PIN 생성 · HA 등록 · 유효기간 설정',   tag:'보안' },
+                  { sc:sc3, title:'웰컴 메시지', desc:'게스트에게 입실 안내 + WiFi 정보 자동 발송',      tag:'메시지' },
+                  { sc:sc4, title:'스마트홈 초기화', desc:'체크인 준비 씬 실행 · 조명 · 에어컨 설정',    tag:'IoT' },
+                ].map(({ sc, title, desc, tag }, idx) => (
+                  <div key={idx} style={{ display:'flex', gap:12, alignItems:'flex-start', padding:'12px 14px', borderRadius:10, background:sc.hBg, border:`2px solid ${sc.b}`, transition:'all 0.3s' }}>
+                    <div style={{ width:22, height:22, borderRadius:'50%', background:sc.cBg, color:sc.cFg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800, flexShrink:0, animation:sc.lbl==='↻'?'d1spin 1s linear infinite':'none' }}>{sc.lbl}</div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:sc.tc, marginBottom:2 }}>{title}</div>
+                      <div style={{ fontSize:11, color:'#64748b' }}>{desc}</div>
+                    </div>
+                    <span style={{ fontSize:10, fontWeight:600, padding:'2px 8px', borderRadius:4, background:sc.cBg, color:sc.cFg, flexShrink:0 }}>{tag}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 처리 결과 */}
+            <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, overflow:'hidden', flex:1, display:'flex', flexDirection:'column' }}>
+              <div style={{ padding:'12px 16px', borderBottom:'1.5px solid #e2e8f0', display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+                <span style={{ width:3, height:13, background:'#0ea5e9', borderRadius:2, flexShrink:0 }} />
+                <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>숙소별 처리 결과</span>
+              </div>
+              <div style={{ flex:1, overflow:'auto', padding:'10px 14px' }}>
+                {results.length === 0 && !running ? (
+                  <div style={{ textAlign:'center', padding:'40px 20px', color:'#94a3b8', fontSize:12 }}>
+                    <div style={{ fontSize:32, marginBottom:10, opacity:0.4 }}>🏠</div>
+                    D-1 자동화를 실행하면<br/>숙소별 처리 결과가 표시됩니다.
+                    {!isRealData && <div style={{ fontSize:11, color:'#d97706', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:6, padding:'6px 10px', marginTop:12 }}>⚠ 목업 데이터 사용 중</div>}
+                  </div>
+                ) : (
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(210px,1fr))', gap:10 }}>
+                    {results.map(r => <PropResultCard key={r.propId} result={r} />)}
+                    {running && targets.slice(results.length).map(t => (
+                      <div key={t.propId} style={{ background:'#f8fafc', border:'1.5px solid #e2e8f0', borderRadius:10, padding:'14px 16px', opacity:0.5 }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:'#94a3b8', marginBottom:4 }}>{t.propName}</div>
+                        <div style={{ fontSize:11, color:'#94a3b8' }}>{t.guestName}</div>
+                        <div style={{ display:'flex', gap:5, marginTop:8, flexWrap:'wrap' }}>
+                          <StepChip label="PIN 발급" state={null}/><StepChip label="메시지" state={null}/><StepChip label="스마트홈" state={null}/>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-          <div style={{ flex:1, overflow:'auto', padding:'8px 10px' }}>
-            {alerts.length === 0
-              ? <div style={{ textAlign:'center', color:'var(--text4)', fontSize:12, marginTop:32 }}>실행 후 알림이 표시됩니다</div>
-              : alerts.map(a => <D1AlertItem key={a.id} alert={a} onAck={ackAlert} />)
-            }
+
+          {/* ── 우측 340px ── */}
+          <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, overflow:'hidden', display:'flex', flexDirection:'column' }}>
+            <div style={{ padding:'12px 16px', borderBottom:'1.5px solid #e2e8f0', display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+              <span style={{ width:3, height:13, background:'#d97706', borderRadius:2, flexShrink:0 }} />
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1 }}>자동화 알림</span>
+              {alerts.length > 0 && <span style={{ background:'#dc2626', color:'#fff', borderRadius:10, padding:'1px 7px', fontSize:10, fontWeight:700 }}>{alerts.length}</span>}
+              {alerts.length > 0 && <button onClick={ackAllAlerts} style={{ padding:'3px 9px', borderRadius:5, background:'#f8fafc', border:'1.5px solid #e2e8f0', color:'#64748b', fontSize:10, cursor:'pointer', fontWeight:600 }}>전체 확인</button>}
+            </div>
+            <div style={{ flex:1, overflow:'auto', padding:'10px 12px' }}>
+              {alerts.length === 0
+                ? <div style={{ textAlign:'center', padding:'40px 20px', color:'#94a3b8', fontSize:12 }}><div style={{ fontSize:32, marginBottom:10, opacity:0.4 }}>🔔</div>알림 없음</div>
+                : alerts.map(a => <D1AlertItem key={a.id} alert={a} onAck={ackAlert} />)
+              }
+            </div>
           </div>
         </div>
-      </div>
-
-      <style>{`@keyframes d1spin { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }`}</style>
+      )}
     </div>
   );
 }

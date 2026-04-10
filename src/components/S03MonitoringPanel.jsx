@@ -747,25 +747,25 @@ function S03MonitoringPanel({ onBack }) {
                 label="온도" icon="🌡"
                 value={currentReading?.temp}
                 unit="°C"
-                warn={T.temp.warn} critical={T.temp.critical}
+                warn={_DEFAULT_THRESHOLDS.temp.warn} critical={_DEFAULT_THRESHOLDS.temp.critical}
               />
               <SensorCard
                 label="습도" icon="💧"
                 value={currentReading?.humidity}
                 unit="%"
-                warn={T.humidity.warn} critical={T.humidity.critical}
+                warn={_DEFAULT_THRESHOLDS.humidity.warn} critical={_DEFAULT_THRESHOLDS.humidity.critical}
               />
               <SensorCard
                 label="소음" icon="🔊"
                 value={currentReading?.noise}
                 unit="dB"
-                warn={T.noise.warn} critical={T.noise.critical}
+                warn={_DEFAULT_THRESHOLDS.noise.warn} critical={_DEFAULT_THRESHOLDS.noise.critical}
               />
               <SensorCard
                 label="전력" icon="⚡"
                 value={currentReading?.power}
                 unit="W"
-                warn={T.power.warn} critical={T.power.critical}
+                warn={_DEFAULT_THRESHOLDS.power.warn} critical={_DEFAULT_THRESHOLDS.power.critical}
               />
             </div>
 
@@ -791,10 +791,10 @@ function S03MonitoringPanel({ onBack }) {
             </div>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               {[
-                { label:'온도', warn:`${T.temp.warn}°C`, critical:`${T.temp.critical}°C` },
-                { label:'습도', warn:`${T.humidity.warn}%`, critical:`${T.humidity.critical}%` },
-                { label:'소음', warn:`${T.noise.warn}dB`, critical:`${T.noise.critical}dB` },
-                { label:'전력', warn:`${T.power.warn}W`, critical:`${T.power.critical}W` },
+                { label:'온도', warn:`${_DEFAULT_THRESHOLDS.temp.warn}°C`, critical:`${_DEFAULT_THRESHOLDS.temp.critical}°C` },
+                { label:'습도', warn:`${_DEFAULT_THRESHOLDS.humidity.warn}%`, critical:`${_DEFAULT_THRESHOLDS.humidity.critical}%` },
+                { label:'소음', warn:`${_DEFAULT_THRESHOLDS.noise.warn}dB`, critical:`${_DEFAULT_THRESHOLDS.noise.critical}dB` },
+                { label:'전력', warn:`${_DEFAULT_THRESHOLDS.power.warn}W`, critical:`${_DEFAULT_THRESHOLDS.power.critical}W` },
               ].map(item => (
                 <div key={item.label} style={{ fontSize: 12, color: '#64748b' }}>
                   <span style={{ fontWeight: 600 }}>{item.label}</span>

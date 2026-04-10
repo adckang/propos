@@ -223,15 +223,15 @@ const GLOBAL_CSS = `
 .badge-sm{font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px}
 
 /* ── HA ── */
-.ha-root{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);flex:1;display:flex;flex-direction:column;overflow:hidden}
-.ha-topbar{background:var(--surface);padding:18px 24px 0;flex-shrink:0;border-bottom:1px solid var(--border);box-shadow:var(--shadow)}
-.ha-tabs{display:flex;gap:0;margin-top:18px}
-.ha-tab{padding:10px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text3);border-bottom:2.5px solid transparent;margin-bottom:-1px;transition:all 0.2s;white-space:nowrap}
-.ha-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
-.ha-tab:hover:not(.active){color:var(--text2)}
+.ha-root{font-family:'DM Sans',sans-serif;background:#f0f4f8;color:#1e293b;flex:1;display:flex;flex-direction:column;overflow:hidden}
+.ha-topbar{background:#ffffff;padding:16px 24px 0;flex-shrink:0;border-bottom:1px solid #e2e8f0}
+.ha-tabs{display:flex;gap:0;margin-top:14px}
+.ha-tab{padding:10px 18px;font-size:12px;font-weight:600;cursor:pointer;color:#64748b;border-bottom:2.5px solid transparent;margin-bottom:-1px;transition:all 0.2s;white-space:nowrap}
+.ha-tab.active{color:#2563eb;border-bottom-color:#2563eb}
+.ha-tab:hover:not(.active){color:#475569}
 .ha-content{flex:1;overflow:auto;padding:20px 24px}
-.ha-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:14px;box-shadow:var(--shadow)}
-.ha-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1.5px;color:var(--text4);text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.ha-card{background:#ffffff;border:1.5px solid #e2e8f0;border-radius:12px;padding:18px;margin-bottom:14px}
+.ha-label{font-size:11px;font-weight:700;letter-spacing:0.06em;color:#475569;text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1.5px solid #e2e8f0}
 .ha-drow{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)}
 .ha-key{font-size:12px;color:var(--text2)}
 .ha-val{font-family:'DM Mono',monospace;font-size:12px;color:var(--text);font-weight:500}
@@ -273,17 +273,17 @@ const GLOBAL_CSS = `
 .pcard.HIGH{border-top-color:var(--red)}
 .pcard.MED{border-top-color:var(--yellow)}
 .pcard.OK{border-top-color:var(--green)}
-.detail-panel{width:370px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.detail-panel{width:370px;flex-shrink:0;background:var(--surface);border-left:1.5px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
 .dtabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;padding:0 12px}
 .dtab{flex:1;padding:10px 6px;font-size:11px;font-weight:700;text-align:center;cursor:pointer;color:var(--text3);border-bottom:2.5px solid transparent;transition:all 0.15s;white-space:nowrap}
 .dtab.active{color:var(--blue);border-bottom-color:var(--blue)}
 .dbody{flex:1;overflow:auto;padding:14px}
-.d-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1.5px;color:var(--text4);text-transform:uppercase;margin-bottom:8px;padding-bottom:7px;border-bottom:1px solid var(--border)}
+.d-label{font-size:11px;font-weight:700;letter-spacing:0.06em;color:#475569;text-transform:uppercase;margin-bottom:10px;padding-bottom:8px;border-bottom:1.5px solid #e2e8f0}
 .d-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)}
 .d-k{font-size:12px;color:var(--text2)}
 .d-v{font-family:'DM Mono',monospace;font-size:12px;color:var(--text);font-weight:500}
-.alert-panel{width:290px;flex-shrink:0;background:var(--surface2);border-left:1px solid var(--border);display:flex;flex-direction:column}
-.alert-hdr{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;background:var(--surface)}
+.alert-panel{width:290px;flex-shrink:0;background:var(--surface);border-left:1.5px solid var(--border);display:flex;flex-direction:column}
+.alert-hdr{padding:14px 16px;border-bottom:1.5px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;background:var(--surface)}
 .alert-list-wrap{flex:1;overflow:auto;padding:8px}
 .aitem{padding:10px 12px;border-radius:var(--radius-sm);margin-bottom:5px;border-left:3px solid;cursor:pointer;transition:opacity 0.2s;background:var(--surface);box-shadow:var(--shadow)}
 .aitem.acked{opacity:0.35}
@@ -294,10 +294,10 @@ const GLOBAL_CSS = `
 .modal-bg{position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px)}
 .modal-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);width:580px;max-height:80vh;overflow:auto;padding:28px;box-shadow:var(--shadow-lg)}
 .cmd-btn{width:100%;padding:13px 16px;border-radius:var(--radius-sm);border:1.5px solid;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;text-align:left;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;transition:all 0.15s}
-.view-wrap{flex:1;overflow:auto;padding:20px}
-.vt{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--blue);margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid var(--border);text-transform:uppercase}
-.rule-row{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px}
-.cleaner-card{padding:12px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px;display:flex;align-items:center;gap:12px}
+.view-wrap{flex:1;overflow:auto}
+.vt{font-size:11px;font-weight:700;letter-spacing:0.06em;color:#475569;margin-bottom:14px;padding-bottom:10px;border-bottom:1.5px solid #e2e8f0;text-transform:uppercase;display:flex;align-items:center;gap:6px}
+.rule-row{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px}
+.cleaner-card{padding:12px 14px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px;display:flex;align-items:center;gap:12px}
 .progress-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:10px}
 .progress-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:3px;transition:width 0.6s}
 .rev-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
@@ -350,19 +350,17 @@ function HomeAssistant({onBack}) {
   return (
     <div className="ha-root">
       <div className="ha-topbar">
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-          <div>
-            <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
-              <span style={{fontSize:"26px"}}>{SINGLE_PROP.emoji||"🏠"}</span>
-              <div>
-                <div style={{fontFamily:"'Nunito',sans-serif",fontSize:"20px",fontWeight:"800",color:"#1a202c"}}>{SINGLE_PROP.name}</div>
-                <div style={{fontSize:"12px",color:"#718096",marginTop:"2px"}}>{SINGLE_PROP.address}</div>
-              </div>
-            </div>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          {onBack&&<button onClick={onBack} style={{background:"none",border:"1px solid #e2e8f0",borderRadius:6,padding:"5px 12px",fontSize:12,color:"#64748b",cursor:"pointer",fontWeight:600,flexShrink:0}}>← 홈</button>}
+          {onBack&&<div style={{width:1,height:22,background:"#e2e8f0",flexShrink:0}}/>}
+          <span style={{fontSize:24,flexShrink:0}}>{SINGLE_PROP.emoji||"🏠"}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:800,fontSize:18,color:"#1e293b",lineHeight:1.2}}>{SINGLE_PROP.name}</div>
+            <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{SINGLE_PROP.address}</div>
           </div>
-          <div style={{textAlign:"right"}}>
-            <div style={{fontFamily:"'DM Mono',monospace",fontSize:"22px",color:"#2563eb",fontWeight:"500"}}>{now.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</div>
-            <div style={{fontSize:"11px",color:"#a0aec0",marginTop:"2px"}}>{now.toLocaleDateString("ko-KR",{month:"long",day:"numeric",weekday:"short"})}</div>
+          <div style={{textAlign:"right",flexShrink:0}}>
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:20,color:"#2563eb",fontWeight:700}}>{now.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</div>
+            <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{now.toLocaleDateString("ko-KR",{month:"long",day:"numeric",weekday:"short"})}</div>
           </div>
         </div>
         <div className="ha-tabs">{TABS.map(([id,l])=><div key={id} className={`ha-tab${tab===id?" active":""}`} onClick={()=>setTab(id)}>{l}</div>)}</div>
@@ -710,12 +708,12 @@ function CommandCenter({onBack}) {
     const p = props.find(x=>x.id===selProp.id)||selProp;
 
     return <>
-      <div style={{padding:"14px 16px",borderBottom:"1px solid #e2e8f0",flexShrink:0,background:"#f7f9fc"}}>
-        <div style={{fontSize:"11px",color:"#a0aec0",fontFamily:"'DM Mono',monospace",marginBottom:"4px"}}>#{String(p.id).padStart(3,"0")} · {p.type}</div>
-        <div style={{fontSize:"14px",fontWeight:"800",color:"#1a202c",lineHeight:"1.3",fontFamily:"'Nunito',sans-serif"}}>{p.name}</div>
+      <div style={{padding:"16px 18px",borderBottom:"1.5px solid #e2e8f0",flexShrink:0,background:"#ffffff"}}>
+        <div style={{fontSize:"11px",color:"#94a3b8",fontFamily:"'DM Mono',monospace",marginBottom:"4px",fontWeight:500}}>#{String(p.id).padStart(3,"0")} · {p.type}</div>
+        <div style={{fontSize:"14px",fontWeight:"800",color:"#1e293b",lineHeight:"1.3"}}>{p.name}</div>
         <div style={{display:"flex",gap:"6px",marginTop:"8px"}}>
-          <span className="badge-sm" style={{background:SC[p.status]+"18",color:SC[p.status],border:`1px solid ${SC[p.status]}44`}}>{p.status}</span>
-          <span className="badge-sm" style={{background:p.priority==="HIGH"?"#fef2f2":p.priority==="MED"?"#fffbeb":"#ecfdf5",color:PC[p.priority],border:`1px solid ${PC[p.priority]}44`}}>{p.priority==="HIGH"?"🚨 긴급":p.priority==="MED"?"⚠ 주의":"✓ 정상"}</span>
+          <span className="badge-sm" style={{background:SC[p.status]+"18",color:SC[p.status],border:`1.5px solid ${SC[p.status]}44`}}>{p.status}</span>
+          <span className="badge-sm" style={{background:p.priority==="HIGH"?"#fef2f2":p.priority==="MED"?"#fffbeb":"#ecfdf5",color:PC[p.priority],border:`1.5px solid ${PC[p.priority]}44`}}>{p.priority==="HIGH"?"🚨 긴급":p.priority==="MED"?"⚠ 주의":"✓ 정상"}</span>
         </div>
       </div>
       <div className="dtabs">
@@ -828,18 +826,21 @@ function CommandCenter({onBack}) {
   };
 
   const renderAutomation = () => (
-    <div className="view-wrap">
-      <div className="vt">자동화 규칙 관리</div>
-      {rules.map(r=>(
-        <div className="rule-row" key={r.id}>
-          <div style={{flex:1}}>
-            <div style={{fontSize:"13px",fontWeight:"700",color:"#1a202c"}}>{r.name}</div>
-            <div style={{fontSize:"11px",color:"#718096",marginTop:"3px"}}>트리거: {r.trigger} → {r.action}</div>
+    <div className="view-wrap" style={{display:"flex",flexDirection:"column",gap:16,padding:20}}>
+      <div style={{background:"#ffffff",border:"1.5px solid #e2e8f0",borderRadius:12,padding:18}}>
+        <div className="vt"><span style={{width:3,height:13,background:"#2563eb",borderRadius:2,display:"inline-block",flexShrink:0}}/> 자동화 규칙 관리</div>
+        {rules.map(r=>(
+          <div className="rule-row" key={r.id}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:"13px",fontWeight:"700",color:"#1e293b"}}>{r.name}</div>
+              <div style={{fontSize:"11px",color:"#64748b",marginTop:"3px"}}>트리거: {r.trigger} → {r.action}</div>
+            </div>
+            <button className={`tog ${r.active?"on":""}`} onClick={()=>setRules(rs=>rs.map(x=>x.id===r.id?{...x,active:!x.active}:x))}><div className="tog-d"/></button>
           </div>
-          <button className={`tog ${r.active?"on":""}`} onClick={()=>setRules(rs=>rs.map(x=>x.id===r.id?{...x,active:!x.active}:x))}><div className="tog-d"/></button>
-        </div>
-      ))}
-      <div style={{marginTop:"24px"}}><div className="vt">AI 인사이트</div>
+        ))}
+      </div>
+      <div style={{background:"#ffffff",border:"1.5px solid #e2e8f0",borderRadius:12,padding:18}}>
+        <div className="vt"><span style={{width:3,height:13,background:"#7c3aed",borderRadius:2,display:"inline-block",flexShrink:0}}/> AI 인사이트</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px"}}>
           {[{ic:"🤖",t:"AI 권장사항",d:"서울 강남 지역 주말 가격 최적화 시 예상 수익 +18%",c:"#2563eb",bg:"#eff6ff"},{ic:"📊",t:"패턴 감지",d:"화~목 공실률 32% — 주중 할인 자동화 권장",c:"#d97706",bg:"#fffbeb"},{ic:"⚡",t:"효율 알림",d:"자동화로 이번 달 절약 시간: 약 14.3시간",c:"#059669",bg:"#ecfdf5"},{ic:"🔮",t:"예측 모델",d:"제주 다음 주 예약률 82% — 청소 인력 사전 배치 권장",c:"#7c3aed",bg:"#f5f3ff"}].map(x=>(
             <div key={x.t} style={{padding:"16px",background:x.bg,border:`1.5px solid ${x.c}22`,borderRadius:"10px",borderLeft:`4px solid ${x.c}`}}>
@@ -858,18 +859,20 @@ function CommandCenter({onBack}) {
     const maxR = top[0]?.revenue||1;
     const total = props.reduce((s,p)=>s+p.revenue,0);
     return (
-      <div className="view-wrap">
-        <div className="vt">수익 분석 센터</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"12px",marginBottom:"20px"}}>
-          {[{l:"총 월 수익",v:`${(total/10000).toFixed(0)}만원`,c:"#059669",bg:"#ecfdf5"},{l:"숙소당 평균",v:`${(total/props.length/10000).toFixed(0)}만원`,c:"#2563eb",bg:"#eff6ff"},{l:"점유율",v:`${occ}%`,c:"#d97706",bg:"#fffbeb"},{l:"수수료 추산",v:`${(total*0.11/10000).toFixed(0)}만원`,c:"#dc2626",bg:"#fef2f2"}].map(k=>(
-            <div key={k.l} style={{background:k.bg,border:`1.5px solid ${k.c}22`,borderRadius:"12px",padding:"16px",borderTop:`4px solid ${k.c}`}}>
-              <div style={{fontFamily:"'DM Mono',monospace",fontSize:"24px",fontWeight:"700",color:k.c}}>{k.v}</div>
-              <div style={{fontSize:"11px",color:"#718096",marginTop:"6px",fontWeight:"600"}}>{k.l}</div>
-            </div>
-          ))}
+      <div className="view-wrap" style={{display:"flex",flexDirection:"column",gap:16,padding:20}}>
+        <div style={{background:"#ffffff",border:"1.5px solid #e2e8f0",borderRadius:12,padding:18}}>
+          <div className="vt"><span style={{width:3,height:13,background:"#059669",borderRadius:2,display:"inline-block",flexShrink:0}}/> 수익 분석 센터</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"12px"}}>
+            {[{l:"총 월 수익",v:`${(total/10000).toFixed(0)}만원`,c:"#059669",bg:"#ecfdf5"},{l:"숙소당 평균",v:`${(total/props.length/10000).toFixed(0)}만원`,c:"#2563eb",bg:"#eff6ff"},{l:"점유율",v:`${occ}%`,c:"#d97706",bg:"#fffbeb"},{l:"수수료 추산",v:`${(total*0.11/10000).toFixed(0)}만원`,c:"#dc2626",bg:"#fef2f2"}].map(k=>(
+              <div key={k.l} style={{background:k.bg,border:`1.5px solid ${k.c}22`,borderRadius:"10px",padding:"16px",borderTop:`3px solid ${k.c}`}}>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:"22px",fontWeight:"700",color:k.c}}>{k.v}</div>
+                <div style={{fontSize:"11px",color:"#64748b",marginTop:"6px",fontWeight:"600"}}>{k.l}</div>
+              </div>
+            ))}
+          </div>
         </div>
-        <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:"12px",padding:"20px",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
-          <div className="d-label">TOP 10 수익 숙소</div>
+        <div style={{background:"#ffffff",border:"1.5px solid #e2e8f0",borderRadius:12,padding:18}}>
+          <div className="vt"><span style={{width:3,height:13,background:"#2563eb",borderRadius:2,display:"inline-block",flexShrink:0}}/> TOP 10 수익 숙소</div>
           {top.map(p=>(
             <div key={p.id} className="rev-row">
               <span style={{fontSize:"11px",color:"#4a5568",fontWeight:"500",width:"80px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name.split(" ").slice(-1)[0]}</span>
@@ -886,38 +889,37 @@ function CommandCenter({onBack}) {
     const needC = props.filter(p=>p.status==="청소중");
     const issues = props.filter(p=>p.issues.length>0);
     return (
-      <div className="view-wrap">
-        <div className="vt">청소 · 유지보수 관제</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"18px"}}>
-          <div>
-            <div className="d-label">청소 인력 현황</div>
+      <div className="view-wrap" style={{display:"flex",flexDirection:"column",gap:16,padding:20}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+          <div style={{background:"#ffffff",border:"1.5px solid #e2e8f0",borderRadius:12,padding:18}}>
+            <div className="vt"><span style={{width:3,height:13,background:"#059669",borderRadius:2,display:"inline-block",flexShrink:0}}/> 청소 인력 현황</div>
             {CLEANERS.map(c=>(
               <div className="cleaner-card" key={c.id}>
                 <div style={{width:"10px",height:"10px",borderRadius:"50%",background:c.status==="가용"?"#059669":c.status==="작업중"?"#d97706":"#cbd5e0",flexShrink:0}} />
                 <div style={{flex:1}}>
-                  <div style={{fontSize:"13px",fontWeight:"700",color:"#1a202c"}}>{c.name}</div>
-                  <div style={{fontSize:"10px",color:"#718096",marginTop:"2px"}}>{c.zone}</div>
+                  <div style={{fontSize:"13px",fontWeight:"700",color:"#1e293b"}}>{c.name}</div>
+                  <div style={{fontSize:"10px",color:"#64748b",marginTop:"2px"}}>{c.zone}</div>
                   <div style={{fontSize:"11px",color:c.status==="가용"?"#059669":c.status==="작업중"?"#d97706":"#94a3b8",fontWeight:"600"}}>{c.status}</div>
                 </div>
                 <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#d97706",fontWeight:"600"}}>★{c.rating}</div>
               </div>
             ))}
           </div>
-          <div>
-            <div className="d-label">청소 대기 ({needC.length})</div>
+          <div style={{background:"#ffffff",border:"1.5px solid #e2e8f0",borderRadius:12,padding:18}}>
+            <div className="vt"><span style={{width:3,height:13,background:"#d97706",borderRadius:2,display:"inline-block",flexShrink:0}}/> 청소 대기 ({needC.length})</div>
             {needC.slice(0,7).map(p=>(
-              <div key={p.id} style={{padding:"10px 13px",background:"#fff",border:"1px solid #e2e8f0",borderRadius:"8px",marginBottom:"5px",display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
+              <div key={p.id} style={{padding:"10px 13px",background:"#f8fafc",border:"1.5px solid #e2e8f0",borderRadius:"8px",marginBottom:"5px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
-                  <div style={{fontSize:"12px",fontWeight:"700",color:"#1a202c"}}>{p.name.split(" ").slice(-2).join(" ")}</div>
-                  <div style={{fontSize:"10px",color:"#a0aec0",marginTop:"2px"}}>{p.city}</div>
+                  <div style={{fontSize:"12px",fontWeight:"700",color:"#1e293b"}}>{p.name.split(" ").slice(-2).join(" ")}</div>
+                  <div style={{fontSize:"10px",color:"#94a3b8",marginTop:"2px"}}>{p.city}</div>
                 </div>
                 <button className="act-btn" style={{color:"#d97706",borderColor:"#fde68a",background:"#fffbeb",fontSize:"11px",padding:"5px 10px"}}>배정</button>
               </div>
             ))}
           </div>
         </div>
-        <div style={{marginTop:"18px"}}>
-          <div className="d-label">유지보수 이슈 ({issues.length}건)</div>
+        <div style={{background:"#ffffff",border:"1.5px solid #e2e8f0",borderRadius:12,padding:18}}>
+          <div className="vt"><span style={{width:3,height:13,background:"#dc2626",borderRadius:2,display:"inline-block",flexShrink:0}}/> 유지보수 이슈 ({issues.length}건)</div>
           {issues.map(p=>(
             <div key={p.id} style={{padding:"10px 14px",background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:"8px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
@@ -1013,7 +1015,11 @@ function CommandCenter({onBack}) {
             {/* ALERT FEED */}
             <div className="alert-panel">
               <div className="alert-hdr">
-                <span style={{fontSize:"12px",fontWeight:"700",color:"#dc2626"}}>🔴 LIVE 알림</span>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{width:3,height:13,background:"#dc2626",borderRadius:2,display:"inline-block",flexShrink:0}}/>
+                  <span style={{fontSize:11,fontWeight:700,letterSpacing:"0.06em",color:"#475569",textTransform:"uppercase"}}>실시간 알림</span>
+                  <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"#dc2626",background:"#fef2f2",border:"1px solid #fecaca",borderRadius:20,padding:"1px 7px",fontWeight:700,marginLeft:4}}>LIVE</span>
+                </div>
                 <button onClick={ackAll} style={{fontSize:"10px",color:"#718096",background:"none",border:"1.5px solid #e2e8f0",borderRadius:"20px",padding:"3px 10px",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:"600"}}>전체 확인</button>
               </div>
               <div className="alert-list-wrap">
@@ -1584,6 +1590,7 @@ function D1AutomationPanel({ onBack }) {
   const [failMode,setFailMode]=useState(false);
   const [haMode,setHaMode]=useState(false);
   const [lastRun,setLastRun]=useState(null);
+  const [devOpen,setDevOpen]=useState(false);
   const countdown=useCountdownTo1800(), ranAtZero=useRef(false);
   const isRealData=syncedBookings.length>0;
   const targets=React.useMemo(()=>isRealData?_d1.filterTomorrowCheckIns(syncedBookings,today):makeTomorrowBookings(today,propConfigs),[syncedBookings,today,propConfigs,isRealData]);
@@ -1621,138 +1628,193 @@ function D1AutomationPanel({ onBack }) {
   const ackAlert=id=>setAlerts(prev=>prev.filter(a=>a.id!==id));
   const ackAllAlerts=()=>setAlerts([]);
 
+  const anyPin=results.some(r=>r.steps?.pin===true);
+  const anyMsg=results.some(r=>r.steps?.message===true);
+  const anySmartHome=results.some(r=>r.steps?.smartHome===true);
+  const pinRunning=running&&results.length>0&&!anyPin;
+  const msgRunning=running&&anyPin&&!anyMsg;
+  const shRunning=running&&anyMsg&&!anySmartHome;
+  function getStepSC(done,isRun,num){
+    if(done)  return{b:'#86efac',hBg:'#f0fdf4',cBg:'#16a34a',cFg:'#fff',tc:'#15803d',lbl:'✓'};
+    if(isRun) return{b:'#93c5fd',hBg:'#eff6ff',cBg:'#2563eb',cFg:'#fff',tc:'#2563eb',lbl:'↻'};
+    return         {b:'#e2e8f0',hBg:'#f8fafc',cBg:'#e2e8f0',cFg:'#64748b',tc:'#94a3b8',lbl:String(num)};
+  }
+  const sc1=getStepSC(targets.length>0,false,1);
+  const sc2=getStepSC(anyPin,pinRunning,2);
+  const sc3=getStepSC(anyMsg,msgRunning,3);
+  const sc4=getStepSC(anySmartHome,shRunning,4);
+
   return (
-    <div style={{display:'flex',flexDirection:'column',height:'100%',fontFamily:"'DM Sans',sans-serif",background:'var(--bg)',overflow:'hidden'}}>
-      <div style={{background:'var(--surface)',borderBottom:'1px solid var(--border)',flexShrink:0,boxShadow:'var(--shadow)'}}>
-        {/* ① 제목 행 */}
-        <div style={{display:'flex',alignItems:'center',gap:12,padding:'14px 20px',borderBottom:'1px solid var(--border)'}}>
-          {onBack&&<button className="back-btn" onClick={onBack}>← 뒤로</button>}
-          <div style={{width:1,height:28,background:'var(--border)'}}/>
-          <div style={{flex:1}}>
-            <div style={{fontSize:16,fontWeight:800,color:'var(--text)',lineHeight:1.2,letterSpacing:'-0.3px'}}>D-1 체크인 전날 자동화</div>
-            <div style={{fontSize:12,color:'var(--text3)',marginTop:3}}>체크인 하루 전 — PIN 자동 발급 · 웰컴 메시지 발송 · 스마트홈 초기화</div>
-          </div>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <button onClick={handleSync} disabled={syncing||!propConfigs.some(c=>c.icalUrl)}
-              style={{padding:'6px 14px',borderRadius:7,background:(syncing||!propConfigs.some(c=>c.icalUrl))?'var(--surface2)':'#ecfdf5',border:`1.5px solid ${(syncing||!propConfigs.some(c=>c.icalUrl))?'var(--border)':'#a7f3d0'}`,color:(syncing||!propConfigs.some(c=>c.icalUrl))?'var(--text4)':'#059669',fontSize:12,fontWeight:600,cursor:(syncing||!propConfigs.some(c=>c.icalUrl))?'not-allowed':'pointer',display:'flex',alignItems:'center',gap:5}}>
-              {syncing?<><span style={{display:'inline-block',animation:'d1spin 1s linear infinite'}}>↻</span> 동기화 중</>:'🔄 iCal 동기화'}
-            </button>
-            <button onClick={()=>setView(v=>v==='settings'?'auto':'settings')}
-              style={{padding:'6px 14px',borderRadius:7,background:view==='settings'?'var(--blue)':'var(--surface2)',border:`1.5px solid ${view==='settings'?'#1d4ed8':'var(--border)'}`,color:view==='settings'?'#fff':'var(--text2)',fontSize:12,fontWeight:600,cursor:'pointer'}}>
-              ⚙ 숙소 설정
-            </button>
-          </div>
+    <div style={{display:'flex',flexDirection:'column',height:'100%',fontFamily:"'DM Sans',sans-serif",background:'#f0f4f8',overflow:'hidden'}}>
+      <style>{`@keyframes d1spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}} @keyframes d1pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
+
+      {/* 헤더 */}
+      <div style={{background:'#ffffff',borderBottom:'1px solid #e2e8f0',padding:'16px 24px',display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
+        {onBack&&<button onClick={onBack} style={{background:'none',border:'1px solid #e2e8f0',borderRadius:6,padding:'5px 12px',fontSize:12,color:'#64748b',cursor:'pointer',fontWeight:600}}>← 홈</button>}
+        {onBack&&<div style={{width:1,height:22,background:'#e2e8f0'}}/>}
+        <div style={{flex:1}}>
+          <div style={{fontWeight:800,fontSize:18,color:'#1e293b',lineHeight:1.2}}>D-1 체크인 전날 자동화</div>
+          <div style={{fontSize:12,color:'#64748b',marginTop:3}}>PIN 자동 발급 · 웰컴 메시지 발송 · 스마트홈 초기화</div>
         </div>
-        {/* ② 현재 상태 행 */}
-        <div style={{display:'flex',alignItems:'center',gap:16,padding:'10px 20px',borderBottom:'1px solid var(--border)',background:'var(--bg)'}}>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <span style={{fontSize:11,color:'var(--text3)',fontWeight:500}}>데이터 소스</span>
-            <span style={{fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20,background:isRealData?'#ecfdf5':'#f1f5f9',color:isRealData?'#059669':'#94a3b8',border:`1.5px solid ${isRealData?'#a7f3d0':'#e2e8f0'}`}}>
-              {isRealData?`● 실데이터 ${syncedBookings.length}건`:'○ 목업 데이터'}
-            </span>
-          </div>
-          <div style={{width:1,height:16,background:'var(--border)'}}/>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <span style={{fontSize:11,color:'var(--text3)',fontWeight:500}}>다음 자동 실행</span>
-            <span style={{fontFamily:"'DM Mono',monospace",fontSize:13,fontWeight:700,color:countdown.secs<300?'var(--red)':countdown.secs<3600?'var(--yellow)':'var(--green)',background:countdown.secs<300?'var(--red-l)':countdown.secs<3600?'var(--yellow-l)':'var(--green-l)',border:`1.5px solid ${countdown.secs<300?'var(--red-m)':countdown.secs<3600?'var(--yellow-m)':'var(--green-m)'}`,borderRadius:6,padding:'2px 10px'}}>
-              ⏱ {countdown.label}
-            </span>
-            <span style={{fontSize:11,color:'var(--text4)'}}>매일 오후 6:00 (UC-001)</span>
-          </div>
-          {view==='auto'&&(
-            <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:12}}>
-              <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:haMode?'#059669':'var(--text3)',cursor:'pointer',userSelect:'none',background:haMode?'#ecfdf5':'var(--surface)',border:`1.5px solid ${haMode?'#a7f3d0':'var(--border)'}`,borderRadius:7,padding:'4px 10px'}}>
-                <button className={`tog${haMode?' on':''}`} onClick={()=>setHaMode(m=>!m)} style={{background:haMode?'var(--green)':undefined}}><div className="tog-d"/></button>
-                <span style={{fontWeight:600}}>{haMode?'● HA 연결됨':'○ Mock 모드'}</span>
-              </label>
-              {!haMode&&(
-                <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:failMode?'var(--red)':'var(--text3)',cursor:'pointer',userSelect:'none',background:failMode?'var(--red-l)':'var(--surface)',border:`1.5px solid ${failMode?'var(--red-m)':'var(--border)'}`,borderRadius:7,padding:'4px 10px'}}>
-                  <button className={`tog${failMode?' on':''}`} onClick={()=>setFailMode(f=>!f)} style={{background:failMode?'var(--red)':undefined}}><div className="tog-d"/></button>
-                  <span style={{fontWeight:600}}>오류 시뮬</span>
-                </label>
-              )}
-            </div>
-          )}
-        </div>
-        {/* ③ 결과 요약 + ④ 실행 버튼 */}
+        <button onClick={handleSync} disabled={syncing||!propConfigs.some(c=>c.icalUrl)}
+          style={{padding:'7px 14px',borderRadius:8,background:(syncing||!propConfigs.some(c=>c.icalUrl))?'#f8fafc':'#f0fdf4',border:`1.5px solid ${(syncing||!propConfigs.some(c=>c.icalUrl))?'#e2e8f0':'#86efac'}`,color:(syncing||!propConfigs.some(c=>c.icalUrl))?'#94a3b8':'#059669',fontSize:12,fontWeight:600,cursor:(syncing||!propConfigs.some(c=>c.icalUrl))?'not-allowed':'pointer',display:'flex',alignItems:'center',gap:5}}>
+          {syncing?<><span style={{display:'inline-block',animation:'d1spin 1s linear infinite'}}>↻</span> 동기화 중</>:'🔄 iCal 동기화'}
+        </button>
+        <button onClick={()=>setView(v=>v==='settings'?'auto':'settings')} style={{padding:'7px 14px',borderRadius:8,background:view==='settings'?'#2563eb':'#f8fafc',border:`1.5px solid ${view==='settings'?'#1d4ed8':'#e2e8f0'}`,color:view==='settings'?'#fff':'#64748b',fontSize:12,fontWeight:600,cursor:'pointer'}}>⚙ 숙소 설정</button>
         {view==='auto'&&(
-          <div style={{display:'flex',alignItems:'center',gap:20,padding:'12px 20px'}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:11,fontWeight:700,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>
-                {results.length>0?`실행 결과 요약${lastRun?` — 마지막 실행 ${lastRun}`:''}`:(`처리 대상 — 내일 체크인 ${targets.length}개 숙소`)}
-              </div>
-              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                {results.length>0?[
-                  {label:'총 대상',val:targets.length,accent:'#94a3b8',bg:'#f8fafc',border:'#e2e8f0'},
-                  {label:'완료',val:summary.success,accent:'#059669',bg:'#ecfdf5',border:'#a7f3d0'},
-                  {label:'부분 완료',val:summary.partial,accent:'#d97706',bg:'#fffbeb',border:'#fde68a'},
-                  {label:'실패',val:summary.failed,accent:'#dc2626',bg:'#fef2f2',border:'#fecaca'},
-                ].map(({label,val,accent,bg,border})=>(
-                  <div key={label} style={{display:'flex',alignItems:'center',gap:10,background:bg,border:`1.5px solid ${border}`,borderRadius:8,padding:'8px 14px',borderLeft:`4px solid ${accent}`}}>
-                    <span style={{fontFamily:"'DM Mono',monospace",fontSize:20,fontWeight:800,color:accent,lineHeight:1}}>{val}</span>
-                    <span style={{fontSize:11,color:accent,fontWeight:600,lineHeight:1.3}}>{label}</span>
-                  </div>
-                )):(
-                  targets.length===0
-                    ?<div style={{fontSize:12,color:'var(--text4)',padding:'6px 0'}}>내일 체크인 예정 숙소 없음</div>
-                    :targets.map(t=>(
-                      <div key={t.propId} style={{display:'flex',alignItems:'center',gap:6,background:'var(--surface)',border:'1.5px solid var(--border)',borderRadius:8,padding:'6px 12px',borderLeft:'4px solid var(--blue)'}}>
-                        <span style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--blue)',fontWeight:700}}>{t.propId}</span>
-                        <span style={{fontSize:12,color:'var(--text)',fontWeight:500}}>{t.propName}</span>
-                      </div>
-                    ))
-                )}
-              </div>
-            </div>
-            <button onClick={handleRun} disabled={running} style={{padding:'12px 28px',borderRadius:9,background:running?'var(--surface2)':'var(--blue)',border:`2px solid ${running?'var(--border)':'#1d4ed8'}`,color:running?'var(--text4)':'#fff',fontSize:14,fontWeight:800,cursor:running?'not-allowed':'pointer',fontFamily:"'DM Sans',sans-serif",transition:'all 0.15s',display:'flex',alignItems:'center',gap:8,boxShadow:running?'none':'0 2px 8px rgba(37,99,235,0.35)',flexShrink:0}}>
-              {running?<><span style={{display:'inline-block',animation:'d1spin 1s linear infinite'}}>↻</span> 처리 중...</>:<><span style={{fontSize:16}}>▶</span> D-1 자동화 실행</>}
-            </button>
-          </div>
+          <button onClick={handleRun} disabled={running} style={{padding:'9px 20px',borderRadius:8,background:running?'#e2e8f0':'#2563eb',border:`2px solid ${running?'#cbd5e1':'#1d4ed8'}`,color:running?'#94a3b8':'#fff',fontSize:13,fontWeight:800,cursor:running?'not-allowed':'pointer',display:'flex',alignItems:'center',gap:8,boxShadow:running?'none':'0 2px 8px rgba(37,99,235,0.4)'}}>
+            {running?<><span style={{display:'inline-block',animation:'d1spin 1s linear infinite'}}>↻</span> 처리 중...</>:'▶ D-1 자동화 실행'}
+          </button>
         )}
       </div>
-      <div style={{display:'flex',flex:1,overflow:'hidden'}}>
-        {view==='settings'?(
+
+      {/* 바디 */}
+      {view==='settings'?(
+        <div style={{flex:1,overflow:'auto'}}>
           <SettingsView propConfigs={propConfigs} onChange={handleConfigChange} onAdd={handleAddProp} onRemove={handleRemoveProp} onSave={handleSaveConfigs} syncing={syncing} onSync={handleSync} lastSyncTime={lastSyncTime} syncError={syncError}/>
-        ):(
-          <div style={{flex:1,overflow:'auto',padding:16}}>
-            {results.length===0&&!running&&(
-              <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',gap:12,color:'var(--text4)',textAlign:'center'}}>
-                <div style={{fontSize:40}}>🏠</div>
-                <div style={{fontSize:15,fontWeight:600,color:'var(--text3)'}}>D-1 자동화 대기 중</div>
-                <div style={{fontSize:12,lineHeight:1.8}}>{`내일 체크인 대상: ${targets.length}개 숙소`}<br/>{targets.map(t=>t.propName).join(' · ')}</div>
-                {!isRealData&&<div style={{fontSize:11,color:'#d97706',background:'#fffbeb',border:'1px solid #fde68a',borderRadius:6,padding:'6px 12px',display:'flex',alignItems:'center',gap:6}}>⚠ 목업 데이터 사용 중 — <button onClick={()=>setView('settings')} style={{color:'var(--blue)',background:'none',border:'none',cursor:'pointer',fontWeight:700,fontSize:11,padding:0}}>⚙ iCal 설정</button> 후 동기화하면 실데이터를 사용합니다</div>}
-                <div style={{fontSize:12,color:'var(--text3)',fontFamily:"'DM Mono',monospace",background:'var(--surface)',border:'1px solid var(--border)',borderRadius:8,padding:'8px 16px'}}>자동 실행까지 <span style={{color:'var(--blue)',fontWeight:700}}>{countdown.label}</span></div>
-                <button onClick={handleRun} style={{marginTop:4,padding:'9px 22px',borderRadius:7,background:'var(--blue)',border:'1.5px solid #1d4ed8',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:"'DM Sans',sans-serif"}}>▶ 지금 실행</button>
+        </div>
+      ):(
+        <div style={{flex:1,display:'grid',gridTemplateColumns:'260px 1fr 340px',gap:20,padding:20,overflow:'hidden'}}>
+
+          {/* 좌측 260px */}
+          <div style={{display:'flex',flexDirection:'column',gap:16,overflow:'hidden'}}>
+            {/* 숙소 현황 */}
+            <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:12,overflow:'hidden',flexShrink:0}}>
+              <div style={{padding:'12px 16px',borderBottom:'1.5px solid #e2e8f0',display:'flex',alignItems:'center',gap:8}}>
+                <span style={{width:3,height:13,background:'#059669',borderRadius:2,flexShrink:0}}/>
+                <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',flex:1}}>숙소 현황</span>
+                {isRealData&&<span style={{width:7,height:7,borderRadius:'50%',background:'#059669',animation:'d1pulse 2s ease-in-out infinite'}}/>}
               </div>
-            )}
+              <div style={{padding:'10px 14px'}}>
+                {isRealData?<div style={{fontSize:12,fontWeight:600,color:'#059669',marginBottom:8}}>에어비앤비 {syncedBookings.length}건 연동됨</div>:<div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}><span style={{fontSize:11,color:'#94a3b8',fontWeight:600}}>⚠ 예약 미연동 (목업)</span></div>}
+                {targets.length===0?(<div style={{fontSize:11,color:'#94a3b8',padding:'6px 0'}}>내일 체크인 없음</div>):targets.map(t=>(
+                  <div key={t.propId} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:'#f8fafc',borderRadius:7,marginBottom:5,border:'1px solid #e2e8f0'}}>
+                    <span style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'#2563eb',fontWeight:700}}>{t.propId}</span>
+                    <span style={{fontSize:12,color:'#1e293b',fontWeight:500,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.propName}</span>
+                  </div>
+                ))}
+                <div style={{marginTop:8,display:'flex',alignItems:'center',gap:6,padding:'7px 10px',background:'#eff6ff',borderRadius:7,border:'1px solid #bfdbfe'}}>
+                  <span style={{fontSize:10,color:'#64748b'}}>자동 실행까지</span>
+                  <span style={{fontFamily:"'DM Mono',monospace",fontSize:12,fontWeight:700,color:countdown.secs<300?'#dc2626':countdown.secs<3600?'#d97706':'#2563eb'}}>⏱ {countdown.label}</span>
+                </div>
+              </div>
+            </div>
+            {/* 개발 옵션 */}
+            <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:12,overflow:'hidden',flexShrink:0}}>
+              <button onClick={()=>setDevOpen(v=>!v)} style={{width:'100%',padding:'11px 16px',background:'none',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:8,textAlign:'left'}}>
+                <span style={{width:3,height:13,background:'#7c3aed',borderRadius:2,flexShrink:0}}/>
+                <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',flex:1}}>개발 옵션</span>
+                <span style={{fontSize:10,fontWeight:600,padding:'2px 6px',borderRadius:4,background:'#f5f3ff',border:'1px solid #c4b5fd',color:'#7c3aed'}}>테스트용</span>
+                <span style={{fontSize:10,color:'#94a3b8'}}>{devOpen?'▲':'▼'}</span>
+              </button>
+              {devOpen&&(
+                <div style={{padding:'0 14px 14px',background:'#fefce8',borderTop:'1px solid #fef08a'}}>
+                  <div style={{marginTop:10,marginBottom:10}}>
+                    <div style={{fontSize:10,color:'#78716c',fontWeight:600,marginBottom:6}}>HA 연동 모드</div>
+                    <button onClick={()=>setHaMode(m=>!m)} style={{width:'100%',padding:'6px 8px',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer',background:haMode?'#f0fdf4':'#ffffff',border:`1.5px solid ${haMode?'#86efac':'#e2e8f0'}`,color:haMode?'#059669':'#64748b'}}>
+                      {haMode?'⚡ 실제 HA 연동':'○ Mock 모드'}
+                    </button>
+                  </div>
+                  {!haMode&&(
+                    <div>
+                      <div style={{fontSize:10,color:'#78716c',fontWeight:600,marginBottom:6}}>오류 시뮬레이션</div>
+                      <button onClick={()=>setFailMode(f=>!f)} style={{width:'100%',padding:'6px 8px',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer',background:failMode?'#fee2e2':'#ffffff',border:`1.5px solid ${failMode?'#fca5a5':'#e2e8f0'}`,color:failMode?'#dc2626':'#64748b'}}>
+                        {failMode?'✕ 에러 시뮬 ON':'○ 정상 동작'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            {/* 실행 결과 요약 */}
             {results.length>0&&(
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(230px,1fr))',gap:10}}>
-                {results.map(r=><PropResultCard key={r.propId} result={r}/>)}
-                {running&&targets.slice(results.length).map(t=>(
-                  <div key={t.propId} style={{background:'var(--surface)',border:'1.5px solid var(--border)',borderRadius:10,padding:'14px 16px',opacity:0.5}}>
-                    <div style={{fontSize:12,fontWeight:700,color:'var(--text3)',marginBottom:4}}>{t.propName}</div>
-                    <div style={{fontSize:11,color:'var(--text4)'}}>{t.guestName}</div>
-                    <div style={{display:'flex',gap:5,marginTop:8,flexWrap:'wrap'}}><StepChip label="PIN 발급" state={null}/><StepChip label="메시지" state={null}/><StepChip label="스마트홈" state={null}/></div>
+              <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:12,padding:'14px',flexShrink:0}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,paddingBottom:8,borderBottom:'1.5px solid #e2e8f0'}}>
+                  <span style={{width:3,height:13,background:'#0ea5e9',borderRadius:2,flexShrink:0}}/>
+                  <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em'}}>실행 결과</span>
+                  {lastRun&&<span style={{marginLeft:'auto',fontSize:10,color:'#94a3b8',fontFamily:"'DM Mono',monospace"}}>{lastRun}</span>}
+                </div>
+                {[{label:'총 대상',val:targets.length,c:'#94a3b8',bg:'#f8fafc',b:'#e2e8f0'},{label:'완료',val:summary.success,c:'#059669',bg:'#f0fdf4',b:'#86efac'},{label:'부분완료',val:summary.partial,c:'#d97706',bg:'#fffbeb',b:'#fde68a'},{label:'실패',val:summary.failed,c:'#dc2626',bg:'#fef2f2',b:'#fca5a5'}].map(({label,val,c,bg,b})=>(
+                  <div key={label} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',background:bg,borderRadius:6,border:`1px solid ${b}`,marginBottom:5}}>
+                    <span style={{fontSize:12,color:c,fontWeight:600}}>{label}</span>
+                    <span style={{fontFamily:"'DM Mono',monospace",fontSize:16,fontWeight:800,color:c}}>{val}</span>
                   </div>
                 ))}
               </div>
             )}
           </div>
-        )}
-        <div style={{width:280,flexShrink:0,background:'var(--surface2)',borderLeft:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
-          <div style={{padding:'10px 14px',borderBottom:'1px solid var(--border)',background:'var(--surface)',flexShrink:0,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <span style={{fontSize:12,fontWeight:700,color:'var(--text)'}}>자동화 알림</span>
-            <div style={{display:'flex',alignItems:'center',gap:6}}>
-              {alerts.length>0&&<button onClick={ackAllAlerts} style={{fontSize:10,color:'var(--text3)',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:4,padding:'2px 8px',cursor:'pointer',fontWeight:600}}>전체 확인</button>}
-              <span style={{fontFamily:"'DM Mono',monospace",fontSize:11,background:'var(--blue-l)',color:'var(--blue)',borderRadius:20,padding:'2px 8px',fontWeight:700}}>{alerts.length}</span>
+
+          {/* 중앙 */}
+          <div style={{display:'flex',flexDirection:'column',gap:16,overflow:'hidden'}}>
+            {/* 자동화 흐름 */}
+            <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:12,overflow:'hidden',flexShrink:0}}>
+              <div style={{padding:'12px 16px',borderBottom:'1.5px solid #e2e8f0',display:'flex',alignItems:'center',gap:8}}>
+                <span style={{width:3,height:13,background:'#2563eb',borderRadius:2,flexShrink:0}}/>
+                <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em'}}>D-1 자동화 흐름</span>
+              </div>
+              <div style={{padding:'16px',display:'flex',flexDirection:'column',gap:10}}>
+                {[
+                  {sc:sc1,title:'숙소 확인',desc:`내일 체크인 대상 ${targets.length}개 숙소 필터링`,tag:'확인'},
+                  {sc:sc2,title:'PIN 발급',desc:'6자리 도어락 PIN 생성 · HA 등록 · 유효기간 설정',tag:'보안'},
+                  {sc:sc3,title:'웰컴 메시지',desc:'게스트에게 입실 안내 + WiFi 정보 자동 발송',tag:'메시지'},
+                  {sc:sc4,title:'스마트홈 초기화',desc:'체크인 준비 씬 실행 · 조명 · 에어컨 설정',tag:'IoT'},
+                ].map(({sc,title,desc,tag},idx)=>(
+                  <div key={idx} style={{display:'flex',gap:12,alignItems:'flex-start',padding:'12px 14px',borderRadius:10,background:sc.hBg,border:`2px solid ${sc.b}`,transition:'all 0.3s'}}>
+                    <div style={{width:22,height:22,borderRadius:'50%',background:sc.cBg,color:sc.cFg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,flexShrink:0,animation:sc.lbl==='↻'?'d1spin 1s linear infinite':'none'}}>{sc.lbl}</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:700,color:sc.tc,marginBottom:2}}>{title}</div>
+                      <div style={{fontSize:11,color:'#64748b'}}>{desc}</div>
+                    </div>
+                    <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:4,background:sc.cBg,color:sc.cFg,flexShrink:0}}>{tag}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* 처리 결과 */}
+            <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:12,overflow:'hidden',flex:1,display:'flex',flexDirection:'column'}}>
+              <div style={{padding:'12px 16px',borderBottom:'1.5px solid #e2e8f0',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                <span style={{width:3,height:13,background:'#0ea5e9',borderRadius:2,flexShrink:0}}/>
+                <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em'}}>숙소별 처리 결과</span>
+              </div>
+              <div style={{flex:1,overflow:'auto',padding:'10px 14px'}}>
+                {results.length===0&&!running?(
+                  <div style={{textAlign:'center',padding:'40px 20px',color:'#94a3b8',fontSize:12}}>
+                    <div style={{fontSize:32,marginBottom:10,opacity:0.4}}>🏠</div>
+                    D-1 자동화를 실행하면<br/>숙소별 처리 결과가 표시됩니다.
+                    {!isRealData&&<div style={{fontSize:11,color:'#d97706',background:'#fffbeb',border:'1px solid #fde68a',borderRadius:6,padding:'6px 10px',marginTop:12}}>⚠ 목업 데이터 사용 중</div>}
+                  </div>
+                ):(
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(210px,1fr))',gap:10}}>
+                    {results.map(r=><PropResultCard key={r.propId} result={r}/>)}
+                    {running&&targets.slice(results.length).map(t=>(
+                      <div key={t.propId} style={{background:'#f8fafc',border:'1.5px solid #e2e8f0',borderRadius:10,padding:'14px 16px',opacity:0.5}}>
+                        <div style={{fontSize:12,fontWeight:700,color:'#94a3b8',marginBottom:4}}>{t.propName}</div>
+                        <div style={{fontSize:11,color:'#94a3b8'}}>{t.guestName}</div>
+                        <div style={{display:'flex',gap:5,marginTop:8,flexWrap:'wrap'}}><StepChip label="PIN 발급" state={null}/><StepChip label="메시지" state={null}/><StepChip label="스마트홈" state={null}/></div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-          <div style={{flex:1,overflow:'auto',padding:'8px 10px'}}>
-            {alerts.length===0?<div style={{textAlign:'center',color:'var(--text4)',fontSize:12,marginTop:32}}>실행 후 알림이 표시됩니다</div>:alerts.map(a=><D1AlertItem key={a.id} alert={a} onAck={ackAlert}/>)}
+
+          {/* 우측 340px */}
+          <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:12,overflow:'hidden',display:'flex',flexDirection:'column'}}>
+            <div style={{padding:'12px 16px',borderBottom:'1.5px solid #e2e8f0',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+              <span style={{width:3,height:13,background:'#d97706',borderRadius:2,flexShrink:0}}/>
+              <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',flex:1}}>자동화 알림</span>
+              {alerts.length>0&&<span style={{background:'#dc2626',color:'#fff',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{alerts.length}</span>}
+              {alerts.length>0&&<button onClick={ackAllAlerts} style={{padding:'3px 9px',borderRadius:5,background:'#f8fafc',border:'1.5px solid #e2e8f0',color:'#64748b',fontSize:10,cursor:'pointer',fontWeight:600}}>전체 확인</button>}
+            </div>
+            <div style={{flex:1,overflow:'auto',padding:'10px 12px'}}>
+              {alerts.length===0
+                ?<div style={{textAlign:'center',padding:'40px 20px',color:'#94a3b8',fontSize:12}}><div style={{fontSize:32,marginBottom:10,opacity:0.4}}>🔔</div>알림 없음</div>
+                :alerts.map(a=><D1AlertItem key={a.id} alert={a} onAck={ackAlert}/>)}
+            </div>
           </div>
         </div>
-      </div>
-      <style>{`@keyframes d1spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+      )}
     </div>
   );
 }
@@ -2035,6 +2097,7 @@ function S02CheckinPanel({bookings:propBookings}) {
   const [eventResults, setEventResults] = useState([]);
   const [alerts,       setAlerts]       = useState([]);
   const [running,      setRunning]      = useState(false);
+  const [devOpen,      setDevOpen]      = useState(false);
   const [simPropId,    setSimPropId]    = useState('P-042');
   const [simContext,   setSimContext]   = useState('guest_checkin');
   const [simTime,      setSimTime]      = useState('15:12');
@@ -2105,127 +2168,180 @@ function S02CheckinPanel({bookings:propBookings}) {
   const simWindow   = checkinBook ? _s02.getCheckinWindow(checkinBook.checkIn) : null;
   const timeInWin   = simWindow && simTime>=simWindow.from && simTime<=simWindow.until;
 
+  const lr        = eventResults[0] || null;
+  const step1done = lr !== null;
+  const s2run     = running && step1done && lr?.steps?.scene == null;
+  const step2done = lr?.steps?.scene === true;
+  const step2fail = lr?.steps?.scene === false;
+  const s3run     = running && step2done && lr?.steps?.channel == null;
+  const step3done = lr?.steps?.channel === true;
+  const step3fail = lr?.steps?.channel === false;
+  const s4run     = running && step3done && lr?.steps?.message == null;
+  const step4done = lr?.steps?.message === true;
+  const step4fail = lr?.steps?.message === false;
+  function getSC(done,fail,isRun,num){
+    if(done)  return{b:'#86efac',hBg:'#f0fdf4',cBg:'#16a34a',cFg:'#fff',tc:'#15803d',lbl:'✓'};
+    if(fail)  return{b:'#fca5a5',hBg:'#fff1f2',cBg:'#dc2626',cFg:'#fff',tc:'#b91c1c',lbl:'✕'};
+    if(isRun) return{b:'#93c5fd',hBg:'#eff6ff',cBg:'#2563eb',cFg:'#fff',tc:'#2563eb',lbl:'↻'};
+    return         {b:'#e2e8f0',hBg:'#f8fafc',cBg:'#e2e8f0',cFg:'#64748b',tc:'#94a3b8',lbl:String(num)};
+  }
+  const sc1 = step1done?{b:'#86efac',hBg:'#f0fdf4',cBg:'#16a34a',cFg:'#fff',tc:'#15803d',lbl:'✓'}:{b:'#e2e8f0',hBg:'#f8fafc',cBg:'#e2e8f0',cFg:'#64748b',tc:'#94a3b8',lbl:'1'};
+  const sc2 = getSC(step2done,step2fail,s2run,2);
+  const sc3 = getSC(step3done,step3fail,s3run,3);
+  const sc4 = getSC(step4done,step4fail,s4run,4);
+
   return (
-    <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden',fontFamily:"'DM Sans',sans-serif"}}>
+    <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden',fontFamily:"'DM Sans',sans-serif",background:'#f0f4f8'}}>
       <style>{`@keyframes s02spin{to{transform:rotate(360deg)}} @keyframes s02pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
 
       {/* 헤더 */}
-      <div style={{padding:'12px 16px',background:'var(--surface)',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
-        <div>
-          <div style={{fontSize:14,fontWeight:700,color:'var(--text)'}}>S02 — 체크인 당일 자동화</div>
-          <div style={{fontSize:11,color:'var(--text3)',marginTop:1}}>입실 감지 → IoT 씬 실행 → 게스트 채팅 오픈 → 상태 갱신</div>
+      <div style={{background:'#ffffff',borderBottom:'1px solid #e2e8f0',padding:'16px 24px',display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:800,fontSize:18,color:'#1e293b',lineHeight:1.2}}>체크인 당일 자동화</div>
+          <div style={{fontSize:12,color:'#64748b',marginTop:3}}>입실 감지 → IoT 씬 실행 → 게스트 채팅 오픈 → 상태 갱신</div>
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <S02WsBadge status={wsStatus} />
-          {wsStatus==='simulating'||wsStatus==='disconnected' ? (
-            <button onClick={connectWS} style={{padding:'5px 12px',borderRadius:6,background:'#2563eb',border:'1.5px solid #1d4ed8',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer'}}>HA 연결</button>
-          ) : (
-            <button onClick={disconnectWS} style={{padding:'5px 12px',borderRadius:6,background:'#fee2e2',border:'1.5px solid #fca5a5',color:'#dc2626',fontSize:11,fontWeight:600,cursor:'pointer'}}>연결 해제</button>
-          )}
-        </div>
+        <S02WsBadge status={wsStatus} />
+        {wsStatus==='simulating'||wsStatus==='disconnected' ? (
+          <button onClick={connectWS} style={{padding:'7px 16px',borderRadius:8,background:'#2563eb',border:'1.5px solid #1d4ed8',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>HA 연결</button>
+        ) : (
+          <button onClick={disconnectWS} style={{padding:'7px 16px',borderRadius:8,background:'#fee2e2',border:'1.5px solid #fca5a5',color:'#dc2626',fontSize:12,fontWeight:600,cursor:'pointer'}}>연결 해제</button>
+        )}
       </div>
 
-      {/* 본문 */}
-      <div style={{flex:1,display:'flex',gap:0,overflow:'hidden'}}>
+      {/* 본문 3-column */}
+      <div style={{flex:1,display:'grid',gridTemplateColumns:'260px 1fr 340px',gap:20,padding:20,overflow:'hidden'}}>
 
-        {/* 좌측: 숙소 상태 + 시뮬레이터 */}
-        <div style={{width:300,flexShrink:0,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
-          <div style={{flex:1,overflow:'auto',padding:12}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:12,paddingBottom:8,borderBottom:'1.5px solid #e2e8f0'}}>
-              <span style={{width:3,height:13,background:'var(--green)',borderRadius:2,flexShrink:0}} />
-              숙소 현황
+        {/* ── 좌측 260px ── */}
+        <div style={{display:'flex',flexDirection:'column',gap:16,overflow:'hidden'}}>
+
+          {/* 숙소 현황 */}
+          <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:12,overflow:'hidden',flexShrink:0}}>
+            <div style={{padding:'12px 16px',borderBottom:'1.5px solid #e2e8f0',display:'flex',alignItems:'center',gap:8}}>
+              <span style={{width:3,height:13,background:'#059669',borderRadius:2,flexShrink:0}}/>
+              <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em'}}>숙소 현황</span>
             </div>
-            {bookings.map(b=><S02PropStatusCard key={b.propId} booking={b} status={propStatuses[b.propId]||'vacant'} />)}
+            <div style={{padding:'10px 12px',maxHeight:180,overflowY:'auto'}}>
+              {bookings.map(b=><S02PropStatusCard key={b.propId} booking={b} status={propStatuses[b.propId]||'vacant'} />)}
+            </div>
           </div>
 
-          {/* 시뮬레이터 */}
-          <div style={{borderTop:'2px solid #e2e8f0',padding:'12px 14px',flexShrink:0,background:'var(--bg)'}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:12,paddingBottom:8,borderBottom:'1.5px solid #e2e8f0'}}>
-              <span style={{width:3,height:13,background:'#7c3aed',borderRadius:2,flexShrink:0}} />
-              이벤트 시뮬레이터
-              <span style={{marginLeft:'auto',fontSize:9,fontWeight:600,padding:'2px 6px',borderRadius:4,background:'#f5f3ff',border:'1px solid #c4b5fd',color:'#7c3aed'}}>테스트용</span>
-            </div>
-
-            <div style={{marginBottom:7}}>
-              <div style={{fontSize:10,color:'var(--text3)',marginBottom:3}}>숙소</div>
-              <select value={simPropId} onChange={e=>setSimPropId(e.target.value)} style={{..._i,width:'100%'}}>
-                {bookings.map(b=><option key={b.propId} value={b.propId}>{b.propId} — {b.propName}</option>)}
-              </select>
-            </div>
-
-            <div style={{display:'flex',gap:6,marginBottom:7}}>
-              <div style={{flex:1}}>
-                <div style={{fontSize:10,color:'var(--text3)',marginBottom:3}}>context</div>
-                <select value={simContext} onChange={e=>setSimContext(e.target.value)} style={{..._i,width:'100%'}}>
-                  <option value="guest_checkin">guest_checkin</option>
-                  <option value="manual">manual (무시됨)</option>
-                  <option value="maintenance">maintenance (무시됨)</option>
-                </select>
-              </div>
-              <div style={{width:80}}>
-                <div style={{fontSize:10,color:'var(--text3)',marginBottom:3}}>시각</div>
-                <input type="time" value={simTime} onChange={e=>setSimTime(e.target.value)} style={{..._i,width:'100%',fontFamily:"'DM Mono',monospace"}} />
-              </div>
-            </div>
-
-            {simWindow && (
-              <div style={{fontSize:10,marginBottom:8,padding:'4px 8px',borderRadius:5,background:timeInWin?'#f0fdf4':'#fff7ed',border:`1px solid ${timeInWin?'#86efac':'#fed7aa'}`,color:timeInWin?'#166534':'#92400e',fontFamily:"'DM Mono',monospace"}}>
-                체크인 가능: {simWindow.from} ~ {simWindow.until}{timeInWin?' ✓':' ← 시간창 외'}
+          {/* 개발 옵션 */}
+          <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:12,overflow:'hidden',flexShrink:0}}>
+            <button onClick={()=>setDevOpen(v=>!v)} style={{width:'100%',padding:'11px 16px',background:'none',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:8,textAlign:'left'}}>
+              <span style={{width:3,height:13,background:'#7c3aed',borderRadius:2,flexShrink:0}}/>
+              <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',flex:1}}>개발 옵션</span>
+              <span style={{fontSize:10,fontWeight:600,padding:'2px 6px',borderRadius:4,background:'#f5f3ff',border:'1px solid #c4b5fd',color:'#7c3aed'}}>테스트용</span>
+              <span style={{fontSize:10,color:'#94a3b8'}}>{devOpen?'▲':'▼'}</span>
+            </button>
+            {devOpen && (
+              <div style={{padding:'0 14px 14px',background:'#fefce8',borderTop:'1px solid #fef08a'}}>
+                <div style={{marginBottom:7,marginTop:10}}>
+                  <div style={{fontSize:10,color:'#78716c',marginBottom:3}}>숙소</div>
+                  <select value={simPropId} onChange={e=>setSimPropId(e.target.value)} style={{..._i,width:'100%'}}>
+                    {bookings.map(b=><option key={b.propId} value={b.propId}>{b.propId} — {b.propName}</option>)}
+                  </select>
+                </div>
+                <div style={{display:'flex',gap:6,marginBottom:7}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:10,color:'#78716c',marginBottom:3}}>context</div>
+                    <select value={simContext} onChange={e=>setSimContext(e.target.value)} style={{..._i,width:'100%'}}>
+                      <option value="guest_checkin">guest_checkin</option>
+                      <option value="manual">manual (무시됨)</option>
+                      <option value="maintenance">maintenance (무시됨)</option>
+                    </select>
+                  </div>
+                  <div style={{width:76}}>
+                    <div style={{fontSize:10,color:'#78716c',marginBottom:3}}>시각</div>
+                    <input type="time" value={simTime} onChange={e=>setSimTime(e.target.value)} style={{..._i,width:'100%',fontFamily:"'DM Mono',monospace"}} />
+                  </div>
+                </div>
+                {simWindow && (
+                  <div style={{fontSize:10,marginBottom:8,padding:'4px 8px',borderRadius:5,background:timeInWin?'#f0fdf4':'#fff7ed',border:`1px solid ${timeInWin?'#86efac':'#fed7aa'}`,color:timeInWin?'#166534':'#92400e',fontFamily:"'DM Mono',monospace"}}>
+                    체크인 가능: {simWindow.from} ~ {simWindow.until}{timeInWin?' ✓':' ← 시간창 외'}
+                  </div>
+                )}
+                <div style={{display:'flex',gap:6,marginBottom:8}}>
+                  {[{key:'sf',label:'씬 실패',val:sceneFail,set:setSceneFail},{key:'cf',label:'채널 실패',val:channelFail,set:setChannelFail}].map(({key,label,val,set})=>(
+                    <button key={key} onClick={()=>set(v=>!v)} style={{flex:1,padding:'4px 6px',borderRadius:5,fontSize:10,fontWeight:600,cursor:'pointer',background:val?'#fee2e2':'#ffffff',border:`1.5px solid ${val?'#fca5a5':'#e2e8f0'}`,color:val?'#dc2626':'#64748b'}}>
+                      {val?'✕ ':''}{label}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={()=>setUseRealHA(v=>!v)} style={{width:'100%',padding:'5px 8px',borderRadius:6,fontSize:10,fontWeight:600,cursor:'pointer',background:useRealHA?'#ede9fe':'#ffffff',border:`1.5px solid ${useRealHA?'#c4b5fd':'#e2e8f0'}`,color:useRealHA?'#7c3aed':'#64748b',marginBottom:8}}>
+                  {useRealHA?'⚡ 실제 HA 모드':'○ Mock 모드'}
+                </button>
+                <button onClick={()=>handlePinLockout(simPropId,3)} style={{width:'100%',padding:'6px',borderRadius:6,background:'#fff7ed',border:'1.5px solid #fed7aa',color:'#92400e',fontSize:10,fontWeight:600,cursor:'pointer'}}>
+                  ⚠ PIN 오류 3회 시뮬
+                </button>
               </div>
             )}
+          </div>
 
-            <div style={{display:'flex',gap:6,marginBottom:8}}>
-              {[{key:'sf',label:'씬 실패',val:sceneFail,set:setSceneFail},{key:'cf',label:'채널 실패',val:channelFail,set:setChannelFail}].map(({key,label,val,set})=>(
-                <button key={key} onClick={()=>set(v=>!v)} style={{flex:1,padding:'4px 6px',borderRadius:5,fontSize:10,fontWeight:600,cursor:'pointer',background:val?'#fee2e2':'var(--surface)',border:`1.5px solid ${val?'#fca5a5':'var(--border)'}`,color:val?'#dc2626':'var(--text3)'}}>
-                  {val?'✕ ':''}{label}
-                </button>
+          {/* 이벤트 발생 버튼 */}
+          <button onClick={simulate} disabled={running} style={{padding:'12px',borderRadius:10,background:running?'#e2e8f0':'#2563eb',border:`1.5px solid ${running?'#cbd5e1':'#1d4ed8'}`,color:running?'#94a3b8':'#fff',fontSize:13,fontWeight:700,cursor:running?'not-allowed':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,flexShrink:0}}>
+            {running?<><span style={{animation:'s02spin 1s linear infinite',display:'inline-block'}}>↻</span> 처리 중...</>:<>🚪 도어락 열림 이벤트</>}
+          </button>
+        </div>
+
+        {/* ── 중앙 flex:1 ── */}
+        <div style={{display:'flex',flexDirection:'column',gap:16,overflow:'hidden'}}>
+
+          {/* 자동화 흐름 */}
+          <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:12,overflow:'hidden',flexShrink:0}}>
+            <div style={{padding:'12px 16px',borderBottom:'1.5px solid #e2e8f0',display:'flex',alignItems:'center',gap:8}}>
+              <span style={{width:3,height:13,background:'#2563eb',borderRadius:2,flexShrink:0}}/>
+              <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em'}}>체크인 자동화 흐름</span>
+            </div>
+            <div style={{padding:'16px',display:'flex',flexDirection:'column',gap:10}}>
+              {[
+                {sc:sc1,title:'도어락 감지',desc:'입실 이벤트 수신 · 체크인 여부 판별',tag:'감지'},
+                {sc:sc2,title:'IoT 씬 실행',desc:'체크인 웰컴 씬 · 조명 · 에어컨 자동 설정',tag:'씬'},
+                {sc:sc3,title:'채팅 오픈',desc:'게스트 메시지 채널 활성화',tag:'메시지'},
+                {sc:sc4,title:'입실 확인 발송',desc:'게스트에게 입실 완료 안내 메시지 전송',tag:'완료'},
+              ].map(({sc,title,desc,tag},idx)=>(
+                <div key={idx} style={{display:'flex',gap:12,alignItems:'flex-start',padding:'12px 14px',borderRadius:10,background:sc.hBg,border:`2px solid ${sc.b}`,transition:'all 0.3s'}}>
+                  <div style={{width:22,height:22,borderRadius:'50%',background:sc.cBg,color:sc.cFg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,flexShrink:0,animation:sc.lbl==='↻'?'s02spin 1s linear infinite':'none'}}>{sc.lbl}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,fontWeight:700,color:sc.tc,marginBottom:2}}>{title}</div>
+                    <div style={{fontSize:11,color:'#64748b'}}>{desc}</div>
+                  </div>
+                  <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:4,background:sc.cBg,color:sc.cFg,flexShrink:0}}>{tag}</span>
+                </div>
               ))}
             </div>
+          </div>
 
-            <button onClick={()=>setUseRealHA(v=>!v)} style={{width:'100%',marginBottom:8,padding:'4px 8px',borderRadius:5,fontSize:10,fontWeight:600,cursor:'pointer',background:useRealHA?'#ede9fe':'var(--surface)',border:`1.5px solid ${useRealHA?'#c4b5fd':'var(--border)'}`,color:useRealHA?'#7c3aed':'var(--text3)'}}>
-              {useRealHA?'⚡ 실제 HA 모드':'○ Mock 모드'}
-            </button>
-
-            <button onClick={simulate} disabled={running} style={{width:'100%',padding:'9px',borderRadius:7,background:running?'var(--border)':'#2563eb',border:`1.5px solid ${running?'var(--border2)':'#1d4ed8'}`,color:running?'var(--text3)':'#fff',fontSize:12,fontWeight:700,cursor:running?'not-allowed':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-              {running?<><span style={{animation:'s02spin 1s linear infinite',display:'inline-block'}}>↻</span> 처리 중...</>:'🚪 도어락 열림 이벤트 발생'}
-            </button>
-
-            <button onClick={()=>handlePinLockout(simPropId,3)} style={{width:'100%',marginTop:6,padding:'7px',borderRadius:7,background:'#fff7ed',border:'1.5px solid #fed7aa',color:'#92400e',fontSize:11,fontWeight:600,cursor:'pointer'}}>
-              ⚠ PIN 오류 3회 시뮬레이션
-            </button>
+          {/* 처리 이력 */}
+          <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:12,overflow:'hidden',flex:1,display:'flex',flexDirection:'column'}}>
+            <div style={{padding:'12px 16px',borderBottom:'1.5px solid #e2e8f0',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+              <span style={{width:3,height:13,background:'#0ea5e9',borderRadius:2,flexShrink:0}}/>
+              <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',flex:1}}>처리 이력</span>
+              {eventResults.length>0 && <button onClick={()=>setEventResults([])} style={{padding:'3px 9px',borderRadius:5,background:'#f8fafc',border:'1.5px solid #e2e8f0',color:'#64748b',fontSize:10,cursor:'pointer',fontWeight:600}}>초기화</button>}
+            </div>
+            <div style={{flex:1,overflow:'auto',padding:'10px 14px'}}>
+              {eventResults.length===0 ? (
+                <div style={{textAlign:'center',padding:'40px 20px',color:'#94a3b8',fontSize:12}}>
+                  <div style={{fontSize:32,marginBottom:10,opacity:0.4}}>🚪</div>
+                  도어락 열림 이벤트를 시뮬레이션하면<br/>처리 결과가 여기에 표시됩니다.
+                </div>
+              ) : eventResults.map((r,i)=><S02EventResultCard key={`${r.propId}-${r.time}-${i}`} result={r} />)}
+            </div>
           </div>
         </div>
 
-        {/* 우측: 처리 결과 + 알림 피드 */}
-        <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-          <div style={{flex:1,overflow:'auto',padding:14}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:12,paddingBottom:8,borderBottom:'1.5px solid #e2e8f0'}}>
-              <span style={{width:3,height:13,background:'var(--blue)',borderRadius:2,flexShrink:0}} />
-              이벤트 처리 결과
-              {eventResults.length>0 && <button onClick={()=>setEventResults([])} style={{marginLeft:'auto',padding:'3px 9px',borderRadius:5,background:'var(--surface)',border:'1.5px solid var(--border)',color:'var(--text3)',fontSize:10,cursor:'pointer',fontWeight:600}}>초기화</button>}
-            </div>
-            {eventResults.length===0 ? (
-              <div style={{textAlign:'center',padding:'40px 20px',color:'var(--text3)',fontSize:12}}>
-                <div style={{fontSize:32,marginBottom:10,opacity:0.4}}>🚪</div>
-                도어락 열림 이벤트를 시뮬레이션하면<br/>처리 결과가 여기에 표시됩니다.
-              </div>
-            ) : eventResults.map((r,i)=><S02EventResultCard key={`${r.propId}-${r.time}-${i}`} result={r} />)}
+        {/* ── 우측 340px ── */}
+        <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:12,overflow:'hidden',display:'flex',flexDirection:'column'}}>
+          <div style={{padding:'12px 16px',borderBottom:'1.5px solid #e2e8f0',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+            <span style={{width:3,height:13,background:'#d97706',borderRadius:2,flexShrink:0}}/>
+            <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',flex:1}}>알림 피드</span>
+            {alerts.length>0 && <span style={{background:'#dc2626',color:'#fff',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{alerts.length}</span>}
+            {alerts.length>0 && <button onClick={()=>setAlerts([])} style={{padding:'3px 9px',borderRadius:5,background:'#f8fafc',border:'1.5px solid #e2e8f0',color:'#64748b',fontSize:10,cursor:'pointer',fontWeight:600}}>전체 확인</button>}
           </div>
-
-          {/* 알림 피드 */}
-          <div style={{height:240,borderTop:'2px solid #e2e8f0',display:'flex',flexDirection:'column',flexShrink:0}}>
-            <div style={{padding:'8px 14px',borderBottom:'1.5px solid #e2e8f0',display:'flex',alignItems:'center',gap:8,background:'var(--surface)',flexShrink:0}}>
-              <span style={{width:3,height:13,background:'var(--yellow)',borderRadius:2,flexShrink:0}} />
-              <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',flex:1}}>알림 피드</span>
-              {alerts.length>0 && <span style={{background:'#dc2626',color:'#fff',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{alerts.length}</span>}
-              {alerts.length>0 && <button onClick={()=>setAlerts([])} style={{padding:'3px 9px',borderRadius:5,background:'var(--bg)',border:'1.5px solid var(--border)',color:'var(--text3)',fontSize:10,cursor:'pointer',fontWeight:600}}>전체 확인</button>}
-            </div>
-            <div style={{flex:1,overflow:'auto',padding:'8px 12px'}}>
-              {alerts.length===0
-                ? <div style={{textAlign:'center',padding:'20px',color:'var(--text3)',fontSize:11}}>알림 없음</div>
-                : alerts.map(a=><S02AlertItem key={a.id} alert={a} onAck={ackAlert} />)
-              }
-            </div>
+          <div style={{flex:1,overflow:'auto',padding:'10px 12px'}}>
+            {alerts.length===0
+              ? <div style={{textAlign:'center',padding:'40px 20px',color:'#94a3b8',fontSize:12}}><div style={{fontSize:32,marginBottom:10,opacity:0.4}}>🔔</div>알림 없음</div>
+              : alerts.map(a=><S02AlertItem key={a.id} alert={a} onAck={ackAlert} />)
+            }
           </div>
         </div>
       </div>
@@ -2978,25 +3094,25 @@ function S03MonitoringPanel({ onBack }) {
                 label="온도" icon="🌡"
                 value={currentReading?.temp}
                 unit="°C"
-                warn={T.temp.warn} critical={T.temp.critical}
+                warn={_DEFAULT_THRESHOLDS.temp.warn} critical={_DEFAULT_THRESHOLDS.temp.critical}
               />
               <SensorCard
                 label="습도" icon="💧"
                 value={currentReading?.humidity}
                 unit="%"
-                warn={T.humidity.warn} critical={T.humidity.critical}
+                warn={_DEFAULT_THRESHOLDS.humidity.warn} critical={_DEFAULT_THRESHOLDS.humidity.critical}
               />
               <SensorCard
                 label="소음" icon="🔊"
                 value={currentReading?.noise}
                 unit="dB"
-                warn={T.noise.warn} critical={T.noise.critical}
+                warn={_DEFAULT_THRESHOLDS.noise.warn} critical={_DEFAULT_THRESHOLDS.noise.critical}
               />
               <SensorCard
                 label="전력" icon="⚡"
                 value={currentReading?.power}
                 unit="W"
-                warn={T.power.warn} critical={T.power.critical}
+                warn={_DEFAULT_THRESHOLDS.power.warn} critical={_DEFAULT_THRESHOLDS.power.critical}
               />
             </div>
 
@@ -3019,10 +3135,10 @@ function S03MonitoringPanel({ onBack }) {
             </div>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               {[
-                { label:'온도', warn:`${T.temp.warn}°C`, critical:`${T.temp.critical}°C` },
-                { label:'습도', warn:`${T.humidity.warn}%`, critical:`${T.humidity.critical}%` },
-                { label:'소음', warn:`${T.noise.warn}dB`, critical:`${T.noise.critical}dB` },
-                { label:'전력', warn:`${T.power.warn}W`, critical:`${T.power.critical}W` },
+                { label:'온도', warn:`${_DEFAULT_THRESHOLDS.temp.warn}°C`, critical:`${_DEFAULT_THRESHOLDS.temp.critical}°C` },
+                { label:'습도', warn:`${_DEFAULT_THRESHOLDS.humidity.warn}%`, critical:`${_DEFAULT_THRESHOLDS.humidity.critical}%` },
+                { label:'소음', warn:`${_DEFAULT_THRESHOLDS.noise.warn}dB`, critical:`${_DEFAULT_THRESHOLDS.noise.critical}dB` },
+                { label:'전력', warn:`${_DEFAULT_THRESHOLDS.power.warn}W`, critical:`${_DEFAULT_THRESHOLDS.power.critical}W` },
               ].map(item => (
                 <div key={item.label} style={{ fontSize: 12, color: '#64748b' }}>
                   <span style={{ fontWeight: 600 }}>{item.label}</span>
@@ -3280,12 +3396,7 @@ function CleaningChecklistS04({ items, onToggle, onFinalize, propStatus }) {
   const requiredDone = required.every(i => i.done);
   const progress = Math.round((doneCount / items.length) * 100);
   return (
-    <div style={{ background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px 20px' }}>
-      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
-        <span style={{ fontSize:18 }}>📋</span>
-        <span style={{ fontWeight:700, fontSize:14, color:'#1e293b' }}>청소 체크리스트</span>
-        <span style={{ marginLeft:'auto', fontFamily:"'DM Mono',monospace", fontSize:12, color:'#64748b' }}>{doneCount}/{items.length}</span>
-      </div>
+    <div>
       <div style={{ height:6, background:'#f1f5f9', borderRadius:3, marginBottom:14 }}>
         <div style={{ height:'100%', width:`${progress}%`, background:progress===100?'#16a34a':'#2563eb', borderRadius:3, transition:'width 0.4s ease' }} />
       </div>
@@ -3526,75 +3637,158 @@ function S04CheckoutPanel({ onBack }) {
           </div>
         </div>
 
-        {/* 가운데: 체크아웃 제어 & 체크리스트 */}
-        <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-          {/* 현재 숙소 정보 */}
-          <div style={{ background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px 20px' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
-              <span style={{ fontWeight:700, fontSize:16, color:'#1e293b' }}>{currentBooking?.propName}</span>
-              <PropStatusBadgeS04 status={currentStatus} />
-              {pinDone[selectedProp] && <span style={{ fontSize:11, fontWeight:700, color:'#dc2626', background:'#fef2f2', border:'1px solid #fecaca', padding:'2px 8px', borderRadius:20 }}>🔒 PIN 만료됨</span>}
-            </div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
-              <div><div style={{ fontSize:11, color:'#64748b', marginBottom:2 }}>게스트</div><div style={{ fontWeight:600, fontSize:13, color:'#1e293b' }}>{currentBooking?.guestName}님</div></div>
-              <div><div style={{ fontSize:11, color:'#64748b', marginBottom:2 }}>체크아웃</div><div style={{ fontFamily:"'DM Mono',monospace", fontSize:13, color:'#1e293b' }}>{currentBooking?.checkOut?.slice(11,16)||'—'}</div></div>
-              <div>
-                <div style={{ fontSize:11, color:'#64748b', marginBottom:2 }}>가능 시간창</div>
-                <div style={{ fontFamily:"'DM Mono',monospace", fontSize:12, color:'#475569' }}>
-                  {currentBooking ? (() => { try { const d=new Date(currentBooking.checkOut); const f=new Date(d.getTime()-7200000); const u=new Date(d.getTime()+10800000); return `${f.getHours().toString().padStart(2,'0')}:${f.getMinutes().toString().padStart(2,'0')}~${u.getHours().toString().padStart(2,'0')}:${u.getMinutes().toString().padStart(2,'0')}`; } catch(_){return '—';} })() : '—'}
-                </div>
+        {/* 가운데: 4단계 자동화 흐름 */}
+        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+
+          {/* 숙소 정보 헤더 */}
+          <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'14px 18px', display:'flex', alignItems:'center', gap:12 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+                <span style={{ fontWeight:800, fontSize:15, color:'#1e293b' }}>{currentBooking?.propName}</span>
+                <PropStatusBadgeS04 status={currentStatus} />
+              </div>
+              <div style={{ display:'flex', gap:16, fontSize:12, color:'#64748b' }}>
+                <span>게스트: <b style={{ color:'#1e293b' }}>{currentBooking?.guestName}님</b></span>
+                <span>체크아웃: <b style={{ color:'#1e293b', fontFamily:"'DM Mono',monospace" }}>{currentBooking?.checkOut?.slice(11,16)||'—'}</b></span>
+                <span>가능 시간창: <b style={{ color:'#1e293b', fontFamily:"'DM Mono',monospace" }}>
+                  {currentBooking ? (() => { try { const d=new Date(currentBooking.checkOut); const f=new Date(d.getTime()-7200000); const u=new Date(d.getTime()+10800000); return `${String(f.getHours()).padStart(2,'0')}:${String(f.getMinutes()).padStart(2,'0')}~${String(u.getHours()).padStart(2,'0')}:${String(u.getMinutes()).padStart(2,'0')}`; } catch(_){return '—';} })() : '—'}
+                </b></span>
               </div>
             </div>
           </div>
 
-          {/* PIN 만료 카운트다운 */}
-          <PinExpireCountdown active={pinCountdown && !pinDone[selectedProp]} onDone={() => setPinCountdown(false)} />
-
-          {/* 이벤트 시뮬레이터 */}
-          {currentStatus === 'occupied' && (
-            <div style={{ background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px 20px' }}>
-              <div style={{ fontWeight:700, fontSize:13, color:'#1e293b', marginBottom:12, display:'flex', alignItems:'center', gap:6 }}>
-                <span>🎮</span> 이벤트 시뮬레이터
-                <span style={{ fontSize:11, color:'#94a3b8', fontWeight:400, marginLeft:4 }}>테스트용</span>
+          {/* ── STEP 1: 퇴실 감지 ── */}
+          <div style={{ background:'#ffffff', border:`2px solid ${currentStatus!=='occupied'?'#86efac':'#e2e8f0'}`, borderRadius:12, overflow:'hidden' }}>
+            {/* 단계 레이블 */}
+            <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', background:currentStatus!=='occupied'?'#f0fdf4':'#f8fafc', borderBottom:'1px solid #e2e8f0' }}>
+              <div style={{ width:22, height:22, borderRadius:'50%', background:currentStatus!=='occupied'?'#16a34a':'#e2e8f0', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                {currentStatus!=='occupied'
+                  ? <span style={{ color:'#fff', fontSize:12, fontWeight:800 }}>✓</span>
+                  : <span style={{ fontSize:11, fontWeight:800, color:'#94a3b8' }}>1</span>}
               </div>
-              <div style={{ display:'flex', gap:10 }}>
-                <button
-                  onClick={() => handleCheckoutEvent('door_locked')}
-                  disabled={processing}
-                  style={{ flex:1, padding:'10px 0', borderRadius:8, border:`1.5px solid ${processing?'#e2e8f0':'#dc2626'}`, background:processing?'#f8fafc':'#dc2626', color:processing?'#94a3b8':'#ffffff', fontSize:13, fontWeight:700, cursor:processing?'default':'pointer', transition:'all 0.2s', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}
-                >
-                  {processing ? (<><div style={{ width:14, height:14, border:'2px solid #94a3b8', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />처리 중...</>) : '🔒 도어락 잠금 (퇴실 감지)'}
-                </button>
-                <button
-                  onClick={() => handleCheckoutEvent('manual_checkout')}
-                  disabled={processing}
-                  style={{ flex:1, padding:'10px 0', borderRadius:8, border:`1.5px solid ${processing?'#e2e8f0':'#d97706'}`, background:processing?'#f8fafc':'#fffbeb', color:processing?'#94a3b8':'#d97706', fontSize:13, fontWeight:700, cursor:processing?'default':'pointer', transition:'all 0.2s' }}
-                >
-                  📋 수동 체크아웃
-                </button>
+              <span style={{ fontSize:13, fontWeight:700, color:currentStatus!=='occupied'?'#15803d':'#374151' }}>퇴실 감지</span>
+              {currentStatus!=='occupied' && <span style={{ marginLeft:'auto', fontSize:11, color:'#16a34a', fontWeight:600 }}>완료</span>}
+            </div>
+            {/* 단계 내용 */}
+            <div style={{ padding:'14px 16px' }}>
+              {currentStatus === 'occupied' ? (
+                <>
+                  <div style={{ fontSize:12, color:'#64748b', marginBottom:10 }}>도어락 잠금 이벤트를 수신하면 자동으로 체크아웃 처리가 시작됩니다.</div>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <button onClick={() => handleCheckoutEvent('door_locked')} disabled={processing}
+                      style={{ flex:1, padding:'9px 0', borderRadius:8, border:`1.5px solid ${processing?'#e2e8f0':'#dc2626'}`, background:processing?'#f8fafc':'#dc2626', color:processing?'#94a3b8':'#ffffff', fontSize:13, fontWeight:700, cursor:processing?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                      {processing ? (<><div style={{ width:13, height:13, border:'2px solid #94a3b8', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />처리 중...</>) : '🔒 도어락 잠금 (퇴실 감지)'}
+                    </button>
+                    <button onClick={() => handleCheckoutEvent('manual_checkout')} disabled={processing}
+                      style={{ flex:1, padding:'9px 0', borderRadius:8, border:`1.5px solid ${processing?'#e2e8f0':'#d97706'}`, background:processing?'#f8fafc':'#fffbeb', color:processing?'#94a3b8':'#d97706', fontSize:13, fontWeight:700, cursor:processing?'default':'pointer' }}>
+                      📋 수동 체크아웃
+                    </button>
+                  </div>
+                  <div style={{ marginTop:8, fontSize:11, color:'#94a3b8' }}>* 실제 환경에서는 HA WebSocket 이벤트로 자동 수신</div>
+                </>
+              ) : (
+                <div style={{ fontSize:12, color:'#16a34a', fontWeight:500 }}>
+                  {currentBooking?.guestName}님 퇴실이 감지되어 자동화가 시작되었습니다.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── STEP 2: PIN 즉시 만료 ── */}
+          <div style={{ background:'#ffffff', border:`2px solid ${pinDone[selectedProp]?'#86efac':pinCountdown&&!pinDone[selectedProp]?'#fca5a5':'#e2e8f0'}`, borderRadius:12, overflow:'hidden' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', background:pinDone[selectedProp]?'#f0fdf4':pinCountdown&&!pinDone[selectedProp]?'#fef2f2':'#f8fafc', borderBottom:'1px solid #e2e8f0' }}>
+              <div style={{ width:22, height:22, borderRadius:'50%', background:pinDone[selectedProp]?'#16a34a':pinCountdown&&!pinDone[selectedProp]?'#dc2626':'#e2e8f0', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                {pinDone[selectedProp]
+                  ? <span style={{ color:'#fff', fontSize:12, fontWeight:800 }}>✓</span>
+                  : pinCountdown&&!pinDone[selectedProp]
+                    ? <span style={{ color:'#fff', fontSize:11, fontWeight:800 }}>⚡</span>
+                    : <span style={{ fontSize:11, fontWeight:800, color:'#94a3b8' }}>2</span>}
               </div>
-              <div style={{ marginTop:8, fontSize:11, color:'#94a3b8' }}>* 실제 환경에서는 HA WebSocket 이벤트로 자동 수신됩니다</div>
+              <span style={{ fontSize:13, fontWeight:700, color:pinDone[selectedProp]?'#15803d':pinCountdown&&!pinDone[selectedProp]?'#dc2626':'#94a3b8' }}>도어락 PIN 즉시 만료</span>
+              {pinDone[selectedProp] && <span style={{ marginLeft:'auto', fontSize:11, color:'#16a34a', fontWeight:600 }}>완료</span>}
+              {pinCountdown&&!pinDone[selectedProp] && <span style={{ marginLeft:'auto', fontSize:11, color:'#dc2626', fontWeight:700, animation:'pulse 0.8s infinite' }}>처리 중...</span>}
             </div>
-          )}
-
-          {currentAssign && <CleanerAssignCard assignment={currentAssign} />}
-
-          {currentItems && (
-            <CleaningChecklistS04
-              items={currentItems}
-              onToggle={toggleChecklistItem}
-              onFinalize={handleFinalizeClean}
-              propStatus={currentStatus}
-            />
-          )}
-
-          {currentStatus === 'vacant' && (
-            <div style={{ background:'#f0fdf4', border:'2px solid #bbf7d0', borderRadius:12, padding:'20px 24px', textAlign:'center' }}>
-              <div style={{ fontSize:32, marginBottom:8 }}>✅</div>
-              <div style={{ fontWeight:800, fontSize:16, color:'#15803d' }}>숙소 준비 완료</div>
-              <div style={{ fontSize:13, color:'#16a34a', marginTop:4 }}>다음 게스트 입실 대기 중</div>
+            <div style={{ padding:'14px 16px' }}>
+              {pinDone[selectedProp] ? (
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <span style={{ fontSize:20 }}>🔒</span>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, color:'#15803d' }}>PIN 만료 완료</div>
+                    <div style={{ fontSize:11, color:'#64748b' }}>도어락이 비활성화되어 재입실이 불가합니다</div>
+                  </div>
+                </div>
+              ) : pinCountdown && !pinDone[selectedProp] ? (
+                <PinExpireCountdown active={true} onDone={() => setPinCountdown(false)} />
+              ) : (
+                <div style={{ fontSize:12, color:'#94a3b8' }}>퇴실 감지 후 5초 내 자동으로 PIN이 비활성화됩니다.</div>
+              )}
             </div>
-          )}
+          </div>
+
+          {/* ── STEP 3: 청소팀 배정 ── */}
+          <div style={{ background:'#ffffff', border:`2px solid ${currentAssign?'#86efac':'#e2e8f0'}`, borderRadius:12, overflow:'hidden' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', background:currentAssign?'#f0fdf4':'#f8fafc', borderBottom:'1px solid #e2e8f0' }}>
+              <div style={{ width:22, height:22, borderRadius:'50%', background:currentAssign?'#16a34a':'#e2e8f0', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                {currentAssign
+                  ? <span style={{ color:'#fff', fontSize:12, fontWeight:800 }}>✓</span>
+                  : <span style={{ fontSize:11, fontWeight:800, color:'#94a3b8' }}>3</span>}
+              </div>
+              <span style={{ fontSize:13, fontWeight:700, color:currentAssign?'#15803d':'#94a3b8' }}>청소팀 자동 배정</span>
+              {currentAssign && <span style={{ marginLeft:'auto', fontSize:11, color:'#16a34a', fontWeight:600 }}>배정 완료</span>}
+            </div>
+            <div style={{ padding:'14px 16px' }}>
+              {currentAssign ? (
+                <div style={{ display:'flex', gap:20 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <div style={{ width:36, height:36, borderRadius:'50%', background:'#fffbeb', border:'2px solid #fde68a', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>🧹</div>
+                    <div>
+                      <div style={{ fontWeight:800, fontSize:15, color:'#1e293b' }}>{currentAssign.cleanerName}</div>
+                      <div style={{ fontSize:11, color:'#64748b' }}>배정 시각: {currentAssign.assignedAt}</div>
+                    </div>
+                  </div>
+                  <div style={{ marginLeft:'auto', textAlign:'right' }}>
+                    <div style={{ fontSize:11, color:'#64748b' }}>예상 도착</div>
+                    <div style={{ fontFamily:"'DM Mono',monospace", fontSize:20, fontWeight:800, color:'#d97706' }}>{currentAssign.estimatedArrival}</div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontSize:12, color:'#94a3b8' }}>퇴실 감지 후 가용 청소팀 중 부하가 가장 적은 담당자가 자동 배정됩니다.</div>
+              )}
+            </div>
+          </div>
+
+          {/* ── STEP 4: 청소 체크리스트 ── */}
+          <div style={{ background:'#ffffff', border:`2px solid ${currentStatus==='vacant'?'#86efac':currentItems?'#bfdbfe':'#e2e8f0'}`, borderRadius:12, overflow:'hidden' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', background:currentStatus==='vacant'?'#f0fdf4':currentItems?'#eff6ff':'#f8fafc', borderBottom:'1px solid #e2e8f0' }}>
+              <div style={{ width:22, height:22, borderRadius:'50%', background:currentStatus==='vacant'?'#16a34a':currentItems?'#2563eb':'#e2e8f0', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                {currentStatus==='vacant'
+                  ? <span style={{ color:'#fff', fontSize:12, fontWeight:800 }}>✓</span>
+                  : currentItems
+                    ? <span style={{ color:'#fff', fontSize:11, fontWeight:800 }}>📋</span>
+                    : <span style={{ fontSize:11, fontWeight:800, color:'#94a3b8' }}>4</span>}
+              </div>
+              <span style={{ fontSize:13, fontWeight:700, color:currentStatus==='vacant'?'#15803d':currentItems?'#1d4ed8':'#94a3b8' }}>청소 체크리스트</span>
+              {currentItems && currentStatus!=='vacant' && (
+                <span style={{ marginLeft:'auto', fontSize:11, color:'#2563eb', fontWeight:600 }}>
+                  {currentItems.filter(i=>i.done).length}/{currentItems.length} 완료
+                </span>
+              )}
+              {currentStatus==='vacant' && <span style={{ marginLeft:'auto', fontSize:11, color:'#16a34a', fontWeight:600 }}>청소 완료</span>}
+            </div>
+            <div style={{ padding:'14px 16px' }}>
+              {currentItems ? (
+                <CleaningChecklistS04
+                  items={currentItems}
+                  onToggle={toggleChecklistItem}
+                  onFinalize={handleFinalizeClean}
+                  propStatus={currentStatus}
+                />
+              ) : (
+                <div style={{ fontSize:12, color:'#94a3b8' }}>청소팀 배정 후 표준 체크리스트가 자동 생성됩니다.<br/>청소 완료 항목을 하나씩 체크하고, 전체 완료 시 숙소 상태가 "준비 완료"로 변경됩니다.</div>
+              )}
+            </div>
+          </div>
+
         </div>
 
         {/* 오른쪽: 알림 피드 */}
@@ -3914,73 +4108,113 @@ function S05RevenuePanel({onBack}){
   const allDone=steps.start&&steps.data&&steps.pricing&&steps.tax;
 
   return(
-    <div style={{height:'100vh',display:'flex',flexDirection:'column',background:'#f0f4f8',fontFamily:"'DM Sans',sans-serif",overflow:'hidden'}}>
-      {/* 월말 정산일 자동 트리거 배너 */}
+    <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden',fontFamily:"'DM Sans',sans-serif",background:'#f0f4f8'}}>
       {autoBanner&&!running&&!allDone&&(
-        <div style={{background:'#eff6ff',borderBottom:'2px solid #3b82f6',padding:'10px 20px',display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
+        <div style={{background:'#eff6ff',borderBottom:'2px solid #3b82f6',padding:'10px 24px',display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
           <span style={{fontSize:18}}>📅</span>
-          <div style={{flex:1}}><span style={{fontWeight:700,color:'#1d4ed8',fontSize:13}}>오늘은 정산일입니다 — {settlementPeriod.label} 수익 정산을 자동 실행할까요?</span></div>
+          <span style={{flex:1,fontWeight:700,color:'#1d4ed8',fontSize:13}}>오늘은 정산일입니다 — {settlementPeriod.label} 수익 정산을 자동 실행할까요?</span>
           <button onClick={()=>{setAutoBanner(false);runSettlement();}} style={{padding:'6px 16px',borderRadius:7,background:'#2563eb',border:'1.5px solid #1d4ed8',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>지금 실행</button>
           <button onClick={()=>setAutoBanner(false)} style={{padding:'6px 12px',borderRadius:7,background:'#f8fafc',border:'1.5px solid #e2e8f0',color:'#64748b',fontSize:12,fontWeight:600,cursor:'pointer'}}>나중에</button>
         </div>
       )}
-      <div style={{background:'#ffffff',borderBottom:'1px solid #e2e8f0',padding:'0 20px',height:48,display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
-        <button onClick={onBack} style={{background:'none',border:'1px solid #e2e8f0',borderRadius:6,padding:'4px 10px',fontSize:12,color:'#64748b',cursor:'pointer',fontWeight:600}}>← 홈</button>
+
+      {/* 헤더 */}
+      <div style={{background:'#ffffff',borderBottom:'1px solid #e2e8f0',padding:'16px 24px',display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
+        <button onClick={onBack} style={{background:'none',border:'1px solid #e2e8f0',borderRadius:6,padding:'5px 12px',fontSize:12,color:'#64748b',cursor:'pointer',fontWeight:600}}>← 홈</button>
         <div style={{width:1,height:22,background:'#e2e8f0'}}/>
-        <div style={{fontWeight:800,fontSize:14,color:'#1e293b'}}>PROP<span style={{color:'#059669'}}>OS</span> · S05 수익 정산 자동화</div>
-        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:10}}>
-          <select value={marketTrend} onChange={e=>setMarketTrend(e.target.value)} disabled={running} style={{fontSize:11,border:'1px solid #e2e8f0',borderRadius:6,padding:'4px 8px',background:'#f8fafc',color:'#475569',fontWeight:600,cursor:'pointer'}}>
-            <option value="spring_peak">봄 성수기 (+10%)</option>
-            <option value="summer_peak">여름 성수기 (+15%)</option>
-            <option value="normal">보통</option>
-            <option value="off_season">비수기 (-10%)</option>
-          </select>
-          <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:failMode?'#dc2626':'#94a3b8',cursor:'pointer',userSelect:'none'}}>
-            <button className={`tog${failMode?' on':''}`} onClick={()=>setFailMode(f=>!f)} style={{background:failMode?'var(--red)':undefined}}><div className="tog-d"/></button>API 오류 시뮬
-          </label>
-          <button onClick={running?undefined:runSettlement} disabled={running} style={{padding:'6px 16px',borderRadius:7,border:`1.5px solid ${running?'#e2e8f0':'#059669'}`,background:running?'#f8fafc':'#059669',color:running?'#94a3b8':'#fff',fontSize:12,fontWeight:700,cursor:running?'default':'pointer',display:'flex',alignItems:'center',gap:6,transition:'all 0.2s'}}>
-            {running?<><div style={{width:12,height:12,border:'2px solid #94a3b8',borderTopColor:'transparent',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>정산 중...</>:`▶ ${month}월 정산 실행`}
-          </button>
-          {allDone&&<button onClick={resetAll} style={{padding:'6px 12px',borderRadius:7,border:'1.5px solid #e2e8f0',background:'#f8fafc',color:'#64748b',fontSize:12,fontWeight:600,cursor:'pointer'}}>↺ 초기화</button>}
+        <div style={{flex:1}}>
+          <div style={{fontWeight:800,fontSize:18,color:'#1e293b',lineHeight:1.2}}>수익 정산 자동화</div>
+          <div style={{fontSize:12,color:'#64748b',marginTop:3}}>멀티플랫폼 통합 · AI 가격 최적화 · 세금 리포트</div>
         </div>
+        <button onClick={running?undefined:runSettlement} disabled={running} style={{padding:'9px 20px',borderRadius:8,border:`1.5px solid ${running?'#e2e8f0':'#059669'}`,background:running?'#f8fafc':'#059669',color:running?'#94a3b8':'#fff',fontSize:13,fontWeight:700,cursor:running?'default':'pointer',display:'flex',alignItems:'center',gap:6}}>
+          {running?<><div style={{width:12,height:12,border:'2px solid #94a3b8',borderTopColor:'transparent',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>정산 중...</>:`▶ ${month}월 정산 실행`}
+        </button>
+        {allDone&&<button onClick={resetAll} style={{padding:'9px 14px',borderRadius:8,border:'1.5px solid #e2e8f0',background:'#f8fafc',color:'#64748b',fontSize:13,fontWeight:600,cursor:'pointer'}}>↺ 초기화</button>}
       </div>
-      <div style={{flex:1,overflow:'auto',padding:20}}>
-        <div style={{background:'#ffffff',border:'1px solid #e2e8f0',borderRadius:12,padding:'16px 24px',marginBottom:16}}>
-          <SettlementProgress steps={steps} running={running}/>
-          {allDone&&<div style={{textAlign:'center',color:'#059669',fontSize:13,fontWeight:700,marginTop:4}}>✓ {month}월 정산 완료 — 모든 단계 성공</div>}
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:16}}>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',paddingBottom:8,borderBottom:'1.5px solid #e2e8f0'}}>
-              <span style={{width:3,height:13,background:'#FF5A5F',borderRadius:2,flexShrink:0}}/>
-              플랫폼별 수익
-            </div>
-            <PlatformCardS05 platform="에어비앤비" data={airbnbData}  icon="🏠" color="#FF5A5F"/>
-            <PlatformCardS05 platform="야놀자"     data={yanoljaData} icon="🌙" color="#0078FF"/>
-            {revenueData&&<RevenueSummaryCardS05 revenueData={revenueData}/>}
-          </div>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',paddingBottom:8,borderBottom:'1.5px solid #e2e8f0'}}>
-              <span style={{width:3,height:13,background:'#7c3aed',borderRadius:2,flexShrink:0}}/>
-              AI 가격 최적화
-            </div>
-            {pricingData?(<PricingRecommendationListS05 pricingData={pricingData} selectedProps={selectedProps} onToggleProp={toggleProp} onApply={applyPricing} applying={applying}/>):(
-              <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:10,padding:'24px',textAlign:'center',color:'#94a3b8',fontSize:12}}>정산 실행 후 AI 분석 결과가 표시됩니다</div>
-            )}
-          </div>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',paddingBottom:8,borderBottom:'1.5px solid #e2e8f0'}}>
+
+      {/* 본문 3-column */}
+      <div style={{flex:1,display:'grid',gridTemplateColumns:'260px 1fr 340px',gap:20,padding:20,overflow:'hidden'}}>
+
+        {/* 좌측 260px: 정산 설정 + 진행 상태 */}
+        <div style={{display:'flex',flexDirection:'column',gap:14,overflowY:'auto'}}>
+
+          <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:12,padding:'16px 14px',flexShrink:0}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14,paddingBottom:8,borderBottom:'1.5px solid #e2e8f0'}}>
               <span style={{width:3,height:13,background:'#059669',borderRadius:2,flexShrink:0}}/>
-              세금 리포트
+              <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em'}}>정산 설정</span>
             </div>
-            {taxData?(<TaxReportCardS05 taxData={taxData}/>):(
-              <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:10,padding:'24px',textAlign:'center',color:'#94a3b8',fontSize:12}}>정산 실행 후 세금 리포트가 표시됩니다</div>
-            )}
-            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',marginTop:4,paddingBottom:8,borderBottom:'1.5px solid #e2e8f0'}}>
+            <div style={{display:'flex',gap:8,marginBottom:12}}>
+              <div style={{flex:1,background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:8,padding:'10px 12px',textAlign:'center'}}>
+                <div style={{fontSize:10,color:'#94a3b8',fontWeight:600,textTransform:'uppercase',marginBottom:2}}>연도</div>
+                <div style={{fontFamily:"'DM Mono',monospace",fontWeight:700,fontSize:16,color:'#1e293b'}}>{year}</div>
+              </div>
+              <div style={{flex:1,background:'#f0fdf4',border:'1px solid #86efac',borderRadius:8,padding:'10px 12px',textAlign:'center'}}>
+                <div style={{fontSize:10,color:'#059669',fontWeight:600,textTransform:'uppercase',marginBottom:2}}>월</div>
+                <div style={{fontFamily:"'DM Mono',monospace",fontWeight:700,fontSize:16,color:'#059669'}}>{month}월</div>
+              </div>
+            </div>
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:10,color:'#64748b',fontWeight:600,marginBottom:4}}>시장 트렌드</div>
+              <select value={marketTrend} onChange={e=>setMarketTrend(e.target.value)} disabled={running} style={{width:'100%',fontSize:12,border:'1.5px solid #e2e8f0',borderRadius:7,padding:'6px 8px',background:'#f8fafc',color:'#475569',fontWeight:600,cursor:'pointer'}}>
+                <option value="spring_peak">🌸 봄 성수기 (+10%)</option>
+                <option value="summer_peak">☀️ 여름 성수기 (+15%)</option>
+                <option value="normal">기본 (보통)</option>
+                <option value="off_season">❄️ 비수기 (-10%)</option>
+              </select>
+            </div>
+            <button onClick={()=>setFailMode(f=>!f)} style={{width:'100%',padding:'6px 8px',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer',background:failMode?'#fee2e2':'#f8fafc',border:`1.5px solid ${failMode?'#fca5a5':'#e2e8f0'}`,color:failMode?'#dc2626':'#64748b'}}>
+              {failMode?'✕ API 오류 시뮬 ON':'○ API 오류 시뮬 OFF'}
+            </button>
+          </div>
+
+          <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:12,padding:'16px 14px',flexShrink:0}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14,paddingBottom:8,borderBottom:'1.5px solid #e2e8f0'}}>
+              <span style={{width:3,height:13,background:'#2563eb',borderRadius:2,flexShrink:0}}/>
+              <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em'}}>진행 상태</span>
+            </div>
+            <SettlementProgress steps={steps} running={running}/>
+            {allDone&&<div style={{marginTop:10,textAlign:'center',color:'#059669',fontSize:12,fontWeight:700,background:'#f0fdf4',border:'1px solid #86efac',borderRadius:6,padding:'6px'}}>✓ {month}월 정산 완료</div>}
+          </div>
+        </div>
+
+        {/* 중앙: 플랫폼 수익 + AI 가격 최적화 */}
+        <div style={{display:'flex',flexDirection:'column',gap:12,overflowY:'auto'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,paddingBottom:10,borderBottom:'1.5px solid #e2e8f0',flexShrink:0}}>
+            <span style={{width:3,height:13,background:'#FF5A5F',borderRadius:2,flexShrink:0}}/>
+            <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em'}}>플랫폼별 수익</span>
+          </div>
+          <PlatformCardS05 platform="에어비앤비" data={airbnbData}  icon="🏠" color="#FF5A5F"/>
+          <PlatformCardS05 platform="야놀자"     data={yanoljaData} icon="🌙" color="#0078FF"/>
+          {revenueData&&<RevenueSummaryCardS05 revenueData={revenueData}/>}
+
+          <div style={{display:'flex',alignItems:'center',gap:8,paddingBottom:10,borderBottom:'1.5px solid #e2e8f0',marginTop:4,flexShrink:0}}>
+            <span style={{width:3,height:13,background:'#7c3aed',borderRadius:2,flexShrink:0}}/>
+            <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em'}}>AI 가격 최적화</span>
+          </div>
+          {pricingData?(<PricingRecommendationListS05 pricingData={pricingData} selectedProps={selectedProps} onToggleProp={toggleProp} onApply={applyPricing} applying={applying}/>):(
+            <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:12,padding:'28px',textAlign:'center',color:'#94a3b8',fontSize:13,flexShrink:0}}>
+              <div style={{fontSize:28,marginBottom:8,opacity:0.4}}>🤖</div>정산 실행 후 AI 분석 결과가 표시됩니다
+            </div>
+          )}
+        </div>
+
+        {/* 우측 340px: 세금 리포트 + 알림 피드 */}
+        <div style={{display:'flex',flexDirection:'column',gap:12,overflow:'hidden'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,paddingBottom:10,borderBottom:'1.5px solid #e2e8f0',flexShrink:0}}>
+            <span style={{width:3,height:13,background:'#059669',borderRadius:2,flexShrink:0}}/>
+            <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em'}}>세금 리포트</span>
+          </div>
+          {taxData?(<TaxReportCardS05 taxData={taxData}/>):(
+            <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:12,padding:'20px',textAlign:'center',color:'#94a3b8',fontSize:13,flexShrink:0}}>정산 실행 후 세금 리포트가 표시됩니다</div>
+          )}
+          <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden',background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:12}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'12px 16px',borderBottom:'1.5px solid #e2e8f0',flexShrink:0}}>
               <span style={{width:3,height:13,background:'#d97706',borderRadius:2,flexShrink:0}}/>
-              자동화 알림
+              <span style={{fontSize:11,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'0.06em',flex:1}}>자동화 알림</span>
+              {alerts.length>0&&<span style={{background:'#dc2626',color:'#fff',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{alerts.length}</span>}
+              {alerts.length>0&&<button onClick={()=>setAlerts([])} style={{padding:'3px 9px',borderRadius:5,background:'#f8fafc',border:'1.5px solid #e2e8f0',color:'#64748b',fontSize:10,cursor:'pointer',fontWeight:600}}>전체 확인</button>}
             </div>
-            <div style={{background:'#ffffff',border:'1.5px solid #e2e8f0',borderRadius:12,padding:'12px',maxHeight:280,overflowY:'auto'}}>
+            <div style={{flex:1,overflowY:'auto',padding:'8px 10px'}}>
               <AlertFeedS05 alerts={alerts} onAck={ackAlert}/>
             </div>
           </div>

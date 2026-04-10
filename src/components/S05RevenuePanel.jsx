@@ -508,172 +508,140 @@ function S05RevenuePanel({ onBack }) {
   const allDone = steps.start && steps.data && steps.pricing && steps.tax;
 
   return (
-    <div style={{ height:'100vh', display:'flex', flexDirection:'column', background:'#f0f4f8', fontFamily:"'DM Sans',sans-serif", overflow:'hidden' }}>
+    <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontFamily:"'DM Sans',sans-serif" }}>
 
-      {/* 월말 정산일 자동 트리거 배너 */}
+      {/* 정산일 자동 트리거 배너 */}
       {autoBanner && !running && !allDone && (
-        <div style={{ background:'#eff6ff', borderBottom:'2px solid #3b82f6', padding:'10px 20px',
-          display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+        <div style={{ background:'#eff6ff', borderBottom:'2px solid #3b82f6', padding:'10px 24px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
           <span style={{ fontSize:18 }}>📅</span>
-          <div style={{ flex:1 }}>
-            <span style={{ fontWeight:700, color:'#1d4ed8', fontSize:13 }}>
-              오늘은 정산일입니다 — {settlementPeriod.label} 수익 정산을 자동 실행할까요?
-            </span>
-          </div>
-          <button
-            onClick={() => { setAutoBanner(false); runSettlement(); }}
-            style={{ padding:'6px 16px', borderRadius:7, background:'#2563eb', border:'1.5px solid #1d4ed8',
-              color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer' }}>
-            지금 실행
-          </button>
-          <button
-            onClick={() => setAutoBanner(false)}
-            style={{ padding:'6px 12px', borderRadius:7, background:'#f8fafc', border:'1.5px solid #e2e8f0',
-              color:'#64748b', fontSize:12, fontWeight:600, cursor:'pointer' }}>
-            나중에
-          </button>
+          <span style={{ flex:1, fontWeight:700, color:'#1d4ed8', fontSize:13 }}>오늘은 정산일입니다 — {settlementPeriod.label} 수익 정산을 자동 실행할까요?</span>
+          <button onClick={() => { setAutoBanner(false); runSettlement(); }} style={{ padding:'6px 16px', borderRadius:7, background:'#2563eb', border:'1.5px solid #1d4ed8', color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer' }}>지금 실행</button>
+          <button onClick={() => setAutoBanner(false)} style={{ padding:'6px 12px', borderRadius:7, background:'#f8fafc', border:'1.5px solid #e2e8f0', color:'#64748b', fontSize:12, fontWeight:600, cursor:'pointer' }}>나중에</button>
         </div>
       )}
 
-      {/* 상단 네비게이션 */}
-      <div style={{ background:'#ffffff', borderBottom:'1px solid #e2e8f0', padding:'0 20px', height:48, display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
-        <button
-          onClick={onBack}
-          style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'4px 10px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}
-        >← 홈</button>
-        <div style={{ width:1, height:22, background:'#e2e8f0' }} />
-        <div style={{ fontWeight:800, fontSize:14, color:'#1e293b' }}>
-          PROP<span style={{ color:'#059669' }}>OS</span> · S05 수익 정산 자동화
+      {/* ── 헤더 ── */}
+      <div style={{ background:'#ffffff', borderBottom:'1px solid #e2e8f0', padding:'16px 24px', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+          <button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}>← 홈</button>
+          <div style={{ width:1, height:22, background:'#e2e8f0' }} />
+          <div>
+            <div style={{ fontWeight:800, fontSize:18, color:'#1e293b' }}>UC-005 — 수익 정산 자동화</div>
+            <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>멀티플랫폼 통합 · AI 가격 최적화 · 세금 리포트</div>
+          </div>
         </div>
-        <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:10 }}>
-          {/* 성수기 선택 */}
-          <select
-            value={marketTrend}
-            onChange={e => setMarketTrend(e.target.value)}
-            disabled={running}
-            style={{ fontSize:11, border:'1px solid #e2e8f0', borderRadius:6, padding:'4px 8px', background:'#f8fafc', color:'#475569', fontWeight:600, cursor:'pointer' }}
-          >
-            <option value="spring_peak">봄 성수기 (+10%)</option>
-            <option value="summer_peak">여름 성수기 (+15%)</option>
-            <option value="normal">보통</option>
-            <option value="off_season">비수기 (-10%)</option>
-          </select>
-          {/* 오류 시뮬 토글 */}
-          <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, color:failMode?'#dc2626':'#94a3b8', cursor:'pointer', userSelect:'none' }}>
-            <button
-              className={`tog${failMode?' on':''}`}
-              onClick={() => setFailMode(f => !f)}
-              style={{ background: failMode ? 'var(--red)' : undefined }}
-            >
-              <div className="tog-d" />
-            </button>
-            API 오류 시뮬
-          </label>
-          {/* 정산 실행 버튼 */}
-          <button
-            onClick={running ? undefined : runSettlement}
-            disabled={running}
-            style={{
-              padding:'6px 16px', borderRadius:7,
-              border:`1.5px solid ${running?'#e2e8f0':'#059669'}`,
-              background: running ? '#f8fafc' : '#059669',
-              color: running ? '#94a3b8' : '#fff',
-              fontSize:12, fontWeight:700, cursor: running?'default':'pointer',
-              display:'flex', alignItems:'center', gap:6, transition:'all 0.2s',
-            }}
-          >
+        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+          <button onClick={running ? undefined : runSettlement} disabled={running}
+            style={{ padding:'9px 20px', borderRadius:8, border:`1.5px solid ${running?'#e2e8f0':'#059669'}`, background: running ? '#f8fafc' : '#059669', color: running ? '#94a3b8' : '#fff', fontSize:13, fontWeight:700, cursor: running?'default':'pointer', display:'flex', alignItems:'center', gap:6 }}>
             {running
               ? <><div style={{ width:12, height:12, border:'2px solid #94a3b8', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />정산 중...</>
-              : `▶ ${month}월 정산 실행`
-            }
+              : `▶ ${month}월 정산 실행`}
           </button>
-          {allDone && (
-            <button
-              onClick={resetAll}
-              style={{ padding:'6px 12px', borderRadius:7, border:'1.5px solid #e2e8f0', background:'#f8fafc', color:'#64748b', fontSize:12, fontWeight:600, cursor:'pointer' }}
-            >↺ 초기화</button>
-          )}
+          {allDone && <button onClick={resetAll} style={{ padding:'9px 14px', borderRadius:8, border:'1.5px solid #e2e8f0', background:'#f8fafc', color:'#64748b', fontSize:13, fontWeight:600, cursor:'pointer' }}>↺ 초기화</button>}
         </div>
       </div>
 
-      {/* 본문 */}
-      <div style={{ flex:1, overflow:'auto', padding:20 }}>
+      {/* ── 본문 3열 ── */}
+      <div style={{ flex:1, display:'grid', gridTemplateColumns:'260px 1fr 340px', gap:20, padding:20, overflow:'hidden' }}>
 
-        {/* 진행 단계 표시 */}
-        <div style={{ background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px 24px', marginBottom:16 }}>
-          <SettlementProgress steps={steps} running={running} />
-          {allDone && (
-            <div style={{ textAlign:'center', color:'#059669', fontSize:13, fontWeight:700, marginTop:4 }}>
-              ✓ {month}월 정산 완료 — 모든 단계 성공
+        {/* 좌측: 정산 설정 + 진행 상태 */}
+        <div style={{ display:'flex', flexDirection:'column', gap:14, overflowY:'auto' }}>
+
+          {/* 정산 설정 */}
+          <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'16px 14px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
+              <span style={{ width:3, height:13, background:'#059669', borderRadius:2, flexShrink:0 }} />
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>정산 설정</span>
+            </div>
+            <div style={{ display:'flex', gap:8, marginBottom:12 }}>
+              <div style={{ flex:1, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'10px 12px', textAlign:'center' }}>
+                <div style={{ fontSize:10, color:'#94a3b8', fontWeight:600, textTransform:'uppercase', marginBottom:2 }}>연도</div>
+                <div style={{ fontFamily:"'DM Mono',monospace", fontWeight:700, fontSize:16, color:'#1e293b' }}>{year}</div>
+              </div>
+              <div style={{ flex:1, background:'#f0fdf4', border:'1px solid #86efac', borderRadius:8, padding:'10px 12px', textAlign:'center' }}>
+                <div style={{ fontSize:10, color:'#059669', fontWeight:600, textTransform:'uppercase', marginBottom:2 }}>월</div>
+                <div style={{ fontFamily:"'DM Mono',monospace", fontWeight:700, fontSize:16, color:'#059669' }}>{month}월</div>
+              </div>
+            </div>
+            <div style={{ marginBottom:10 }}>
+              <div style={{ fontSize:10, color:'#64748b', fontWeight:600, marginBottom:4 }}>시장 트렌드</div>
+              <select value={marketTrend} onChange={e => setMarketTrend(e.target.value)} disabled={running}
+                style={{ width:'100%', fontSize:12, border:'1.5px solid #e2e8f0', borderRadius:7, padding:'6px 8px', background:'#f8fafc', color:'#475569', fontWeight:600, cursor:'pointer' }}>
+                <option value="spring_peak">🌸 봄 성수기 (+10%)</option>
+                <option value="summer_peak">☀️ 여름 성수기 (+15%)</option>
+                <option value="normal">기본 (보통)</option>
+                <option value="off_season">❄️ 비수기 (-10%)</option>
+              </select>
+            </div>
+            <button onClick={() => setFailMode(f => !f)}
+              style={{ width:'100%', padding:'6px 8px', borderRadius:6, fontSize:11, fontWeight:600, cursor:'pointer', background: failMode ? '#fee2e2' : '#f8fafc', border: `1.5px solid ${failMode ? '#fca5a5' : '#e2e8f0'}`, color: failMode ? '#dc2626' : '#64748b' }}>
+              {failMode ? '✕ API 오류 시뮬 ON' : '○ API 오류 시뮬 OFF'}
+            </button>
+          </div>
+
+          {/* 진행 상태 */}
+          <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'16px 14px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
+              <span style={{ width:3, height:13, background:'#2563eb', borderRadius:2, flexShrink:0 }} />
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>진행 상태</span>
+            </div>
+            <SettlementProgress steps={steps} running={running} />
+            {allDone && (
+              <div style={{ marginTop:10, textAlign:'center', color:'#059669', fontSize:12, fontWeight:700, background:'#f0fdf4', border:'1px solid #86efac', borderRadius:6, padding:'6px' }}>
+                ✓ {month}월 정산 완료
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 중앙: 플랫폼 수익 + AI 가격 최적화 */}
+        <div style={{ display:'flex', flexDirection:'column', gap:12, overflowY:'auto' }}>
+
+          <div style={{ display:'flex', alignItems:'center', gap:8, paddingBottom:10, borderBottom:'1.5px solid #e2e8f0' }}>
+            <span style={{ width:3, height:13, background:'#FF5A5F', borderRadius:2, flexShrink:0 }} />
+            <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>플랫폼별 수익</span>
+          </div>
+          <PlatformCard platform="에어비앤비" data={airbnbData}  icon="🏠" color="#FF5A5F" />
+          <PlatformCard platform="야놀자"     data={yanoljaData} icon="🌙" color="#0078FF" />
+          {revenueData && <RevenueSummaryCard revenueData={revenueData} />}
+
+          <div style={{ display:'flex', alignItems:'center', gap:8, paddingBottom:10, borderBottom:'1.5px solid #e2e8f0', marginTop:4 }}>
+            <span style={{ width:3, height:13, background:'#7c3aed', borderRadius:2, flexShrink:0 }} />
+            <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>AI 가격 최적화</span>
+          </div>
+          {pricingData ? (
+            <PricingRecommendationList pricingData={pricingData} selectedProps={selectedProps} onToggleProp={toggleProp} onApply={applyPricing} applying={applying} />
+          ) : (
+            <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'28px', textAlign:'center', color:'#94a3b8', fontSize:13 }}>
+              <div style={{ fontSize:28, marginBottom:8, opacity:0.4 }}>🤖</div>
+              정산 실행 후 AI 분석 결과가 표시됩니다
             </div>
           )}
         </div>
 
-        {/* 3열 그리드 */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:16 }}>
+        {/* 우측: 세금 리포트 + 알림 피드 */}
+        <div style={{ display:'flex', flexDirection:'column', gap:12, overflow:'hidden' }}>
 
-          {/* 왼쪽: 플랫폼 수익 + 수익 요약 */}
-          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:8,
-              fontSize:11, fontWeight:700, color:'#475569',
-              textTransform:'uppercase', letterSpacing:'0.06em',
-              paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
-              <span style={{ width:3, height:13, background:'#FF5A5F', borderRadius:2, flexShrink:0 }} />
-              플랫폼별 수익
-            </div>
-            <PlatformCard platform="에어비앤비" data={airbnbData}  icon="🏠" color="#FF5A5F" />
-            <PlatformCard platform="야놀자"     data={yanoljaData} icon="🌙" color="#0078FF" />
-            {revenueData && <RevenueSummaryCard revenueData={revenueData} />}
+          <div style={{ display:'flex', alignItems:'center', gap:8, paddingBottom:10, borderBottom:'1.5px solid #e2e8f0' }}>
+            <span style={{ width:3, height:13, background:'#059669', borderRadius:2, flexShrink:0 }} />
+            <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>세금 리포트</span>
           </div>
-
-          {/* 가운데: AI 가격 최적화 */}
-          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:8,
-              fontSize:11, fontWeight:700, color:'#475569',
-              textTransform:'uppercase', letterSpacing:'0.06em',
-              paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
-              <span style={{ width:3, height:13, background:'#7c3aed', borderRadius:2, flexShrink:0 }} />
-              AI 가격 최적화
+          {taxData ? (
+            <TaxReportCard taxData={taxData} />
+          ) : (
+            <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'20px', textAlign:'center', color:'#94a3b8', fontSize:13 }}>
+              정산 실행 후 세금 리포트가 표시됩니다
             </div>
-            {pricingData ? (
-              <PricingRecommendationList
-                pricingData={pricingData}
-                selectedProps={selectedProps}
-                onToggleProp={toggleProp}
-                onApply={applyPricing}
-                applying={applying}
-              />
-            ) : (
-              <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:10, padding:'24px', textAlign:'center', color:'#94a3b8', fontSize:12 }}>
-                정산 실행 후 AI 분석 결과가 표시됩니다
-              </div>
-            )}
-          </div>
+          )}
 
-          {/* 오른쪽: 세금 리포트 + 알림 피드 */}
-          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:8,
-              fontSize:11, fontWeight:700, color:'#475569',
-              textTransform:'uppercase', letterSpacing:'0.06em',
-              paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
-              <span style={{ width:3, height:13, background:'#059669', borderRadius:2, flexShrink:0 }} />
-              세금 리포트
-            </div>
-            {taxData ? (
-              <TaxReportCard taxData={taxData} />
-            ) : (
-              <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:10, padding:'24px', textAlign:'center', color:'#94a3b8', fontSize:12 }}>
-                정산 실행 후 세금 리포트가 표시됩니다
-              </div>
-            )}
-            <div style={{ display:'flex', alignItems:'center', gap:8,
-              fontSize:11, fontWeight:700, color:'#475569',
-              textTransform:'uppercase', letterSpacing:'0.06em',
-              marginTop:4, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
+          <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden', background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, padding:'12px 16px', borderBottom:'1.5px solid #e2e8f0', flexShrink:0 }}>
               <span style={{ width:3, height:13, background:'#d97706', borderRadius:2, flexShrink:0 }} />
-              자동화 알림
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1 }}>자동화 알림</span>
+              {alerts.length > 0 && <span style={{ background:'#dc2626', color:'#fff', borderRadius:10, padding:'1px 7px', fontSize:10, fontWeight:700 }}>{alerts.length}</span>}
+              {alerts.length > 0 && <button onClick={() => setAlerts([])} style={{ padding:'3px 9px', borderRadius:5, background:'#f8fafc', border:'1.5px solid #e2e8f0', color:'#64748b', fontSize:10, cursor:'pointer', fontWeight:600 }}>전체 확인</button>}
             </div>
-            <div style={{ background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:12, padding:'12px', maxHeight:280, overflowY:'auto' }}>
+            <div style={{ flex:1, overflowY:'auto', padding:'8px 10px' }}>
               <AlertFeedS05 alerts={alerts} onAck={ackAlert} />
             </div>
           </div>

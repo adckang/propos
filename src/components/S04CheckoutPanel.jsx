@@ -213,59 +213,6 @@ function PinExpireCountdown({ active, onDone }) {
 }
 
 // ============================================================
-// CleanerAssignCard — 청소팀 배정 카드
-// ============================================================
-function CleanerAssignCard({ assignment }) {
-  if (!assignment) return null;
-
-  const statusStyle = {
-    assigned:    { bg: '#fffbeb', border: '#fde68a', badge: '#d97706', text: '배정됨' },
-    in_progress: { bg: '#eff6ff', border: '#bfdbfe', badge: '#2563eb', text: '청소 중' },
-    done:        { bg: '#f0fdf4', border: '#bbf7d0', badge: '#16a34a', text: '완료' },
-  };
-  const s = statusStyle[assignment.status] || statusStyle.assigned;
-
-  return (
-    <div style={{
-      background: s.bg, border: `2px solid ${s.border}`,
-      borderRadius: 12, padding: '16px 20px',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <span style={{ fontSize: 20 }}>🧹</span>
-        <span style={{ fontWeight: 700, fontSize: 14, color: '#1e293b' }}>청소팀 배정 완료</span>
-        <span style={{
-          marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: s.badge,
-          background: '#ffffff', border: `1px solid ${s.border}`,
-          padding: '2px 8px', borderRadius: 20,
-        }}>
-          {s.text}
-        </span>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <div>
-          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>담당자</div>
-          <div style={{ fontWeight: 700, fontSize: 15, color: '#1e293b' }}>{assignment.cleanerName}</div>
-        </div>
-        <div>
-          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>예상 도착</div>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 15, color: s.badge }}>
-            {assignment.estimatedArrival}
-          </div>
-        </div>
-        <div>
-          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>배정 시각</div>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#475569' }}>{assignment.assignedAt}</div>
-        </div>
-        <div>
-          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>숙소</div>
-          <div style={{ fontSize: 13, color: '#475569' }}>{assignment.propId}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
 // CleaningChecklist — 청소 체크리스트
 // ============================================================
 function CleaningChecklist({ items, onToggle, onFinalize, propStatus }) {
@@ -741,125 +688,156 @@ function S04CheckoutPanel({ onBack }) {
           </div>
         </div>
 
-        {/* 가운데: 체크아웃 제어 & 체크리스트 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* 가운데: 4단계 자동화 흐름 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-          {/* 현재 숙소 정보 */}
-          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-              <span style={{ fontWeight: 700, fontSize: 16, color: '#1e293b' }}>{currentBooking?.propName}</span>
-              <PropStatusBadge status={currentStatus} />
-              {pinDone[selectedProp] && (
-                <span style={{
-                  fontSize: 11, fontWeight: 700, color: '#dc2626',
-                  background: '#fef2f2', border: '1px solid #fecaca',
-                  padding: '2px 8px', borderRadius: 20,
-                }}>
-                  🔒 PIN 만료됨
-                </span>
-              )}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>게스트</div>
-                <div style={{ fontWeight: 600, fontSize: 13, color: '#1e293b' }}>{currentBooking?.guestName}님</div>
+          {/* 숙소 정보 헤더 */}
+          <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={{ fontWeight: 800, fontSize: 15, color: '#1e293b' }}>{currentBooking?.propName}</span>
+                <PropStatusBadge status={currentStatus} />
               </div>
-              <div>
-                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>체크아웃</div>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#1e293b' }}>
-                  {currentBooking?.checkOut?.slice(11, 16) || '—'}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>가능 시간창</div>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#475569' }}>
-                  {currentBooking ? (() => { try { const w = _s04.isCheckoutEvent && (() => { const d = new Date(currentBooking.checkOut); const f = new Date(d.getTime()-7200000); const u = new Date(d.getTime()+10800000); return `${f.getHours().toString().padStart(2,'0')}:${f.getMinutes().toString().padStart(2,'0')} ~ ${u.getHours().toString().padStart(2,'0')}:${u.getMinutes().toString().padStart(2,'0')}`; })(); return w; } catch(_) { return '—'; } })() : '—'}
-                </div>
+              <div style={{ display: 'flex', gap: 16, fontSize: 12, color: '#64748b' }}>
+                <span>게스트: <b style={{ color: '#1e293b' }}>{currentBooking?.guestName}님</b></span>
+                <span>체크아웃: <b style={{ color: '#1e293b', fontFamily: "'DM Mono',monospace" }}>{currentBooking?.checkOut?.slice(11,16) || '—'}</b></span>
+                <span>가능 시간창: <b style={{ color: '#1e293b', fontFamily: "'DM Mono',monospace" }}>
+                  {currentBooking ? (() => { try { const d = new Date(currentBooking.checkOut); const f = new Date(d.getTime()-7200000); const u = new Date(d.getTime()+10800000); return `${String(f.getHours()).padStart(2,'0')}:${String(f.getMinutes()).padStart(2,'0')}~${String(u.getHours()).padStart(2,'0')}:${String(u.getMinutes()).padStart(2,'0')}`; } catch(_) { return '—'; } })() : '—'}
+                </b></span>
               </div>
             </div>
           </div>
 
-          {/* PIN 만료 카운트다운 */}
-          <PinExpireCountdown
-            active={pinCountdown && !pinDone[selectedProp]}
-            onDone={() => setPinCountdown(false)}
-          />
-
-          {/* 이벤트 시뮬레이터 */}
-          {currentStatus === 'occupied' && (
-            <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 20px' }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span>🎮</span> 이벤트 시뮬레이터
-                <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400, marginLeft: 4 }}>테스트용</span>
+          {/* ── STEP 1: 퇴실 감지 ── */}
+          <div style={{ background: '#ffffff', border: `2px solid ${currentStatus !== 'occupied' ? '#86efac' : '#e2e8f0'}`, borderRadius: 12, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: currentStatus !== 'occupied' ? '#f0fdf4' : '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <div style={{ width: 22, height: 22, borderRadius: '50%', background: currentStatus !== 'occupied' ? '#16a34a' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {currentStatus !== 'occupied'
+                  ? <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>✓</span>
+                  : <span style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8' }}>1</span>}
               </div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button
-                  onClick={() => handleCheckoutEvent('door_locked')}
-                  disabled={processing}
-                  style={{
-                    flex: 1, padding: '10px 0', borderRadius: 8,
-                    border: `1.5px solid ${processing ? '#e2e8f0' : '#dc2626'}`,
-                    background: processing ? '#f8fafc' : '#dc2626',
-                    color: processing ? '#94a3b8' : '#ffffff',
-                    fontSize: 13, fontWeight: 700, cursor: processing ? 'default' : 'pointer',
-                    transition: 'all 0.2s',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                  }}
-                >
-                  {processing ? (
-                    <>
-                      <div style={{ width: 14, height: 14, border: '2px solid #94a3b8', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                      처리 중...
-                    </>
-                  ) : '🔒 도어락 잠금 (퇴실 감지)'}
-                </button>
-                <button
-                  onClick={() => handleCheckoutEvent('manual_checkout')}
-                  disabled={processing}
-                  style={{
-                    flex: 1, padding: '10px 0', borderRadius: 8,
-                    border: `1.5px solid ${processing ? '#e2e8f0' : '#d97706'}`,
-                    background: processing ? '#f8fafc' : '#fffbeb',
-                    color: processing ? '#94a3b8' : '#d97706',
-                    fontSize: 13, fontWeight: 700, cursor: processing ? 'default' : 'pointer',
-                    transition: 'all 0.2s',
-                  }}
-                >
-                  📋 수동 체크아웃
-                </button>
-              </div>
-              <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>
-                * 실제 환경에서는 HA WebSocket 이벤트로 자동 수신됩니다
-              </div>
+              <span style={{ fontSize: 13, fontWeight: 700, color: currentStatus !== 'occupied' ? '#15803d' : '#374151' }}>퇴실 감지</span>
+              {currentStatus !== 'occupied' && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#16a34a', fontWeight: 600 }}>완료</span>}
             </div>
-          )}
-
-          {/* 청소팀 배정 카드 */}
-          {currentAssign && (
-            <CleanerAssignCard assignment={currentAssign} />
-          )}
-
-          {/* 청소 체크리스트 */}
-          {currentItems && (
-            <CleaningChecklist
-              items={currentItems}
-              onToggle={toggleChecklistItem}
-              onFinalize={handleFinalizeClean}
-              propStatus={currentStatus}
-            />
-          )}
-
-          {/* 청소 완료 상태 */}
-          {currentStatus === 'vacant' && (
-            <div style={{
-              background: '#f0fdf4', border: '2px solid #bbf7d0',
-              borderRadius: 12, padding: '20px 24px', textAlign: 'center',
-            }}>
-              <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
-              <div style={{ fontWeight: 800, fontSize: 16, color: '#15803d' }}>숙소 준비 완료</div>
-              <div style={{ fontSize: 13, color: '#16a34a', marginTop: 4 }}>다음 게스트 입실 대기 중</div>
+            <div style={{ padding: '14px 16px' }}>
+              {currentStatus === 'occupied' ? (
+                <>
+                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>도어락 잠금 이벤트를 수신하면 자동으로 체크아웃 처리가 시작됩니다.</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => handleCheckoutEvent('door_locked')} disabled={processing}
+                      style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: `1.5px solid ${processing ? '#e2e8f0' : '#dc2626'}`, background: processing ? '#f8fafc' : '#dc2626', color: processing ? '#94a3b8' : '#ffffff', fontSize: 13, fontWeight: 700, cursor: processing ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                      {processing ? (<><div style={{ width: 13, height: 13, border: '2px solid #94a3b8', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />처리 중...</>) : '🔒 도어락 잠금 (퇴실 감지)'}
+                    </button>
+                    <button onClick={() => handleCheckoutEvent('manual_checkout')} disabled={processing}
+                      style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: `1.5px solid ${processing ? '#e2e8f0' : '#d97706'}`, background: processing ? '#f8fafc' : '#fffbeb', color: processing ? '#94a3b8' : '#d97706', fontSize: 13, fontWeight: 700, cursor: processing ? 'default' : 'pointer' }}>
+                      📋 수동 체크아웃
+                    </button>
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>* 실제 환경에서는 HA WebSocket 이벤트로 자동 수신</div>
+                </>
+              ) : (
+                <div style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>
+                  {currentBooking?.guestName}님 퇴실이 감지되어 자동화가 시작되었습니다.
+                </div>
+              )}
             </div>
-          )}
+          </div>
+
+          {/* ── STEP 2: PIN 즉시 만료 ── */}
+          <div style={{ background: '#ffffff', border: `2px solid ${pinDone[selectedProp] ? '#86efac' : pinCountdown && !pinDone[selectedProp] ? '#fca5a5' : '#e2e8f0'}`, borderRadius: 12, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: pinDone[selectedProp] ? '#f0fdf4' : pinCountdown && !pinDone[selectedProp] ? '#fef2f2' : '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <div style={{ width: 22, height: 22, borderRadius: '50%', background: pinDone[selectedProp] ? '#16a34a' : pinCountdown && !pinDone[selectedProp] ? '#dc2626' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {pinDone[selectedProp]
+                  ? <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>✓</span>
+                  : pinCountdown && !pinDone[selectedProp]
+                    ? <span style={{ color: '#fff', fontSize: 11, fontWeight: 800 }}>⚡</span>
+                    : <span style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8' }}>2</span>}
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 700, color: pinDone[selectedProp] ? '#15803d' : pinCountdown && !pinDone[selectedProp] ? '#dc2626' : '#94a3b8' }}>도어락 PIN 즉시 만료</span>
+              {pinDone[selectedProp] && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#16a34a', fontWeight: 600 }}>완료</span>}
+              {pinCountdown && !pinDone[selectedProp] && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#dc2626', fontWeight: 700, animation: 'pulse 0.8s infinite' }}>처리 중...</span>}
+            </div>
+            <div style={{ padding: '14px 16px' }}>
+              {pinDone[selectedProp] ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 20 }}>🔒</span>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#15803d' }}>PIN 만료 완료</div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>도어락이 비활성화되어 재입실이 불가합니다</div>
+                  </div>
+                </div>
+              ) : pinCountdown && !pinDone[selectedProp] ? (
+                <PinExpireCountdown active={true} onDone={() => setPinCountdown(false)} />
+              ) : (
+                <div style={{ fontSize: 12, color: '#94a3b8' }}>퇴실 감지 후 5초 내 자동으로 PIN이 비활성화됩니다.</div>
+              )}
+            </div>
+          </div>
+
+          {/* ── STEP 3: 청소팀 배정 ── */}
+          <div style={{ background: '#ffffff', border: `2px solid ${currentAssign ? '#86efac' : '#e2e8f0'}`, borderRadius: 12, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: currentAssign ? '#f0fdf4' : '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <div style={{ width: 22, height: 22, borderRadius: '50%', background: currentAssign ? '#16a34a' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {currentAssign
+                  ? <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>✓</span>
+                  : <span style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8' }}>3</span>}
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 700, color: currentAssign ? '#15803d' : '#94a3b8' }}>청소팀 자동 배정</span>
+              {currentAssign && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#16a34a', fontWeight: 600 }}>배정 완료</span>}
+            </div>
+            <div style={{ padding: '14px 16px' }}>
+              {currentAssign ? (
+                <div style={{ display: 'flex', gap: 20 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fffbeb', border: '2px solid #fde68a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>🧹</div>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 15, color: '#1e293b' }}>{currentAssign.cleanerName}</div>
+                      <div style={{ fontSize: 11, color: '#64748b' }}>배정 시각: {currentAssign.assignedAt}</div>
+                    </div>
+                  </div>
+                  <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>예상 도착</div>
+                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 20, fontWeight: 800, color: '#d97706' }}>{currentAssign.estimatedArrival}</div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: '#94a3b8' }}>퇴실 감지 후 가용 청소팀 중 부하가 가장 적은 담당자가 자동 배정됩니다.</div>
+              )}
+            </div>
+          </div>
+
+          {/* ── STEP 4: 청소 체크리스트 ── */}
+          <div style={{ background: '#ffffff', border: `2px solid ${currentStatus === 'vacant' ? '#86efac' : currentItems ? '#bfdbfe' : '#e2e8f0'}`, borderRadius: 12, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: currentStatus === 'vacant' ? '#f0fdf4' : currentItems ? '#eff6ff' : '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <div style={{ width: 22, height: 22, borderRadius: '50%', background: currentStatus === 'vacant' ? '#16a34a' : currentItems ? '#2563eb' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {currentStatus === 'vacant'
+                  ? <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>✓</span>
+                  : currentItems
+                    ? <span style={{ color: '#fff', fontSize: 11, fontWeight: 800 }}>📋</span>
+                    : <span style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8' }}>4</span>}
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 700, color: currentStatus === 'vacant' ? '#15803d' : currentItems ? '#1d4ed8' : '#94a3b8' }}>청소 체크리스트</span>
+              {currentItems && currentStatus !== 'vacant' && (
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: '#2563eb', fontWeight: 600 }}>
+                  {currentItems.filter(i => i.done).length}/{currentItems.length} 완료
+                </span>
+              )}
+              {currentStatus === 'vacant' && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#16a34a', fontWeight: 600 }}>청소 완료</span>}
+            </div>
+            <div style={{ padding: '14px 16px' }}>
+              {currentItems ? (
+                <CleaningChecklist
+                  items={currentItems}
+                  onToggle={toggleChecklistItem}
+                  onFinalize={handleFinalizeClean}
+                  propStatus={currentStatus}
+                />
+              ) : (
+                <div style={{ fontSize: 12, color: '#94a3b8' }}>청소팀 배정 후 표준 체크리스트가 자동 생성됩니다.<br/>청소 완료 항목을 하나씩 체크하고, 전체 완료 시 숙소 상태가 "준비 완료"로 변경됩니다.</div>
+              )}
+            </div>
+          </div>
+
         </div>
 
         {/* 오른쪽: 알림 피드 */}
