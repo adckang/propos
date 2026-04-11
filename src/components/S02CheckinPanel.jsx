@@ -1,3 +1,7 @@
+import React, { useEffect, useRef, useState } from "react";
+
+import PROPOS_CONFIG from "../config/propos.config.json";
+
 // ============================================================
 // S02CheckinPanel.jsx — UC-002 체크인 당일 자동화 UI
 // 시나리오: 입실 감지 → IoT 씬 실행 → 게스트 채팅 오픈 → 상태 갱신
@@ -791,3 +795,5 @@ function S02CheckinPanel({ bookings: propBookings }) {
     </div>
   );
 }
+
+export default S02CheckinPanel;

@@ -1,3 +1,5 @@
+import React from "react";
+
 // ============================================================
 // S05RevenuePanel.jsx — UC-005 수익 정산 자동화 UI
 // 시나리오: 월말 자동화 → 멀티플랫폼 수집 → AI 가격 최적화 → 세금 리포트
@@ -651,3 +653,5 @@ function S05RevenuePanel({ onBack }) {
     </div>
   );
 }
+
+export default S05RevenuePanel;

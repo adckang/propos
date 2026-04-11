@@ -5,8 +5,8 @@
 // ============================================================
 
 // ── 공통 유틸 ──────────────────────────────────────────────
-const rand  = a => a[Math.floor(Math.random() * a.length)];
-const randN = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+export const rand  = a => a[Math.floor(Math.random() * a.length)];
+export const randN = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
 // ── 풀 데이터 ──────────────────────────────────────────────
 const CITIES      = ["서울 강남","서울 마포","서울 용산","서울 성동","서울 종로",
@@ -19,7 +19,7 @@ const ISSUES_POOL = ["Wi-Fi 불안정","에어컨 오류","도어락 배터리 �
 const STATUSES    = ["입실중","입실중","입실중","예약됨","예약됨","공실","청소중","점검중"];
 
 // ── 전체 숙소 목록 (CommandCenter용) ─────────────────────
-const ALL_PROPS = Array.from({length: 48}, (_, i) => {
+export const ALL_PROPS = Array.from({length: 48}, (_, i) => {
   const status = rand(STATUSES);
   const hasG   = status === "입실중" || status === "예약됨";
   return {
@@ -49,11 +49,11 @@ const ALL_PROPS = Array.from({length: 48}, (_, i) => {
 });
 
 // ── 상태 컬러 맵 (공용) ──────────────────────────────────
-const SC = {"입실중":"#059669","예약됨":"#2563eb","공실":"#94a3b8","청소중":"#d97706","점검중":"#dc2626"};
-const PC = {HIGH:"#dc2626", MED:"#d97706", OK:"#059669"};
+export const SC = {"입실중":"#059669","예약됨":"#2563eb","공실":"#94a3b8","청소중":"#d97706","점검중":"#dc2626"};
+export const PC = {HIGH:"#dc2626", MED:"#d97706", OK:"#059669"};
 
 // ── 실시간 알림 초기값 (CommandCenter용) ─────────────────
-const INIT_ALERTS = [
+export const INIT_ALERTS = [
   {id:1, type:"error", prop:"서울 강남 아파트 #007",          msg:"도어락 배터리 위험 (5%)",         time:"00:32", ack:false},
   {id:2, type:"warn",  prop:"제주 서귀포 한옥 #019",          msg:"Wi-Fi 연결 끊김 감지",             time:"01:14", ack:false},
   {id:3, type:"warn",  prop:"부산 해운대 펜트하우스 #003",     msg:"에어컨 설정 온도 미달",            time:"01:45", ack:false},
@@ -62,7 +62,7 @@ const INIT_ALERTS = [
 ];
 
 // ── 자동화 규칙 (CommandCenter > 자동화 탭) ───────────────
-const AUTO_RULES = [
+export const AUTO_RULES = [
   {id:1, name:"체크아웃 후 자동 청소 배정",     trigger:"체크아웃 감지",      action:"청소팀 알림 발송",    active:true},
   {id:2, name:"도어락 배터리 < 20% 알림",       trigger:"배터리 임계값",      action:"관리자 긴급 알림",    active:true},
   {id:3, name:"체크인 2시간 전 PIN 발급",        trigger:"체크인 D-0 13:00",  action:"게스트 자동 문자",    active:true},
@@ -72,7 +72,7 @@ const AUTO_RULES = [
 ];
 
 // ── 청소 인력 (공용) ─────────────────────────────────────
-const CLEANERS = [
+export const CLEANERS = [
   {id:1, name:"김청소", status:"가용",   assigned:0, rating:4.9, zone:"서울 강남/마포"},
   {id:2, name:"이정비", status:"작업중", assigned:2, rating:4.7, zone:"서울 용산/종로"},
   {id:3, name:"박미화", status:"가용",   assigned:0, rating:4.8, zone:"부산 전역"},
@@ -81,13 +81,13 @@ const CLEANERS = [
 ];
 
 // ── 개별 숙소 고정 데이터 (HomeAssistant용) ───────────────
-const SINGLE_PROP = {
+export const SINGLE_PROP = {
   id:      "hj-001",
   name:    "해운대 오션뷰 펜트하우스",
   address: "부산시 해운대구 해운대해변로 298, 32F",
 };
 
-const BOOKING = {
+export const BOOKING = {
   guest:          {name:"田中 花子", avatar:"🇯🇵", phone:"+81-90-1234-5678"},
   checkIn:        "2026-03-07T15:00:00",
   checkOut:       "2026-03-12T11:00:00",
@@ -99,7 +99,7 @@ const BOOKING = {
   specialRequests:"조용한 층 선호, 늦은 체크아웃 희망",
 };
 
-const DEVICES_INIT = [
+export const DEVICES_INIT = [
   {id:"lock",    label:"현관 도어락", icon:"🔒", type:"lock",    state:false, category:"security"},
   {id:"ac_l",    label:"거실 에어컨", icon:"❄️", type:"ac",      state:true,  temp:22,        category:"climate"},
   {id:"ac_b",    label:"침실 에어컨", icon:"❄️", type:"ac",      state:false, temp:24,        category:"climate"},
@@ -109,10 +109,25 @@ const DEVICES_INIT = [
   {id:"curtain", label:"전동 커튼",   icon:"🪟", type:"curtain", state:true,  open:60,        category:"comfort"},
 ];
 
-const EXPENSES = [
+export const EXPENSES = [
   {date:"03/07", desc:"객실 요금 (5박)",        amount: 1150000, type:"income"},
   {date:"03/07", desc:"청소비",                  amount:   50000, type:"income"},
   {date:"03/07", desc:"플랫폼 수수료 (Airbnb)", amount: -138000, type:"expense"},
   {date:"03/07", desc:"청소 직원 비용",          amount:  -85000, type:"expense"},
   {date:"03/07", desc:"소모품 보충",             amount:  -12000, type:"expense"},
 ];
+
+export default {
+  ALL_PROPS,
+  AUTO_RULES,
+  BOOKING,
+  CLEANERS,
+  DEVICES_INIT,
+  EXPENSES,
+  INIT_ALERTS,
+  PC,
+  SC,
+  SINGLE_PROP,
+  rand,
+  randN,
+};

@@ -1,3 +1,8 @@
+import { useEffect, useState } from "react";
+
+import { ALL_PROPS, AUTO_RULES, CLEANERS, INIT_ALERTS, PC, SC, rand, randN } from "../data/mockData";
+import Toast from "../utils/toast";
+
 // ============================================================
 // CommandCenter.jsx — 전체 숙소 지휘 센터
 // 시나리오 1~5를 기준으로 100개 숙소를 한눈에 보는 운영 화면
@@ -676,3 +681,5 @@ function CommandCenter({onBack}) {
     </div>
   );
 }
+
+export default CommandCenter;

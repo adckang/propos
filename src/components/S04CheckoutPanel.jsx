@@ -1,3 +1,7 @@
+import React from "react";
+
+import PROPOS_CONFIG from "../config/propos.config.json";
+
 // ============================================================
 // S04CheckoutPanel.jsx — UC-004 체크아웃 & 청소 자동화 UI
 // 시나리오: 퇴실 감지 → PIN 즉시 만료 → 청소팀 자동 배정 → 체크리스트
@@ -857,3 +861,5 @@ function S04CheckoutPanel({ onBack }) {
     </div>
   );
 }
+
+export default S04CheckoutPanel;

@@ -1,3 +1,7 @@
+import React from "react";
+
+import PROPOS_CONFIG from "../config/propos.config.json";
+
 // ============================================================
 // S03MonitoringPanel.jsx — UC-003 체류 중 실시간 모니터링 UI
 // 시나리오: 센서 LIVE 폴링 → 이상 감지 → AI 답장 초안 생성
@@ -829,3 +833,5 @@ function S03MonitoringPanel({ onBack }) {
     </div>
   );
 }
+
+export default S03MonitoringPanel;

@@ -1,25 +1,40 @@
 // ============================================================
 // toast.js — Toast 알림 유틸리티 (alert() 대체)
-// 보안: textContent 사용으로 XSS 완전 차단
-// 사용처: CommandCenter (배정 완료, 전송 등 피드백)
-// HTML에 필요한 요소: <div id="toast-root" class="toast-wrap"></div>
 // ============================================================
 
-window.Toast = {
-  /**
-   * @param {string} msg   - 표시할 메시지 (XSS-safe: textContent 처리)
-   * @param {string} type  - 's'(success) | 'e'(error) | 'i'(info) | 'w'(warning)
-   * @param {number} ms    - 자동 사라지는 시간 (기본 3000ms)
-   */
-  show(msg, type = 'i', ms = 3000) {
-    const el = document.createElement('div');
-    el.className  = 'toast toast-' + type;
-    el.textContent = msg;           // textContent = XSS-safe (innerHTML 절대 사용 금지)
-    document.getElementById('toast-root').appendChild(el);
-    setTimeout(() => el.remove(), ms);
+function ensureToastRoot() {
+  let root = document.getElementById("toast-root");
+  if (!root) {
+    root = document.createElement("div");
+    root.id = "toast-root";
+    root.className = "toast-wrap";
+    document.body.appendChild(root);
+  }
+  return root;
+}
+
+const Toast = {
+  show(msg, type = "i", ms = 3000) {
+    const el = document.createElement("div");
+    el.className = "toast toast-" + type;
+    el.textContent = msg;
+    ensureToastRoot().appendChild(el);
+    window.setTimeout(() => el.remove(), ms);
   },
-  success: m => Toast.show(m, 's'),
-  error:   m => Toast.show(m, 'e'),
-  info:    m => Toast.show(m, 'i'),
-  warn:    m => Toast.show(m, 'w'),
+  success(msg) {
+    Toast.show(msg, "s");
+  },
+  error(msg) {
+    Toast.show(msg, "e");
+  },
+  info(msg) {
+    Toast.show(msg, "i");
+  },
+  warn(msg) {
+    Toast.show(msg, "w");
+  },
 };
+
+window.Toast = Toast;
+
+export default Toast;

@@ -1,3 +1,7 @@
+import React, { useEffect, useRef, useState } from "react";
+
+import { BOOKING, CLEANERS, DEVICES_INIT, EXPENSES, SINGLE_PROP } from "../data/mockData";
+
 // ============================================================
 // HomeAssistant.jsx — 개별 숙소 어시스턴트
 // 시나리오 1~5를 한 축으로 재구성한 운영 화면
@@ -374,3 +378,5 @@ function HomeAssistant({onBack}) {
     </div>
   );
 }
+
+export default HomeAssistant;

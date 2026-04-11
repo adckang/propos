@@ -1,3 +1,8 @@
+import React, { useCallback, useEffect, useRef, useState } from "react";
+
+import PROPOS_CONFIG from "../config/propos.config.json";
+import Toast from "../utils/toast";
+
 // ============================================================
 // D1AutomationPanel.jsx — UC-001 체크인 전날 자동화 UI
 // ============================================================
@@ -922,3 +927,5 @@ function D1AutomationPanel({ onBack }) {
     </div>
   );
 }
+
+export default D1AutomationPanel;

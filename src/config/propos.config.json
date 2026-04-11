@@ -1,0 +1,58 @@
+{
+  "ha": {
+    "baseUrl": "http://192.168.45.76:8123",
+    "wsUrl": "ws://192.168.45.76:8123/api/websocket",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw"
+  },
+  "entities": {
+    "tvLight": "light.rgbcct_8002",
+    "tvPlug": "switch.tv_smart_plug_socket_1",
+    "tempSensor": "sensor.temperature_humidity_sensor_temperature",
+    "humiditySensor": "sensor.temperature_humidity_sensor_humidity",
+    "noiseSensor": null,
+    "powerSensor": null
+  },
+  "sensorThresholds": {
+    "temp": { "warn": 30, "critical": 35 },
+    "humidity": { "warn": 80, "critical": 90 },
+    "noise": { "warn": 60, "critical": 75 },
+    "power": { "warn": 3000, "critical": 5000 }
+  },
+  "defaultProps": [
+    {
+      "propId": "P-042",
+      "propName": "해운대 오션뷰 펜트하우스",
+      "icalUrl": "",
+      "checkInTime": "15:00:00",
+      "checkOutTime": "11:00:00",
+      "wifi": { "ssid": "ProposGuest_5G", "pw": "1234567890" }
+    },
+    {
+      "propId": "P-007",
+      "propName": "강남 럭셔리 스위트",
+      "icalUrl": "",
+      "checkInTime": "14:00:00",
+      "checkOutTime": "11:00:00",
+      "wifi": { "ssid": "ProposGuest_7", "pw": "abcde12345" }
+    },
+    {
+      "propId": "P-015",
+      "propName": "제주 한옥 스테이",
+      "icalUrl": "",
+      "checkInTime": "16:00:00",
+      "checkOutTime": "11:00:00",
+      "wifi": { "ssid": "JejuGuest_2G", "pw": "jeju5678" }
+    },
+    {
+      "propId": "P-031",
+      "propName": "마포 모던 스튜디오",
+      "icalUrl": "",
+      "checkInTime": "15:00:00",
+      "checkOutTime": "11:00:00",
+      "wifi": { "ssid": "ProposGuest_3G", "pw": "mapo9999" }
+    }
+  ],
+  "polling": {
+    "sensorIntervalSec": 30
+  }
+}

@@ -15,9 +15,25 @@
 }
 
 /* ── BASE ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{height:100%;overflow:hidden}
+body{background:#f0f4f8}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:#f0f4f8}
+::-webkit-scrollbar-thumb{background:#c8d5e0;border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:#a0b4c0}
 .app{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.6;transform:scale(1.3)}}
 @keyframes slideIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes tIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+
+/* ── TOAST ── */
+.toast-wrap{position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{padding:12px 18px;border-radius:10px;font-family:"DM Sans",sans-serif;font-size:13px;font-weight:600;border-left:4px solid;max-width:340px;pointer-events:auto;animation:tIn .25s ease;box-shadow:0 4px 24px rgba(0,0,0,.12)}
+.toast-s{background:#fff;border-color:#10b981;color:#065f46}
+.toast-e{background:#fff;border-color:#ef4444;color:#991b1b}
+.toast-i{background:#fff;border-color:#3b82f6;color:#1e40af}
+.toast-w{background:#fff;border-color:#f59e0b;color:#92400e}
 
 /* ── LANDING ── */
 .landing{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(160deg,#f0f7ff 0%,#f8fafc 50%,#f0fdf6 100%);padding:32px 20px;overflow:auto}
