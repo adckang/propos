@@ -6,9 +6,9 @@
 ---
 
 ## 현재 상태
-- **버전**: v0.8 (UC-005 완성 + TDD 342개 통과)
+- **버전**: v0.9 (Config 중앙화 + 미구현 항목 분석)
 - **배포**: Netlify Drop (dist/index.html)
-- **업데이트**: 2026-04-04
+- **업데이트**: 2026-04-10
 
 ## 완료된 마일스톤
 
@@ -100,26 +100,71 @@
 ## 진행 중
 없음
 
+---
+
+## ✅ M9: Config 중앙화 (2026-04-10)
+- `src/config/propos.config.js` 신규 생성 — 전체 설정 단일 파일 관리
+- `src/infrastructure/haClient.js` → config require로 변경 (IP/토큰/entity 하드코딩 제거)
+- `src/infrastructure/haWebSocket.js` → config require로 변경
+- `src/components/{D1,S02,S03,S04}Panel.jsx` → `PROPOS_CONFIG` 전역 참조로 변경
+- `dist/index.html`:
+  - PROPOS_CONFIG 설정 블록 신규 추가 (파일 최상단 `<script>` 섹션)
+  - IP/토큰/entity ID → 모두 PROPOS_CONFIG 단일 블록으로 통합
+  - S02 WebSocket 중복 하드코딩 제거
+  - S03 센서 임계값 → PROPOS_CONFIG.sensorThresholds 참조
+  - S03 센서 entity ID → PROPOS_CONFIG.entities 참조 (null이면 스킵)
+  - haClient.getSensorStates → noise/power 센서 추가 시 자동 반영 구조
+
+---
+
+## 미구현 항목 — 구현 불가 / 조건부 구현 가능
+
+### ❌ 구현 불가 (외부 의존성 없음)
+
+| UC | 항목 | 이유 | 사용자가 해줘야 할 것 |
+|----|------|------|----------------------|
+| UC-003 | 소음(noise) 센서 | HA에 연결된 소음 센서 없음 | 소음 센서 구매 후 HA 연동 → `PROPOS_CONFIG.entities.noiseSensor` 입력 |
+| UC-003 | 전력(power) 센서 | HA에 연결된 전력 측정기 없음 | 스마트 플러그(전력 측정 지원) 연동 후 entity 입력 |
+| UC-001 | 도어락 실제 제어 | 스마트 도어락 HA 연동 없음 | Z-Wave/Zigbee 도어락 구매 → HA에서 `lock.*` entity 생성 |
+| UC-002 | Airbnb 메시지 채널 | Airbnb API 미공개 (호스트 전용 API 없음) | 해결책 없음 (현재 HA persistent_notification 대체) |
+| UC-005 | Airbnb 수익 API | Airbnb 공개 API 없음 | 해결책 없음 (현재 iCal으로 예약 수만 파악 가능) |
+| UC-005 | 야놀자 수익 API | 야놀자 파트너 API는 기업 계약 필요 | 야놀자 파트너센터 API 계약 후 endpoint 연동 |
+
+### 🔜 구현 가능 (사용자 준비 완료 시 즉시 구현)
+
+| UC | 항목 | 필요한 것 | 예상 작업 |
+|----|------|----------|----------|
+| UC-001 | iCal 실예약 데이터 | Airbnb 숙소 → 예약 캘린더 → iCal URL 복사 | 설정 탭에 URL 붙여넣기 (이미 UI 있음) |
+| UC-003 | 소음/전력 센서 추가 | HA entity_id 알려주기 | `PROPOS_CONFIG.entities.noiseSensor` 입력만으로 자동 반영 |
+| UC-001 | 도어락 실제 PIN 등록 | HA `lock.*` entity 생성 | haClient.setLockCode() 이미 구현됨, entity만 연결하면 동작 |
+| ALL | HA CORS 설정 | HA configuration.yaml 수정 | HA 외부(Netlify)에서 API 호출 허용 필요 |
+| UC-003/005 | AI 답장/가격 최적화 | Claude API key 제공 | API key 있으면 즉시 구현 가능 |
+
+### HA CORS 설정 (필수 — Netlify 배포 시 HA 연동에 필요)
+```yaml
+# HA configuration.yaml에 추가
+http:
+  cors_allowed_origins:
+    - https://your-netlify-url.netlify.app
+    - http://localhost:8080
+```
+
+---
+
 ## 다음 작업 (우선순위 순)
 
-### 🔜 HA CORS 설정 (사용자 직접)
-- HA configuration.yaml에 추가 필요:
-  ```yaml
-  http:
-    cors_allowed_origins:
-      - http://localhost:8080
-  ```
-- 설정 후 HA 재시작 → HA 연동 모드 테스트
+### 🔜 M10: HA CORS 설정 (사용자 직접)
+- HA configuration.yaml 수정 후 HA 재시작
+- Netlify URL 또는 Vercel URL 추가
 
-### 🔜 M5: 프로덕션 전환
+### 🔜 M11: 프로덕션 전환
 - [ ] Vercel 배포 + 도메인 설정
-- [ ] 환경변수로 HA 주소/토큰 관리
-- [ ] 실제 숙소 데이터 연결 (목업 → 실제)
+- [ ] HA 토큰 갱신 주기 관리 (현재 만료일: 2036년경)
+- [ ] 실제 숙소 iCal URL 연결 (현재 전부 목업)
 
-### 🔜 M6: AI 기능
-- [ ] 게스트 메시지 AI 번역 (다국어)
-- [ ] AI 답장 초안 생성
-- [ ] AI 가격 최적화 실제 구현
+### 🔜 M12: AI 기능 (Claude API key 있을 때)
+- [ ] UC-003 게스트 메시지 AI 답장 (Claude API)
+- [ ] UC-005 AI 가격 최적화 실제 구현 (Claude API)
 
 ---
 
