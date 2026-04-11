@@ -1,3 +1,5 @@
 .DS_Store
 *.rtf
 node_modules/
+playwright-report/
+test-results/

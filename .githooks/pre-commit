@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+echo "[pre-commit] Regenerating dist from src..."
+npm run sync:dist

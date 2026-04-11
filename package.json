@@ -5,13 +5,18 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test tests/unit/*.test.js tests/functional/*.test.js"
+    "test": "node --test tests/unit/*.test.js tests/functional/*.test.js",
+    "sync:dist": "node scripts/sync-dist.mjs",
+    "verify:dist": "node scripts/verify-dist-sync.mjs",
+    "test:smoke": "playwright test",
+    "prepare": "node scripts/setup-git-hooks.mjs"
   },
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.54.2",
     "@vitejs/plugin-react": "^4.3.3",
     "vite": "^5.4.10"
   }
