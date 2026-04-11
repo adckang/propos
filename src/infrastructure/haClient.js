@@ -3,15 +3,17 @@
 // ============================================================
 // haClient.js — Home Assistant REST API 클라이언트
 // 대상: homeassistant.local:8123 (Tailscale VPN or 로컬)
+// 설정 변경: src/config/propos.config.js 참고
 // ============================================================
 
-const HA_BASE  = 'http://192.168.45.76:8123';
-const HA_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw';
+const CFG      = require('../config/propos.config');
+const HA_BASE  = CFG.ha.baseUrl;
+const HA_TOKEN = CFG.ha.token;
 
-// TV방 entity ID 매핑
+// entity ID 매핑
 const TV_ROOM = {
-  light  : 'light.rgbcct_8002',
-  tv     : 'switch.tv_smart_plug_socket_1',
+  light : CFG.entities.tvLight,
+  tv    : CFG.entities.tvPlug,
 };
 
 async function _post(path, data) {
@@ -78,11 +80,12 @@ async function sendMessage(guestId, text) {
   });
 }
 
-// ── 센서 엔티티 매핑 (TV방 실제 센서) ─────────────────────────
+// ── 센서 엔티티 매핑 (propos.config.js에서 읽음) ─────────────
 const SENSOR_ENTITIES = {
-  temperature: 'sensor.temperature_humidity_sensor_temperature',
-  humidity:    'sensor.temperature_humidity_sensor_humidity',
-  // noise/power: 미연동 (센서 없음)
+  temperature: CFG.entities.tempSensor,
+  humidity:    CFG.entities.humiditySensor,
+  noise:       CFG.entities.noiseSensor,   // null이면 조회 스킵
+  power:       CFG.entities.powerSensor,   // null이면 조회 스킵
 };
 
 /**
@@ -115,13 +118,18 @@ async function _getState(entityId, fetchImpl) {
  * @returns {Promise<SensorReading>}
  */
 async function getSensorStates(propId, fetchImpl) {
-  const [temp, humidity] = await Promise.all([
-    _getState(SENSOR_ENTITIES.temperature, fetchImpl),
-    _getState(SENSOR_ENTITIES.humidity,    fetchImpl),
+  // entity가 null이면 null 반환 (하드웨어 없음)
+  const getOrNull = (entityId) => entityId ? _getState(entityId, fetchImpl) : Promise.resolve(null);
+
+  const [temp, humidity, noise, power] = await Promise.all([
+    getOrNull(SENSOR_ENTITIES.temperature),
+    getOrNull(SENSOR_ENTITIES.humidity),
+    getOrNull(SENSOR_ENTITIES.noise),
+    getOrNull(SENSOR_ENTITIES.power),
   ]);
   const now = new Date();
   const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-  return { propId, time: hhmm, temp, humidity, noise: null, power: null };
+  return { propId, time: hhmm, temp, humidity, noise, power };
 }
 
 module.exports = { setLockCode, activateScene, sendMessage, getSensorStates, HA_BASE, HA_TOKEN, TV_ROOM };

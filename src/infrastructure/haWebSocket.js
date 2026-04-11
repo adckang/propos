@@ -5,10 +5,12 @@
 // HA WebSocket API: ws://IP:8123/api/websocket
 //
 // 브라우저 환경에서 실행. node:test 시 WebSocketImpl 주입으로 테스트.
+// 설정 변경: src/config/propos.config.js 참고
 // ============================================================
 
-const HA_WS_URL = 'ws://192.168.45.76:8123/api/websocket';
-const HA_TOKEN  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw';
+const CFG       = require('../config/propos.config');
+const HA_WS_URL = CFG.ha.wsUrl;
+const HA_TOKEN  = CFG.ha.token;
 
 const MAX_RECONNECT = 5;
 

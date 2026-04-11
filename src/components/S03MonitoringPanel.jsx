@@ -6,6 +6,10 @@
 // ── 도메인 함수 (인라인) ─────────────────────────────────────
 const _s03 = (() => {
   function getDefaultThresholds() {
+    // PROPOS_CONFIG가 있으면 설정값 사용, 없으면 내장 기본값
+    if (typeof PROPOS_CONFIG !== 'undefined' && PROPOS_CONFIG.sensorThresholds) {
+      return PROPOS_CONFIG.sensorThresholds;
+    }
     return {
       temp:     { warn: 30, critical: 35 },
       humidity: { warn: 80, critical: 90 },
@@ -93,32 +97,37 @@ function makeMockSensorInfra() {
 // [R2] getDefaultThresholds() 반환값은 상수 — 렌더마다 재생성 방지
 const _DEFAULT_THRESHOLDS = _s03.getDefaultThresholds();
 
-// ── Real HA Infrastructure — haClient.getSensorStates 위임 ───
-// haClient.js에 온도+습도 동시 조회 구현 완료 (temperature + humidity entity)
-// 브라우저 환경에서는 window._haClientS03 또는 전역 haClient 참조
-// 단일 HTML 번들에서 haClient.js 내용이 전역 스코프에 포함되면 직접 사용 가능
+// ── Real HA Infrastructure — PROPOS_CONFIG 기반 ──────────────
+// PROPOS_CONFIG: dist/index.html 상단에 정의된 전역 설정 객체
+// 새 센서 추가 시: propos.config.js의 entities.noiseSensor 등을 채우면 자동 반영
 const _haS03 = {
   async getSensorStates(propId) {
-    const HA_BASE  = 'http://192.168.45.76:8123';
-    const HA_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw';
+    const cfg    = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG : { ha:{baseUrl:'',token:''}, entities:{} };
+    const BASE   = cfg.ha.baseUrl;
+    const TOKEN  = cfg.ha.token;
+    const ENTS   = cfg.entities || {};
 
     async function getState(entityId) {
+      if (!entityId || !BASE) return null;
       try {
-        const res = await fetch(`${HA_BASE}/api/states/${entityId}`, {
-          headers: { 'Authorization': `Bearer ${HA_TOKEN}` },
+        const res = await fetch(`${BASE}/api/states/${entityId}`, {
+          headers: { 'Authorization': `Bearer ${TOKEN}` },
         });
         if (!res.ok) return null;
         const data = await res.json();
+        if (data.state === 'unavailable' || data.state === 'unknown') return null;
         const v = parseFloat(data.state);
         return isNaN(v) ? null : v;
       } catch (_) { return null; }
     }
 
-    const [temp, humidity] = await Promise.all([
-      getState('sensor.temperature_humidity_sensor_temperature'),
-      getState('sensor.temperature_humidity_sensor_humidity'),
+    const [temp, humidity, noise, power] = await Promise.all([
+      getState(ENTS.tempSensor),
+      getState(ENTS.humiditySensor),
+      getState(ENTS.noiseSensor),   // null이면 getState 내부에서 즉시 null 반환
+      getState(ENTS.powerSensor),
     ]);
-    return { propId, time: _s03.hhmm(), temp, humidity, noise: null, power: null };
+    return { propId, time: _s03.hhmm(), temp, humidity, noise, power };
   },
 };
 

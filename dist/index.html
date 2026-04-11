@@ -58,14 +58,49 @@ window.Toast = {
   warn:    m => Toast.show(m,'w'),
 };
 </script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     PROPOS_CONFIG — 여기서만 설정 변경하면 전체 UC에 반영됩니다.
+     새 토큰 발급: HA → 프로필 → 장기 액세스 토큰
+     새 센서 추가: entities.noiseSensor / entities.powerSensor 채우기
+     ═══════════════════════════════════════════════════════════ -->
+<script>
+window.PROPOS_CONFIG = {
+  ha: {
+    baseUrl : 'http://192.168.45.76:8123',
+    wsUrl   : 'ws://192.168.45.76:8123/api/websocket',
+    token   : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw',
+  },
+  entities: {
+    tvLight        : 'light.rgbcct_8002',
+    tvPlug         : 'switch.tv_smart_plug_socket_1',
+    tempSensor     : 'sensor.temperature_humidity_sensor_temperature',
+    humiditySensor : 'sensor.temperature_humidity_sensor_humidity',
+    noiseSensor    : null,  // 소음 센서 없음 — entity_id 추가 시 여기에 입력
+    powerSensor    : null,  // 전력 센서 없음 — entity_id 추가 시 여기에 입력
+  },
+  sensorThresholds: {
+    temp:     { warn: 30, critical: 35 },
+    humidity: { warn: 80, critical: 90 },
+    noise:    { warn: 60, critical: 75 },
+    power:    { warn: 3000, critical: 5000 },
+  },
+  polling: {
+    sensorIntervalSec: 30,
+  },
+};
+</script>
+
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
+const PROPOS_CONFIG = window.PROPOS_CONFIG;
 
 // ═══════════════════════════════════════════════════
-// HA 설정 (공통) — 프로덕션 전환 시 환경변수로 이동
+// HA 설정 — PROPOS_CONFIG에서 읽음 (위 <script> 블록 참조)
 // ═══════════════════════════════════════════════════
-const _HA_BASE  = 'http://192.168.45.76:8123';
-const _HA_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw';
+const _HA_BASE  = PROPOS_CONFIG.ha.baseUrl;
+const _HA_TOKEN = PROPOS_CONFIG.ha.token;
+const _HA_WS    = PROPOS_CONFIG.ha.wsUrl;
 
 // ═══════════════════════════════════════════════════
 // DATA
@@ -224,14 +259,15 @@ const GLOBAL_CSS = `
 
 /* ── HA ── */
 .ha-root{font-family:'DM Sans',sans-serif;background:#f0f4f8;color:#1e293b;flex:1;display:flex;flex-direction:column;overflow:hidden}
-.ha-topbar{background:#ffffff;padding:16px 24px 0;flex-shrink:0;border-bottom:1px solid #e2e8f0}
-.ha-tabs{display:flex;gap:0;margin-top:14px}
+.ha-topbar{background:#ffffff;padding:14px 24px 0;flex-shrink:0;border-bottom:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
+.ha-tabs{display:flex;gap:0;margin-top:12px}
 .ha-tab{padding:10px 18px;font-size:12px;font-weight:600;cursor:pointer;color:#64748b;border-bottom:2.5px solid transparent;margin-bottom:-1px;transition:all 0.2s;white-space:nowrap}
 .ha-tab.active{color:#2563eb;border-bottom-color:#2563eb}
 .ha-tab:hover:not(.active){color:#475569}
 .ha-content{flex:1;overflow:auto;padding:20px 24px}
 .ha-card{background:#ffffff;border:1.5px solid #e2e8f0;border-radius:12px;padding:18px;margin-bottom:14px}
-.ha-label{font-size:11px;font-weight:700;letter-spacing:0.06em;color:#475569;text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1.5px solid #e2e8f0}
+.ha-label{font-size:11px;font-weight:700;letter-spacing:0.06em;color:#475569;text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1.5px solid #e2e8f0;display:flex;align-items:center;gap:6px}
+.ha-label::before{content:'';display:inline-block;width:3px;height:12px;background:#2563eb;border-radius:2px;flex-shrink:0}
 .ha-drow{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)}
 .ha-key{font-size:12px;color:var(--text2)}
 .ha-val{font-family:'DM Mono',monospace;font-size:12px;color:var(--text);font-weight:500}
@@ -247,10 +283,11 @@ const GLOBAL_CSS = `
 
 /* ── CC ── */
 .cc-body{display:flex;flex:1;overflow:hidden}
-.cc-sidenav{width:58px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:4px;flex-shrink:0;box-shadow:var(--shadow)}
-.cc-nav-ic{width:42px;height:42px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;transition:all 0.15s;color:var(--text4);border:1.5px solid transparent}
+.cc-sidenav{width:70px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:2px;flex-shrink:0;box-shadow:var(--shadow)}
+.cc-nav-ic{width:58px;border-radius:var(--radius-sm);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 4px;gap:3px;font-size:18px;cursor:pointer;transition:all 0.15s;color:var(--text4);border:1.5px solid transparent}
 .cc-nav-ic.active{background:var(--blue-l);border-color:var(--blue-m);color:var(--blue)}
 .cc-nav-ic:hover:not(.active){color:var(--text2);background:var(--surface2)}
+.cc-nav-label{font-size:9px;font-weight:700;letter-spacing:0.3px;text-transform:uppercase;line-height:1}
 .cc-main{flex:1;display:flex;overflow:hidden}
 .prop-panel{flex:1;display:flex;flex-direction:column;overflow:hidden}
 .toolbar{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface);flex-shrink:0}
@@ -304,7 +341,46 @@ const GLOBAL_CSS = `
 .rev-bar{flex:1;height:6px;background:var(--border);border-radius:3px}
 .rev-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--blue),var(--green))}
 .no-sel{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text4);font-size:13px;gap:10px}
+
+/* ── PIPELINE (CC 5단계 파이프라인) ── */
+.pipeline-wrap{display:flex;gap:8px;padding:12px 16px;background:#f8fafc;border-bottom:1.5px solid var(--border);overflow-x:auto;flex-shrink:0}
+.pipeline-card{min-width:120px;flex:1;padding:12px 14px;border-radius:var(--radius);border:1.5px solid;cursor:pointer;transition:all 0.18s;background:var(--surface);position:relative}
+.pipeline-card.active{box-shadow:var(--shadow-md);transform:translateY(-1px)}
+.pipeline-card:hover:not(.active){transform:translateY(-1px);box-shadow:var(--shadow)}
+.pipeline-count{font-family:'DM Mono',monospace;font-size:22px;font-weight:800;line-height:1;margin:4px 0}
+.pipeline-label{font-size:11px;font-weight:700;white-space:nowrap}
+.pipeline-sub{font-size:10px;margin-top:3px;font-weight:500;white-space:nowrap}
+.pipeline-urgent{position:absolute;top:8px;right:8px;font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+
+/* ── STAGE ACTION BAR ── */
+.stage-bar{padding:10px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.stage-bar-desc{font-size:12px;color:var(--text2);flex:1;line-height:1.5}
+.stage-action-btn{padding:7px 16px;border-radius:var(--radius-sm);border:1.5px solid;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;white-space:nowrap;transition:all 0.15s}
+
+/* ── STAGE-SPECIFIC PCARD KPI ── */
+.pcard-kpi{display:flex;gap:8px;margin-top:9px;padding-top:9px;border-top:1px solid #f0f4f8;flex-wrap:wrap}
+.pcard-kpi-item{display:flex;align-items:center;gap:3px;font-size:10px;font-family:'DM Mono',monospace}
+
+/* ── HA TIMELINE STEPPER ── */
+.ha-timeline{display:flex;align-items:flex-start;padding:14px 24px;background:#fff;border-bottom:1px solid #e2e8f0;overflow-x:auto}
+.ha-step{display:flex;flex-direction:column;align-items:center;flex:1;min-width:80px;cursor:pointer;transition:opacity 0.15s}
+.ha-step:hover{opacity:0.8}
+.ha-step-dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;transition:all 0.2s}
+.ha-step-line{flex:1;height:2px;margin:0 4px;margin-top:-16px;align-self:center;flex-shrink:0;min-width:20px}
+.ha-step-label{font-size:11px;font-weight:700;margin-top:5px;white-space:nowrap;text-align:center}
+.ha-step-sub{font-size:9px;margin-top:1px;white-space:nowrap;text-align:center;color:#94a3b8}
+
+/* ── HA STAGE CONTENT ── */
+.ha-stage-header{display:flex;align-items:center;gap:8px;padding:14px 0 10px;border-bottom:1.5px solid #e2e8f0;margin-bottom:16px}
+.ha-stage-icon{font-size:20px}
+.ha-stage-title{font-size:15px;font-weight:800;color:#1e293b}
+.ha-stage-sub{font-size:12px;color:#64748b;margin-top:1px}
+
+/* ── HA QUICK CONTROLS (bottom strip) ── */
+.ha-quick-strip{background:#fff;border-top:1.5px solid #e2e8f0;padding:12px 24px;flex-shrink:0;display:flex;gap:12px;align-items:center}
+.ha-quick-label{font-size:10px;font-weight:700;letter-spacing:0.06em;color:#94a3b8;text-transform:uppercase;flex-shrink:0}
 `;
+
 
 // ═══════════════════════════════════════════════════
 // HOME ASSISTANT
@@ -345,118 +421,126 @@ function HomeAssistant({onBack}) {
     setMsgIn("");
   };
 
-  const TABS = [["overview","현황"],["checkinout","체크인/아웃"],["devices","스마트홈"],["messages","메시지"],["cleaning","청소·정비"],["revenue","수익"]];
+  // 5단계 시나리오 타임라인
+  const HA_STAGES = [
+    {id:"d1",     emoji:"📅", label:"D-1 자동화",  sub:"내일 체크인",  color:"#2563eb", done:true,  active:false},
+    {id:"checkin",emoji:"🏠", label:"체크인",       sub:"입실 완료",    color:"#059669", done:true,  active:false},
+    {id:"stay",   emoji:"📡", label:"체류 중",      sub:"센서 모니터링",color:"#7c3aed", done:false, active:true},
+    {id:"checkout",emoji:"🚪",label:"퇴실·청소",    sub:"체크아웃 예정",color:"#d97706", done:false, active:false},
+    {id:"revenue",emoji:"💰", label:"정산",         sub:"이달 정산",    color:"#0891b2", done:false, active:false},
+  ];
+  const [haStage, setHaStage] = useState("stay");
+  const curHaStage = HA_STAGES.find(s=>s.id===haStage)||HA_STAGES[2];
 
   return (
     <div className="ha-root">
       <div className="ha-topbar">
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          {onBack&&<button onClick={onBack} style={{background:"none",border:"1px solid #e2e8f0",borderRadius:6,padding:"5px 12px",fontSize:12,color:"#64748b",cursor:"pointer",fontWeight:600,flexShrink:0}}>← 홈</button>}
-          {onBack&&<div style={{width:1,height:22,background:"#e2e8f0",flexShrink:0}}/>}
-          <span style={{fontSize:24,flexShrink:0}}>{SINGLE_PROP.emoji||"🏠"}</span>
+        <div style={{display:"flex",alignItems:"center",gap:14}}>
+          {onBack&&<button onClick={onBack} style={{padding:"6px 16px",borderRadius:8,border:"1.5px solid #e2e8f0",background:"#f8fafc",color:"#475569",fontSize:13,fontWeight:600,cursor:"pointer",flexShrink:0,fontFamily:"'DM Sans',sans-serif"}}>← 뒤로</button>}
+          {onBack&&<div style={{width:1,height:24,background:"#e2e8f0",flexShrink:0}}/>}
+          <span style={{fontSize:22,flexShrink:0}}>{SINGLE_PROP.emoji||"🏠"}</span>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:800,fontSize:18,color:"#1e293b",lineHeight:1.2}}>{SINGLE_PROP.name}</div>
+            <div style={{fontWeight:800,fontSize:17,color:"#1e293b",lineHeight:1.2}}>{SINGLE_PROP.name}</div>
             <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{SINGLE_PROP.address}</div>
           </div>
-          <div style={{textAlign:"right",flexShrink:0}}>
-            <div style={{fontFamily:"'DM Mono',monospace",fontSize:20,color:"#2563eb",fontWeight:700}}>{now.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</div>
-            <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{now.toLocaleDateString("ko-KR",{month:"long",day:"numeric",weekday:"short"})}</div>
+          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+            <span style={{background:"#ecfdf5",color:"#059669",border:"1px solid #a7f3d0",fontSize:11,padding:"4px 12px",borderRadius:20,fontWeight:700,whiteSpace:"nowrap"}}>● 입실 중</span>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontFamily:"'DM Mono',monospace",fontSize:18,color:"#2563eb",fontWeight:700}}>{now.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</div>
+              <div style={{fontSize:10,color:"#94a3b8",marginTop:1}}>{now.toLocaleDateString("ko-KR",{month:"long",day:"numeric",weekday:"short"})}</div>
+            </div>
           </div>
         </div>
-        <div className="ha-tabs">{TABS.map(([id,l])=><div key={id} className={`ha-tab${tab===id?" active":""}`} onClick={()=>setTab(id)}>{l}</div>)}</div>
+      </div>
+      {/* 5단계 시나리오 타임라인 스테퍼 */}
+      <div className="ha-timeline">
+        {HA_STAGES.map((s,i)=>(
+          <React.Fragment key={s.id}>
+            <div className="ha-step" onClick={()=>setHaStage(s.id)} style={{opacity: !s.done && !s.active && haStage!==s.id ? 0.45 : 1}}>
+              <div className="ha-step-dot"
+                style={{
+                  background: s.id===haStage ? s.color : s.done ? "#e2e8f0" : "#f1f5f9",
+                  color: s.id===haStage ? "#fff" : s.done ? "#64748b" : "#94a3b8",
+                  border: s.active && s.id!==haStage ? `2px solid ${s.color}` : "2px solid transparent",
+                  boxShadow: s.id===haStage ? `0 0 0 3px ${s.color}33` : "none",
+                }}>
+                {s.done && s.id!==haStage ? "✓" : s.emoji}
+              </div>
+              <div className="ha-step-label" style={{color: s.id===haStage ? s.color : s.done ? "#475569" : "#94a3b8", fontWeight: s.id===haStage ? 800 : 600}}>{s.label}</div>
+              <div className="ha-step-sub">{s.sub}</div>
+            </div>
+            {i<HA_STAGES.length-1 && (
+              <div className="ha-step-line" style={{background: s.done ? "#059669" : "#e2e8f0"}} />
+            )}
+          </React.Fragment>
+        ))}
       </div>
 
       <div className="ha-content">
-        {tab==="overview" && <>
+        {/* 단계 헤더 */}
+        <div className="ha-stage-header">
+          <span style={{fontSize:20}}>{curHaStage.emoji}</span>
+          <div style={{fontSize:15,fontWeight:800,color:curHaStage.color}}>{curHaStage.label}</div>
+          <div style={{fontSize:12,color:"#94a3b8",fontWeight:500}}>— {curHaStage.sub}</div>
+        </div>
+
+        {/* UC-001: D-1 자동화 */}
+        {haStage==="d1" && <>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"14px",marginBottom:"14px"}}>
+            <div className="ha-card" style={{borderTop:`3px solid #2563eb`}}>
+              <div className="ha-label">도어락 PIN 발급</div>
+              <div style={{fontFamily:"'DM Mono',monospace",fontSize:"32px",fontWeight:"700",color:"#2563eb",letterSpacing:"8px"}}>4821</div>
+              <div style={{fontSize:"11px",color:"#059669",marginTop:"6px",fontWeight:"600"}}>✓ 발급 완료 · 체크인 1시간 전부터 유효</div>
+            </div>
+            <div className="ha-card" style={{borderTop:`3px solid #059669`}}>
+              <div className="ha-label">웰컴 메시지</div>
+              <div style={{fontSize:"12px",color:"#4a5568",lineHeight:"1.6",marginTop:"4px"}}>{BOOKING.guest.name}님, 내일 체크인을 환영합니다! PIN: 4821</div>
+              <span style={{display:"inline-block",marginTop:"10px",background:"#ecfdf5",color:"#059669",border:"1px solid #a7f3d0",fontSize:"11px",padding:"3px 10px",borderRadius:"20px",fontWeight:"700"}}>✓ 발송 완료</span>
+            </div>
+          </div>
           <div className="ha-card">
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div style={{display:"flex",alignItems:"center",gap:"14px"}}>
-                <div style={{width:"48px",height:"48px",borderRadius:"50%",background:"#eff6ff",border:"2px solid #bfdbfe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px"}}>{BOOKING.guest.avatar}</div>
-                <div>
-                  <div style={{fontSize:"16px",fontWeight:"700",color:"#1a202c"}}>{BOOKING.guest.name}</div>
-                  <div style={{fontSize:"12px",color:"#718096",marginTop:"2px"}}>{BOOKING.guests}명 · {BOOKING.nights}박 · {BOOKING.platform}</div>
-                </div>
-              </div>
-              <span style={{background:"#ecfdf5",color:"#059669",border:"1px solid #a7f3d0",fontSize:"11px",padding:"4px 12px",borderRadius:"20px",fontWeight:"700"}}>● 입실 중</span>
-            </div>
-            <div style={{marginTop:"16px"}}>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:"11px",color:"#a0aec0",marginBottom:"6px"}}>
-                <span>체크인 03/07 15:00</span>
-                <span style={{color:"#2563eb",fontWeight:"600"}}>{prog.toFixed(0)}% 경과</span>
-                <span>체크아웃 03/12 11:00</span>
-              </div>
-              <div className="progress-bar"><div className="progress-fill" style={{width:`${prog}%`}} /></div>
-            </div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"14px"}}>
-            <div className="ha-card">
-              <div className="ha-label">체크아웃까지</div>
-              <div style={{display:"flex",justifyContent:"space-around"}}>
-                {[[cd.days,"일"],[cd.hours,"시"],[cd.mins,"분"],[cd.secs,"초"]].map(([n,u],i)=>(
-                  <div key={u} style={{display:"flex",alignItems:"center"}}>
-                    <div style={{textAlign:"center"}}>
-                      <div style={{fontFamily:"'DM Mono',monospace",fontSize:"26px",fontWeight:"700",color:"#2563eb"}}>{String(n).padStart(2,"0")}</div>
-                      <div style={{fontSize:"10px",color:"#a0aec0",marginTop:"2px"}}>{u}</div>
-                    </div>
-                    {i<3 && <span style={{color:"#e2e8f0",margin:"0 4px",paddingBottom:"12px",fontSize:"20px"}}>:</span>}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="ha-card">
-              <div className="ha-label">특이사항</div>
-              <div style={{fontSize:"13px",color:"#4a5568",lineHeight:"1.7"}}>{BOOKING.specialRequests}</div>
-            </div>
-          </div>
-          <div className="ha-card" style={{marginTop:"14px"}}>
-            <div className="ha-label">스마트홈 빠른 제어</div>
-            <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-              {devs.map(d=>(
-                <div key={d.id} onClick={()=>toggleDev(d.id)} style={{display:"flex",alignItems:"center",gap:"6px",padding:"7px 14px",borderRadius:"20px",background:d.state?"#eff6ff":"#f7f9fc",border:`1.5px solid ${d.state?"#bfdbfe":"#e2e8f0"}`,cursor:"pointer",transition:"all 0.15s"}}>
-                  <span style={{fontSize:"14px"}}>{d.icon}</span>
-                  <span style={{fontSize:"12px",fontWeight:"600",color:d.state?"#2563eb":"#718096"}}>{d.label}</span>
+            <div className="ha-label">스마트홈 초기화</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"10px"}}>
+              {[["🌡 에어컨","24°C 설정","#2563eb"],["💡 조명","환영 모드","#d97706"],["🔒 도어락","초기화 완료","#059669"]].map(([ic,v,c])=>(
+                <div key={ic} style={{background:"#f8fafc",border:"1.5px solid #e2e8f0",borderRadius:"10px",padding:"14px",textAlign:"center"}}>
+                  <div style={{fontSize:"20px",marginBottom:"6px"}}>{ic.split(" ")[0]}</div>
+                  <div style={{fontSize:"11px",color:"#64748b",fontWeight:"600"}}>{ic.split(" ").slice(1).join(" ")}</div>
+                  <div style={{fontSize:"12px",color:c,fontWeight:"700",marginTop:"4px"}}>{v}</div>
                 </div>
               ))}
+            </div>
+            <div style={{marginTop:"14px",display:"flex",gap:"8px"}}>
+              <button className="act-btn" style={{color:"#2563eb",borderColor:"#bfdbfe",background:"#eff6ff"}}>⚡ D-1 자동화 재실행</button>
+              <button className="act-btn" style={{color:"#718096",borderColor:"#e2e8f0",background:"#f8fafc"}}>↻ PIN 재발급</button>
             </div>
           </div>
         </>}
 
-        {tab==="checkinout" && <>
+        {/* UC-002: 체크인 당일 */}
+        {haStage==="checkin" && <>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"14px",marginBottom:"14px"}}>
             <div className="ha-card" style={{borderTop:"3px solid #059669"}}>
-              <div className="ha-label">체크인</div>
-              <div style={{fontFamily:"'DM Mono',monospace",fontSize:"26px",fontWeight:"700",color:"#059669"}}>03월 07일</div>
-              <div style={{fontSize:"15px",color:"#718096",marginTop:"6px",fontWeight:"600"}}>15:00 PM</div>
-              <span style={{display:"inline-block",marginTop:"12px",background:"#ecfdf5",color:"#059669",border:"1px solid #a7f3d0",fontSize:"11px",padding:"4px 12px",borderRadius:"20px",fontWeight:"700"}}>✓ 완료</span>
+              <div className="ha-label">입실 확인</div>
+              <div style={{fontFamily:"'DM Mono',monospace",fontSize:"26px",fontWeight:"700",color:"#059669"}}>15:23</div>
+              <div style={{fontSize:"12px",color:"#718096",marginTop:"4px"}}>03월 07일 · 실제 입실</div>
+              <span style={{display:"inline-block",marginTop:"10px",background:"#ecfdf5",color:"#059669",border:"1px solid #a7f3d0",fontSize:"11px",padding:"4px 12px",borderRadius:"20px",fontWeight:"700"}}>✓ 도어락 감지 완료</span>
             </div>
             <div className="ha-card" style={{borderTop:"3px solid #2563eb"}}>
-              <div className="ha-label">체크아웃</div>
+              <div className="ha-label">체크아웃 예정</div>
               <div style={{fontFamily:"'DM Mono',monospace",fontSize:"26px",fontWeight:"700",color:"#2563eb"}}>03월 12일</div>
-              <div style={{fontSize:"15px",color:"#718096",marginTop:"6px",fontWeight:"600"}}>11:00 AM</div>
-              <span style={{display:"inline-block",marginTop:"12px",background:"#eff6ff",color:"#2563eb",border:"1px solid #bfdbfe",fontSize:"11px",padding:"4px 12px",borderRadius:"20px",fontWeight:"700"}}>예정</span>
+              <div style={{fontSize:"12px",color:"#718096",marginTop:"4px"}}>11:00 AM</div>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:"11px",color:"#a0aec0",marginTop:"12px",marginBottom:"6px"}}>
+                <span>{prog.toFixed(0)}% 경과</span>
+              </div>
+              <div className="progress-bar"><div className="progress-fill" style={{width:`${prog}%`}} /></div>
             </div>
           </div>
           <div className="ha-card">
-            <div className="ha-label">도어 액세스</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"14px"}}>
-              <div style={{background:"#f7f9fc",border:"1px solid #e2e8f0",borderRadius:"10px",padding:"16px"}}>
-                <div style={{fontSize:"11px",color:"#718096",marginBottom:"8px",fontWeight:"600"}}>입장 PIN</div>
-                <div style={{fontFamily:"'DM Mono',monospace",fontSize:"30px",fontWeight:"700",color:"#2563eb",letterSpacing:"8px"}}>4821</div>
-                <div style={{fontSize:"11px",color:"#a0aec0",marginTop:"6px"}}>체크아웃 후 만료</div>
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
-                <button className="act-btn" style={{color:"#059669",borderColor:"#a7f3d0",background:"#ecfdf5"}}>🔓 도어락 열기</button>
-                <button className="act-btn" style={{color:"#2563eb",borderColor:"#bfdbfe",background:"#eff6ff"}}>↻ PIN 재발급</button>
-                <button className="act-btn" style={{color:"#d97706",borderColor:"#fde68a",background:"#fffbeb"}}>⏱ 레이트 체크아웃</button>
-              </div>
-            </div>
-          </div>
-          <div className="ha-card" style={{marginTop:"14px"}}>
-            <div className="ha-label">체크인 체크리스트</div>
+            <div className="ha-label">체크인 씬 실행 결과</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
-              {[["청소 완료 확인",true],["비품 체크",true],["어메니티 보충",true],["스마트홈 초기화",true],["긴급연락처 카드",true],["냉장고 웰컴드링크",false]].map(([item,done],i)=>(
-                <div key={i} style={{display:"flex",gap:"10px",alignItems:"center",padding:"10px 13px",background:done?"#f0fdf4":"#f7f9fc",borderRadius:"8px",border:`1px solid ${done?"#a7f3d0":"#e2e8f0"}`}}>
-                  <div style={{width:"18px",height:"18px",borderRadius:"5px",background:done?"#059669":"#e2e8f0",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:"11px",flexShrink:0,fontWeight:"700"}}>{done?"✓":""}</div>
+              {[["🎬 웰컴 씬 실행",true],["💡 조명 켜짐",true],["❄️ 에어컨 24°C",true],["💬 게스트 채팅 오픈",true],["📩 입실 확인 메시지",true],["🔓 도어락 해제 후 복원",true]].map(([item,done],i)=>(
+                <div key={i} style={{display:"flex",gap:"8px",alignItems:"center",padding:"9px 12px",background:done?"#f0fdf4":"#f7f9fc",borderRadius:"8px",border:`1px solid ${done?"#a7f3d0":"#e2e8f0"}`}}>
+                  <div style={{width:"16px",height:"16px",borderRadius:"4px",background:done?"#059669":"#e2e8f0",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:"10px",flexShrink:0,fontWeight:"700"}}>{done?"✓":""}</div>
                   <span style={{fontSize:"12px",color:done?"#065f46":"#718096",fontWeight:done?"600":"400"}}>{item}</span>
                 </div>
               ))}
@@ -464,93 +548,101 @@ function HomeAssistant({onBack}) {
           </div>
         </>}
 
-        {tab==="devices" && <>
-          {[{cat:"security",label:"🔒 보안"},{cat:"climate",label:"❄️ 냉·난방"},{cat:"lighting",label:"💡 조명"},{cat:"comfort",label:"🛋️ 편의"},{cat:"entertainment",label:"🎬 엔터테인먼트"}].map(({cat,label})=>{
-            const catDevs = devs.filter(d=>d.category===cat);
-            if(!catDevs.length) return null;
-            return <div key={cat} style={{marginBottom:"16px"}}>
-              <div className="ha-label">{label}</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:"10px"}}>
-                {catDevs.map(d=>(
-                  <div key={d.id} style={{background:d.state?"#eff6ff":"#f7f9fc",border:`1.5px solid ${d.state?"#bfdbfe":"#e2e8f0"}`,borderRadius:"10px",padding:"14px",transition:"all 0.2s"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"8px"}}>
-                      <span style={{fontSize:"22px"}}>{d.icon}</span>
-                      <button className={`tog ${d.state?"on":""}`} onClick={()=>toggleDev(d.id)}><div className="tog-d"/></button>
-                    </div>
-                    <div style={{fontSize:"12px",fontWeight:"600",color:"#4a5568"}}>{d.label}</div>
-                    <div style={{fontSize:"11px",color:d.state?"#2563eb":"#a0aec0",marginTop:"3px",fontWeight:"600"}}>{d.state?"ON":"OFF"}</div>
-                    {d.state&&d.type==="ac"&&<div style={{display:"flex",alignItems:"center",gap:"8px",marginTop:"9px"}}>
-                      <button className="adj" onClick={()=>adjDev(d.id,"temp",-1)}>−</button>
-                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:"13px",color:"#2563eb",flex:1,textAlign:"center",fontWeight:"500"}}>{d.temp}°C</span>
-                      <button className="adj" onClick={()=>adjDev(d.id,"temp",1)}>+</button>
-                    </div>}
-                    {d.state&&d.type==="light"&&<div style={{display:"flex",alignItems:"center",gap:"6px",marginTop:"9px"}}>
-                      <button className="adj" onClick={()=>adjDev(d.id,"brightness",-10)}>−</button>
-                      <div style={{flex:1,height:"4px",background:"#e2e8f0",borderRadius:"2px"}}><div style={{height:"100%",background:"#2563eb",width:`${d.brightness}%`,borderRadius:"2px"}} /></div>
-                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#2563eb"}}>{d.brightness}%</span>
-                      <button className="adj" onClick={()=>adjDev(d.id,"brightness",10)}>+</button>
-                    </div>}
+        {/* UC-003: 체류 중 */}
+        {haStage==="stay" && <>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:"12px",marginBottom:"14px"}}>
+            {[{l:"온도",v:"24°C",icon:"🌡",c:"#2563eb",ok:true},{l:"습도",v:"62%",icon:"💧",c:"#4a5568",ok:true},{l:"소음",v:"—",icon:"🔊",c:"#94a3b8",ok:true},{l:"전력",v:"—",icon:"⚡",c:"#94a3b8",ok:true}].map(s=>(
+              <div key={s.l} className="ha-card" style={{marginBottom:0,borderTop:`3px solid ${s.ok?"#059669":"#dc2626"}`,padding:"14px"}}>
+                <div style={{fontSize:"18px",marginBottom:"4px"}}>{s.icon}</div>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:"20px",fontWeight:"700",color:s.c}}>{s.v}</div>
+                <div style={{fontSize:"10px",color:"#94a3b8",marginTop:"4px",fontWeight:"600"}}>{s.l}</div>
+                <div style={{fontSize:"9px",color:s.ok?"#059669":"#dc2626",fontWeight:"600",marginTop:"2px"}}>{s.ok&&s.v!=="—"?"정상":"미연결"}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"3fr 2fr",gap:"14px"}}>
+            <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:"12px",overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.06)",display:"flex",flexDirection:"column",maxHeight:"340px"}}>
+              <div style={{padding:"12px 16px",borderBottom:"1px solid #e2e8f0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:"#f7f9fc"}}>
+                <div style={{fontSize:"13px",fontWeight:"700",color:"#1a202c"}}>{BOOKING.guest.avatar} {BOOKING.guest.name} 님</div>
+                <span style={{background:"#ecfdf5",color:"#059669",border:"1px solid #a7f3d0",fontSize:"10px",padding:"2px 8px",borderRadius:"20px",fontWeight:"700"}}>● 온라인</span>
+              </div>
+              <div ref={chatRef} className="chat-msgs" style={{flex:1}}>
+                {msgs.map(m=>(
+                  <div key={m.id} style={{display:"flex",flexDirection:"column",alignItems:m.from==="host"?"flex-end":"flex-start"}}>
+                    <div className={`chat-b chat-${m.from}`}>{m.text}</div>
+                    <div style={{fontSize:"10px",color:"#a0aec0",marginBottom:"6px",alignSelf:m.from==="host"?"flex-end":"flex-start"}}>{m.time}</div>
                   </div>
                 ))}
               </div>
-            </div>;
-          })}
-          <div className="ha-label" style={{marginTop:"8px"}}>씬 프리셋</div>
-          <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-            {["🌅 아침 모드","🌙 취침 모드","🎬 영화 모드","🏠 퇴실 모드"].map(s=><button key={s} className="act-btn" style={{color:"#2563eb",borderColor:"#bfdbfe",background:"#eff6ff"}}>{s}</button>)}
+              <div style={{padding:"10px 12px",borderTop:"1px solid #e2e8f0",flexShrink:0,background:"#f7f9fc"}}>
+                <div style={{display:"flex",gap:"5px",flexWrap:"wrap",marginBottom:"8px"}}>
+                  {["체크아웃 안내","와이파이 정보","불편사항 접수"].map(q=>(
+                    <button key={q} onClick={()=>sendMsg(q)} style={{fontSize:"10px",padding:"3px 8px",borderRadius:"20px",background:"#fff",border:"1.5px solid #e2e8f0",color:"#4a5568",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:"500"}}>{q}</button>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:"6px"}}>
+                  <input className="msg-in" placeholder="메시지 입력..." value={msgIn} onChange={e=>setMsgIn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMsg(msgIn.slice(0,2000))} />
+                  <button className="act-btn" style={{color:"#fff",borderColor:"#2563eb",background:"#2563eb",fontWeight:"700",fontSize:"11px",padding:"5px 12px"}} onClick={()=>sendMsg(msgIn)}>전송</button>
+                </div>
+              </div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
+              <div className="ha-card" style={{marginBottom:0}}>
+                <div className="ha-label">특이사항</div>
+                <div style={{fontSize:"12px",color:"#4a5568",lineHeight:"1.7"}}>{BOOKING.specialRequests}</div>
+              </div>
+              <div className="ha-card" style={{marginBottom:0}}>
+                <div className="ha-label">체크아웃까지</div>
+                <div style={{display:"flex",justifyContent:"space-around"}}>
+                  {[[cd.days,"일"],[cd.hours,"시"],[cd.mins,"분"],[cd.secs,"초"]].map(([n,u],i)=>(
+                    <div key={u} style={{display:"flex",alignItems:"center"}}>
+                      <div style={{textAlign:"center"}}>
+                        <div style={{fontFamily:"'DM Mono',monospace",fontSize:"22px",fontWeight:"700",color:"#2563eb"}}>{String(n).padStart(2,"0")}</div>
+                        <div style={{fontSize:"10px",color:"#a0aec0",marginTop:"2px"}}>{u}</div>
+                      </div>
+                      {i<3 && <span style={{color:"#e2e8f0",margin:"0 3px",paddingBottom:"10px",fontSize:"18px"}}>:</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </>}
 
-        {tab==="messages" && (
-          <div style={{height:"calc(100vh - 240px)",display:"flex",flexDirection:"column",background:"#fff",border:"1px solid #e2e8f0",borderRadius:"12px",overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.08)"}}>
-            <div style={{padding:"14px 18px",borderBottom:"1px solid #e2e8f0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:"#f7f9fc"}}>
-              <div style={{fontSize:"14px",fontWeight:"700",color:"#1a202c"}}>{BOOKING.guest.avatar} {BOOKING.guest.name} 님</div>
-              <span style={{background:"#ecfdf5",color:"#059669",border:"1px solid #a7f3d0",fontSize:"11px",padding:"3px 10px",borderRadius:"20px",fontWeight:"700"}}>● 온라인</span>
-            </div>
-            <div ref={chatRef} className="chat-msgs">
-              {msgs.map(m=>(
-                <div key={m.id} style={{display:"flex",flexDirection:"column",alignItems:m.from==="host"?"flex-end":"flex-start"}}>
-                  <div className={`chat-b chat-${m.from}`}>{m.text}</div>
-                  <div style={{fontSize:"10px",color:"#a0aec0",marginBottom:"6px",alignSelf:m.from==="host"?"flex-end":"flex-start"}}>{m.time}</div>
+        {/* UC-004: 퇴실·청소 */}
+        {haStage==="checkout" && <>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px",marginBottom:"14px"}}>
+            {[{l:"PIN 상태",v:"유효",c:"#059669",bg:"#ecfdf5"},{l:"청소 상태",v:"완료",c:"#059669",bg:"#ecfdf5"},{l:"퇴실 청소",v:"03/12",c:"#d97706",bg:"#fffbeb"}].map(s=>(
+              <div key={s.l} className="ha-card" style={{marginBottom:0,borderTop:`3px solid ${s.c}`}}>
+                <div className="ha-label">{s.l}</div>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:"22px",fontWeight:"700",color:s.c}}>{s.v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"14px"}}>
+            <div className="ha-card">
+              <div className="ha-label">청소 인력 배정</div>
+              {CLEANERS.slice(0,2).map(c=>(
+                <div key={c.id} className="cleaner-card">
+                  <div style={{width:"10px",height:"10px",borderRadius:"50%",background:c.status==="가용"?"#059669":c.status==="작업중"?"#d97706":"#cbd5e0",flexShrink:0}} />
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:"13px",fontWeight:"700",color:"#1a202c"}}>{c.name}</div>
+                    <div style={{fontSize:"11px",color:"#718096",marginTop:"2px"}}>{c.zone} · {c.status}</div>
+                  </div>
+                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#d97706",fontWeight:"600"}}>★{c.rating}</div>
+                  {c.status==="가용" && <button className="act-btn" style={{color:"#059669",borderColor:"#a7f3d0",background:"#ecfdf5",fontSize:"10px",padding:"4px 9px"}}>배정</button>}
                 </div>
               ))}
             </div>
-            <div style={{padding:"12px 14px",borderTop:"1px solid #e2e8f0",flexShrink:0,background:"#f7f9fc"}}>
-              <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"10px"}}>
-                {["체크아웃 안내","와이파이 정보","주변 맛집 추천","불편사항 접수"].map(q=>(
-                  <button key={q} onClick={()=>sendMsg(q)} style={{fontSize:"11px",padding:"4px 10px",borderRadius:"20px",background:"#fff",border:"1.5px solid #e2e8f0",color:"#4a5568",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:"500",transition:"all 0.15s"}}>{q}</button>
-                ))}
-              </div>
-              <div style={{display:"flex",gap:"8px"}}>
-                <input className="msg-in" placeholder="메시지 입력..." value={msgIn} onChange={e=>setMsgIn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMsg(msgIn.slice(0,2000))} />
-                <button className="act-btn" style={{color:"#fff",borderColor:"#2563eb",background:"#2563eb",fontWeight:"700"}} onClick={()=>sendMsg(msgIn)}>전송</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {tab==="cleaning" && <>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px",marginBottom:"14px"}}>
-            {[{l:"청소 상태",v:"완료",c:"#059669",bg:"#ecfdf5"},{l:"다음 청소",v:"03/09",c:"#2563eb",bg:"#eff6ff"},{l:"퇴실 청소",v:"03/12",c:"#d97706",bg:"#fffbeb"}].map(s=>(
-              <div key={s.l} className="ha-card" style={{marginBottom:0,borderTop:`3px solid ${s.c}`}}>
-                <div className="ha-label">{s.l}</div>
-                <div style={{fontFamily:"'DM Mono',monospace",fontSize:"24px",fontWeight:"700",color:s.c}}>{s.v}</div>
-              </div>
-            ))}
-          </div>
-          <div className="ha-card">
-            <div className="ha-label">청소 인력</div>
-            {CLEANERS.slice(0,3).map(c=>(
-              <div key={c.id} className="cleaner-card">
-                <div style={{width:"10px",height:"10px",borderRadius:"50%",background:c.status==="가용"?"#059669":c.status==="작업중"?"#d97706":"#cbd5e0",flexShrink:0}} />
-                <div style={{flex:1}}>
-                  <div style={{fontSize:"13px",fontWeight:"700",color:"#1a202c"}}>{c.name}</div>
-                  <div style={{fontSize:"11px",color:"#718096",marginTop:"2px"}}>{c.zone} · {c.status}</div>
+            <div className="ha-card">
+              <div className="ha-label">청소 체크리스트</div>
+              {[["침구 교체",true],["화장실 청소",true],["주방 청소",true],["바닥 청소",false],["쓰레기 비우기",false]].map(([item,done],i)=>(
+                <div key={i} style={{display:"flex",gap:"8px",alignItems:"center",padding:"7px 0",borderBottom:"1px solid #f1f5f9"}}>
+                  <div style={{width:"16px",height:"16px",borderRadius:"4px",background:done?"#059669":"#f1f5f9",border:`1.5px solid ${done?"#059669":"#e2e8f0"}`,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:"10px",flexShrink:0,fontWeight:"700"}}>{done?"✓":""}</div>
+                  <span style={{fontSize:"12px",color:done?"#065f46":"#64748b",fontWeight:done?"600":"400",textDecoration:done?"line-through":""}}>{item}</span>
                 </div>
-                <div style={{fontFamily:"'DM Mono',monospace",fontSize:"12px",color:"#d97706",fontWeight:"500"}}>★{c.rating}</div>
-                {c.status==="가용" && <button className="act-btn" style={{color:"#059669",borderColor:"#a7f3d0",background:"#ecfdf5",fontSize:"11px",padding:"5px 10px"}}>배정</button>}
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
           <div className="ha-card" style={{marginTop:"14px"}}>
             <div className="ha-label">유지보수 이슈</div>
@@ -561,7 +653,8 @@ function HomeAssistant({onBack}) {
           </div>
         </>}
 
-        {tab==="revenue" && <>
+        {/* UC-005: 정산 */}
+        {haStage==="revenue" && <>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px",marginBottom:"14px"}}>
             {[{l:"객실 매출",v:"1,250,000원",c:"#059669",bg:"#ecfdf5"},{l:"총 비용",v:"235,000원",c:"#dc2626",bg:"#fef2f2"},{l:"순수익",v:`${(netRev/10000).toFixed(0)}만원`,c:"#2563eb",bg:"#eff6ff"}].map(s=>(
               <div key={s.l} className="ha-card" style={{marginBottom:0,borderTop:`3px solid ${s.c}`}}>
@@ -590,6 +683,21 @@ function HomeAssistant({onBack}) {
           </div>
         </>}
       </div>
+
+      {/* 하단 빠른 IoT 제어 */}
+      <div className="ha-quick-strip">
+        <div className="ha-quick-label">빠른 제어</div>
+        {devs.slice(0,5).map(d=>(
+          <div key={d.id} onClick={()=>toggleDev(d.id)} style={{display:"flex",alignItems:"center",gap:"5px",padding:"6px 12px",borderRadius:"20px",background:d.state?"#eff6ff":"#f7f9fc",border:`1.5px solid ${d.state?"#bfdbfe":"#e2e8f0"}`,cursor:"pointer",transition:"all 0.15s",flexShrink:0}}>
+            <span style={{fontSize:"13px"}}>{d.icon}</span>
+            <span style={{fontSize:"11px",fontWeight:"600",color:d.state?"#2563eb":"#718096"}}>{d.label}</span>
+            <span style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:d.state?"#2563eb":"#a0aec0",marginLeft:2}}>{d.state?"ON":"OFF"}</span>
+          </div>
+        ))}
+        <div style={{marginLeft:"auto",display:"flex",gap:"6px",flexShrink:0}}>
+          {["🌅 아침","🌙 취침","🎬 영화","🏠 퇴실"].map(s=><button key={s} className="act-btn" style={{color:"#2563eb",borderColor:"#bfdbfe",background:"#eff6ff",fontSize:"11px",padding:"5px 10px"}}>{s}</button>)}
+        </div>
+      </div>
     </div>
   );
 }
@@ -597,14 +705,41 @@ function HomeAssistant({onBack}) {
 // ═══════════════════════════════════════════════════
 // COMMAND CENTER
 // ═══════════════════════════════════════════════════
+// 5단계 스테이지 정의
+const CC_STAGES = [
+  {id:"all",    emoji:"◈", label:"전체",        color:"#4a5568", bg:"#f7f9fc", border:"#e2e8f0",
+   filter: p=>true,
+   desc:"전체 숙소 현황이에요. 긴급 순으로 정렬돼 있어요. 왼쪽 탭으로 단계별로 집중 관리하세요.",
+   action:null},
+  {id:"d1",     emoji:"📅", label:"내일 체크인", color:"#2563eb", bg:"#eff6ff", border:"#bfdbfe",
+   filter: p=>p.status==="예약됨",
+   desc:"내일 게스트가 들어오는 숙소예요. PIN 발급, 웰컴 메시지, 스마트홈 초기화가 준비됐는지 확인하세요. 아직 안 된 곳은 [D-1 자동화 전체 실행]으로 한 번에 처리하세요.",
+   action:"⚡ D-1 자동화 전체 실행"},
+  {id:"occupied",emoji:"🏠", label:"지금 숙박 중", color:"#059669", bg:"#ecfdf5", border:"#a7f3d0",
+   filter: p=>p.status==="입실중" && p.priority==="OK",
+   desc:"현재 게스트가 머물고 있는 숙소예요. 미읽은 메시지나 긴급 요청이 있는 숙소를 먼저 확인하세요.",
+   action:null},
+  {id:"monitoring",emoji:"📡", label:"센서 모니터링", color:"#7c3aed", bg:"#f5f3ff", border:"#ddd6fe",
+   filter: p=>p.status==="입실중" && (p.priority==="HIGH"||p.priority==="MED"),
+   desc:"온도·습도·소음·전력 이상이 감지된 숙소예요. 빨간 숙소는 지금 즉시 확인이 필요해요. 클릭해서 어떤 센서가 문제인지 보세요.",
+   action:"📡 전체 폴링 시작"},
+  {id:"checkout", emoji:"🚪", label:"퇴실·청소 중", color:"#d97706", bg:"#fffbeb", border:"#fde68a",
+   filter: p=>p.status==="청소중",
+   desc:"오늘 체크아웃이 완료됐거나 청소가 진행 중이에요. 청소 완료된 숙소를 확인하고 다음 예약 준비를 시작하세요.",
+   action:"🧹 청소팀 전체 소집"},
+  {id:"settlement",emoji:"💰", label:"이달 정산",    color:"#0891b2", bg:"#ecfeff", border:"#a5f3fc",
+   filter: p=>true,
+   desc:"이번 달 전체 숙소의 수익을 집계하고 AI 가격 최적화 추천을 받을 수 있어요. [월 정산 실행]으로 한 번에 처리하세요.",
+   action:"💰 월 정산 실행"},
+];
+
 function CommandCenter({onBack}) {
+  const [stage, setStage] = useState("all");
   const [view, setView] = useState("command");
   const [props, setProps] = useState(ALL_PROPS);
   const [alerts, setAlerts] = useState(INIT_ALERTS);
   const [selProp, setSelProp] = useState(null);
-  const [filter, setFilter] = useState("전체");
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState("priority");
   const [rules, setRules] = useState(AUTO_RULES);
   const [now, setNow] = useState(new Date());
   const [showGcmd, setShowGcmd] = useState(false);
@@ -633,16 +768,13 @@ function CommandCenter({onBack}) {
   const ackAll = () => setAlerts(a=>a.map(x=>({...x,ack:true})));
   const bulkToggle = (dev,val) => setProps(p=>p.map(x=>bulkSel.includes(x.id)?{...x,[dev]:val}:x));
 
+  const curStage = CC_STAGES.find(s=>s.id===stage)||CC_STAGES[0];
+
   const filtered = props.filter(p=>{
-    if(filter!=="전체"&&p.status!==filter)return false;
-    if(search&&!p.name.toLowerCase().includes(search.toLowerCase())&&!(p.guest||"").toLowerCase().includes(search.toLowerCase()))return false;
+    if(!curStage.filter(p)) return false;
+    if(search&&!p.name.toLowerCase().includes(search.toLowerCase())&&!(p.guest||"").toLowerCase().includes(search.toLowerCase())) return false;
     return true;
-  }).sort((a,b)=>{
-    if(sortBy==="priority"){const o={HIGH:0,MED:1,OK:2};return o[a.priority]-o[b.priority];}
-    if(sortBy==="revenue")return b.revenue-a.revenue;
-    if(sortBy==="rating")return b.rating-a.rating;
-    return 0;
-  });
+  }).sort((a,b)=>{const o={HIGH:0,MED:1,OK:2};return o[a.priority]-o[b.priority];});
 
   const occupied=props.filter(p=>p.status==="입실중").length;
   const vacant=props.filter(p=>p.status==="공실").length;
@@ -653,10 +785,55 @@ function CommandCenter({onBack}) {
   const unack=alerts.filter(a=>!a.ack).length;
   const occ=Math.round((occupied/props.length)*100);
 
+  // 스테이지별 카드 하단 KPI 렌더링
+  const renderStageKPI = (p, stg) => {
+    if(stg==="d1") return (
+      <div className="pcard-kpi">
+        <span className="pcard-kpi-item" style={{color:p.priority!=="HIGH"?"#059669":"#dc2626"}}>{p.priority!=="HIGH"?"✓ PIN준비":"✗ PIN미발급"}</span>
+        <span className="pcard-kpi-item" style={{color:"#718096"}}>체크인 {p.checkIn||"내일"}</span>
+      </div>
+    );
+    if(stg==="occupied") return (
+      <div className="pcard-kpi">
+        {p.unreadMsg>0&&<span className="pcard-kpi-item" style={{color:"#7c3aed",fontWeight:700}}>💬 미읽 {p.unreadMsg}</span>}
+        <span className="pcard-kpi-item" style={{color:"#64748b"}}>퇴실 {p.checkOut||"—"}</span>
+      </div>
+    );
+    if(stg==="monitoring") return (
+      <div className="pcard-kpi">
+        <span className="pcard-kpi-item" style={{color:p.temp>30?"#dc2626":"#2563eb"}}>🌡 {p.temp}°C</span>
+        <span className="pcard-kpi-item" style={{color:p.humidity>80?"#dc2626":"#64748b"}}>💧 {p.humidity}%</span>
+        <span className="pcard-kpi-item" style={{color:p.priority==="HIGH"?"#dc2626":"#d97706",fontWeight:700}}>{p.priority==="HIGH"?"🔴이상":"🟡주의"}</span>
+      </div>
+    );
+    if(stg==="checkout") return (
+      <div className="pcard-kpi">
+        <span className="pcard-kpi-item" style={{color:"#d97706"}}>🧹 청소중</span>
+        <span className="pcard-kpi-item" style={{color:"#64748b"}}>퇴실완료</span>
+      </div>
+    );
+    if(stg==="settlement") return (
+      <div className="pcard-kpi">
+        <span className="pcard-kpi-item" style={{color:"#059669",fontWeight:700}}>{(p.revenue/10000).toFixed(0)}만원</span>
+        <span className="pcard-kpi-item" style={{color:"#64748b"}}>★ {p.rating}</span>
+      </div>
+    );
+    // "all" — 기본 KPI
+    return (
+      <div className="pcard-kpi">
+        <span className="pcard-kpi-item" style={{color:"#718096"}}>🌡 {p.temp}°</span>
+        <span className="pcard-kpi-item" style={{color:"#059669",fontWeight:600}}>{(p.revenue/10000).toFixed(0)}만</span>
+        <span className="pcard-kpi-item" style={{color:"#718096"}}>★{p.rating}</span>
+      </div>
+    );
+  };
+
   const PCard = ({p}) => {
     const isSel=selProp?.id===p.id, isBulk=bulkSel.includes(p.id);
+    const stageColor = stage==="d1"?"#2563eb":stage==="occupied"?"#059669":stage==="monitoring"?"#7c3aed":stage==="checkout"?"#d97706":stage==="settlement"?"#0891b2":"transparent";
     return (
-      <div className={`pcard ${p.priority} ${isSel?"sel":""}`} onClick={()=>{setSelProp(p);setDTab("info");setChat([]);}}>
+      <div className={`pcard ${p.priority} ${isSel?"sel":""}`} onClick={()=>{setSelProp(p);setDTab("info");setChat([]);}}
+        style={{borderTopColor: stage!=="all" ? stageColor : undefined}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:"8px"}}>
           <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
             <div style={{width:"16px",height:"16px",borderRadius:"4px",border:`1.5px solid ${isBulk?"#2563eb":"#e2e8f0"}`,background:isBulk?"#eff6ff":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"10px",color:"#2563eb",cursor:"pointer",flexShrink:0}}
@@ -664,21 +841,17 @@ function CommandCenter({onBack}) {
             <div style={{width:"8px",height:"8px",borderRadius:"50%",background:SC[p.status]}} />
           </div>
           <div style={{display:"flex",gap:"4px"}}>
-            {p.unreadMsg>0&&<span style={{fontSize:"10px",background:"#2563eb",color:"#fff",borderRadius:"10px",padding:"1px 6px",fontWeight:"700",fontFamily:"'DM Mono',monospace"}}>{p.unreadMsg}</span>}
-            {p.issues.length>0&&<span style={{fontSize:"12px"}}>⚠️</span>}
+            {p.unreadMsg>0&&<span style={{fontSize:"10px",background:"#7c3aed",color:"#fff",borderRadius:"10px",padding:"1px 6px",fontWeight:"700",fontFamily:"'DM Mono',monospace"}}>💬{p.unreadMsg}</span>}
+            {p.issues.length>0&&<span style={{fontSize:"10px",background:"#dc2626",color:"#fff",borderRadius:"10px",padding:"1px 6px",fontWeight:"700"}}>⚠</span>}
           </div>
         </div>
-        <div style={{fontSize:"12px",fontWeight:"700",color:"#1a202c",lineHeight:"1.4",marginBottom:"6px"}}>{p.name}</div>
+        <div style={{fontSize:"12px",fontWeight:"700",color:"#1a202c",lineHeight:"1.4",marginBottom:"5px"}}>{p.name}</div>
         <div style={{display:"flex",gap:"5px",alignItems:"center"}}>
           <span className="badge-sm" style={{background:SC[p.status]+"18",color:SC[p.status],border:`1px solid ${SC[p.status]}44`}}>{p.status}</span>
-          {p.guest&&<span style={{fontSize:"10px",color:"#718096"}}>{p.guest}</span>}
+          {p.guest&&<span style={{fontSize:"10px",color:"#718096",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:80}}>{p.guest}</span>}
         </div>
-        <div style={{display:"flex",gap:"10px",marginTop:"9px",paddingTop:"9px",borderTop:"1px solid #f0f4f8"}}>
-          <span style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#718096"}}>🌡{p.temp}°</span>
-          <span style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#718096"}}>★{p.rating}</span>
-          <span style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#059669",fontWeight:"600"}}>{(p.revenue/10000).toFixed(0)}만원</span>
-        </div>
-        {p.issues.length>0&&<div style={{fontSize:"10px",color:"#dc2626",background:"#fef2f2",border:"1px solid #fecaca",padding:"3px 8px",borderRadius:"4px",marginTop:"6px",display:"inline-block",fontWeight:"600"}}>⚠ {p.issues[0]}</div>}
+        {renderStageKPI(p, stage)}
+        {p.issues.length>0&&<div style={{fontSize:"10px",color:"#dc2626",background:"#fef2f2",border:"1px solid #fecaca",padding:"3px 8px",borderRadius:"4px",marginTop:"5px",display:"inline-block",fontWeight:"600"}}>⚠ {p.issues[0]}</div>}
       </div>
     );
   };
@@ -938,17 +1111,20 @@ function CommandCenter({onBack}) {
   return (
     <div className="app" style={{fontFamily:"'DM Sans',sans-serif"}}>
       {/* KPI TOPBAR */}
-      <div style={{height:"54px",background:"#fff",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",padding:"0 18px",gap:"12px",flexShrink:0,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
-        <div style={{fontFamily:"'Nunito',sans-serif",fontSize:"18px",fontWeight:"800",color:"#2563eb",whiteSpace:"nowrap"}}>PROP<span style={{color:"#dc2626"}}>OS</span></div>
+      <div style={{background:"#fff",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",padding:"0 18px",gap:"10px",flexShrink:0,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",minHeight:54}}>
+        <button onClick={onBack} style={{padding:"6px 16px",borderRadius:8,border:"1.5px solid #e2e8f0",background:"#f8fafc",color:"#475569",fontSize:13,fontWeight:600,cursor:"pointer",flexShrink:0,fontFamily:"'DM Sans',sans-serif"}}>← 뒤로</button>
         <div style={{width:"1px",height:"26px",background:"#e2e8f0",flexShrink:0}} />
-        <div style={{fontFamily:"'DM Mono',monospace",fontSize:"14px",color:"#4a5568",fontWeight:"500"}}>{now.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</div>
+        <div style={{fontFamily:"'Nunito',sans-serif",fontSize:"17px",fontWeight:"800",color:"#2563eb",whiteSpace:"nowrap",letterSpacing:"-0.5px"}}>PROP<span style={{color:"#dc2626"}}>OS</span></div>
+        <div style={{fontSize:"11px",color:"#94a3b8",fontWeight:500,whiteSpace:"nowrap",paddingTop:1}}>전체 관제 센터</div>
+        <div style={{width:"1px",height:"26px",background:"#e2e8f0",flexShrink:0}} />
+        <div style={{fontFamily:"'DM Mono',monospace",fontSize:"13px",color:"#475569",fontWeight:"600",flexShrink:0}}>{now.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</div>
         <div style={{width:"1px",height:"26px",background:"#e2e8f0",flexShrink:0}} />
         <div className="kpi-top">
           {[[props.length,"전체","#4a5568"],[occupied,"입실중","#059669"],[props.filter(p=>p.status==="예약됨").length,"예약됨","#2563eb"],[vacant,"공실","#94a3b8"],[cleaning,"청소중","#d97706"],[highAlert,"긴급","#dc2626"],[totalMsg,"미읽","#7c3aed"],[`${(totalRev/10000).toFixed(0)}만`,"수익","#059669"],[`${occ}%`,"점유율","#2563eb"]].map(([v,l,c])=>(
             <div key={l} className="kpi-t"><div className="kv" style={{color:c}}>{v}</div><div className="kl">{l}</div></div>
           ))}
         </div>
-        <div style={{display:"flex",gap:"8px",alignItems:"center",marginLeft:"auto"}}>
+        <div style={{display:"flex",gap:"8px",alignItems:"center",marginLeft:"auto",flexShrink:0}}>
           {bulkSel.length>0&&<div style={{fontSize:"11px",color:"#2563eb",fontFamily:"'DM Mono',monospace",border:"1px solid #bfdbfe",padding:"4px 10px",borderRadius:"20px",background:"#eff6ff",fontWeight:"600"}}>
             {bulkSel.length}개 선택 <span style={{cursor:"pointer",color:"#dc2626",marginLeft:"4px"}} onClick={()=>setBulkSel([])}>×</span>
           </div>}
@@ -956,8 +1132,7 @@ function CommandCenter({onBack}) {
             🔔 {unack}
             {unack>0&&<div style={{position:"absolute",top:"-2px",right:"-2px",width:"8px",height:"8px",background:"#dc2626",borderRadius:"50%",animation:"pulse 1.5s infinite"}} />}
           </div>
-          <button onClick={()=>setShowGcmd(true)} style={{padding:"7px 14px",borderRadius:"20px",background:"#2563eb",border:"none",color:"#fff",fontSize:"12px",fontWeight:"700",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>⚡ 전체 제어</button>
-          <button onClick={onBack} className="back-btn">← 홈</button>
+          <button onClick={()=>setShowGcmd(true)} style={{padding:"7px 16px",borderRadius:8,background:"#2563eb",border:"1.5px solid #1d4ed8",color:"#fff",fontSize:"12px",fontWeight:"700",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>⚡ 전체 제어</button>
         </div>
       </div>
 
@@ -965,7 +1140,10 @@ function CommandCenter({onBack}) {
       <div className="cc-body">
         <div className="cc-sidenav">
           {[["command","◈","지휘"],["automation","⚙","자동화"],["revenue","💰","수익"],["cleaning","🧹","청소"]].map(([id,ic,tip])=>(
-            <div key={id} className={`cc-nav-ic ${view===id?"active":""}`} onClick={()=>setView(id)} title={tip}>{ic}</div>
+            <div key={id} className={`cc-nav-ic ${view===id?"active":""}`} onClick={()=>setView(id)} title={tip}>
+              <span style={{fontSize:18,lineHeight:1}}>{ic}</span>
+              <span className="cc-nav-label" style={{color:view===id?"#2563eb":"#94a3b8"}}>{tip}</span>
+            </div>
           ))}
         </div>
 
@@ -973,18 +1151,40 @@ function CommandCenter({onBack}) {
           {view==="command" && <>
             {/* PROP PANEL */}
             <div className="prop-panel">
+              {/* PIPELINE STAGE TABS */}
+              <div className="pipeline-wrap">
+                {CC_STAGES.map(s=>{
+                  const cnt = s.id==="all" ? props.length : props.filter(s.filter).length;
+                  const urgCnt = props.filter(s.filter).filter(p=>p.priority==="HIGH").length;
+                  const isAct = stage===s.id;
+                  return (
+                    <div key={s.id} className={`pipeline-card ${isAct?"active":""}`}
+                      style={{borderColor:isAct?s.color:s.border, background:isAct?s.bg:"#fff", color:s.color}}
+                      onClick={()=>setStage(s.id)}>
+                      {urgCnt>0 && s.id!=="all" && <div className="pipeline-urgent">🔴 {urgCnt}</div>}
+                      <div style={{fontSize:"16px",marginBottom:"2px"}}>{s.emoji}</div>
+                      <div className="pipeline-count" style={{color:s.color}}>{cnt}</div>
+                      <div className="pipeline-label" style={{color:isAct?s.color:"#475569"}}>{s.label}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* STAGE ACTION BAR */}
+              {curStage.desc && (
+                <div className="stage-bar">
+                  <div className="stage-bar-desc">{curStage.desc}</div>
+                  {curStage.action && (
+                    <button className="stage-action-btn"
+                      style={{background:curStage.bg, borderColor:curStage.color, color:curStage.color}}
+                      onClick={()=>Toast.show(`${curStage.action} 실행 중...`, "s")}>
+                      {curStage.action}
+                    </button>
+                  )}
+                </div>
+              )}
+              {/* TOOLBAR */}
               <div className="toolbar">
                 <input className="srch" placeholder="숙소 검색..." value={search} onChange={e=>setSearch(e.target.value)} />
-                <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
-                  {["전체","입실중","예약됨","공실","청소중","점검중"].map(f=>(
-                    <button key={f} className={`fb ${filter===f?"act":""}`} onClick={()=>setFilter(f)}>{f}</button>
-                  ))}
-                </div>
-                <select style={{background:"#f7f9fc",border:"1.5px solid #e2e8f0",color:"#4a5568",padding:"6px 10px",borderRadius:"20px",fontSize:"12px",fontFamily:"'DM Sans',sans-serif",outline:"none",cursor:"pointer",fontWeight:"600"}} value={sortBy} onChange={e=>setSortBy(e.target.value)}>
-                  <option value="priority">우선순위</option>
-                  <option value="revenue">수익순</option>
-                  <option value="rating">평점순</option>
-                </select>
                 <div style={{flex:1}} />
                 <span style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#a0aec0",fontWeight:"500"}}>{filtered.length}개</span>
                 <div style={{display:"flex",border:"1.5px solid #e2e8f0",borderRadius:"20px",overflow:"hidden"}}>
@@ -1083,12 +1283,6 @@ function App() {
 
   if(screen==="ha") return (
     <div className="app" style={{fontFamily:"'DM Sans',sans-serif"}}>
-      <div className="topnav">
-        <button className="back-btn" onClick={()=>setScreen("landing")}>← 홈</button>
-        <div style={{width:"1px",height:"22px",background:"#e2e8f0"}} />
-        <div className="nav-title">HOME<span>OS</span> · 개별 숙소 어시스턴트</div>
-        <div className="topnav-clock">{now.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</div>
-      </div>
       <HomeAssistant onBack={()=>setScreen("landing")}/>
     </div>
   );
@@ -1340,10 +1534,10 @@ function makeMockInfra(onAlert, failPropId) {
 }
 
 const _ha = (() => {
-  const BASE  = _HA_BASE;
-  const TOKEN = _HA_TOKEN;
-  const TV_LIGHT = 'light.rgbcct_8002';
-  const TV_PLUG  = 'switch.tv_smart_plug_socket_1';
+  const BASE     = _HA_BASE;
+  const TOKEN    = _HA_TOKEN;
+  const TV_LIGHT = PROPOS_CONFIG.entities.tvLight;
+  const TV_PLUG  = PROPOS_CONFIG.entities.tvPlug;
   async function post(path, data) {
     const res = await fetch(`${BASE}${path}`, {
       method:'POST',
@@ -2042,8 +2236,8 @@ function S02AlertItem({alert, onAck}) {
 
 // ── Real HA WebSocket (S02) ───────────────────────────────────
 const _haWsS02 = (() => {
-  const HA_WS_URL='ws://192.168.45.76:8123/api/websocket';
-  const HA_TOKEN='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw';
+  const HA_WS_URL = _HA_WS;
+  const HA_TOKEN  = _HA_TOKEN;
   const MAX=5; let ws=null,msgId=1,intentionalClose=false,reconnectCount=0,reconnectTimer=null;
   let _onEvent=null,_onStatus=null;
   function connect(onEvent,onStatusChange){
@@ -2361,7 +2555,8 @@ function S02CheckinPanel({bookings:propBookings}) {
 // ── 도메인 함수 (인라인) ─────────────────────────────────────
 const _s03 = (() => {
   function getDefaultThresholds() {
-    return {
+    // PROPOS_CONFIG.sensorThresholds 우선 사용 (위 설정 블록에서 변경 가능)
+    return PROPOS_CONFIG.sensorThresholds || {
       temp:     { warn: 30, critical: 35 },
       humidity: { warn: 80, critical: 90 },
       noise:    { warn: 60, critical: 75 },
@@ -2449,11 +2644,14 @@ function makeMockSensorInfra() {
 const _DEFAULT_THRESHOLDS = _s03.getDefaultThresholds();
 
 // ── Real HA Infrastructure ───────────────────────────────────
+// entity ID는 PROPOS_CONFIG.entities에서 읽음 (null이면 해당 센서 조회 스킵)
 const _haS03 = (() => {
   const BASE  = _HA_BASE;
   const TOKEN = _HA_TOKEN;
+  const ENTS  = PROPOS_CONFIG.entities;
 
   async function getState(entityId) {
+    if (!entityId) return null;
     try {
       const res = await fetch(`${BASE}/api/states/${entityId}`, {
         headers: { 'Authorization': `Bearer ${TOKEN}` },
@@ -2467,18 +2665,13 @@ const _haS03 = (() => {
   }
 
   async function getSensorStates(propId) {
-    const [temp, humidity] = await Promise.all([
-      getState('sensor.temperature_humidity_sensor_temperature'),
-      getState('sensor.temperature_humidity_sensor_humidity'),
+    const [temp, humidity, noise, power] = await Promise.all([
+      getState(ENTS.tempSensor),
+      getState(ENTS.humiditySensor),
+      getState(ENTS.noiseSensor),   // null이면 즉시 null 반환
+      getState(ENTS.powerSensor),   // null이면 즉시 null 반환
     ]);
-    return {
-      propId,
-      time: _s03.hhmm(),
-      temp,
-      humidity,
-      noise:    null,
-      power:    null,
-    };
+    return { propId, time: _s03.hhmm(), temp, humidity, noise, power };
   }
 
   return { getSensorStates };

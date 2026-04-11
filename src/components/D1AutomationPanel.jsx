@@ -153,11 +153,13 @@ function makeMockInfra(onAlert, failPropId) {
 }
 
 // ── Real HA Infrastructure (TV방) ─────────────────────────────
+// 브라우저: PROPOS_CONFIG (dist/index.html 상단에 정의됨)
+// node:test: 직접 실행 안 됨 (Mock 사용)
 const _ha = (() => {
-  const BASE  = 'http://192.168.45.76:8123';
-  const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw';
-  const TV_LIGHT = 'light.rgbcct_8002';
-  const TV_PLUG  = 'switch.tv_smart_plug_socket_1';
+  const BASE     = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.baseUrl : 'http://192.168.45.76:8123';
+  const TOKEN    = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.token   : '';
+  const TV_LIGHT = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.entities.tvLight : 'light.rgbcct_8002';
+  const TV_PLUG  = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.entities.tvPlug  : 'switch.tv_smart_plug_socket_1';
   async function post(path, data) {
     const res = await fetch(`${BASE}${path}`, {
       method:'POST',

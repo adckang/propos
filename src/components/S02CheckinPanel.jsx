@@ -65,9 +65,10 @@ function makeMockInfra(onAlert, onUpdateStatus, sceneFail, channelFail) {
 }
 
 // ── Real HA Infrastructure ───────────────────────────────────
+// 브라우저: PROPOS_CONFIG (dist/index.html 상단에 정의됨)
 const _haS02 = (() => {
-  const BASE  = 'http://192.168.45.76:8123';
-  const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw';
+  const BASE  = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.baseUrl : 'http://192.168.45.76:8123';
+  const TOKEN = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.token   : '';
   async function post(path, data) {
     const res = await fetch(`${BASE}${path}`, {
       method:'POST',

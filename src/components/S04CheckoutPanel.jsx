@@ -65,8 +65,8 @@ const _haMockS04 = {
 };
 
 const _haRealS04 = (() => {
-  const BASE  = 'http://192.168.45.76:8123';
-  const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw';
+  const BASE  = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.baseUrl : 'http://192.168.45.76:8123';
+  const TOKEN = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.token   : '';
 
   async function expirePin(entityId) {
     const res = await fetch(`${BASE}/api/services/persistent_notification/create`, {
@@ -82,8 +82,8 @@ const _haRealS04 = (() => {
 
 // ── Real HA WebSocket — 퇴실 감지용 ──────────────────────────
 const _haWsS04 = (() => {
-  const HA_WS_URL = 'ws://192.168.45.76:8123/api/websocket';
-  const HA_TOKEN  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw';
+  const HA_WS_URL = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.wsUrl   : 'ws://192.168.45.76:8123/api/websocket';
+  const HA_TOKEN  = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.token   : '';
   const MAX_RECONNECT = 5;
 
   let ws = null, msgId = 1, intentionalClose = false;
