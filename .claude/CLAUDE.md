@@ -1,10 +1,19 @@
 # PROPOS — 상세 컨텍스트
+> 업데이트: 2026-04-12
 
 ## 프로젝트 배경
 에어비앤비 숙소 관리 시스템. 한국 서비스 우선.
 - 운영 주체: 관리자 단 1명
 - 운영 규모: 수십~수백 개 숙소 동시 운영
-- 목표: 단순 모니터링이 아닌 체크인→정산 전 과정 완전 자동화
+- 목표: 체크인→정산 전 과정 완전 자동화
+
+## 기술 스택 (현재)
+- 프레임워크: Vite + React 18
+- 소스 오브 트루스: `src/`
+- 빌드 산출물: `dist/` (`npm run build`)
+- 폰트: Nunito(제목) + DM Sans(본문) + DM Mono(숫자/코드)
+- IoT: Home Assistant REST API + WebSocket
+- 인프라: Netlify(현재) → Vercel(예정) + Tailscale VPN + 라즈베리파이
 
 ## 핵심 시나리오 5단계
 | # | 시나리오 | 핵심 자동화 |
@@ -15,36 +24,54 @@
 | 04 | 체크아웃 & 청소 | 5초 내 PIN 만료, 청소팀 자동 배정, 체크리스트 |
 | 05 | 수익 정산 | 멀티플랫폼 통합, AI 가격 최적화(+18%), 세금 리포트 |
 
-## 경쟁사 대비 차별화
-1. **로컬 IoT 통합**: 라즈베리파이 엣지 컴퓨팅, 인터넷 없이도 동작
-2. **5단계 풀 자동화**: 호스트 개입 없이 전 과정 실행 (14시간/월 절감)
-3. **100+ 숙소 단일 대시보드**: 엔터프라이즈 스케일
-
-## 기술 스택
-- 프론트엔드: React 18 (Babel standalone CDN), 단일 HTML 파일
-- 폰트: Nunito(제목) + DM Sans(본문) + DM Mono(숫자/코드)
-- IoT: Home Assistant REST API + WebSocket
-- 인프라: Netlify(현재) → Vercel(예정) + Tailscale VPN + 라즈베리파이
-
-## 컴포넌트 의존성 맵
+## 소스 구조
 ```
-App.jsx (라우터 + 랜딩)
-├── uses: GLOBAL_CSS (main.css 내용을 JS 변수로 인라인)
-├── renders: HomeAssistant.jsx
-│    └── data: BOOKING, SINGLE_PROP, DEVICES_INIT, CLEANERS, EXPENSES
-└── renders: CommandCenter.jsx
-     └── data: ALL_PROPS, INIT_ALERTS, AUTO_RULES, CLEANERS, SC, PC
-     └── util: Toast (window.Toast)
+src/
+├── application/          ← 서비스 레이어 (entry_function이 여기 있음)
+│   ├── checkinPreparationService.js  (runD1Automation)
+│   ├── checkinService.js             (handleDoorUnlocked)
+│   ├── monitoringService.js          (pollSensors)
+│   ├── checkoutService.js            (handleCheckout)
+│   └── settlementService.js          (runMonthlySettlement)
+├── components/
+│   ├── App.jsx           ← 라우터 + 랜딩 (비즈니스 로직 없음)
+│   ├── HomeAssistant.jsx ← 개별 숙소 (5단계 타임라인 스테퍼)
+│   ├── CommandCenter.jsx ← 전체 관제 (파이프라인 뷰)
+│   ├── D1AutomationPanel.jsx
+│   ├── S02CheckinPanel.jsx
+│   ├── S03MonitoringPanel.jsx
+│   ├── S04CheckoutPanel.jsx
+│   └── S05RevenuePanel.jsx
+├── config/
+│   ├── publicConfig.js   ← 브라우저 공개 설정
+│   ├── privateConfig.js  ← Node 전용 비공개 설정 로더
+│   └── propos.public.json ← 공개 설정 정본
+├── domain/               ← 순수 함수 (부작용 없음)
+│   ├── bookingDomain.js
+│   ├── checkinDomain.js
+│   ├── checkoutDomain.js
+│   ├── messageDomain.js
+│   ├── pinDomain.js
+│   ├── revenueDomain.js
+│   └── sensorDomain.js
+├── infrastructure/
+│   ├── haClient.js       ← HA REST API 클라이언트
+│   └── haWebSocket.js    ← HA WebSocket 구독
+├── stories/              ← Storybook (재판단 보류 중)
+├── styles/
+│   └── main.css          ← CSS 토큰 정의
+└── utils/
+    ├── settlementSchedule.js
+    └── toast.js
 ```
 
-## 중요 데이터 상수 위치 (src/data/mockData.js)
-- `ALL_PROPS` — 48개 숙소 목업 (CommandCenter)
-- `BOOKING` — 현재 예약 정보 (HomeAssistant)
-- `SINGLE_PROP` — 개별 숙소 기본 정보 (HomeAssistant)
-- `DEVICES_INIT` — IoT 디바이스 초기값 (HomeAssistant)
-- `CLEANERS` — 청소 인력 목록 (공용)
-- `SC` — 상태별 컬러 맵 (공용)
-- `PC` — 우선순위 컬러 맵 (공용)
+## 정본 계층
+| 계층 | 파일 | 역할 |
+|------|------|------|
+| 시나리오 레지스트리 | `docs/scenarios.yaml` | 컴포넌트·다이어그램·서비스 entry_function·테스트 연결의 단일 정본 |
+| 워딩 기준 | `docs/content-guide.md` | UI 텍스트 일관성 규칙 |
+| 시퀀스 다이어그램 | `myPlantUML/*.uml` | 시나리오별 동작 흐름 (scenarios.yaml이 참조) |
+| 빌드 결과물 | `dist/` | `src/` 빌드 파생물, 직접 수정 금지 |
 
 ## CSS 토큰 (src/styles/main.css)
 ```css
@@ -56,11 +83,17 @@ App.jsx (라우터 + 랜딩)
 --yellow:#d97706    /* 경고/대기 */
 ```
 
+## HA 환경 정보
+- HA IP: `192.168.45.76:8123` (mDNS 불안정 → IP 직접 사용)
+- HA 버전: 2025.12.4
+- TV방 기기: `light.rgbcct_8002` / `switch.tv_smart_plug_socket_1`
+- 브라우저 공개 설정: `src/config/publicConfig.js`
+- Node 비공개 설정: `src/config/privateConfig.js`
+
 ## 세션 시작 체크리스트
 ```
 □ CLAUDE.md 읽었는가?
-□ .claude/rules/ 관련 파일 확인했는가?
-□ 변경 금지 항목 확인했는가?
-□ 작업할 컴포넌트 파일 첨부했는가?
-□ 완료 후 해당 rules 파일 업데이트 요청할 것
+□ docs/scenarios.yaml에서 관련 시나리오 확인했는가?
+□ .claude/rules/decisions.md 변경 금지 항목 확인했는가?
+□ 완료 후 progress.md 업데이트 요청할 것
 ```

@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * S04 기능 테스트 — 체크아웃 & 청소 자동화
  * node --test tests/functional/s04.functional.test.js
@@ -7,10 +5,10 @@
  * TC-F-037 ~ TC-F-054
  */
 
-const { test, describe } = require('node:test');
-const assert = require('node:assert/strict');
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
 
-const { handleCheckout, completeChecklistItem, finalizeClean } = require('../../src/application/checkoutService.js');
+import { handleCheckout, completeChecklistItem, finalizeClean } from "../../src/application/checkoutService.js";
 
 // ─────────────────────────────────────────────
 // 공통 픽스처 & Mock 빌더

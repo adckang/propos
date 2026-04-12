@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * messageDomain — 메시지 텍스트 조립 순수 도메인 함수
  * 외부 의존성 없음. 입력 → 출력만.
@@ -11,7 +9,7 @@
  * @param {{ pin: string, validFrom: string, validUntil: string }} pinRecord
  * @returns {string}
  */
-function buildWelcomeMessage(booking, pinRecord) {
+export function buildWelcomeMessage(booking, pinRecord) {
   if (!booking) throw new Error('booking is required');
   if (!pinRecord) throw new Error('pinRecord is required');
 
@@ -65,7 +63,7 @@ function _formatDateTime(iso) {
  * @param {string} actualCheckInTime  - "HH:MM" (실제 입실 시각)
  * @returns {string}
  */
-function buildCheckinConfirmMessage(booking, actualCheckInTime) {
+export function buildCheckinConfirmMessage(booking, actualCheckInTime) {
   if (!booking)            throw new Error('booking is required');
   if (!actualCheckInTime)  throw new Error('actualCheckInTime is required');
 
@@ -98,7 +96,7 @@ function buildCheckinConfirmMessage(booking, actualCheckInTime) {
  * @param {number} failCount
  * @returns {string}
  */
-function buildPinLockoutAlert(propId, failCount) {
+export function buildPinLockoutAlert(propId, failCount) {
   if (!propId)               throw new Error('propId is required');
   if (failCount == null)     throw new Error('failCount is required');
   if (typeof failCount !== 'number' || failCount < 0) throw new Error('failCount must be a non-negative number');
@@ -133,7 +131,7 @@ const _REPLY_TEMPLATES = [
  * @param {{ guestName: string }} booking
  * @returns {string}
  */
-function buildReplyDraft(guestMessage, booking) {
+export function buildReplyDraft(guestMessage, booking) {
   if (!guestMessage) throw new Error('guestMessage is required');
   if (!booking)      throw new Error('booking is required');
   if (!booking.guestName) throw new Error('booking.guestName is required');
@@ -156,7 +154,7 @@ function buildReplyDraft(guestMessage, booking) {
  * @param {{ guestName: string, propName?: string }} booking
  * @returns {string}
  */
-function buildCheckoutThankYouMessage(booking) {
+export function buildCheckoutThankYouMessage(booking) {
   if (!booking)          throw new Error('booking is required');
   if (!booking.guestName) throw new Error('booking.guestName is required');
 
@@ -169,11 +167,3 @@ function buildCheckoutThankYouMessage(booking) {
     `다음에 또 방문해 주세요! 좋은 하루 보내세요.`,
   ].join('\n');
 }
-
-module.exports = {
-  buildWelcomeMessage,
-  buildCheckinConfirmMessage,
-  buildPinLockoutAlert,
-  buildReplyDraft,
-  buildCheckoutThankYouMessage,
-};

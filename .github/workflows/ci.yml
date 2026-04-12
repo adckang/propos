@@ -24,6 +24,9 @@ jobs:
       - name: Run unit and functional tests
         run: npm test
 
+      - name: Verify scenario sync
+        run: npm run verify:scenarios
+
       - name: Verify dist sync
         run: npm run verify:dist
 

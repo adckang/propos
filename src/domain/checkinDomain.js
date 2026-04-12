@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * checkinDomain — 체크인 당일 판별 순수 도메인 함수
  * 외부 의존성 없음. 입력 → 출력만.
@@ -17,7 +15,7 @@
  *   AND booking.status === "confirmed"
  *   AND now가 getCheckinWindow(booking.checkIn) 범위 내
  */
-function isCheckinEvent(haEvent, booking, now) {
+export function isCheckinEvent(haEvent, booking, now) {
   if (!haEvent)  throw new Error('haEvent is required');
   if (!booking)  throw new Error('booking is required');
   if (!now)      throw new Error('now is required');
@@ -36,7 +34,7 @@ function isCheckinEvent(haEvent, booking, now) {
  * from  = checkIn - 1시간
  * until = checkIn + 5시간
  */
-function getCheckinWindow(checkIn) {
+export function getCheckinWindow(checkIn) {
   if (!checkIn) throw new Error('checkIn is required');
 
   // ISO 문자열에서 시/분을 직접 파싱 — new Date()의 로컬/UTC 혼용 방지
@@ -75,5 +73,3 @@ function _isTimeInWindow(time, from, until) {
   // until이 from보다 작으면 자정을 넘는 케이스 (미지원 — 단순 비교)
   return time >= from && time <= until;
 }
-
-module.exports = { isCheckinEvent, getCheckinWindow };

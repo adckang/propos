@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * pinDomain — PIN 생성/유효기간 순수 도메인 함수
  * 외부 의존성 없음. 입력 → 출력만.
@@ -9,7 +7,7 @@
  * 6자리 랜덤 PIN 생성
  * @returns {string} "000000"~"999999"
  */
-function generatePIN() {
+export function generatePIN() {
   const n = Math.floor(Math.random() * 1_000_000);
   return String(n).padStart(6, '0');
 }
@@ -23,7 +21,7 @@ function generatePIN() {
  * @param {string} checkOut - ISO 8601 (예: "2026-03-30T11:00:00")
  * @returns {{ validFrom: string, validUntil: string }}
  */
-function calcExpiry(checkIn, checkOut) {
+export function calcExpiry(checkIn, checkOut) {
   if (!checkIn || !checkOut) throw new Error('checkIn and checkOut are required');
 
   const from = new Date(_asUTC(checkIn));
@@ -53,5 +51,3 @@ function _asUTC(dateStr) {
   }
   return dateStr + 'Z';
 }
-
-module.exports = { generatePIN, calcExpiry };

@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * bookingDomain — 예약 관련 순수 도메인 함수
  * 외부 의존성 없음. 입력 → 출력만.
@@ -11,7 +9,7 @@
  * @param {string} today    - "YYYY-MM-DD" (테스트 주입용)
  * @returns {Array}
  */
-function filterTomorrowCheckIns(bookings, today) {
+export function filterTomorrowCheckIns(bookings, today) {
   if (!Array.isArray(bookings)) return [];
 
   const tomorrow = _addDays(today, 1);
@@ -33,5 +31,3 @@ function _addDays(dateStr, days) {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
-
-module.exports = { filterTomorrowCheckIns };

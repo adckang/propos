@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 
-import PROPOS_CONFIG from "../config/propos.config.json";
+import checkinService from "../application/checkinService.js";
+import PROPOS_CONFIG, { getBrowserToken } from "../config/publicConfig.js";
 
 // ============================================================
 // S02CheckinPanel.jsx — UC-002 체크인 당일 자동화 UI
@@ -69,10 +70,9 @@ function makeMockInfra(onAlert, onUpdateStatus, sceneFail, channelFail) {
 }
 
 // ── Real HA Infrastructure ───────────────────────────────────
-// 브라우저: PROPOS_CONFIG (dist/index.html 상단에 정의됨)
 const _haS02 = (() => {
   const BASE  = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.baseUrl : 'http://192.168.45.76:8123';
-  const TOKEN = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.token   : '';
+  const TOKEN = getBrowserToken();
   async function post(path, data) {
     const res = await fetch(`${BASE}${path}`, {
       method:'POST',
@@ -105,83 +105,6 @@ const _haS02 = (() => {
   }
   return { activateScene, openChannel, sendMessage };
 })();
-
-// ── Application (오케스트레이터) ─────────────────────────────
-async function runCheckinAutomation(haEvent, bookings, deps, now, onStepUpdate) {
-  const booking = bookings.find(b => b.propId === haEvent.propId);
-  if (!booking) return null;
-
-  const currentTime = now || _s02.hhmm();
-  if (!_s02.isCheckinEvent(haEvent, booking, currentTime)) return null;
-
-  const result = {
-    propId: booking.propId,
-    propName: booking.propName,
-    guestName: booking.guestName,
-    time: haEvent.time,
-    status: 'running',
-    steps: { scene: null, channel: null, message: null },
-    error: null,
-  };
-  onStepUpdate({ ...result });
-
-  // Step 1: 체크인 웰컴 씬 실행
-  try {
-    const sceneId = `scene.checkin_welcome_${booking.propId.toLowerCase().replace('-','_')}`;
-    await deps.activateScene(sceneId);
-    result.steps.scene = true;
-  } catch (err) {
-    result.steps.scene = false;
-    result.status = 'failed';
-    result.error = `씬 실행 실패: ${err.message}`;
-    deps.addAlert({ type:'error', prop:booking.propId, msg:result.error, time:haEvent.time });
-    onStepUpdate({ ...result });
-    return result;
-  }
-  onStepUpdate({ ...result });
-
-  const confirmText = _s02.buildCheckinConfirmMessage(booking, haEvent.time || _s02.hhmm());
-
-  // Step 2: 게스트 채팅 채널 오픈
-  try {
-    await deps.openChannel(booking);
-    result.steps.channel = true;
-  } catch (err) {
-    result.steps.channel = false;
-    result.status = 'partial';
-    result.error = `채팅 채널 오픈 실패: ${err.message}`;
-    deps.addAlert({ type:'warn', prop:booking.propId, msg:result.error, time:haEvent.time });
-  }
-  onStepUpdate({ ...result });
-
-  // Step 3: 입실 확인 메시지 발송
-  try {
-    await deps.sendMessage(booking.guestId, confirmText);
-    result.steps.message = true;
-  } catch (err) {
-    result.steps.message = false;
-    if (result.status === 'running') result.status = 'partial';
-    result.error = `메시지 발송 실패: ${err.message}`;
-    deps.addAlert({ type:'warn', prop:booking.propId, msg:result.error, time:haEvent.time });
-  }
-  onStepUpdate({ ...result });
-
-  // Step 4: 상태 갱신 + 완료 알림
-  deps.updateStatus(booking.propId, 'occupied');
-
-  if (result.status === 'running') {
-    result.status = 'success';
-    deps.addAlert({
-      type: 'info',
-      prop: booking.propId,
-      msg: `입실 감지 — ${booking.guestName}님 체크인 완료 (${haEvent.time})`,
-      time: haEvent.time,
-    });
-  }
-
-  onStepUpdate({ ...result });
-  return result;
-}
 
 // ── 기본 숙소 데이터 ─────────────────────────────────────────
 const DEFAULT_S02_BOOKINGS = [
@@ -347,8 +270,8 @@ function AlertItem({ alert, onAck }) {
 
 // ── Real HA WebSocket 연결 관리 (브라우저 전용) ───────────────
 const _haWsS02 = (() => {
-  const HA_WS_URL = 'ws://192.168.45.76:8123/api/websocket';
-  const HA_TOKEN  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyZThiNWNlY2U0MmU0ZjQ1ODc5ZjE1NDc4NTJkNjgyZCIsImlhdCI6MTc3NDk3MjM2OSwiZXhwIjoyMDkwMzMyMzY5fQ.fGrvj0ah1GenARULOtYrplDzlvgPl-injAB5Yqh2Zlw';
+  const HA_WS_URL = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.wsUrl : 'ws://192.168.45.76:8123/api/websocket';
+  const HA_TOKEN  = getBrowserToken();
   const MAX_RECONNECT = 5;
 
   let ws = null, msgId = 1, intentionalClose = false;
@@ -480,7 +403,13 @@ function S02CheckinPanel({ bookings: propBookings }) {
     };
 
     try {
-      const result = await runCheckinAutomation(haEvent, bookings, deps, haEvent.time, onStepUpdate);
+      const result = await checkinService.handleDoorUnlocked(
+        haEvent,
+        bookings,
+        deps,
+        haEvent.time,
+        { onStepUpdate }
+      );
 
       if (!result) {
         // 체크인 이벤트 아님 → 원상복귀
@@ -500,9 +429,7 @@ function S02CheckinPanel({ bookings: propBookings }) {
 
   // ── PIN 오류 처리 ──
   const handlePinLockout = (propId, failCount) => {
-    const time = _s02.hhmm();
-    const text = _s02.buildPinLockoutAlert(propId, failCount);
-    addAlert({ type:'error', prop:propId, msg:text, time });
+    checkinService.handlePinLockout({ propId, failCount, time: _s02.hhmm() }, { addAlert });
   };
 
   // ── handleEventRef: WS 콜백에서 항상 최신 handleEvent 호출 ──

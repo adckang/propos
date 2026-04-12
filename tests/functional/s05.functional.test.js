@@ -1,18 +1,16 @@
-'use strict';
-
 /**
  * S05 기능 테스트 — 수익 정산 오케스트레이션
  * node --test tests/functional/s05.functional.test.js
  */
 
-const { test, describe } = require('node:test');
-const assert = require('node:assert/strict');
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
 
-const {
+import {
   runMonthlySettlement,
   applyPricingRecommendations,
   fetchWithRetry,
-} = require('../../src/application/settlementService.js');
+} from "../../src/application/settlementService.js";
 
 // ============================================================
 // 공통 픽스처

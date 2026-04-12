@@ -4,3 +4,5 @@ node_modules/
 playwright-report/
 test-results/
 myPlantUML/test.uml
+src/config/propos.config.json
+src/config/propos.config.local.json

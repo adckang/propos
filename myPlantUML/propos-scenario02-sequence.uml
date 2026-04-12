@@ -85,7 +85,7 @@ end
 
 == 1. 입실 감지 — 체크인 이벤트 판별 ==
 
-Panel -> Panel : runCheckinAutomation(haEvent, bookings, deps, now)\n→ isCheckinEvent(haEvent, booking, now)
+Panel -> Panel : handleDoorUnlocked(haEvent, bookings, deps, now)\n→ isCheckinEvent(haEvent, booking, now)
 
 note over Panel
   [src] checkinDomain.js
@@ -100,7 +100,7 @@ end note
 
 note over Panel
   [src] S02CheckinPanel.jsx
-  [fn]  handleEvent(haEvent) → runCheckinAutomation()
+  [fn]  handleEvent(haEvent) → handleDoorUnlocked()
   흐름: isCheckinEvent → 씬실행 → 채팅오픈 → 메시지발송 → 상태갱신 → 알림
   TC-F-011~F-023 전범위 커버
 end note
@@ -225,7 +225,7 @@ legend right
   핵심: 비대면 입실 — 관리자 0 개입
   ----
   소스 파일 매핑
-  S02CheckinPanel.jsx   handleEvent() / runCheckinAutomation()
+  S02CheckinPanel.jsx   handleEvent() / handleDoorUnlocked()
   checkinDomain.js      isCheckinEvent / getCheckinWindow
   messageDomain.js      buildCheckinConfirmMessage / buildPinLockoutAlert
   haClient.js           activateScene / openChannel / sendMessage

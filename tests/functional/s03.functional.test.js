@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * S03 기능 테스트 — 체류 중 모니터링
  * node --test tests/functional/s03.functional.test.js
@@ -7,11 +5,11 @@
  * TC-F-024 ~ TC-F-036
  */
 
-const { test, describe } = require('node:test');
-const assert = require('node:assert/strict');
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
 
-const { pollSensors, pollAll, handleGuestMessage } = require('../../src/application/monitoringService.js');
-const { getDefaultThresholds }                     = require('../../src/domain/sensorDomain.js');
+import { pollSensors, pollAll, handleGuestMessage } from "../../src/application/monitoringService.js";
+import { getDefaultThresholds } from "../../src/domain/sensorDomain.js";
 
 // ─────────────────────────────────────────────
 // 공통 픽스처 & Mock 빌더

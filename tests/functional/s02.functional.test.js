@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * UC-002 기능 테스트 (S02 체크인 당일 자동화)
  * 수용 기준: 시퀀스 다이어그램 propos-scenario02-sequence.uml 기준
@@ -18,10 +16,10 @@
  * TC-F-022  updateStatus — 성공 시 "occupied"로 호출됨
  */
 
-const { test, describe } = require('node:test');
-const assert = require('node:assert/strict');
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
 
-const { handleDoorUnlocked, handlePinLockout } = require('../../src/application/checkinService.js');
+import { handleDoorUnlocked, handlePinLockout } from "../../src/application/checkinService.js";
 
 // ============================================================
 // 공통 픽스처

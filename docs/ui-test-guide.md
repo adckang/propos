@@ -6,17 +6,20 @@
 
 ## 실행 환경
 
+> 시나리오 정본: `docs/scenarios.yaml`
+
 ```bash
 cd /Users/kimjinsol/Downloads/propos-project-v2
-python3 -m http.server 8080
-# 브라우저: http://localhost:8080/dist/
+npm install
+npm run dev
+# 브라우저: http://localhost:5173
 ```
 
 ---
 
 ## UC-001 · D-1 체크인 전날 자동화
 
-**구현 파일:** `src/components/D1AutomationPanel.jsx` → `dist/index.html`
+**구현 파일:** `src/components/D1AutomationPanel.jsx`
 **진입 경로:** 랜딩 → ⚡ D-1 자동화 카드
 
 ---
@@ -35,7 +38,7 @@ python3 -m http.server 8080
 
 | 순서 | 액션 | 기대 결과 |
 |------|------|----------|
-| 1 | `http://localhost:8080/dist/` 접속 | 랜딩 화면 — 카드 3개 표시 |
+| 1 | `http://localhost:5173` 접속 | 랜딩 화면 — 카드 3개 표시 |
 | 2 | ⚡ **D-1 자동화** 카드 클릭 | D-1 화면 진입 |
 | 3 | 화면 확인 | 타이틀: "D-1 체크인 전날 자동화" |
 | 4 | 서브타이틀 확인 | `UC-001 · 매일 18:00 · cron: "0 18 * * *"` |

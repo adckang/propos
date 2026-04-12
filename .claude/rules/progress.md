@@ -6,9 +6,9 @@
 ---
 
 ## 현재 상태
-- **버전**: v0.9 (Config 중앙화 + 미구현 항목 분석)
+- **버전**: v1.0 (구조 정리 완료 — 삼박자 싱크 확립)
 - **배포**: Netlify Drop (dist/index.html)
-- **업데이트**: 2026-04-10
+- **업데이트**: 2026-04-12
 
 ## 완료된 마일스톤
 
@@ -49,8 +49,6 @@
 - dist/index.html 동기화 완료
 
 ### ✅ M5: UC-002 체크인 당일 자동화 (2026-04-02)
-- `.claude/rules/s02-module-boundary.md` — 모듈 경계 정의
-- `.claude/rules/s02-interface-definitions.md` — 인터페이스 정의
 - `src/domain/checkinDomain.js` — isCheckinEvent, getCheckinWindow
 - `src/domain/messageDomain.js` — buildCheckinConfirmMessage, buildPinLockoutAlert 추가
 - `src/application/checkinService.js` — handleDoorUnlocked, handlePinLockout
@@ -62,8 +60,6 @@
 - **전체 테스트 112개 통과 (fail 0)**
 
 ### ✅ M6: UC-003 체류 중 모니터링 (2026-04-03)
-- `.claude/rules/s03-module-boundary.md` — 모듈 경계 정의 (완료)
-- `.claude/rules/s03-interface-definitions.md` — 인터페이스 정의 (완료)
 - `src/domain/sensorDomain.js` — isAnomaly, buildAnomalyAlert, getDefaultThresholds
 - `src/domain/messageDomain.js` — buildReplyDraft 추가 (키워드 매칭 4종)
 - `src/application/monitoringService.js` — pollSensors, pollAll, handleGuestMessage
@@ -74,8 +70,6 @@
 - **전체 테스트 146개 통과 (fail 0)**
 
 ### ✅ M7: UC-004 체크아웃 & 청소 자동화 (2026-04-03)
-- `.claude/rules/s04-module-boundary.md` — 모듈 경계 정의
-- `.claude/rules/s04-interface-definitions.md` — 인터페이스 정의
 - `src/domain/checkoutDomain.js` — isCheckoutEvent, getCheckoutWindow, assignCleaner, buildChecklist, buildCheckoutAlert, buildCleanerAssignAlert
 - `src/domain/messageDomain.js` — buildCheckoutThankYouMessage 추가
 - `src/application/checkoutService.js` — handleCheckout, completeChecklistItem, finalizeClean
@@ -87,8 +81,6 @@
 - **전체 테스트 243개 통과 (fail 0)**
 
 ### ✅ M8: UC-005 수익 정산 자동화 (2026-04-04)
-- `.claude/rules/s05-module-boundary.md` — 모듈 경계 정의
-- `.claude/rules/s05-interface-definitions.md` — 인터페이스 정의
 - `src/domain/revenueDomain.js` — aggregateRevenue, calcTax, getPricingRecommendations, 알림 텍스트 함수 6개
 - `src/application/settlementService.js` — runMonthlySettlement, applyPricingRecommendations, fetchWithRetry
 - `tests/unit/s05.domain.test.js` — 61개 통과
@@ -97,16 +89,15 @@
 - `dist/index.html` 동기화 + 랜딩 UC-005 카드 추가
 - **전체 테스트 342개 통과 (fail 0)**
 
-## 진행 중
-없음
-
 ---
 
 ## ✅ M9: Config 중앙화 (2026-04-10)
-- `src/config/propos.config.js` 신규 생성 — 전체 설정 단일 파일 관리
-- `src/infrastructure/haClient.js` → config require로 변경 (IP/토큰/entity 하드코딩 제거)
-- `src/infrastructure/haWebSocket.js` → config require로 변경
-- `src/components/{D1,S02,S03,S04}Panel.jsx` → `PROPOS_CONFIG` 전역 참조로 변경
+- 이후 구조 개선으로 공개/비공개 설정 분리됨:
+  - `src/config/publicConfig.js` / `src/config/propos.public.json`
+  - `src/config/privateConfig.js`
+- `src/infrastructure/haClient.js` → privateConfig 참조
+- `src/infrastructure/haWebSocket.js` → privateConfig 참조
+- `src/components/{D1,S02,S03,S04}Panel.jsx` → publicConfig + 런타임 브라우저 토큰 참조
 - `dist/index.html`:
   - PROPOS_CONFIG 설정 블록 신규 추가 (파일 최상단 `<script>` 섹션)
   - IP/토큰/entity ID → 모두 PROPOS_CONFIG 단일 블록으로 통합
@@ -114,6 +105,18 @@
   - S03 센서 임계값 → PROPOS_CONFIG.sensorThresholds 참조
   - S03 센서 entity ID → PROPOS_CONFIG.entities 참조 (null이면 스킵)
   - haClient.getSensorStates → noise/power 센서 추가 시 자동 반영 구조
+
+## ✅ M10: UI 재설계 + 구조 정리 (2026-04-12)
+- CommandCenter: CC_STAGES 파이프라인 뷰 (단계별 카운트 + 긴급 배지 + 배치 액션)
+- HomeAssistant: HA_STAGES 5단계 타임라인 스테퍼 (탭 → 스테퍼 전환)
+- ha-quick-strip: 상시 노출 IoT 빠른 제어 버튼 추가
+- `.claude/rules/s01~s05-interface-definitions.md` 10개 삭제 (diagram/source 3중 중복)
+- `docs/scenario-index.md` + `scripts/generate-scenario-index.mjs` 삭제
+- `docs/scenarios.yaml`: content_keys 제거, entry_function 5개 추가
+- `scripts/verify-scenarios-sync.mjs`: entry_function → service 파일 + diagram 양방향 검증 추가
+- `myPlantUML/propos-scenario02-sequence.uml`: runCheckinAutomation → handleDoorUnlocked 수정
+- `.claude/CLAUDE.md`, `architecture.md`, `decisions.md`, `progress.md` 전면 갱신
+- **전체 테스트 364개 통과 (fail 0), verify:scenarios All checks passed**
 
 ---
 

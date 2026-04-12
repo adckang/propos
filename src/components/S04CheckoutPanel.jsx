@@ -1,6 +1,7 @@
 import React from "react";
 
-import PROPOS_CONFIG from "../config/propos.config.json";
+import checkoutService from "../application/checkoutService.js";
+import PROPOS_CONFIG, { getBrowserToken } from "../config/publicConfig.js";
 
 // ============================================================
 // S04CheckoutPanel.jsx — UC-004 체크아웃 & 청소 자동화 UI
@@ -70,7 +71,7 @@ const _haMockS04 = {
 
 const _haRealS04 = (() => {
   const BASE  = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.baseUrl : 'http://192.168.45.76:8123';
-  const TOKEN = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.token   : '';
+  const TOKEN = getBrowserToken();
 
   async function expirePin(entityId) {
     const res = await fetch(`${BASE}/api/services/persistent_notification/create`, {
@@ -87,7 +88,7 @@ const _haRealS04 = (() => {
 // ── Real HA WebSocket — 퇴실 감지용 ──────────────────────────
 const _haWsS04 = (() => {
   const HA_WS_URL = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.wsUrl   : 'ws://192.168.45.76:8123/api/websocket';
-  const HA_TOKEN  = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.token   : '';
+  const HA_TOKEN  = getBrowserToken();
   const MAX_RECONNECT = 5;
 
   let ws = null, msgId = 1, intentionalClose = false;
@@ -432,60 +433,49 @@ function S04CheckoutPanel({ onBack }) {
 
     const now = _s04.hhmm();
     const event = { event: eventType, propId: selectedProp, time: now };
-    const booking = currentBooking;
-
-    if (!booking) {
-      addAlert({ type: 'warn', prop: selectedProp, msg: '예약 정보 없음', time: now });
-      setProcessing(false);
-      return;
-    }
-
-    // 체크아웃 이벤트 판별
-    if (!_s04.isCheckoutEvent(event, booking, now)) {
-      addAlert({
-        type: 'warn', prop: booking.propName,
-        msg: `체크아웃 이벤트 아님 — 현재 시각(${now})이 체크아웃 시간창 밖이거나 상태 불일치`,
-        time: now,
-      });
-      setProcessing(false);
-      return;
-    }
-
-    // PIN 만료 카운트다운 시작
-    setPinCountdown(true);
 
     try {
-      // PIN 만료
       const infra = getInfra();
-      await infra.expirePin(`lock.front_door_${selectedProp.toLowerCase().replace('-', '_')}`);
-      setPinDone(prev => ({ ...prev, [selectedProp]: true }));
-      addAlert({ type: 'info', prop: booking.propName, msg: `PIN 만료 완료 — 도어락 비활성화`, time: _s04.hhmm() });
+      const result = await checkoutService.handleCheckout(
+        event,
+        _S04_PROPS,
+        _S04_CLEANERS,
+        {
+          expirePin: async entityId => {
+            setPinCountdown(true);
+            await infra.expirePin(entityId);
+            setPinDone(prev => ({ ...prev, [selectedProp]: true }));
+          },
+          addAlert: alert => {
+            const booking = _S04_PROPS.find(item => item.propId === alert.prop);
+            addAlert({
+              ...alert,
+              prop: booking?.propName || currentBooking?.propName || alert.prop,
+            });
+          },
+          updateStatus: (propId, status) => {
+            setPropStatuses(prev => ({ ...prev, [propId]: status }));
+          },
+          setAssignment: (propId, assignment) => {
+            setAssignments(prev => ({ ...prev, [propId]: assignment }));
+          },
+          setChecklist: (propId, items) => {
+            setChecklists(prev => ({ ...prev, [propId]: items }));
+          },
+        },
+        now
+      );
 
-      // 청소팀 배정
-      const assignment = _s04.assignCleaner(_S04_CLEANERS, selectedProp, now);
-      setAssignments(prev => ({ ...prev, [selectedProp]: assignment }));
-      addAlert({
-        type: 'info', prop: booking.propName,
-        msg: `청소팀 배정 완료 — ${assignment.cleanerName} 도착예정 ${assignment.estimatedArrival}`,
-        time: _s04.hhmm(),
-      });
-
-      // 체크리스트 생성
-      const items = _s04.buildChecklist(selectedProp);
-      setChecklists(prev => ({ ...prev, [selectedProp]: items }));
-
-      // 숙소 상태 → 청소 중
-      setPropStatuses(prev => ({ ...prev, [selectedProp]: 'cleaning' }));
-
-      // 체크아웃 완료 알림
-      addAlert({
-        type: 'info', prop: booking.propName,
-        msg: `${selectedProp} 체크아웃 완료 — ${booking.guestName}님 퇴실 (${now})`,
-        time: now,
-      });
-
+      if (result.status === "failed") {
+        addAlert({
+          type: "warn",
+          prop: currentBooking?.propName || selectedProp,
+          msg: result.error || "체크아웃 이벤트 아님",
+          time: now,
+        });
+      }
     } catch (err) {
-      addAlert({ type: 'error', prop: booking.propName, msg: `체크아웃 자동화 오류: ${err.message}`, time: _s04.hhmm() });
+      addAlert({ type: 'error', prop: currentBooking?.propName || selectedProp, msg: `체크아웃 자동화 오류: ${err.message}`, time: _s04.hhmm() });
     } finally {
       setProcessing(false);
     }
@@ -493,22 +483,34 @@ function S04CheckoutPanel({ onBack }) {
 
   // ── 청소 항목 토글 ──
   function toggleChecklistItem(itemId) {
-    setChecklists(prev => {
-      const items = prev[selectedProp] || [];
-      return {
-        ...prev,
-        [selectedProp]: items.map(i => i.id === itemId ? { ...i, done: !i.done } : i),
-      };
+    const items = checklists[selectedProp] || [];
+    const target = items.find(item => item.id === itemId);
+    if (!target || target.done) return;
+
+    checkoutService.completeChecklistItem(selectedProp, itemId, {
+      updateChecklistItem: (propId, id, done) => {
+        setChecklists(prev => {
+          const nextItems = (prev[propId] || []).map(item =>
+            item.id === id ? { ...item, done } : item
+          );
+          return { ...prev, [propId]: nextItems };
+        });
+      },
     });
   }
 
   // ── 청소 완료 처리 ──
   function handleFinalizeClean() {
-    setPropStatuses(prev => ({ ...prev, [selectedProp]: 'vacant' }));
-    addAlert({
-      type: 'info', prop: currentBooking ? currentBooking.propName : selectedProp,
-      msg: `${selectedProp} 청소 완료 — 숙소 준비 완료`,
-      time: _s04.hhmm(),
+    checkoutService.finalizeClean(selectedProp, {
+      updateStatus: (propId, status) => {
+        setPropStatuses(prev => ({ ...prev, [propId]: status }));
+      },
+      addAlert: alert => {
+        addAlert({
+          ...alert,
+          prop: currentBooking?.propName || alert.prop,
+        });
+      },
     });
   }
 

@@ -1,11 +1,13 @@
 {
   "name": "propos-project-v2",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test tests/unit/*.test.js tests/functional/*.test.js",
+    "verify:scenarios": "node scripts/verify-scenarios-sync.mjs",
     "sync:dist": "node scripts/sync-dist.mjs",
     "verify:dist": "node scripts/verify-dist-sync.mjs",
     "test:smoke": "playwright test",
@@ -16,8 +18,10 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@babel/parser": "^7.29.2",
     "@playwright/test": "^1.54.2",
     "@vitejs/plugin-react": "^4.3.3",
-    "vite": "^5.4.10"
+    "vite": "^5.4.10",
+    "yaml": "^2.8.3"
   }
 }

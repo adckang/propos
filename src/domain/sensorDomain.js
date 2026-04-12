@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * sensorDomain — 센서 이상 감지 순수 도메인 함수
  * 외부 의존성 없음. 입력 → 출력만.
@@ -9,7 +7,7 @@
  * 기본 임계값 반환
  * @returns {Thresholds}
  */
-function getDefaultThresholds() {
+export function getDefaultThresholds() {
   return {
     temp:     { warn: 30, critical: 35 },
     humidity: { warn: 80, critical: 90 },
@@ -24,7 +22,7 @@ function getDefaultThresholds() {
  * @param {Thresholds} thresholds
  * @returns {{ isAnomaly: boolean, severity: "warn"|"critical"|null, sensors: string[] }}
  */
-function isAnomaly(reading, thresholds) {
+export function isAnomaly(reading, thresholds) {
   if (!reading)    throw new Error('reading is required');
   if (!thresholds) throw new Error('thresholds is required');
 
@@ -62,7 +60,7 @@ function isAnomaly(reading, thresholds) {
  * @param {{ sensors: string[], severity: string }} anomaly
  * @returns {string}
  */
-function buildAnomalyAlert(propId, reading, anomaly) {
+export function buildAnomalyAlert(propId, reading, anomaly) {
   if (!propId)  throw new Error('propId is required');
   if (!reading) throw new Error('reading is required');
   if (!anomaly) throw new Error('anomaly is required');
@@ -80,4 +78,4 @@ function buildAnomalyAlert(propId, reading, anomaly) {
   return `${severity} ${propId} — ${lines.join(', ')} — 확인 필요`;
 }
 
-module.exports = { isAnomaly, buildAnomalyAlert, getDefaultThresholds };
+export default { isAnomaly, buildAnomalyAlert, getDefaultThresholds };

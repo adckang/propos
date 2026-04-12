@@ -1,12 +1,11 @@
-'use strict';
-
 /**
  * S07 단위 테스트 — HA 센서 클라이언트 (haClient.getSensorStates)
  * node --test tests/unit/s07.sensor.test.js
  */
 
-const { test, describe } = require('node:test');
-const assert = require('node:assert/strict');
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
+import { getSensorStates } from "../../src/infrastructure/haClient.js";
 
 // ============================================================
 // fetch 모킹 유틸리티
@@ -23,18 +22,6 @@ function makeFetch(responses) {
   };
 }
 
-function loadModule(fetchImpl) {
-  // haClient를 require할 때 global.fetch를 대체
-  // Node.js 22에서 global.fetch 지원
-  const orig = global.fetch;
-  global.fetch = fetchImpl;
-  // 캐시 제거 후 재로드
-  delete require.cache[require.resolve('../../src/infrastructure/haClient.js')];
-  const mod = require('../../src/infrastructure/haClient.js');
-  global.fetch = orig;
-  return mod;
-}
-
 // ============================================================
 // TC-SN-001 ~ TC-SN-006
 // ============================================================
@@ -46,7 +33,6 @@ describe('haClient.getSensorStates — TC-SN-001 ~ TC-SN-006', () => {
       'sensor.temperature_humidity_sensor_temperature': { state: '24.5' },
       'sensor.temperature_humidity_sensor_humidity':    { state: '62.3' },
     });
-    const { getSensorStates } = loadModule(fetch);
     const result = await getSensorStates('P-042', fetch);
 
     assert.equal(result.propId,   'P-042');
@@ -59,7 +45,6 @@ describe('haClient.getSensorStates — TC-SN-001 ~ TC-SN-006', () => {
       'sensor.temperature_humidity_sensor_temperature': { state: '26.0' },
       // humidity entity 없음
     });
-    const { getSensorStates } = loadModule(fetch);
     const result = await getSensorStates('P-042', fetch);
 
     assert.ok(Math.abs(result.temp - 26.0) < 0.01, `temp 기대 26.0, 실제 ${result.temp}`);
@@ -68,7 +53,6 @@ describe('haClient.getSensorStates — TC-SN-001 ~ TC-SN-006', () => {
 
   test('TC-SN-003: 온도 센서 404 → temp: null, 나머지 null', async () => {
     const fetch = makeFetch({});
-    const { getSensorStates } = loadModule(fetch);
     const result = await getSensorStates('P-042', fetch);
 
     assert.equal(result.temp,     null);
@@ -80,7 +64,6 @@ describe('haClient.getSensorStates — TC-SN-001 ~ TC-SN-006', () => {
       'sensor.temperature_humidity_sensor_temperature': { state: 'unavailable' },
       'sensor.temperature_humidity_sensor_humidity':    { state: 'unavailable' },
     });
-    const { getSensorStates } = loadModule(fetch);
     const result = await getSensorStates('P-042', fetch);
 
     assert.equal(result.temp,     null, 'unavailable → null');
@@ -91,7 +74,6 @@ describe('haClient.getSensorStates — TC-SN-001 ~ TC-SN-006', () => {
     const fetch = makeFetch({
       'sensor.temperature_humidity_sensor_temperature': { state: 'unknown' },
     });
-    const { getSensorStates } = loadModule(fetch);
     const result = await getSensorStates('P-042', fetch);
 
     assert.equal(result.temp, null);
@@ -102,7 +84,6 @@ describe('haClient.getSensorStates — TC-SN-001 ~ TC-SN-006', () => {
       'sensor.temperature_humidity_sensor_temperature': { state: '25.0' },
       'sensor.temperature_humidity_sensor_humidity':    { state: '60.0' },
     });
-    const { getSensorStates } = loadModule(fetch);
     const result = await getSensorStates('P-042', fetch);
 
     assert.equal(result.noise, null, 'noise는 null (센서 미연동)');

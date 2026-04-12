@@ -6,5 +6,14 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    commonjsOptions: {
+      include: [
+        /node_modules/,
+        /src\/application\//,
+        /src\/domain\//,
+        /src\/infrastructure\//,
+        /src\/config\//,
+      ],
+    },
   },
 });

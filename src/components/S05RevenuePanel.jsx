@@ -1,5 +1,7 @@
 import React from "react";
 
+import settlementService from "../application/settlementService.js";
+
 // ============================================================
 // S05RevenuePanel.jsx — UC-005 수익 정산 자동화 UI
 // 시나리오: 월말 자동화 → 멀티플랫폼 수집 → AI 가격 최적화 → 세금 리포트
@@ -432,54 +434,46 @@ function S05RevenuePanel({ onBack }) {
     resetAll();
     setRunning(true);
 
-    const period = `${month}월`;
     const propCount = _PROP_DATA.length;
 
-    // Step 1: 정산 시작 알림
-    addAlert({ type:'info', prop:'SYSTEM', msg:`${period} 수익 정산 시작 (${propCount}개 숙소)`, time:_s05.hhmm() });
     setSteps(s => ({ ...s, start: true }));
 
     try {
-      // Step 2~3: 플랫폼 데이터 수집
-      const airbnbFetch  = () => failMode ? Promise.reject(new Error('503 Service Unavailable')) : _mockPlatform.fetchAirbnb(period);
-      const yanoljaFetch = () => _mockPlatform.fetchYanolja(period);
-
-      let ab, ya;
-      try {
-        [ab, ya] = await Promise.all([
-          _fetchWithRetry(airbnbFetch,  3, '에어비앤비', addAlert),
-          _fetchWithRetry(yanoljaFetch, 3, '야놀자',     addAlert),
-        ]);
-      } catch (err) {
-        addAlert({ type:'error', prop:'SYSTEM', msg:`데이터 수집 실패: ${err.message}`, time:_s05.hhmm() });
-        setRunning(false);
-        return;
-      }
-
-      setAirbnbData(ab);
-      setYanoljaData(ya);
-
-      // Step 4: 수익 집계
-      const rev = _s05.aggregateRevenue({ airbnb: ab, yanolja: ya }, OPERATING_COST);
-      setRevenueData(rev);
-      setSteps(s => ({ ...s, data: true }));
-      addAlert({ type:'info', prop:'SYSTEM', msg:`수익 데이터 수집 완료\n총 수익: ${_s05.won(rev.totalGross)} (${propCount}개 숙소)`, time:_s05.hhmm() });
-
-      // Step 5: AI 가격 최적화
-      await new Promise(r => setTimeout(r, 500)); // 분석 딜레이 시뮬
-      const pricing = _s05.getPricingRecommendations(_PROP_DATA, marketTrend);
-      setPricingData(pricing);
-      setSelectedProps(_PROP_DATA.map(p => p.propId)); // 기본 전체 선택
-      setSteps(s => ({ ...s, pricing: true }));
-      addAlert({ type:'info', prop:'SYSTEM', msg:`AI 가격 최적화 완료\n예상 수익 향상: ${pricing.projectedRevenueIncrease} (${_s05.won(pricing.totalProjected)})`, time:_s05.hhmm() });
-
-      // Step 6: 세금 리포트
-      await new Promise(r => setTimeout(r, 300));
-      const tax = _s05.calcTax(rev);
-      setTaxData(tax);
-      setSteps(s => ({ ...s, tax: true }));
-      addAlert({ type:'info', prop:'SYSTEM', msg:`세금 리포트 생성 완료\n(VAT: ${_s05.won(tax.vat)} / 소득세 추정: ${_s05.won(tax.incomeTaxEstimate)})`, time:_s05.hhmm() });
-
+      await settlementService.runMonthlySettlement(
+        {
+          year,
+          month,
+          propCount,
+          operatingCost: OPERATING_COST,
+          marketTrend,
+        },
+        {
+          fetchAirbnb: () => failMode ? Promise.reject(new Error("503 Service Unavailable")) : _mockPlatform.fetchAirbnb(`${month}월`),
+          fetchYanolja: () => _mockPlatform.fetchYanolja(`${month}월`),
+          getPropDataList: () => _PROP_DATA.map(({ propId, occupancy, avgNightlyRate, competitorAvg }) => ({
+            propId,
+            occupancy,
+            avgNightlyRate,
+            competitorAvg,
+          })),
+          setRevenueData: data => {
+            setAirbnbData(data.byPlatform.airbnb || null);
+            setYanoljaData(data.byPlatform.yanolja || null);
+            setRevenueData(data);
+            setSteps(s => ({ ...s, data: true }));
+          },
+          setPricingData: data => {
+            setPricingData(data);
+            setSelectedProps(_PROP_DATA.map(p => p.propId));
+            setSteps(s => ({ ...s, pricing: true }));
+          },
+          setTaxData: data => {
+            setTaxData(data);
+            setSteps(s => ({ ...s, tax: true }));
+          },
+          addAlert,
+        }
+      );
     } finally {
       setRunning(false);
     }
@@ -489,13 +483,15 @@ function S05RevenuePanel({ onBack }) {
     if (!pricingData || selectedProps.length === 0) return;
     setApplying(true);
     try {
-      const targets = pricingData.recommendations.filter(r => selectedProps.includes(r.propId));
-      const listings = targets.map(r => ({ propId: r.propId, suggestedRate: r.suggestedRate }));
-      await _mockPlatform.updateAirbnbPricing(listings);
-      await _mockPlatform.updateYanoljaPricing(listings);
-      addAlert({ type:'info', prop:'SYSTEM', msg:`AI 가격 최적화 적용 완료 (${targets.length}개 숙소)`, time:_s05.hhmm() });
-    } catch (err) {
-      addAlert({ type:'error', prop:'SYSTEM', msg:`가격 업데이트 오류: ${err.message}`, time:_s05.hhmm() });
+      await settlementService.applyPricingRecommendations(
+        selectedProps,
+        pricingData.recommendations,
+        {
+          updateAirbnbPricing: listings => _mockPlatform.updateAirbnbPricing(listings),
+          updateYanoljaPricing: listings => _mockPlatform.updateYanoljaPricing(listings),
+          addAlert,
+        }
+      );
     } finally {
       setApplying(false);
     }

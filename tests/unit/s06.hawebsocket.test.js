@@ -1,12 +1,11 @@
-'use strict';
-
 /**
  * S06 단위 테스트 — HA WebSocket 클라이언트
  * node --test tests/unit/s06.hawebsocket.test.js
  */
 
-const { test, describe, beforeEach } = require('node:test');
-const assert = require('node:assert/strict');
+import { beforeEach, describe, test } from "node:test";
+import assert from "node:assert/strict";
+import { createHAConnection, HA_TOKEN } from "../../src/infrastructure/haWebSocket.js";
 
 // ============================================================
 // MockWebSocket — 브라우저 WebSocket API 모방
@@ -28,12 +27,6 @@ class MockWebSocket {
 
 beforeEach(() => { MockWebSocket.instances = []; });
 
-// createHAConnection 을 여기서 인라인 구현해 테스트
-// (실제 모듈 require 후 테스트 — 구현 전이므로 선 정의)
-function loadModule() {
-  return require('../../src/infrastructure/haWebSocket.js');
-}
-
 // ============================================================
 // TC-WS-001 ~ TC-WS-009
 // ============================================================
@@ -41,7 +34,6 @@ function loadModule() {
 describe('haWebSocket — TC-WS-001 ~ TC-WS-009', () => {
 
   test('TC-WS-001: connect() 호출 시 즉시 onStatusChange("connecting") 발생', () => {
-    const { createHAConnection } = loadModule();
     const statuses = [];
     createHAConnection({
       onEvent: () => {},
@@ -52,7 +44,6 @@ describe('haWebSocket — TC-WS-001 ~ TC-WS-009', () => {
   });
 
   test('TC-WS-002: auth_required 수신 → auth 메시지 전송 (access_token 포함)', () => {
-    const { createHAConnection, HA_TOKEN } = loadModule();
     createHAConnection({
       onEvent: () => {},
       onStatusChange: () => {},
@@ -66,7 +57,6 @@ describe('haWebSocket — TC-WS-001 ~ TC-WS-009', () => {
   });
 
   test('TC-WS-003: auth_ok 수신 → onStatusChange("connected") + subscribe_events 전송', () => {
-    const { createHAConnection } = loadModule();
     const statuses = [];
     createHAConnection({
       onEvent: () => {},
@@ -84,7 +74,6 @@ describe('haWebSocket — TC-WS-001 ~ TC-WS-009', () => {
   });
 
   test('TC-WS-004: auth_invalid 수신 → onStatusChange("error") + 재연결 없음', (t) => {
-    const { createHAConnection } = loadModule();
     const statuses = [];
     const conn = createHAConnection({
       onEvent: () => {},
@@ -101,7 +90,6 @@ describe('haWebSocket — TC-WS-001 ~ TC-WS-009', () => {
   });
 
   test('TC-WS-005: state_changed 이벤트 수신 → onEvent({ entityId, newState, oldState }) 호출', () => {
-    const { createHAConnection } = loadModule();
     const events = [];
     createHAConnection({
       onEvent: ev => events.push(ev),
@@ -130,7 +118,6 @@ describe('haWebSocket — TC-WS-001 ~ TC-WS-009', () => {
   });
 
   test('TC-WS-006: state_changed 외 이벤트 타입은 onEvent 호출하지 않음', () => {
-    const { createHAConnection } = loadModule();
     const events = [];
     createHAConnection({
       onEvent: ev => events.push(ev),
@@ -146,7 +133,6 @@ describe('haWebSocket — TC-WS-001 ~ TC-WS-009', () => {
   });
 
   test('TC-WS-007: disconnect() 호출 후 WS close + 재연결 없음', () => {
-    const { createHAConnection } = loadModule();
     const conn = createHAConnection({
       onEvent: () => {},
       onStatusChange: () => {},
@@ -163,7 +149,6 @@ describe('haWebSocket — TC-WS-001 ~ TC-WS-009', () => {
   });
 
   test('TC-WS-008: 비정상 연결 끊김 → onStatusChange("reconnecting") 발생', (t) => {
-    const { createHAConnection } = loadModule();
     const statuses = [];
     const conn = createHAConnection({
       onEvent: () => {},
@@ -181,7 +166,6 @@ describe('haWebSocket — TC-WS-001 ~ TC-WS-009', () => {
   });
 
   test('TC-WS-009: JSON 파싱 오류 메시지는 조용히 무시 (onEvent 미호출)', () => {
-    const { createHAConnection } = loadModule();
     const events = [];
     createHAConnection({
       onEvent: ev => events.push(ev),

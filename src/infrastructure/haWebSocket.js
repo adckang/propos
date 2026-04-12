@@ -1,14 +1,13 @@
-'use strict';
-
 // ============================================================
 // haWebSocket.js — Home Assistant WebSocket 클라이언트
 // HA WebSocket API: ws://IP:8123/api/websocket
 //
 // 브라우저 환경에서 실행. node:test 시 WebSocketImpl 주입으로 테스트.
-// 설정 변경: src/config/propos.config.js 참고
+// 설정 변경: src/config/privateConfig.js 참고
 // ============================================================
 
-const CFG       = require('../config/propos.config');
+import CFG from "../config/privateConfig.js";
+
 const HA_WS_URL = CFG.ha.wsUrl;
 const HA_TOKEN  = CFG.ha.token;
 
@@ -23,7 +22,7 @@ const MAX_RECONNECT = 5;
  * @param {Function} [opts.WebSocketImpl]  - 테스트 주입용 (기본: 전역 WebSocket)
  * @returns {{ disconnect: () => void }}
  */
-function createHAConnection({ onEvent, onStatusChange, WebSocketImpl }) {
+export function createHAConnection({ onEvent, onStatusChange, WebSocketImpl }) {
   const WS = WebSocketImpl || (typeof WebSocket !== 'undefined' ? WebSocket : null);
   if (!WS) throw new Error('WebSocket을 사용할 수 없는 환경입니다');
 
@@ -126,4 +125,5 @@ function createHAConnection({ onEvent, onStatusChange, WebSocketImpl }) {
   };
 }
 
-module.exports = { createHAConnection, HA_WS_URL, HA_TOKEN };
+export { HA_WS_URL, HA_TOKEN };
+export default { createHAConnection, HA_WS_URL, HA_TOKEN };

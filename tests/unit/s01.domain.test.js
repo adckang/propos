@@ -1,11 +1,9 @@
-'use strict';
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
 
-const { test, describe } = require('node:test');
-const assert = require('node:assert/strict');
-
-const { filterTomorrowCheckIns }  = require('../../src/domain/bookingDomain.js');
-const { generatePIN, calcExpiry } = require('../../src/domain/pinDomain.js');
-const { buildWelcomeMessage }     = require('../../src/domain/messageDomain.js');
+import { filterTomorrowCheckIns } from "../../src/domain/bookingDomain.js";
+import { generatePIN, calcExpiry } from "../../src/domain/pinDomain.js";
+import { buildWelcomeMessage } from "../../src/domain/messageDomain.js";
 
 // ============================================================
 // bookingDomain

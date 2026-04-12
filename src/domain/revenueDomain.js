@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * revenueDomain — 수익 정산 순수 도메인 함수
  * 외부 의존성 없음. 입력 → 출력만.
@@ -11,7 +9,7 @@
  * @param {number} [operatingCost=0]
  * @returns {{ totalGross, totalFee, totalNet, byPlatform, operatingCost, operatingProfit }}
  */
-function aggregateRevenue(platforms, operatingCost = 0) {
+export function aggregateRevenue(platforms, operatingCost = 0) {
   if (!platforms || typeof platforms !== 'object' || Object.keys(platforms).length === 0) {
     throw new Error('platforms is required and must be non-empty');
   }
@@ -53,7 +51,7 @@ function aggregateRevenue(platforms, operatingCost = 0) {
  *   - 유지보수비    = totalGross × 2%
  * netAfterTax = operatingProfit - vat
  */
-function calcTax(revenueData) {
+export function calcTax(revenueData) {
   if (!revenueData) throw new Error('revenueData is required');
   if (typeof revenueData.operatingProfit !== 'number') throw new Error('revenueData.operatingProfit must be a number');
   if (typeof revenueData.totalGross      !== 'number') throw new Error('revenueData.totalGross must be a number');
@@ -91,7 +89,7 @@ const _TREND_MULTIPLIER = {
  * @param {string} [marketTrend='normal']
  * @returns {{ recommendations, projectedRevenueIncrease, totalProjected }}
  */
-function getPricingRecommendations(propDataList, marketTrend = 'normal') {
+export function getPricingRecommendations(propDataList, marketTrend = 'normal') {
   if (!propDataList || propDataList.length === 0) {
     throw new Error('propDataList is required and must be non-empty');
   }
@@ -165,7 +163,7 @@ function _trendLabel(trend) {
  * @param {number} propCount
  * @returns {string}
  */
-function buildSettlementStartAlert(period, propCount) {
+export function buildSettlementStartAlert(period, propCount) {
   if (!period)                         throw new Error('period is required');
   if (propCount == null)               throw new Error('propCount is required');
   if (typeof propCount !== 'number' || propCount < 0) throw new Error('propCount must be a non-negative number');
@@ -179,7 +177,7 @@ function buildSettlementStartAlert(period, propCount) {
  * @param {number} propCount
  * @returns {string}
  */
-function buildRevenueCollectedAlert(totalGross, propCount) {
+export function buildRevenueCollectedAlert(totalGross, propCount) {
   if (totalGross == null)              throw new Error('totalGross is required');
   if (typeof totalGross !== 'number')  throw new Error('totalGross must be a number');
   if (propCount == null)               throw new Error('propCount is required');
@@ -194,7 +192,7 @@ function buildRevenueCollectedAlert(totalGross, propCount) {
  * @param {number} totalProjected
  * @returns {string}
  */
-function buildPricingOptimizedAlert(projectedIncrease, totalProjected) {
+export function buildPricingOptimizedAlert(projectedIncrease, totalProjected) {
   if (!projectedIncrease)              throw new Error('projectedIncrease is required');
   if (totalProjected == null)          throw new Error('totalProjected is required');
   if (typeof totalProjected !== 'number') throw new Error('totalProjected must be a number');
@@ -208,7 +206,7 @@ function buildPricingOptimizedAlert(projectedIncrease, totalProjected) {
  * @param {number} incomeTaxEstimate
  * @returns {string}
  */
-function buildTaxReportAlert(vat, incomeTaxEstimate) {
+export function buildTaxReportAlert(vat, incomeTaxEstimate) {
   if (vat == null)                     throw new Error('vat is required');
   if (typeof vat !== 'number')         throw new Error('vat must be a number');
   if (incomeTaxEstimate == null)       throw new Error('incomeTaxEstimate is required');
@@ -224,7 +222,7 @@ function buildTaxReportAlert(vat, incomeTaxEstimate) {
  * @param {number} maxRetries
  * @returns {string}
  */
-function buildPlatformRetryAlert(platform, attempt, maxRetries) {
+export function buildPlatformRetryAlert(platform, attempt, maxRetries) {
   if (!platform)                       throw new Error('platform is required');
   if (attempt == null)                 throw new Error('attempt is required');
   if (typeof attempt !== 'number' || attempt < 1) throw new Error('attempt must be a positive number');
@@ -239,14 +237,3 @@ function buildPlatformRetryAlert(platform, attempt, maxRetries) {
 function _won(n) {
   return n.toLocaleString('ko-KR') + '원';
 }
-
-module.exports = {
-  aggregateRevenue,
-  calcTax,
-  getPricingRecommendations,
-  buildSettlementStartAlert,
-  buildRevenueCollectedAlert,
-  buildPricingOptimizedAlert,
-  buildTaxReportAlert,
-  buildPlatformRetryAlert,
-};

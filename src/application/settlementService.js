@@ -1,6 +1,4 @@
-'use strict';
-
-const {
+import {
   aggregateRevenue,
   calcTax,
   getPricingRecommendations,
@@ -9,7 +7,7 @@ const {
   buildPricingOptimizedAlert,
   buildTaxReportAlert,
   buildPlatformRetryAlert,
-} = require('../domain/revenueDomain.js');
+} from "../domain/revenueDomain.js";
 
 /**
  * 월말 정산 전체 흐름 오케스트레이션
@@ -40,7 +38,7 @@ const {
  * @param {Function} deps.addAlert        - (alert) => void
  * @returns {Promise<{ status, steps, revenueData, pricingData, taxData, error }>}
  */
-async function runMonthlySettlement(params, deps) {
+export async function runMonthlySettlement(params, deps) {
   if (!params) throw new Error('params is required');
   if (!deps)   throw new Error('deps is required');
 
@@ -128,7 +126,7 @@ async function runMonthlySettlement(params, deps) {
  * @param {Function} deps.addAlert              - (alert) => void
  * @returns {Promise<{ applied: number, failed: number }>}
  */
-async function applyPricingRecommendations(propIds, recommendations, deps) {
+export async function applyPricingRecommendations(propIds, recommendations, deps) {
   if (!propIds || propIds.length === 0) throw new Error('propIds is required');
   if (!recommendations || recommendations.length === 0) throw new Error('recommendations is required');
 
@@ -173,7 +171,7 @@ async function applyPricingRecommendations(propIds, recommendations, deps) {
  * @returns {Promise<data>}
  * @throws {Error} maxRetries 초과 시
  */
-async function fetchWithRetry(fetchFn, maxRetries = 3, deps) {
+export async function fetchWithRetry(fetchFn, maxRetries = 3, deps) {
   if (!fetchFn)   throw new Error('fetchFn is required');
   if (!deps)      throw new Error('deps is required');
   if (!deps.platform) throw new Error('deps.platform is required');
@@ -211,4 +209,4 @@ function _nowHHMM() {
          d.getMinutes().toString().padStart(2, '0');
 }
 
-module.exports = { runMonthlySettlement, applyPricingRecommendations, fetchWithRetry };
+export default { runMonthlySettlement, applyPricingRecommendations, fetchWithRetry };

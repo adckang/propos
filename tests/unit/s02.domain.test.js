@@ -1,10 +1,8 @@
-'use strict';
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
 
-const { test, describe } = require('node:test');
-const assert = require('node:assert/strict');
-
-const { isCheckinEvent, getCheckinWindow }               = require('../../src/domain/checkinDomain.js');
-const { buildCheckinConfirmMessage, buildPinLockoutAlert } = require('../../src/domain/messageDomain.js');
+import { isCheckinEvent, getCheckinWindow } from "../../src/domain/checkinDomain.js";
+import { buildCheckinConfirmMessage, buildPinLockoutAlert } from "../../src/domain/messageDomain.js";
 
 // ============================================================
 // 공통 픽스처

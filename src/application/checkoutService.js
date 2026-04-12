@@ -1,14 +1,12 @@
-'use strict';
-
-const {
+import {
   isCheckoutEvent,
   assignCleaner,
   buildChecklist,
   buildCheckoutAlert,
   buildCleanerAssignAlert,
-} = require('../domain/checkoutDomain.js');
+} from "../domain/checkoutDomain.js";
 
-const { buildCheckoutThankYouMessage } = require('../domain/messageDomain.js');
+import { buildCheckoutThankYouMessage } from "../domain/messageDomain.js";
 
 /**
  * 퇴실 이벤트 수신 → 체크아웃 판별 → PIN 만료 → 청소팀 배정 → 체크리스트 생성
@@ -37,7 +35,7 @@ const { buildCheckoutThankYouMessage } = require('../domain/messageDomain.js');
  * @param {string}   [now]               - "HH:MM" (테스트 주입용)
  * @returns {Promise<{ propId, status, steps, error }>}
  */
-async function handleCheckout(event, allBookings, cleaners, deps, now) {
+export async function handleCheckout(event, allBookings, cleaners, deps, now) {
   if (!event)       throw new Error('event is required');
   if (!allBookings) throw new Error('allBookings is required');
   if (!cleaners)    throw new Error('cleaners is required');
@@ -114,7 +112,7 @@ async function handleCheckout(event, allBookings, cleaners, deps, now) {
  * @param {Function} deps.updateChecklistItem - (propId, itemId, done) => void
  * @returns {void}
  */
-function completeChecklistItem(propId, itemId, deps) {
+export function completeChecklistItem(propId, itemId, deps) {
   if (!propId) throw new Error('propId is required');
   if (!itemId) throw new Error('itemId is required');
 
@@ -129,7 +127,7 @@ function completeChecklistItem(propId, itemId, deps) {
  * @param {Function} deps.addAlert     - (alert) => void
  * @returns {void}
  */
-function finalizeClean(propId, deps) {
+export function finalizeClean(propId, deps) {
   if (!propId) throw new Error('propId is required');
 
   deps.updateStatus(propId, 'vacant');
@@ -147,4 +145,4 @@ function _nowHHMM() {
          d.getMinutes().toString().padStart(2, '0');
 }
 
-module.exports = { handleCheckout, completeChecklistItem, finalizeClean };
+export default { handleCheckout, completeChecklistItem, finalizeClean };

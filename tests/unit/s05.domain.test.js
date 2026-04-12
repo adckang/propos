@@ -1,14 +1,12 @@
-'use strict';
-
 /**
  * S05 도메인 단위 테스트 — 수익 정산
  * node --test tests/unit/s05.domain.test.js
  */
 
-const { test, describe } = require('node:test');
-const assert = require('node:assert/strict');
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
 
-const {
+import {
   aggregateRevenue,
   calcTax,
   getPricingRecommendations,
@@ -17,7 +15,7 @@ const {
   buildPricingOptimizedAlert,
   buildTaxReportAlert,
   buildPlatformRetryAlert,
-} = require('../../src/domain/revenueDomain.js');
+} from "../../src/domain/revenueDomain.js";
 
 // ============================================================
 // 공통 픽스처

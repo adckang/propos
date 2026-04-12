@@ -1,7 +1,5 @@
-'use strict';
-
-const { isAnomaly, buildAnomalyAlert, getDefaultThresholds } = require('../domain/sensorDomain.js');
-const { buildReplyDraft }                                     = require('../domain/messageDomain.js');
+import { isAnomaly, buildAnomalyAlert } from "../domain/sensorDomain.js";
+import { buildReplyDraft } from "../domain/messageDomain.js";
 
 /**
  * 단일 숙소 센서 1회 폴링 → 이상 감지 → 알림/상태 갱신
@@ -22,7 +20,7 @@ const { buildReplyDraft }                                     = require('../doma
  * @param {Function}   deps.addAlert         - (alert) => void
  * @returns {Promise<S03PollResult>}
  */
-async function pollSensors(propId, thresholds, deps) {
+export async function pollSensors(propId, thresholds, deps) {
   let reading = null;
   let anomaly = null;
 
@@ -78,7 +76,7 @@ async function pollSensors(propId, thresholds, deps) {
  * @param {Object}     deps
  * @returns {Promise<S03PollResult[]>}
  */
-async function pollAll(propIds, thresholds, deps) {
+export async function pollAll(propIds, thresholds, deps) {
   const results = [];
 
   for (const propId of propIds) {
@@ -99,7 +97,7 @@ async function pollAll(propIds, thresholds, deps) {
  * @param {Function} deps.addAlert   - (alert) => void
  * @returns {void}
  */
-function handleGuestMessage(msg, booking, deps) {
+export function handleGuestMessage(msg, booking, deps) {
   if (!msg)     throw new Error('msg is required');
   if (!booking) throw new Error('booking is required');
 
@@ -121,4 +119,4 @@ function _nowHHMM() {
          d.getMinutes().toString().padStart(2, '0');
 }
 
-module.exports = { pollSensors, pollAll, handleGuestMessage };
+export default { pollSensors, pollAll, handleGuestMessage };

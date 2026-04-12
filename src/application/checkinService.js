@@ -1,7 +1,17 @@
-'use strict';
+import { isCheckinEvent } from "../domain/checkinDomain.js";
+import { buildCheckinConfirmMessage, buildPinLockoutAlert } from "../domain/messageDomain.js";
 
-const { isCheckinEvent }                                         = require('../domain/checkinDomain.js');
-const { buildCheckinConfirmMessage, buildPinLockoutAlert }       = require('../domain/messageDomain.js');
+function cloneResult(result) {
+  return {
+    ...result,
+    steps: { ...result.steps },
+  };
+}
+
+function emitStepUpdate(onStepUpdate, result) {
+  if (typeof onStepUpdate !== 'function' || !result) return;
+  onStepUpdate(cloneResult(result));
+}
 
 /**
  * 도어락 열림 이벤트 수신 → 체크인 판별 → 씬/채팅 자동화 (UC-002)
@@ -27,8 +37,9 @@ const { buildCheckinConfirmMessage, buildPinLockoutAlert }       = require('../d
  * @param {string}   [now]               - "HH:MM" (테스트 주입용)
  * @returns {Promise<S02Result|null>}    null = 체크인 이벤트 아님
  */
-async function handleDoorUnlocked(haEvent, allBookings, deps, now) {
+export async function handleDoorUnlocked(haEvent, allBookings, deps, now, options = {}) {
   const booking = (allBookings || []).find(b => b.propId === haEvent.propId);
+  const onStepUpdate = options.onStepUpdate;
 
   if (!booking) return null;
 
@@ -38,48 +49,67 @@ async function handleDoorUnlocked(haEvent, allBookings, deps, now) {
 
   const result = {
     propId: booking.propId,
-    status: 'success',
+    propName: booking.propName ?? booking.propId,
+    guestName: booking.guestName ?? "",
+    time: haEvent.time || currentTime,
+    status: 'running',
     steps:  { scene: false, channel: false, message: false },
+    sceneId: null,
+    confirmText: null,
     error:  null,
   };
+  emitStepUpdate(onStepUpdate, result);
 
   // Step 1: 체크인 웰컴 씬 실행
   try {
     const sceneId = `scene.checkin_welcome_${booking.propId.toLowerCase().replace('-', '_')}`;
+    result.sceneId = sceneId;
     await deps.activateScene(sceneId);
     result.steps.scene = true;
+    emitStepUpdate(onStepUpdate, result);
   } catch (err) {
     result.status = 'failed';
     result.error  = `씬 실행 실패: ${err.message}`;
     deps.addAlert({ type: 'error', prop: booking.propId, msg: result.error, time: haEvent.time });
+    emitStepUpdate(onStepUpdate, result);
     return result;
   }
 
   // Step 2: 입실 확인 메시지 텍스트 생성 (time 누락 시 현재 시각으로 보완)
   const confirmText = buildCheckinConfirmMessage(booking, haEvent.time || _nowHHMM());
+  result.confirmText = confirmText;
 
   // Step 3: 게스트 채팅 채널 오픈
   try {
     await deps.openChannel(booking);
     result.steps.channel = true;
+    emitStepUpdate(onStepUpdate, result);
   } catch (err) {
     result.status = 'partial';
     result.error  = `채팅 채널 오픈 실패: ${err.message}`;
     deps.addAlert({ type: 'warn', prop: booking.propId, msg: result.error, time: haEvent.time });
+    emitStepUpdate(onStepUpdate, result);
   }
 
   // Step 4: 입실 확인 메시지 발송
   try {
     await deps.sendMessage(booking.guestId, confirmText);
     result.steps.message = true;
+    emitStepUpdate(onStepUpdate, result);
   } catch (err) {
     if (result.status === 'success') result.status = 'partial';
+    if (result.status === 'running') result.status = 'partial';
     result.error = `메시지 발송 실패: ${err.message}`;
     deps.addAlert({ type: 'warn', prop: booking.propId, msg: result.error, time: haEvent.time });
+    emitStepUpdate(onStepUpdate, result);
   }
 
   // Step 5: 숙소 상태 갱신 + 완료 알림
   deps.updateStatus(booking.propId, 'occupied');
+
+  if (result.status === 'running') {
+    result.status = 'success';
+  }
 
   if (result.status === 'success') {
     deps.addAlert({
@@ -90,6 +120,7 @@ async function handleDoorUnlocked(haEvent, allBookings, deps, now) {
     });
   }
 
+  emitStepUpdate(onStepUpdate, result);
   return result;
 }
 
@@ -101,7 +132,7 @@ async function handleDoorUnlocked(haEvent, allBookings, deps, now) {
  * @param {Function} deps.addAlert  - (alert) => void
  * @returns {void}
  */
-function handlePinLockout(haEvent, deps) {
+export function handlePinLockout(haEvent, deps) {
   const text = buildPinLockoutAlert(haEvent.propId, haEvent.failCount);
   deps.addAlert({
     type: 'error',
@@ -119,4 +150,4 @@ function _nowHHMM() {
          d.getMinutes().toString().padStart(2, '0');
 }
 
-module.exports = { handleDoorUnlocked, handlePinLockout };
+export default { handleDoorUnlocked, handlePinLockout };

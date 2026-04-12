@@ -1,0 +1,147 @@
+version: "1"
+updated_at: "2026-04-12"
+source_of_truth:
+  registry: docs/scenarios.yaml
+  code: src/
+
+system_pages:
+  - id: SYS-HA
+    screen_key: ha
+    title: 홈 어시스턴트
+    component: src/components/HomeAssistant.jsx
+    primary_user: 단일 숙소를 상세 운영하는 관리자
+    purpose: 한 숙소의 시나리오 1~5를 시간축으로 따라가며 상태를 파악하고 직접 제어한다.
+    stage_coverage:
+      - S01
+      - S02
+      - S03
+      - S04
+      - S05
+    key_questions:
+      - 지금 이 숙소에서 가장 먼저 확인해야 할 일은 무엇인가
+      - 자동화가 어디까지 끝났고 어디서 멈췄는가
+      - 지금 바로 눌러야 할 제어 액션은 무엇인가
+
+  - id: SYS-CC
+    screen_key: cc
+    title: 커맨드 센터
+    component: src/components/CommandCenter.jsx
+    primary_user: 100개 이상 숙소를 동시에 운영하는 관리자
+    purpose: 1~5 시나리오를 공통 시간축으로 삼아 예외 숙소를 먼저 발견하고 우선순위대로 대응한다.
+    stage_coverage:
+      - S01
+      - S02
+      - S03
+      - S04
+      - S05
+    key_questions:
+      - 지금 가장 위험한 숙소는 어디인가
+      - 어느 단계에서 병목과 수동 개입이 발생하는가
+      - 한 번에 처리 가능한 액션은 무엇인가
+
+scenarios:
+  - id: S01
+    use_case_id: UC-001
+    screen_key: d1
+    title: 체크인 전날 자동화
+    stage_label: D-1 자동화
+    landing_label: D-1 자동화
+    component: src/components/D1AutomationPanel.jsx
+    diagram: myPlantUML/propos-scenario01-sequence.uml
+    functional_test: tests/functional/s01.functional.test.js
+    service: src/application/checkinPreparationService.js
+    entry_function: runD1Automation
+    domain_modules:
+      - src/domain/bookingDomain.js
+      - src/domain/pinDomain.js
+      - src/domain/messageDomain.js
+    trigger: 매일 18:00 또는 관리자의 수동 실행
+    primary_job: 내일 체크인하는 숙소를 한 번에 준비 완료해서 당일 문제를 줄인다.
+    success_signal: PIN 발급, 웰컴 메시지 발송, 스마트홈 준비가 모두 완료된다.
+    primary_actions:
+      - D-1 자동화 전체 실행
+      - 실패 숙소만 다시 처리
+
+  - id: S02
+    use_case_id: UC-002
+    screen_key: s02
+    title: 체크인 당일 자동화
+    stage_label: 체크인 당일
+    landing_label: 체크인 당일
+    component: src/components/S02CheckinPanel.jsx
+    diagram: myPlantUML/propos-scenario02-sequence.uml
+    functional_test: tests/functional/s02.functional.test.js
+    service: src/application/checkinService.js
+    entry_function: handleDoorUnlocked
+    domain_modules:
+      - src/domain/checkinDomain.js
+      - src/domain/messageDomain.js
+    trigger: 도어락 열림 등 입실 이벤트 수신
+    primary_job: 게스트 입실 순간의 확인과 후속 자동화를 지연 없이 끝낸다.
+    success_signal: 입실 상태 반영, 체크인 씬 실행, 채널 오픈이 자동으로 이어진다.
+    primary_actions:
+      - 체크인 이벤트 확인
+      - 채널 오픈 상태 점검
+
+  - id: S03
+    use_case_id: UC-003
+    screen_key: s03
+    title: 체류 중 실시간 모니터링
+    stage_label: 체류 중 모니터링
+    landing_label: 체류 중 모니터링
+    component: src/components/S03MonitoringPanel.jsx
+    diagram: myPlantUML/propos-scenario03-sequence.uml
+    functional_test: tests/functional/s03.functional.test.js
+    service: src/application/monitoringService.js
+    entry_function: pollSensors
+    domain_modules:
+      - src/domain/sensorDomain.js
+      - src/domain/messageDomain.js
+    trigger: 30초 폴링 또는 게스트 메시지 수신
+    primary_job: 체류 중인 숙소에서 이상 징후와 응답 필요 메시지를 즉시 파악한다.
+    success_signal: 이상 감지 알림이 올라오고, 답장 초안이나 수동 제어로 빠르게 대응한다.
+    primary_actions:
+      - 이상 숙소 먼저 확인
+      - AI 답장 초안 검토 후 발송
+
+  - id: S04
+    use_case_id: UC-004
+    screen_key: s04
+    title: 체크아웃 및 청소 자동화
+    stage_label: 체크아웃 & 청소
+    landing_label: 체크아웃 & 청소
+    component: src/components/S04CheckoutPanel.jsx
+    diagram: myPlantUML/propos-scenario04-sequence.uml
+    functional_test: tests/functional/s04.functional.test.js
+    service: src/application/checkoutService.js
+    entry_function: handleCheckout
+    domain_modules:
+      - src/domain/checkoutDomain.js
+      - src/domain/pinDomain.js
+      - src/domain/messageDomain.js
+    trigger: 퇴실 이벤트 또는 도어락 잠금 이벤트 수신
+    primary_job: 퇴실 직후의 보안 해제와 청소 배정을 빠르게 끝내 다음 예약 준비를 시작한다.
+    success_signal: PIN 만료, 청소 배정, 체크리스트 생성이 끊김 없이 이어진다.
+    primary_actions:
+      - 퇴실 이벤트 확인
+      - 청소팀 배정 상태 점검
+
+  - id: S05
+    use_case_id: UC-005
+    screen_key: s05
+    title: 수익 정산 자동화
+    stage_label: 수익 정산
+    landing_label: 수익 정산
+    component: src/components/S05RevenuePanel.jsx
+    diagram: myPlantUML/propos-scenario05-sequence.uml
+    functional_test: tests/functional/s05.functional.test.js
+    service: src/application/settlementService.js
+    entry_function: runMonthlySettlement
+    domain_modules:
+      - src/domain/revenueDomain.js
+    trigger: 월말 자동 트리거 또는 관리자 수동 실행
+    primary_job: 여러 플랫폼의 수익을 한 번에 정리하고 다음 달 가격 결정을 빠르게 돕는다.
+    success_signal: 집계, 추천, 리포트 생성이 한 흐름으로 완료된다.
+    primary_actions:
+      - 월 정산 실행
+      - 가격 추천 검토

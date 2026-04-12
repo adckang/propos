@@ -1,0 +1,33 @@
+{
+  "ha": {
+    "baseUrl": "http://192.168.45.76:8123",
+    "wsUrl": "ws://192.168.45.76:8123/api/websocket"
+  },
+  "entities": {
+    "tvLight": "light.rgbcct_8002",
+    "tvPlug": "switch.tv_smart_plug_socket_1",
+    "tempSensor": "sensor.temperature_humidity_sensor_temperature",
+    "humiditySensor": "sensor.temperature_humidity_sensor_humidity",
+    "noiseSensor": null,
+    "powerSensor": null
+  },
+  "sensorThresholds": {
+    "temp": { "warn": 30, "critical": 35 },
+    "humidity": { "warn": 80, "critical": 90 },
+    "noise": { "warn": 60, "critical": 75 },
+    "power": { "warn": 3000, "critical": 5000 }
+  },
+  "defaultProps": [
+    {
+      "propId": "P-042",
+      "propName": "해운대 오션뷰 펜트하우스",
+      "icalUrl": "",
+      "checkInTime": "15:00:00",
+      "checkOutTime": "11:00:00",
+      "wifi": { "ssid": "ProposGuest_5G", "pw": "YOUR_WIFI_PASSWORD" }
+    }
+  ],
+  "polling": {
+    "sensorIntervalSec": 30
+  }
+}

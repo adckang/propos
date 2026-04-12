@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * checkoutDomain — 체크아웃 & 청소 순수 도메인 함수
  * 외부 의존성 없음. 입력 → 출력만.
@@ -17,7 +15,7 @@
  *   AND booking.status === "confirmed" || "occupied"
  *   AND now가 getCheckoutWindow(booking.checkOut) 범위 내
  */
-function isCheckoutEvent(event, booking, now) {
+export function isCheckoutEvent(event, booking, now) {
   if (!event)   throw new Error('event is required');
   if (!booking) throw new Error('booking is required');
   if (!now)     throw new Error('now is required');
@@ -39,7 +37,7 @@ function isCheckoutEvent(event, booking, now) {
  * from  = checkOut - 2시간
  * until = checkOut + 3시간
  */
-function getCheckoutWindow(checkOut) {
+export function getCheckoutWindow(checkOut) {
   if (!checkOut) throw new Error('checkOut is required');
 
   const d = new Date(checkOut);
@@ -62,7 +60,7 @@ function getCheckoutWindow(checkOut) {
  * @returns {{ propId, cleanerId, cleanerName, assignedAt, estimatedArrival, status }}
  * @throws {Error} 가용 청소팀 없을 시
  */
-function assignCleaner(cleaners, propId, checkoutTime) {
+export function assignCleaner(cleaners, propId, checkoutTime) {
   if (!cleaners || cleaners.length === 0) throw new Error('cleaners is required');
   if (!propId)      throw new Error('propId is required');
   if (!checkoutTime) throw new Error('checkoutTime is required');
@@ -90,7 +88,7 @@ function assignCleaner(cleaners, propId, checkoutTime) {
  * @param {string} propId
  * @returns {Array<{ id, label, done, priority }>}
  */
-function buildChecklist(propId) {
+export function buildChecklist(propId) {
   if (!propId) throw new Error('propId is required');
 
   return [
@@ -112,7 +110,7 @@ function buildChecklist(propId) {
  * @param {string} checkoutTime - "HH:MM"
  * @returns {string}
  */
-function buildCheckoutAlert(propId, guestName, checkoutTime) {
+export function buildCheckoutAlert(propId, guestName, checkoutTime) {
   if (!propId)       throw new Error('propId is required');
   if (!guestName)    throw new Error('guestName is required');
   if (!checkoutTime) throw new Error('checkoutTime is required');
@@ -126,7 +124,7 @@ function buildCheckoutAlert(propId, guestName, checkoutTime) {
  * @param {{ cleanerName: string, estimatedArrival: string }} assignment
  * @returns {string}
  */
-function buildCleanerAssignAlert(propId, assignment) {
+export function buildCleanerAssignAlert(propId, assignment) {
   if (!propId)      throw new Error('propId is required');
   if (!assignment)  throw new Error('assignment is required');
   if (!assignment.cleanerName)      throw new Error('assignment.cleanerName is required');
@@ -159,12 +157,3 @@ function _addMinutes(hhmm, minutes) {
   const mm = total % 60;
   return hh.toString().padStart(2, '0') + ':' + mm.toString().padStart(2, '0');
 }
-
-module.exports = {
-  isCheckoutEvent,
-  getCheckoutWindow,
-  assignCleaner,
-  buildChecklist,
-  buildCheckoutAlert,
-  buildCleanerAssignAlert,
-};

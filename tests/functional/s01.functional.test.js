@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * UC-001 기능 테스트 (S01 D-1 자동화)
  * 수용 기준: 시퀀스 다이어그램 propos-scenario01-sequence.uml 기준
@@ -16,10 +14,10 @@
  * TC-F-010  알림 — 복수 실패 시 숙소별 독립 알림
  */
 
-const { test, describe, beforeEach } = require('node:test');
-const assert = require('node:assert/strict');
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
 
-const { runD1Automation } = require('../../src/application/checkinPreparationService.js');
+import { runD1Automation } from "../../src/application/checkinPreparationService.js";
 
 // ============================================================
 // 공통 픽스처

@@ -1,12 +1,11 @@
-'use strict';
-
 // ============================================================
 // haClient.js — Home Assistant REST API 클라이언트
 // 대상: homeassistant.local:8123 (Tailscale VPN or 로컬)
-// 설정 변경: src/config/propos.config.js 참고
+// 설정 변경: src/config/privateConfig.js 참고
 // ============================================================
 
-const CFG      = require('../config/propos.config');
+import CFG from "../config/privateConfig.js";
+
 const HA_BASE  = CFG.ha.baseUrl;
 const HA_TOKEN = CFG.ha.token;
 
@@ -38,7 +37,7 @@ async function _post(path, data) {
  * @param {string} code
  * @param {string} name
  */
-async function setLockCode(entityId, code, name) {
+export async function setLockCode(entityId, code, name) {
   await _post('/api/services/persistent_notification/create', {
     title          : '[PROPOS] PIN 발급 완료',
     message        : `게스트: ${name}\nPIN: ${code}\n등록 entity: ${entityId}`,
@@ -50,7 +49,7 @@ async function setLockCode(entityId, code, name) {
  * HA 씬 실행 — checkin_ready 씬은 TV방 기기로 매핑
  * @param {string} entityId  "scene.checkin_ready_*" 형태
  */
-async function activateScene(entityId) {
+export async function activateScene(entityId) {
   if (entityId.includes('checkin_ready')) {
     // TV방 조명 켜기
     await _post('/api/services/light/turn_on', {
@@ -72,7 +71,7 @@ async function activateScene(entityId) {
  * @param {string} guestId
  * @param {string} text
  */
-async function sendMessage(guestId, text) {
+export async function sendMessage(guestId, text) {
   await _post('/api/services/persistent_notification/create', {
     title          : `[PROPOS] 웰컴 메시지 — ${guestId}`,
     message        : text,
@@ -80,7 +79,7 @@ async function sendMessage(guestId, text) {
   });
 }
 
-// ── 센서 엔티티 매핑 (propos.config.js에서 읽음) ─────────────
+// ── 센서 엔티티 매핑 (privateConfig.js에서 읽음) ─────────────
 const SENSOR_ENTITIES = {
   temperature: CFG.entities.tempSensor,
   humidity:    CFG.entities.humiditySensor,
@@ -117,7 +116,7 @@ async function _getState(entityId, fetchImpl) {
  * @param {Function} [fetchImpl]  - 테스트 주입용
  * @returns {Promise<SensorReading>}
  */
-async function getSensorStates(propId, fetchImpl) {
+export async function getSensorStates(propId, fetchImpl) {
   // entity가 null이면 null 반환 (하드웨어 없음)
   const getOrNull = (entityId) => entityId ? _getState(entityId, fetchImpl) : Promise.resolve(null);
 
@@ -132,4 +131,5 @@ async function getSensorStates(propId, fetchImpl) {
   return { propId, time: hhmm, temp, humidity, noise, power };
 }
 
-module.exports = { setLockCode, activateScene, sendMessage, getSensorStates, HA_BASE, HA_TOKEN, TV_ROOM };
+export { HA_BASE, HA_TOKEN, TV_ROOM };
+export default { setLockCode, activateScene, sendMessage, getSensorStates, HA_BASE, HA_TOKEN, TV_ROOM };

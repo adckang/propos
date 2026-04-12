@@ -1,77 +1,31 @@
 import React from "react";
 
-import PROPOS_CONFIG from "../config/propos.config.json";
+import monitoringService from "../application/monitoringService.js";
+import PROPOS_CONFIG, { getBrowserToken } from "../config/publicConfig.js";
+import sensorDomain from "../domain/sensorDomain.js";
 
 // ============================================================
 // S03MonitoringPanel.jsx — UC-003 체류 중 실시간 모니터링 UI
 // 시나리오: 센서 LIVE 폴링 → 이상 감지 → AI 답장 초안 생성
 // ============================================================
 
-// ── 도메인 함수 (인라인) ─────────────────────────────────────
 const _s03 = (() => {
-  function getDefaultThresholds() {
-    // PROPOS_CONFIG가 있으면 설정값 사용, 없으면 내장 기본값
-    if (typeof PROPOS_CONFIG !== 'undefined' && PROPOS_CONFIG.sensorThresholds) {
-      return PROPOS_CONFIG.sensorThresholds;
-    }
-    return {
-      temp:     { warn: 30, critical: 35 },
-      humidity: { warn: 80, critical: 90 },
-      noise:    { warn: 60, critical: 75 },
-      power:    { warn: 3000, critical: 5000 },
-    };
-  }
-
-  function isAnomaly(reading, thresholds) {
-    const SENSORS = ['temp', 'humidity', 'noise', 'power'];
-    let highestSeverity = null;
-    const anomalySensors = [];
-    for (const key of SENSORS) {
-      const val = reading[key]; if (val == null) continue;
-      const t = thresholds[key]; if (!t) continue;
-      if (val > t.critical) {
-        anomalySensors.push(key); highestSeverity = 'critical';
-      } else if (val > t.warn) {
-        anomalySensors.push(key);
-        if (highestSeverity !== 'critical') highestSeverity = 'warn';
-      }
-    }
-    return { isAnomaly: anomalySensors.length > 0, severity: highestSeverity, sensors: anomalySensors };
-  }
-
-  function buildAnomalyAlert(propId, reading, anomaly) {
-    const LABEL = { temp:'온도', humidity:'습도', noise:'소음', power:'전력' };
-    const UNIT  = { temp:'°C',  humidity:'%',    noise:'dB',   power:'W' };
-    const lines = anomaly.sensors.map(k => `${LABEL[k]||k} ${reading[k]}${UNIT[k]||''} 초과`);
-    const badge = anomaly.severity === 'critical' ? '[긴급]' : '[경고]';
-    return `${badge} ${propId} — ${lines.join(', ')} — 확인 필요`;
-  }
-
-  const REPLY_TEMPLATES = [
-    { keywords:['wifi','와이파이','인터넷','wi-fi'],
-      build:(b)=>`안녕하세요 ${b.guestName}님!\nWiFi 관련 문의 감사합니다.\nSSID와 비밀번호를 다시 안내드릴게요. 잠시만 기다려 주세요.` },
-    { keywords:['덥','뜨겁','더워','춥','cold','hot','온도','에어컨','냉방','난방'],
-      build:(b)=>`안녕하세요 ${b.guestName}님!\n실내 온도 불편 사항을 전달해 주셔서 감사합니다.\n에어컨/난방 조절 방법을 안내해 드리겠습니다.` },
-    { keywords:['청소','clean','더럽','냄새','쓰레기'],
-      build:(b)=>`안녕하세요 ${b.guestName}님!\n불편을 드려 죄송합니다.\n청소 담당자가 신속하게 방문하도록 조치하겠습니다.` },
-    { keywords:['체크아웃','checkout','퇴실','떠나','나가'],
-      build:(b)=>`안녕하세요 ${b.guestName}님!\n키는 현관에 두시고 문만 닫아 주시면 됩니다. 즐거운 여행 되셨길 바랍니다!` },
-  ];
-
-  function buildReplyDraft(msg, booking) {
-    const lower = msg.toLowerCase();
-    for (const tpl of REPLY_TEMPLATES) {
-      if (tpl.keywords.some(kw => lower.includes(kw))) return tpl.build(booking);
-    }
-    return `안녕하세요 ${booking.guestName}님!\n문의 주셔서 감사합니다.\n확인 후 빠르게 답변 드리겠습니다.`;
-  }
-
   function hhmm() {
     const d = new Date();
     return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   }
 
-  return { getDefaultThresholds, isAnomaly, buildAnomalyAlert, buildReplyDraft, hhmm };
+  return {
+    getDefaultThresholds: () => {
+      if (typeof PROPOS_CONFIG !== "undefined" && PROPOS_CONFIG.sensorThresholds) {
+        return PROPOS_CONFIG.sensorThresholds;
+      }
+      return sensorDomain.getDefaultThresholds();
+    },
+    isAnomaly: sensorDomain.isAnomaly,
+    buildAnomalyAlert: sensorDomain.buildAnomalyAlert,
+    hhmm,
+  };
 })();
 
 // ── Mock Infrastructure ──────────────────────────────────────
@@ -101,14 +55,11 @@ function makeMockSensorInfra() {
 // [R2] getDefaultThresholds() 반환값은 상수 — 렌더마다 재생성 방지
 const _DEFAULT_THRESHOLDS = _s03.getDefaultThresholds();
 
-// ── Real HA Infrastructure — PROPOS_CONFIG 기반 ──────────────
-// PROPOS_CONFIG: dist/index.html 상단에 정의된 전역 설정 객체
-// 새 센서 추가 시: propos.config.js의 entities.noiseSensor 등을 채우면 자동 반영
 const _haS03 = {
   async getSensorStates(propId) {
-    const cfg    = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG : { ha:{baseUrl:'',token:''}, entities:{} };
+    const cfg    = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG : { ha:{baseUrl:''}, entities:{} };
     const BASE   = cfg.ha.baseUrl;
-    const TOKEN  = cfg.ha.token;
+    const TOKEN  = getBrowserToken();
     const ENTS   = cfg.entities || {};
 
     async function getState(entityId) {
@@ -452,40 +403,25 @@ function S03MonitoringPanel({ onBack }) {
     setReadings(prev => ({ ...prev, [propId]: reading }));
   }
 
-  // ── 단일 숙소 폴링 ──
-  async function pollOneProp(prop, infra) {
-    try {
-      const reading = await infra.getSensorStates(prop.propId);
-      updateReadings(prop.propId, reading);
-
-      const anomaly = _s03.isAnomaly(reading, _DEFAULT_THRESHOLDS);
-      if (anomaly.isAnomaly) {
-        const msg = _s03.buildAnomalyAlert(prop.propId, reading, anomaly);
-        addAlert({
-          type: anomaly.severity === 'critical' ? 'error' : 'warn',
-          prop: prop.propName,
-          msg,
-          time: reading.time,
-        });
-      }
-      setNetworkError(false);
-    } catch (err) {
-      setNetworkError(true);
-      addAlert({
-        type: 'warn',
-        prop: prop.propName,
-        msg:  `센서 폴링 실패 — 마지막 정상값 유지 (${err.message})`,
-        time: _s03.hhmm(),
-      });
-    }
-  }
-
   // ── 전체 숙소 일괄 폴링 ──
   async function pollAll() {
     const infra = infraRef.current;  // [B1] 유지된 인스턴스 사용
-    for (const prop of PROPS) {
-      await pollOneProp(prop, infra);
-    }
+    const results = await monitoringService.pollAll(
+      PROPS.map(prop => prop.propId),
+      _DEFAULT_THRESHOLDS,
+      {
+        getSensorStates: propId => infra.getSensorStates(propId),
+        updateReadings,
+        addAlert: alert => {
+          const prop = PROPS.find(item => item.propId === alert.prop);
+          addAlert({
+            ...alert,
+            prop: prop?.propName || alert.prop,
+          });
+        },
+      }
+    );
+    setNetworkError(results.some(result => result.status === "error"));
     setLastPoll(_s03.hhmm());
     setCountdown(pollInterval);
   }
@@ -538,16 +474,26 @@ function S03MonitoringPanel({ onBack }) {
       msg:  `게스트 메시지 수신: "${msgText.slice(0, 30)}${msgText.length > 30 ? '...' : ''}"`,
       time: _s03.hhmm(),
     });
-
-    const draft = _s03.buildReplyDraft(msgText, booking);
-    setDrafts(prev => ({ ...prev, [selectedProp]: draft }));
-
-    addAlert({
-      type: 'info',
-      prop: booking.propName,
-      msg:  `AI 답장 초안 생성 완료`,
-      time: _s03.hhmm(),
-    });
+    monitoringService.handleGuestMessage(
+      {
+        id: `${booking.propId}-${Date.now()}`,
+        guestId: booking.guestId,
+        text: msgText,
+        time: _s03.hhmm(),
+      },
+      booking,
+      {
+        setDraft: (propId, draft) => {
+          setDrafts(prev => ({ ...prev, [propId]: draft }));
+        },
+        addAlert: alert => {
+          addAlert({
+            ...alert,
+            prop: booking.propName,
+          });
+        },
+      }
+    );
   }
 
   function handleDraftApply(text) {

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
-import PROPOS_CONFIG from "../config/propos.config.json";
+import checkinPreparationService from "../application/checkinPreparationService.js";
+import PROPOS_CONFIG, { getBrowserToken } from "../config/publicConfig.js";
 import Toast from "../utils/toast";
 
 // ============================================================
@@ -158,11 +159,9 @@ function makeMockInfra(onAlert, failPropId) {
 }
 
 // ── Real HA Infrastructure (TV방) ─────────────────────────────
-// 브라우저: PROPOS_CONFIG (dist/index.html 상단에 정의됨)
-// node:test: 직접 실행 안 됨 (Mock 사용)
 const _ha = (() => {
   const BASE     = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.baseUrl : 'http://192.168.45.76:8123';
-  const TOKEN    = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.token   : '';
+  const TOKEN    = getBrowserToken();
   const TV_LIGHT = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.entities.tvLight : 'light.rgbcct_8002';
   const TV_PLUG  = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.entities.tvPlug  : 'switch.tv_smart_plug_socket_1';
   async function post(path, data) {
@@ -201,62 +200,6 @@ const _ha = (() => {
 
 function makeHAInfra(onAlert) {
   return { setLockCode:_ha.setLockCode, activateScene:_ha.activateScene, sendMessage:_ha.sendMessage, addAlert:onAlert };
-}
-
-// ── Application Logic ─────────────────────────────────────────
-async function runD1Automation(targets, deps, onProgress) {
-  const results = [];
-  for (const booking of targets) {
-    const result = {
-      propId:booking.propId, propName:booking.propName, guestName:booking.guestName,
-      status:'running', steps:{pin:null, message:null, smartHome:null},
-      pin:null, expiry:null, welcomeMsg:null, sceneId:null, error:null,
-    };
-    onProgress([...results, result]);
-
-    const pin    = _d1.generatePIN();
-    const expiry = _d1.calcExpiry(booking.checkIn, booking.checkOut);
-    result.pin = pin; result.expiry = expiry;
-
-    try {
-      const eid = `lock.front_door_${booking.propId.toLowerCase().replace('-','_')}`;
-      await deps.setLockCode(eid, pin, `guest_${booking.guestName}`);
-      result.steps.pin = true;
-    } catch (err) {
-      result.steps.pin = false; result.status = 'failed'; result.error = err.message;
-      deps.addAlert({ type:'error', prop:booking.propName, msg:`PIN 등록 실패 — ${err.message}`, time:_hhmm() });
-      results.push(result); onProgress([...results]); continue;
-    }
-
-    try {
-      const text = _d1.buildWelcomeMessage(booking, { pin, ...expiry });
-      result.welcomeMsg = text;
-      await deps.sendMessage(booking.guestId, text);
-      result.steps.message = true;
-    } catch (err) {
-      result.steps.message = false; result.status = 'partial'; result.error = err.message;
-      deps.addAlert({ type:'warn', prop:booking.propName, msg:`메시지 발송 실패 — ${err.message}`, time:_hhmm() });
-    }
-
-    try {
-      const sid = `scene.checkin_ready_${booking.propId.toLowerCase().replace('-','_')}`;
-      result.sceneId = sid;
-      await deps.activateScene(sid);
-      result.steps.smartHome = true;
-    } catch (err) {
-      result.steps.smartHome = false;
-      if (result.status === 'running') result.status = 'partial';
-      result.error = err.message;
-      deps.addAlert({ type:'warn', prop:booking.propName, msg:`스마트홈 초기화 실패 — ${err.message}`, time:_hhmm() });
-    }
-
-    if (result.status === 'running') {
-      result.status = 'success';
-      deps.addAlert({ type:'info', prop:booking.propName, msg:`D-1 자동화 완료 (PIN ${pin} · 메시지 · 스마트홈)`, time:_hhmm() });
-    }
-    results.push(result); onProgress([...results]);
-  }
-  return results;
 }
 
 function _hhmm() {
@@ -658,10 +601,10 @@ function D1AutomationPanel({ onBack }) {
       ? makeHAInfra(onAlert)
       : makeMockInfra(onAlert, failMode ? 'P-007' : null);
     try {
-      await runD1Automation(targets, deps, onProgress);
+      await checkinPreparationService.runD1Automation(targets, today, deps, { onProgress });
       setLastRun(_hhmm());
     } finally { setRunning(false); }
-  }, [running, haMode, failMode, targets]);
+  }, [running, haMode, failMode, targets, today]);
 
   // 18:00 자동 실행
   useEffect(() => {
