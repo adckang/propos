@@ -1,5 +1,5 @@
 # PROPOS — 상세 컨텍스트
-> 업데이트: 2026-04-12
+> 업데이트: 2026-04-13
 
 ## 프로젝트 배경
 에어비앤비 숙소 관리 시스템. 한국 서비스 우선.
@@ -12,8 +12,8 @@
 - 소스 오브 트루스: `src/`
 - 빌드 산출물: `dist/` (`npm run build`)
 - 폰트: Nunito(제목) + DM Sans(본문) + DM Mono(숫자/코드)
-- IoT: Home Assistant REST API + WebSocket
-- 인프라: Netlify(현재) → Vercel(예정) + Tailscale VPN + 라즈베리파이
+- IoT: Home Assistant REST API + 상태 폴링 기반 이벤트 감지
+- 인프라: Vercel 배포 전환 준비 완료 + Tailscale VPN + 라즈베리파이
 
 ## 핵심 시나리오 5단계
 | # | 시나리오 | 핵심 자동화 |
@@ -43,9 +43,10 @@ src/
 │   ├── S04CheckoutPanel.jsx
 │   └── S05RevenuePanel.jsx
 ├── config/
-│   ├── publicConfig.js   ← 브라우저 공개 설정
-│   ├── privateConfig.js  ← Node 전용 비공개 설정 로더
-│   └── propos.public.json ← 공개 설정 정본
+│   ├── publicConfig.js    ← 브라우저 공개 설정
+│   ├── privateConfig.js   ← Node 전용 비공개 설정 로더
+│   ├── propos.public.json ← 공개 설정 정본
+│   └── propos.config.json.example ← 로컬 비공개 설정 예시
 ├── domain/               ← 순수 함수 (부작용 없음)
 │   ├── bookingDomain.js
 │   ├── checkinDomain.js
@@ -55,9 +56,16 @@ src/
 │   ├── revenueDomain.js
 │   └── sensorDomain.js
 ├── infrastructure/
-│   ├── haClient.js       ← HA REST API 클라이언트
-│   └── haWebSocket.js    ← HA WebSocket 구독
-├── stories/              ← Storybook (재판단 보류 중)
+│   ├── haBrowserClient.js   ← 브라우저 → /api/ha 프록시 클라이언트
+│   ├── haBrowserPolling.js  ← 브라우저 상태 폴링
+│   ├── haClient.js          ← Node 서버측 HA REST 클라이언트
+│   └── haWebSocket.js       ← HA WebSocket 어댑터 (테스트/레거시 검증용)
+├── api/
+│   └── ha/               ← 서버리스 HA 프록시 엔드포인트
+├── server/
+│   ├── haProxy.js        ← HA 직접 호출 공용 코드
+│   └── haApiHandlers.js  ← dev/preview/API 공용 핸들러
+├── vercel.json           ← SPA rewrite + API 캐시 제어
 ├── styles/
 │   └── main.css          ← CSS 토큰 정의
 └── utils/
@@ -89,6 +97,8 @@ src/
 - TV방 기기: `light.rgbcct_8002` / `switch.tv_smart_plug_socket_1`
 - 브라우저 공개 설정: `src/config/publicConfig.js`
 - Node 비공개 설정: `src/config/privateConfig.js`
+- 브라우저는 HA를 직접 호출하지 않고 `/api/ha/*`만 호출
+- 운영 배포는 환경변수 `PROPOS_HA_BASE_URL`, `PROPOS_HA_WS_URL`, `PROPOS_HA_TOKEN` 우선 사용
 
 ## 세션 시작 체크리스트
 ```

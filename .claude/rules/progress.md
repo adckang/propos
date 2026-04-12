@@ -7,8 +7,8 @@
 
 ## 현재 상태
 - **버전**: v1.0 (구조 정리 완료 — 삼박자 싱크 확립)
-- **배포**: Netlify Drop (dist/index.html)
-- **업데이트**: 2026-04-12
+- **배포**: Vite 빌드 + Vercel 설정 파일 완료, 실제 환경변수 주입만 남음
+- **업데이트**: 2026-04-13
 
 ## 완료된 마일스톤
 
@@ -97,14 +97,13 @@
   - `src/config/privateConfig.js`
 - `src/infrastructure/haClient.js` → privateConfig 참조
 - `src/infrastructure/haWebSocket.js` → privateConfig 참조
-- `src/components/{D1,S02,S03,S04}Panel.jsx` → publicConfig + 런타임 브라우저 토큰 참조
-- `dist/index.html`:
-  - PROPOS_CONFIG 설정 블록 신규 추가 (파일 최상단 `<script>` 섹션)
-  - IP/토큰/entity ID → 모두 PROPOS_CONFIG 단일 블록으로 통합
-  - S02 WebSocket 중복 하드코딩 제거
-  - S03 센서 임계값 → PROPOS_CONFIG.sensorThresholds 참조
-  - S03 센서 entity ID → PROPOS_CONFIG.entities 참조 (null이면 스킵)
-  - haClient.getSensorStates → noise/power 센서 추가 시 자동 반영 구조
+- `src/components/{D1,S02,S03,S04}Panel.jsx` → `/api/ha/*` 프록시 경유 구조로 전환
+- `src/infrastructure/haBrowserClient.js`, `src/infrastructure/haBrowserPolling.js` 추가
+- `api/ha/*`, `server/haProxy.js`, `server/haApiHandlers.js` 추가
+- `src/config/privateConfig.js` → 환경변수 `PROPOS_HA_BASE_URL`, `PROPOS_HA_WS_URL`, `PROPOS_HA_TOKEN` 우선 오버라이드 지원
+- S02/S04 실시간 감지 → 브라우저 직접 WebSocket 대신 서버 프록시 기반 상태 폴링으로 전환
+- `vercel.json` 추가 → `dist/` 출력물 지정, SPA rewrite, `/api/ha/*` no-store 헤더
+- `tests/unit/s09.private-config.test.js`, `tests/unit/s10.ha-api-handlers.test.js` 추가
 
 ## ✅ M10: UI 재설계 + 구조 정리 (2026-04-12)
 - CommandCenter: CC_STAGES 파이프라인 뷰 (단계별 카운트 + 긴급 배지 + 배치 액션)
@@ -113,7 +112,7 @@
 - `.claude/rules/s01~s05-interface-definitions.md` 10개 삭제 (diagram/source 3중 중복)
 - `docs/scenario-index.md` + `scripts/generate-scenario-index.mjs` 삭제
 - `docs/scenarios.yaml`: content_keys 제거, entry_function 5개 추가
-- `scripts/verify-scenarios-sync.mjs`: entry_function → service 파일 + diagram 양방향 검증 추가
+- `scripts/verify-scenarios-sync.mjs`: entry_function → service export + component import/call + diagram 검증 추가
 - `myPlantUML/propos-scenario02-sequence.uml`: runCheckinAutomation → handleDoorUnlocked 수정
 - `.claude/CLAUDE.md`, `architecture.md`, `decisions.md`, `progress.md` 전면 갱신
 - **전체 테스트 364개 통과 (fail 0), verify:scenarios All checks passed**
@@ -140,25 +139,21 @@
 | UC-001 | iCal 실예약 데이터 | Airbnb 숙소 → 예약 캘린더 → iCal URL 복사 | 설정 탭에 URL 붙여넣기 (이미 UI 있음) |
 | UC-003 | 소음/전력 센서 추가 | HA entity_id 알려주기 | `PROPOS_CONFIG.entities.noiseSensor` 입력만으로 자동 반영 |
 | UC-001 | 도어락 실제 PIN 등록 | HA `lock.*` entity 생성 | haClient.setLockCode() 이미 구현됨, entity만 연결하면 동작 |
-| ALL | HA CORS 설정 | HA configuration.yaml 수정 | HA 외부(Netlify)에서 API 호출 허용 필요 |
+| ALL | API 배포 연결 | Vercel 프로젝트 + 환경변수 설정 | `/api/ha/*` 서버 프록시를 운영 환경과 연결 |
 | UC-003/005 | AI 답장/가격 최적화 | Claude API key 제공 | API key 있으면 즉시 구현 가능 |
 
-### HA CORS 설정 (필수 — Netlify 배포 시 HA 연동에 필요)
-```yaml
-# HA configuration.yaml에 추가
-http:
-  cors_allowed_origins:
-    - https://your-netlify-url.netlify.app
-    - http://localhost:8080
-```
+### 운영 연결 준비
+- Vercel에 `PROPOS_HA_BASE_URL`, `PROPOS_HA_WS_URL`, `PROPOS_HA_TOKEN` 환경변수 설정
+- `/api/ha/*`가 호출 가능한 서버리스 배포 활성화
+- 브라우저는 HA에 직접 붙지 않으므로 기존 Netlify CORS 대응은 핵심 경로가 아님
 
 ---
 
 ## 다음 작업 (우선순위 순)
 
-### 🔜 M10: HA CORS 설정 (사용자 직접)
-- HA configuration.yaml 수정 후 HA 재시작
-- Netlify URL 또는 Vercel URL 추가
+### 🔜 M10: 운영 프록시 연결
+- Vercel 프로젝트 생성 후 환경변수 주입
+- `/api/ha/*` 실배포 동작 확인
 
 ### 🔜 M11: 프로덕션 전환
 - [ ] Vercel 배포 + 도메인 설정

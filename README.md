@@ -30,6 +30,20 @@
 - CI는 `npm run verify:dist`로 `dist`가 `src`와 동기화되어 있는지 검증합니다.
 - CI는 Playwright 스모크 테스트로 핵심 화면 진입과 런타임 오류를 확인합니다.
 
+## HA Security Boundary
+
+- 브라우저는 Home Assistant를 직접 호출하지 않습니다.
+- 프런트는 `/api/ha/*`만 호출하고, HA 토큰은 서버 측 `src/config/privateConfig.js`에서만 읽습니다.
+- 공개 설정은 `src/config/propos.public.json`만 사용합니다.
+- 비공개 설정은 `src/config/propos.config.json` 또는 환경변수 `PROPOS_HA_BASE_URL`, `PROPOS_HA_WS_URL`, `PROPOS_HA_TOKEN`으로 주입합니다.
+- 실제 배포에서 이 구조를 쓰려면 서버리스/API 실행 환경이 필요합니다. 현재 기준 권장 배포는 Vercel입니다.
+
+## Vercel Deployment
+
+- `vercel.json` 에서 `dist/`를 정적 출력물로 지정하고, SPA 경로는 `index.html`로 rewrite 합니다.
+- `/api/ha/*` 응답에는 `Cache-Control: no-store`를 적용해 상태 조회 응답이 캐시되지 않도록 합니다.
+- Vercel 프로젝트 환경변수에 `PROPOS_HA_BASE_URL`, `PROPOS_HA_WS_URL`, `PROPOS_HA_TOKEN`을 등록하면 운영 프록시가 바로 같은 경계를 사용합니다.
+
 ## Useful Commands
 
 - `npm run dev`

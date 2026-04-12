@@ -1,7 +1,8 @@
 import React from "react";
 
 import checkoutService from "../application/checkoutService.js";
-import PROPOS_CONFIG, { getBrowserToken } from "../config/publicConfig.js";
+import haBrowserClient from "../infrastructure/haBrowserClient.js";
+import { createStatePollingConnection } from "../infrastructure/haBrowserPolling.js";
 
 // ============================================================
 // S04CheckoutPanel.jsx — UC-004 체크아웃 & 청소 자동화 UI
@@ -70,70 +71,19 @@ const _haMockS04 = {
 };
 
 const _haRealS04 = (() => {
-  const BASE  = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.baseUrl : 'http://192.168.45.76:8123';
-  const TOKEN = getBrowserToken();
-
   async function expirePin(entityId) {
-    const res = await fetch(`${BASE}/api/services/persistent_notification/create`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: `[PROPOS] PIN 만료 처리: ${entityId}`, title: 'PIN 만료' }),
+    await haBrowserClient.callService('persistent_notification', 'create', {
+      message: `[PROPOS] PIN 만료 처리: ${entityId}`,
+      title: 'PIN 만료',
     });
-    if (!res.ok) throw new Error(`HA PIN 만료 실패 (${res.status})`);
   }
 
   return { expirePin };
 })();
 
-// ── Real HA WebSocket — 퇴실 감지용 ──────────────────────────
-const _haWsS04 = (() => {
-  const HA_WS_URL = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.wsUrl   : 'ws://192.168.45.76:8123/api/websocket';
-  const HA_TOKEN  = getBrowserToken();
-  const MAX_RECONNECT = 5;
-
-  let ws = null, msgId = 1, intentionalClose = false;
-  let reconnectCount = 0, reconnectTimer = null;
-  let _onEvent = null, _onStatus = null;
-
-  function connect(onEvent, onStatusChange) {
-    intentionalClose = false;
-    _onEvent = onEvent; _onStatus = onStatusChange;
-    _onStatus('connecting');
-    try { ws = new WebSocket(HA_WS_URL); } catch(_) { _onStatus('error'); return; }
-
-    ws.onmessage = (e) => {
-      let msg; try { msg = JSON.parse(e.data); } catch(_) { return; }
-      if (msg.type === 'auth_required') {
-        ws.send(JSON.stringify({ type: 'auth', access_token: HA_TOKEN }));
-      } else if (msg.type === 'auth_ok') {
-        reconnectCount = 0; _onStatus('connected');
-        ws.send(JSON.stringify({ id: msgId++, type: 'subscribe_events', event_type: 'state_changed' }));
-      } else if (msg.type === 'auth_invalid') {
-        intentionalClose = true; _onStatus('error'); ws.close();
-      } else if (msg.type === 'event' && msg.event?.event_type === 'state_changed') {
-        const { entity_id, new_state, old_state } = msg.event.data || {};
-        _onEvent({ entityId: entity_id, newState: new_state?.state, oldState: old_state?.state });
-      }
-    };
-    ws.onerror = () => _onStatus('error');
-    ws.onclose = () => {
-      if (intentionalClose) { _onStatus('disconnected'); return; }
-      if (reconnectCount < MAX_RECONNECT) {
-        reconnectCount++;
-        _onStatus('reconnecting');
-        reconnectTimer = setTimeout(() => connect(_onEvent, _onStatus), Math.min(1000 * reconnectCount, 30000));
-      } else { _onStatus('error'); }
-    };
-  }
-
-  function disconnect() {
-    intentionalClose = true;
-    clearTimeout(reconnectTimer);
-    if (ws) { ws.close(); ws = null; }
-  }
-
-  return { connect, disconnect };
-})();
+function toLockEntityId(propId) {
+  return `lock.front_door_${propId.toLowerCase().replace("-", "_")}`;
+}
 
 // ── 목업 숙소/청소팀 데이터 ─────────────────────────────────
 // checkOut = 현재 시각 +30분 → 시간창(checkOut -2h ~ +3h) 안에 항상 포함되어 데모 시간 무관
@@ -427,12 +377,13 @@ function S04CheckoutPanel({ onBack }) {
   }
 
   // ── 체크아웃 이벤트 처리 ──
-  async function handleCheckoutEvent(eventType) {
+  async function handleCheckoutEvent(eventType, targetPropId = selectedProp) {
     if (processing) return;
     setProcessing(true);
 
     const now = _s04.hhmm();
-    const event = { event: eventType, propId: selectedProp, time: now };
+    const event = { event: eventType, propId: targetPropId, time: now };
+    const booking = _S04_PROPS.find(item => item.propId === targetPropId);
 
     try {
       const infra = getInfra();
@@ -442,15 +393,17 @@ function S04CheckoutPanel({ onBack }) {
         _S04_CLEANERS,
         {
           expirePin: async entityId => {
-            setPinCountdown(true);
+            if (targetPropId === selectedProp) {
+              setPinCountdown(true);
+            }
             await infra.expirePin(entityId);
-            setPinDone(prev => ({ ...prev, [selectedProp]: true }));
+            setPinDone(prev => ({ ...prev, [targetPropId]: true }));
           },
           addAlert: alert => {
             const booking = _S04_PROPS.find(item => item.propId === alert.prop);
             addAlert({
               ...alert,
-              prop: booking?.propName || currentBooking?.propName || alert.prop,
+              prop: booking?.propName || alert.prop,
             });
           },
           updateStatus: (propId, status) => {
@@ -469,13 +422,13 @@ function S04CheckoutPanel({ onBack }) {
       if (result.status === "failed") {
         addAlert({
           type: "warn",
-          prop: currentBooking?.propName || selectedProp,
+          prop: booking?.propName || targetPropId,
           msg: result.error || "체크아웃 이벤트 아님",
           time: now,
         });
       }
     } catch (err) {
-      addAlert({ type: 'error', prop: currentBooking?.propName || selectedProp, msg: `체크아웃 자동화 오류: ${err.message}`, time: _s04.hhmm() });
+      addAlert({ type: 'error', prop: booking?.propName || targetPropId, msg: `체크아웃 자동화 오류: ${err.message}`, time: _s04.hhmm() });
     } finally {
       setProcessing(false);
     }
@@ -518,31 +471,46 @@ function S04CheckoutPanel({ onBack }) {
   function ackAlert(idx)  { setAlerts(prev => prev.filter((_, i) => i !== idx)); }
   function ackAllAlerts() { setAlerts([]); }
 
-  // ── handleCheckoutRef: WS 콜백이 항상 최신 함수 호출하도록 ──
+  // ── handleCheckoutRef: 연결 콜백이 항상 최신 함수 호출하도록 ──
   handleCheckoutRef.current = handleCheckoutEvent;
 
-  // ── HA WebSocket — haMode 켤 때만 연결 ──
+  // ── HA 상태 폴링 — haMode 켤 때만 연결 ──
   React.useEffect(() => {
     if (!haMode) {
       if (wsConnRef.current) { wsConnRef.current.disconnect(); wsConnRef.current = null; }
       setWsStatus('disconnected');
       return;
     }
-    const onWsEvent = ({ newState, oldState }) => {
-      // lock entity가 locked로 바뀌면 → 퇴실(도어락 잠금) 이벤트
-      if (newState === 'locked' && oldState === 'unlocked') {
-        handleCheckoutRef.current('door_locked');
-      }
-    };
-    _haWsS04.connect(onWsEvent, setWsStatus);
-    wsConnRef.current = _haWsS04;
+    const lastStates = {};
+    const entityIds = _S04_PROPS.map(prop => toLockEntityId(prop.propId));
+
+    wsConnRef.current = createStatePollingConnection({
+      entityIds,
+      onStatusChange: setWsStatus,
+      onStates: states => {
+        for (const [entityId, nextState] of Object.entries(states)) {
+          const prevState = lastStates[entityId];
+          const oldValue = prevState?.state ?? null;
+          const newValue = nextState?.state ?? null;
+
+          if (newValue === 'locked' && oldValue === 'unlocked') {
+            const match = entityId?.match(/p[_-](\d+)/i);
+            const propId = match ? `P-${match[1].padStart(3,'0')}` : selectedProp;
+            handleCheckoutRef.current('door_locked', propId);
+          }
+
+          lastStates[entityId] = nextState;
+        }
+      },
+    });
+
     return () => { if (wsConnRef.current) { wsConnRef.current.disconnect(); wsConnRef.current = null; } };
-  }, [haMode]);
+  }, [haMode, selectedProp]);
 
   const errorCount = alerts.filter(a => a.type === 'error').length;
   const infoCount  = alerts.filter(a => a.type === 'info').length;
 
-  // WS 상태 뱃지 텍스트
+  // HA 연결 상태 뱃지 텍스트
   const wsLabel = {
     connected: '● HA 연결됨', connecting: '◌ 연결 중', reconnecting: '◌ 재연결 중',
     disconnected: '○ 연결 해제', error: '✕ 연결 오류',
@@ -588,7 +556,7 @@ function S04CheckoutPanel({ onBack }) {
             </div>
           )}
 
-          {/* WS 상태 뱃지 (HA 모드일 때) */}
+          {/* HA 상태 뱃지 (HA 모드일 때) */}
           {haMode && (
             <div style={{
               fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
@@ -739,7 +707,7 @@ function S04CheckoutPanel({ onBack }) {
                       📋 수동 체크아웃
                     </button>
                   </div>
-                  <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>* 실제 환경에서는 HA WebSocket 이벤트로 자동 수신</div>
+                  <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>* 실제 환경에서는 HA 상태 변화를 감지해 자동으로 시작됩니다</div>
                 </>
               ) : (
                 <div style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>

@@ -51,12 +51,84 @@ function getExportedFunctionNames(relativePath) {
   return exported;
 }
 
-function componentImportsTarget(relativePath, targetImportPath) {
+function walkAst(node, visit) {
+  if (!node || typeof node !== "object") return;
+  visit(node);
+
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      walkAst(item, visit);
+    }
+    return;
+  }
+
+  for (const value of Object.values(node)) {
+    if (value && typeof value === "object") {
+      walkAst(value, visit);
+    }
+  }
+}
+
+function getComponentServiceLink(relativePath, targetImportPath, entryFunction) {
   const ast = parseModule(relativePath);
-  return ast.program.body.some(node => (
-    node.type === "ImportDeclaration" &&
-    node.source?.value === targetImportPath
-  ));
+  const binding = {
+    importsTarget: false,
+    defaultLocal: null,
+    namedLocals: new Set(),
+    entryLinked: false,
+  };
+
+  for (const node of ast.program.body) {
+    if (node.type !== "ImportDeclaration" || node.source?.value !== targetImportPath) {
+      continue;
+    }
+
+    binding.importsTarget = true;
+
+    for (const specifier of node.specifiers || []) {
+      if (specifier.type === "ImportDefaultSpecifier") {
+        binding.defaultLocal = specifier.local?.name || null;
+      }
+
+      if (
+        specifier.type === "ImportSpecifier" &&
+        specifier.imported?.type === "Identifier" &&
+        specifier.imported.name === entryFunction &&
+        specifier.local?.name
+      ) {
+        binding.namedLocals.add(specifier.local.name);
+      }
+    }
+  }
+
+  if (!binding.importsTarget) {
+    return binding;
+  }
+
+  walkAst(ast.program.body, node => {
+    if (binding.entryLinked || node.type !== "CallExpression") return;
+
+    if (
+      node.callee?.type === "Identifier" &&
+      binding.namedLocals.has(node.callee.name)
+    ) {
+      binding.entryLinked = true;
+      return;
+    }
+
+    if (
+      node.callee?.type === "MemberExpression" &&
+      !node.callee.computed &&
+      node.callee.object?.type === "Identifier" &&
+      node.callee.property?.type === "Identifier" &&
+      node.callee.property.name === entryFunction &&
+      node.callee.object.name === binding.defaultLocal
+    ) {
+      binding.entryLinked = true;
+    }
+  });
+
+  return binding;
 }
 
 function toImportPath(fromFile, targetFile) {
@@ -84,6 +156,11 @@ for (const scenario of registry.scenarios) {
   const componentBase = path.basename(scenario.component, path.extname(scenario.component));
   const expectedServiceImport = toImportPath(scenario.component, scenario.service);
   const serviceExports = getExportedFunctionNames(scenario.service);
+  const componentServiceLink = getComponentServiceLink(
+    scenario.component,
+    expectedServiceImport,
+    scenario.entry_function
+  );
 
   // 파일 존재 확인
   assert(repoFileExists(scenario.component), `[verify:scenarios] Missing component: ${scenario.component}`, errors);
@@ -109,8 +186,13 @@ for (const scenario of registry.scenarios) {
 
   // 컴포넌트 ↔ 서비스 연결 확인
   assert(
-    componentImportsTarget(scenario.component, expectedServiceImport),
+    componentServiceLink.importsTarget,
     `[verify:scenarios] Component ${scenario.component} is not linked to service import: ${expectedServiceImport}`,
+    errors
+  );
+  assert(
+    componentServiceLink.entryLinked,
+    `[verify:scenarios] Component ${scenario.component} does not call service entry function: ${scenario.entry_function}`,
     errors
   );
 
@@ -141,4 +223,4 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log("[verify:scenarios] All checks passed: registry, diagrams, tests, service entry functions.");
+console.log("[verify:scenarios] All checks passed: registry, service exports, component links, diagrams, tests.");

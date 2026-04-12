@@ -1,6 +1,6 @@
 # PROPOS — Project Context
 > Airbnb 숙소 완전 관리 시스템. 관리자 1명 → 100개+ 숙소 + IoT 자동화.
-> 업데이트: 2026-04-12
+> 업데이트: 2026-04-13
 
 ## 인프라 (확정)
 - 라즈베리파이 + Home Assistant + Tailscale VPN (외부 접속 완료)
@@ -43,11 +43,13 @@ propos/
 ├── src/
 │   ├── application/         ← 서비스 레이어 (entry_function이 여기 있음)
 │   ├── components/
-│   ├── config/              ← HA 설정 중앙화
+│   ├── config/              ← 공개/비공개 설정 분리
 │   ├── domain/              ← 도메인 순수 함수
-│   ├── infrastructure/      ← HA REST/WebSocket 클라이언트
+│   ├── infrastructure/      ← 브라우저/서버 HA 어댑터
 │   ├── styles/
 │   └── utils/
+├── api/                     ← 서버리스 HA 프록시 엔드포인트
+├── server/                  ← HA 프록시 공용 서버 코드
 ├── tests/
 └── dist/
 ```
@@ -60,9 +62,12 @@ propos/
 - [x] verify에 서비스 엔트리 함수 검증 추가 (`entry_function`)
 - [x] Storybook 제거 (CI 중복, 유지 가치 없음)
 - [x] 문서 전면 갱신 (CLAUDE.md, architecture.md, decisions.md, progress.md)
+- [x] 브라우저 직접 HA 호출 제거, `/api/ha/*` 프록시 경유 구조 도입
+- [x] Node 비공개 설정에 환경변수 우선 오버라이드 지원 (`PROPOS_HA_*`)
+- [x] Vercel 배포 설정 파일 추가 (`vercel.json`, SPA rewrite + `/api/ha/*` no-store)
 
 ## 다음 작업
-- [ ] Home Assistant API 실제 연동
+- [ ] Vercel 프로젝트 환경변수 주입 후 `/api/ha/*` 실배포 확인
 - [ ] 실제 숙소 데이터 연결
 - [ ] Vercel 프로덕션 배포
 

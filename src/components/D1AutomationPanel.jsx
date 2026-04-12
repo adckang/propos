@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import checkinPreparationService from "../application/checkinPreparationService.js";
-import PROPOS_CONFIG, { getBrowserToken } from "../config/publicConfig.js";
+import PROPOS_CONFIG from "../config/publicConfig.js";
+import haBrowserClient from "../infrastructure/haBrowserClient.js";
 import Toast from "../utils/toast";
 
 // ============================================================
@@ -160,21 +161,10 @@ function makeMockInfra(onAlert, failPropId) {
 
 // ── Real HA Infrastructure (TV방) ─────────────────────────────
 const _ha = (() => {
-  const BASE     = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.baseUrl : 'http://192.168.45.76:8123';
-  const TOKEN    = getBrowserToken();
   const TV_LIGHT = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.entities.tvLight : 'light.rgbcct_8002';
   const TV_PLUG  = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.entities.tvPlug  : 'switch.tv_smart_plug_socket_1';
-  async function post(path, data) {
-    const res = await fetch(`${BASE}${path}`, {
-      method:'POST',
-      headers:{'Authorization':`Bearer ${TOKEN}`,'Content-Type':'application/json'},
-      body:JSON.stringify(data),
-    });
-    if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HA ${res.status}: ${t}`); }
-    return res.json().catch(()=>({}));
-  }
   async function setLockCode(entityId, code, name) {
-    await post('/api/services/persistent_notification/create', {
+    await haBrowserClient.callService('persistent_notification', 'create', {
       title:'[PROPOS] PIN 발급 완료',
       message:`게스트: ${name}\nPIN: ${code}\n등록 대상: ${entityId}`,
       notification_id:`propos_pin_${entityId.replace(/\W/g,'_')}`,
@@ -182,14 +172,14 @@ const _ha = (() => {
   }
   async function activateScene(entityId) {
     if (entityId.includes('checkin_ready')) {
-      await post('/api/services/light/turn_on', { entity_id:TV_LIGHT, brightness:255 });
-      await post('/api/services/switch/turn_on', { entity_id:TV_PLUG });
+      await haBrowserClient.callService('light', 'turn_on', { entity_id:TV_LIGHT, brightness:255 });
+      await haBrowserClient.callService('switch', 'turn_on', { entity_id:TV_PLUG });
       return;
     }
-    await post('/api/services/scene/turn_on', { entity_id:entityId });
+    await haBrowserClient.callService('scene', 'turn_on', { entity_id:entityId });
   }
   async function sendMessage(guestId, text) {
-    await post('/api/services/persistent_notification/create', {
+    await haBrowserClient.callService('persistent_notification', 'create', {
       title:`[PROPOS] 웰컴 메시지 — ${guestId}`,
       message:text,
       notification_id:`propos_msg_${guestId}`,

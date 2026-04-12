@@ -1,8 +1,9 @@
 import React from "react";
 
 import monitoringService from "../application/monitoringService.js";
-import PROPOS_CONFIG, { getBrowserToken } from "../config/publicConfig.js";
+import PROPOS_CONFIG from "../config/publicConfig.js";
 import sensorDomain from "../domain/sensorDomain.js";
+import haBrowserClient from "../infrastructure/haBrowserClient.js";
 
 // ============================================================
 // S03MonitoringPanel.jsx — UC-003 체류 중 실시간 모니터링 UI
@@ -57,31 +58,29 @@ const _DEFAULT_THRESHOLDS = _s03.getDefaultThresholds();
 
 const _haS03 = {
   async getSensorStates(propId) {
-    const cfg    = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG : { ha:{baseUrl:''}, entities:{} };
-    const BASE   = cfg.ha.baseUrl;
-    const TOKEN  = getBrowserToken();
+    const cfg    = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG : { entities:{} };
     const ENTS   = cfg.entities || {};
 
-    async function getState(entityId) {
-      if (!entityId || !BASE) return null;
-      try {
-        const res = await fetch(`${BASE}/api/states/${entityId}`, {
-          headers: { 'Authorization': `Bearer ${TOKEN}` },
-        });
-        if (!res.ok) return null;
-        const data = await res.json();
-        if (data.state === 'unavailable' || data.state === 'unknown') return null;
-        const v = parseFloat(data.state);
-        return isNaN(v) ? null : v;
-      } catch (_) { return null; }
+    const stateMap = await haBrowserClient.getStates([
+      ENTS.tempSensor,
+      ENTS.humiditySensor,
+      ENTS.noiseSensor,
+      ENTS.powerSensor,
+    ]);
+
+    function parseState(entityId) {
+      const data = entityId ? stateMap[entityId] : null;
+      if (!data) return null;
+      if (data.state === 'unavailable' || data.state === 'unknown') return null;
+      const value = parseFloat(data.state);
+      return Number.isNaN(value) ? null : value;
     }
 
-    const [temp, humidity, noise, power] = await Promise.all([
-      getState(ENTS.tempSensor),
-      getState(ENTS.humiditySensor),
-      getState(ENTS.noiseSensor),   // null이면 getState 내부에서 즉시 null 반환
-      getState(ENTS.powerSensor),
-    ]);
+    const temp = parseState(ENTS.tempSensor);
+    const humidity = parseState(ENTS.humiditySensor);
+    const noise = parseState(ENTS.noiseSensor);
+    const power = parseState(ENTS.powerSensor);
+
     return { propId, time: _s03.hhmm(), temp, humidity, noise, power };
   },
 };

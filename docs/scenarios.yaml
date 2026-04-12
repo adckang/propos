@@ -93,7 +93,7 @@ scenarios:
     diagram: myPlantUML/propos-scenario03-sequence.uml
     functional_test: tests/functional/s03.functional.test.js
     service: src/application/monitoringService.js
-    entry_function: pollSensors
+    entry_function: pollAll
     domain_modules:
       - src/domain/sensorDomain.js
       - src/domain/messageDomain.js

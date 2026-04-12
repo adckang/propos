@@ -36,8 +36,14 @@
 ## [D-011] HA 토큰 git 제외
 - **결정**: `src/config/propos.config.json`을 `.gitignore`에 추가, git untrack
 - **이유**: HA Long-Lived Access Token이 평문으로 포함됨 — git 히스토리에 남으면 안 됨
-- **운영**: `src/config/propos.config.json.example`을 복사해 실제 토큰 입력 후 사용, 브라우저는 `src/config/propos.public.json`만 번들에 포함
+- **운영**: 로컬 파일(`src/config/propos.config.json`) 또는 환경변수(`PROPOS_HA_BASE_URL`, `PROPOS_HA_WS_URL`, `PROPOS_HA_TOKEN`)로 주입, 브라우저는 `src/config/propos.public.json`만 번들에 포함
 - **재검토**: Vercel 환경변수로 전환 시 이 파일 구조 전면 교체
+
+## [D-012] 브라우저 직접 HA 호출 금지
+- **결정**: 브라우저는 Home Assistant를 직접 호출하지 않고 `/api/ha/*`만 사용
+- **이유**: 토큰 노출 방지, 배포 환경별 보안 경계 일관화, UI 로직과 HA 인증 분리
+- **구현 위치**: `src/infrastructure/haBrowserClient.js`, `server/haProxy.js`, `api/ha/*`
+- **버린 대안**: 브라우저 번들에서 Bearer 토큰으로 HA REST/WebSocket 직접 호출
 
 ## [D-010] 시나리오 레지스트리 경량화
 - **결정**: `docs/scenarios.yaml`에 `entry_function` 추가, `content_keys` 제거

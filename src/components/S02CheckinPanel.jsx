@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 
 import checkinService from "../application/checkinService.js";
-import PROPOS_CONFIG, { getBrowserToken } from "../config/publicConfig.js";
+import haBrowserClient from "../infrastructure/haBrowserClient.js";
+import { createStatePollingConnection } from "../infrastructure/haBrowserPolling.js";
 
 // ============================================================
 // S02CheckinPanel.jsx — UC-002 체크인 당일 자동화 UI
@@ -71,33 +72,22 @@ function makeMockInfra(onAlert, onUpdateStatus, sceneFail, channelFail) {
 
 // ── Real HA Infrastructure ───────────────────────────────────
 const _haS02 = (() => {
-  const BASE  = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.baseUrl : 'http://192.168.45.76:8123';
-  const TOKEN = getBrowserToken();
-  async function post(path, data) {
-    const res = await fetch(`${BASE}${path}`, {
-      method:'POST',
-      headers:{'Authorization':`Bearer ${TOKEN}`,'Content-Type':'application/json'},
-      body:JSON.stringify(data),
-    });
-    if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error(`HA ${res.status}: ${t}`); }
-    return res.json().catch(()=>({}));
-  }
   async function activateScene(entityId) {
-    await post('/api/services/persistent_notification/create', {
+    await haBrowserClient.callService('persistent_notification', 'create', {
       title:'[PROPOS S02] 체크인 씬 실행',
       message:`씬: ${entityId}\n시각: ${_s02.hhmm()}`,
       notification_id:`propos_s02_scene_${entityId.replace(/\W/g,'_')}`,
     });
   }
   async function openChannel(booking) {
-    await post('/api/services/persistent_notification/create', {
+    await haBrowserClient.callService('persistent_notification', 'create', {
       title:`[PROPOS S02] 채팅 채널 오픈 — ${booking.guestName}`,
       message:`숙소: ${booking.propId}\n체크인: ${booking.checkIn?.slice(0,16).replace('T',' ')}`,
       notification_id:`propos_s02_ch_${booking.propId}`,
     });
   }
   async function sendMessage(guestId, text) {
-    await post('/api/services/persistent_notification/create', {
+    await haBrowserClient.callService('persistent_notification', 'create', {
       title:`[PROPOS S02] 입실 확인 메시지 — ${guestId}`,
       message:text,
       notification_id:`propos_s02_msg_${guestId}`,
@@ -268,62 +258,14 @@ function AlertItem({ alert, onAck }) {
   );
 }
 
-// ── Real HA WebSocket 연결 관리 (브라우저 전용) ───────────────
-const _haWsS02 = (() => {
-  const HA_WS_URL = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.ha.wsUrl : 'ws://192.168.45.76:8123/api/websocket';
-  const HA_TOKEN  = getBrowserToken();
-  const MAX_RECONNECT = 5;
+function toLockEntityId(propId) {
+  return `lock.front_door_${propId.toLowerCase().replace("-", "_")}`;
+}
 
-  let ws = null, msgId = 1, intentionalClose = false;
-  let reconnectCount = 0, reconnectTimer = null;
-  let _onEvent = null, _onStatus = null;
-
-  function connect(onEvent, onStatusChange) {
-    intentionalClose = false;
-    _onEvent  = onEvent;
-    _onStatus = onStatusChange;
-    _onStatus('connecting');
-    try { ws = new WebSocket(HA_WS_URL); } catch(_) { _onStatus('error'); return; }
-
-    ws.onmessage = (e) => {
-      let msg; try { msg = JSON.parse(e.data); } catch(_) { return; }
-      if (msg.type === 'auth_required') {
-        ws.send(JSON.stringify({ type: 'auth', access_token: HA_TOKEN }));
-      } else if (msg.type === 'auth_ok') {
-        reconnectCount = 0;
-        _onStatus('connected');
-        ws.send(JSON.stringify({ id: msgId++, type: 'subscribe_events', event_type: 'state_changed' }));
-      } else if (msg.type === 'auth_invalid') {
-        intentionalClose = true; _onStatus('error'); ws.close();
-      } else if (msg.type === 'event' && msg.event?.event_type === 'state_changed') {
-        const { entity_id, new_state, old_state } = msg.event.data || {};
-        _onEvent({ entityId: entity_id, newState: new_state?.state, oldState: old_state?.state });
-      }
-    };
-    ws.onerror = () => _onStatus('error');
-    ws.onclose = () => {
-      if (intentionalClose) { _onStatus('disconnected'); return; }
-      if (reconnectCount < MAX_RECONNECT) {
-        reconnectCount++;
-        _onStatus('reconnecting');
-        reconnectTimer = setTimeout(() => connect(_onEvent, _onStatus), Math.min(1000 * reconnectCount, 30000));
-      } else { _onStatus('error'); }
-    };
-  }
-
-  function disconnect() {
-    intentionalClose = true;
-    clearTimeout(reconnectTimer);
-    if (ws) { ws.close(); ws = null; }
-  }
-
-  return { connect, disconnect };
-})();
-
-// ── WebSocket Status Indicator ────────────────────────────────
+// ── HA 연결 상태 표시 ─────────────────────────────────────────
 function WsStatusBadge({ status }) {
   const MAP = {
-    connected:    { color:'#059669', bg:'#dcfce7', border:'#86efac', label:'HA WebSocket 연결됨', dot: true },
+    connected:    { color:'#059669', bg:'#dcfce7', border:'#86efac', label:'HA 연결됨', dot: true },
     connecting:   { color:'#d97706', bg:'#fffbeb', border:'#fde68a', label:'연결 중...',          dot: true },
     reconnecting: { color:'#d97706', bg:'#fffbeb', border:'#fde68a', label:'재연결 중...',        dot: true },
     disconnected: { color:'#64748b', bg:'#f8fafc', border:'#e2e8f0', label:'연결 해제됨',         dot: false },
@@ -365,8 +307,8 @@ function S02CheckinPanel({ bookings: propBookings }) {
   const [sceneFail,     setSceneFail]     = useState(false);
   const [channelFail,   setChannelFail]   = useState(false);
   const [useRealHA,     setUseRealHA]     = useState(false);
-  const wsConnRef  = useRef(null);   // _haWsS02 연결 핸들
-  const handleEventRef = useRef(null); // 최신 handleEvent 참조 (WS 콜백용)
+  const wsConnRef  = useRef(null);   // HA 상태 폴링 연결 핸들
+  const handleEventRef = useRef(null); // 최신 handleEvent 참조 (연결 콜백용)
 
   // ── 알림 추가 ──
   const addAlert = (alert) => {
@@ -432,32 +374,46 @@ function S02CheckinPanel({ bookings: propBookings }) {
     checkinService.handlePinLockout({ propId, failCount, time: _s02.hhmm() }, { addAlert });
   };
 
-  // ── handleEventRef: WS 콜백에서 항상 최신 handleEvent 호출 ──
+  // ── handleEventRef: 연결 콜백에서 항상 최신 handleEvent 호출 ──
   handleEventRef.current = handleEvent;
 
-  // ── 실제 HA WebSocket — useRealHA 켤 때만 연결 ──
+  // ── 실제 HA 상태 폴링 — useRealHA 켤 때만 연결 ──
   useEffect(() => {
     if (!useRealHA) {
       if (wsConnRef.current) { wsConnRef.current.disconnect(); wsConnRef.current = null; }
       setWsStatus('simulating');
       return;
     }
-    // HA state_changed → 체크인 이벤트 매핑
-    const onWsEvent = ({ entityId, newState, oldState }) => {
-      // lock entity가 unlocked로 바뀌면 → 도어락 열림 이벤트
-      if (newState === 'unlocked' && oldState === 'locked') {
-        // entity_id에서 propId 추출 (lock.front_door_p_042 → P-042)
-        const match = entityId?.match(/p[_-](\d+)/i);
-        const propId = match ? `P-${match[1].padStart(3,'0')}` : simPropId;
-        handleEventRef.current({
-          event: 'door_unlocked', propId, context: 'guest_checkin', time: _s02.hhmm(),
-        });
-      }
-    };
-    _haWsS02.connect(onWsEvent, setWsStatus);
-    wsConnRef.current = _haWsS02;
+    const lastStates = {};
+    const entityIds = bookings.map(booking => toLockEntityId(booking.propId));
+
+    wsConnRef.current = createStatePollingConnection({
+      entityIds,
+      onStatusChange: setWsStatus,
+      onStates: states => {
+        for (const [entityId, nextState] of Object.entries(states)) {
+          const prevState = lastStates[entityId];
+          const oldValue = prevState?.state ?? null;
+          const newValue = nextState?.state ?? null;
+
+          if (newValue === 'unlocked' && oldValue === 'locked') {
+            const match = entityId?.match(/p[_-](\d+)/i);
+            const propId = match ? `P-${match[1].padStart(3,'0')}` : simPropId;
+            handleEventRef.current({
+              event: 'door_unlocked',
+              propId,
+              context: 'guest_checkin',
+              time: _s02.hhmm(),
+            });
+          }
+
+          lastStates[entityId] = nextState;
+        }
+      },
+    });
+
     return () => { if (wsConnRef.current) { wsConnRef.current.disconnect(); wsConnRef.current = null; } };
-  }, [useRealHA]);
+  }, [bookings, simPropId, useRealHA]);
 
   // ── 체크인 시뮬레이션 (수동) ──
   const simulate = () => {
@@ -465,7 +421,7 @@ function S02CheckinPanel({ bookings: propBookings }) {
     handleEvent(event);
   };
 
-  // ── WS 수동 연결/해제 버튼 핸들러 ──
+  // ── HA 연결/해제 버튼 핸들러 ──
   const connectWS    = () => setUseRealHA(true);
   const disconnectWS = () => setUseRealHA(false);
 
