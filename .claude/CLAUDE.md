@@ -105,5 +105,6 @@ src/
 □ CLAUDE.md 읽었는가?
 □ docs/scenarios.yaml에서 관련 시나리오 확인했는가?
 □ .claude/rules/decisions.md 변경 금지 항목 확인했는가?
+□ 배포 경계 작업이면 npm run verify:deploy 필요 여부 확인했는가?
 □ 완료 후 progress.md 업데이트 요청할 것
 ```

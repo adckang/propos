@@ -104,6 +104,8 @@
 - S02/S04 실시간 감지 → 브라우저 직접 WebSocket 대신 서버 프록시 기반 상태 폴링으로 전환
 - `vercel.json` 추가 → `dist/` 출력물 지정, SPA rewrite, `/api/ha/*` no-store 헤더
 - `tests/unit/s09.private-config.test.js`, `tests/unit/s10.ha-api-handlers.test.js` 추가
+- `.env.vercel.example`, `scripts/verify-deployment-ready.mjs` 추가
+- CI에 `npm run verify:deploy` 추가
 
 ## ✅ M10: UI 재설계 + 구조 정리 (2026-04-12)
 - CommandCenter: CC_STAGES 파이프라인 뷰 (단계별 카운트 + 긴급 배지 + 배치 액션)

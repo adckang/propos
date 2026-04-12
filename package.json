@@ -8,6 +8,7 @@
     "preview": "vite preview",
     "test": "node --test tests/unit/*.test.js tests/functional/*.test.js",
     "verify:scenarios": "node scripts/verify-scenarios-sync.mjs",
+    "verify:deploy": "node scripts/verify-deployment-ready.mjs",
     "sync:dist": "node scripts/sync-dist.mjs",
     "verify:dist": "node scripts/verify-dist-sync.mjs",
     "test:smoke": "playwright test",

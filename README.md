@@ -43,6 +43,8 @@
 - `vercel.json` 에서 `dist/`를 정적 출력물로 지정하고, SPA 경로는 `index.html`로 rewrite 합니다.
 - `/api/ha/*` 응답에는 `Cache-Control: no-store`를 적용해 상태 조회 응답이 캐시되지 않도록 합니다.
 - Vercel 프로젝트 환경변수에 `PROPOS_HA_BASE_URL`, `PROPOS_HA_WS_URL`, `PROPOS_HA_TOKEN`을 등록하면 운영 프록시가 바로 같은 경계를 사용합니다.
+- 환경변수 템플릿은 `.env.vercel.example`에 정리되어 있습니다.
+- 배포 준비 검증은 `npm run verify:deploy`로 실행합니다.
 
 ## Useful Commands
 

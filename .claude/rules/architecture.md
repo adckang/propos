@@ -40,6 +40,7 @@ src/ 수정
 - `vercel.json`을 기준으로 `dist/`를 정적 출력물로 배포한다.
 - SPA 라우트는 `index.html`로 rewrite 하되 `/api/*`와 정적 자산 경로는 침범하지 않는다.
 - `/api/ha/*` 응답은 캐시 금지(`Cache-Control: no-store`)를 유지한다.
+- 배포 변경 후 `npm run verify:deploy`로 Vercel 라우팅/문서/환경변수 연결을 확인한다.
 
 ## 금지 패턴
 - `innerHTML`에 사용자 입력 직접 삽입 금지 → `textContent` 또는 `escapeHtml()` 사용

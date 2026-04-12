@@ -74,6 +74,7 @@ propos/
 ## 운영 명령
 - 개발 서버: `npm run dev`
 - 시나리오 드리프트 검증: `npm run verify:scenarios`
+- 배포 준비 검증: `npm run verify:deploy`
 - 빌드: `npm run build`
 - 스모크 테스트: `npm run test:smoke`
 - 유닛/기능 테스트: `npm test`

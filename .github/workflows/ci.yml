@@ -27,6 +27,9 @@ jobs:
       - name: Verify scenario sync
         run: npm run verify:scenarios
 
+      - name: Verify deployment readiness
+        run: npm run verify:deploy
+
       - name: Verify dist sync
         run: npm run verify:dist
 
