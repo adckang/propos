@@ -135,7 +135,9 @@ body{background:#f0f4f8}
 .pipeline-card.active{box-shadow:var(--shadow-md);transform:translateY(-1px)}
 .pipeline-card:hover:not(.active){transform:translateY(-1px);box-shadow:var(--shadow)}
 .pipeline-count{font-family:'DM Mono',monospace;font-size:22px;font-weight:800;line-height:1;margin:4px 0}
+.pipeline-code{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8}
 .pipeline-label{font-size:11px;font-weight:700;white-space:nowrap}
+.pipeline-meta{margin-top:5px;font-size:10px;color:#94a3b8;font-weight:600}
 .pipeline-urgent{position:absolute;top:8px;right:8px;font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
 
 /* ── STAGE ACTION BAR ── */

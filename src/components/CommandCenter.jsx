@@ -11,8 +11,9 @@ import Toast from "../utils/toast";
 const CC_STAGES = [
   {
     id:"d1",
+    code:"S01",
     emoji:"📅",
-    label:"S01 D-1 준비",
+    label:"D-1 준비",
     color:"#2563eb",
     bg:"#eff6ff",
     border:"#bfdbfe",
@@ -22,8 +23,9 @@ const CC_STAGES = [
   },
   {
     id:"checkin",
+    code:"S02",
     emoji:"🚪",
-    label:"S02 체크인 당일",
+    label:"체크인 당일",
     color:"#059669",
     bg:"#ecfdf5",
     border:"#a7f3d0",
@@ -33,8 +35,9 @@ const CC_STAGES = [
   },
   {
     id:"stay",
+    code:"S03",
     emoji:"📡",
-    label:"S03 체류 중",
+    label:"체류 중",
     color:"#7c3aed",
     bg:"#f5f3ff",
     border:"#ddd6fe",
@@ -44,8 +47,9 @@ const CC_STAGES = [
   },
   {
     id:"checkout",
+    code:"S04",
     emoji:"🚪",
-    label:"S04 퇴실·청소",
+    label:"퇴실·청소",
     color:"#d97706",
     bg:"#fffbeb",
     border:"#fde68a",
@@ -55,8 +59,9 @@ const CC_STAGES = [
   },
   {
     id:"settlement",
+    code:"S05",
     emoji:"💰",
-    label:"S05 수익 정산",
+    label:"수익 정산",
     color:"#0891b2",
     bg:"#ecfeff",
     border:"#a5f3fc",
@@ -141,6 +146,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
     const unread = props.filter(item.filter).reduce((sum, prop)=>sum + prop.unreadMsg, 0);
     return {
       id: item.id,
+      code: item.code,
       label: item.label,
       count,
       urgent,
@@ -161,6 +167,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
   const stageManualCount = filtered.filter(prop => prop.priority !== "OK" || prop.issues.length > 0).length;
   const stageUnreadCount = filtered.reduce((sum, prop)=>sum + prop.unreadMsg, 0);
   const stageLeadProp = filtered[0] || null;
+  const stageUrgentCount = filtered.filter(prop => prop.priority === "HIGH" || prop.issues.length > 0).length;
 
   const getPrimaryAction = prop => {
     if(prop.priority==="HIGH" || prop.issues.length > 0){
@@ -224,11 +231,42 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
   };
 
   const stageFocusTitle = stageLeadProp
-    ? `${currentStage.label}에서 ${stageLeadProp.name}부터 처리하면 됩니다`
-    : `${currentStage.label} 단계에서 바로 처리할 숙소는 아직 없습니다`;
+    ? `${stageLeadProp.name}부터 처리하면 됩니다`
+    : `${currentStage.label} 단계는 지금 안정적입니다`;
   const stageFocusDesc = stageLeadProp
     ? getPrimaryAction(stageLeadProp).detail
     : currentStage.desc;
+  const stageFocusMetrics = {
+    d1: [
+      `준비 대상 ${currentInsight?.count || 0}곳`,
+      `자동 진행 가능 ${filtered.filter(prop => prop.priority === "OK" && prop.unreadMsg === 0).length}곳`,
+      `예외 ${stageManualCount}곳`,
+    ],
+    checkin: [
+      `당일 확인 ${currentInsight?.count || 0}곳`,
+      `메시지 미응답 ${stageUnreadCount}건`,
+      `긴급 ${stageUrgentCount}곳`,
+    ],
+    stay: [
+      `체류 중 ${currentInsight?.count || 0}곳`,
+      `긴급 ${stageUrgentCount}곳`,
+      `미읽음 ${stageUnreadCount}건`,
+    ],
+    checkout: [
+      `퇴실 후 처리 ${currentInsight?.count || 0}곳`,
+      `청소 진행 ${filtered.filter(prop => prop.status === "청소중").length}곳`,
+      `점검 필요 ${filtered.filter(prop => prop.status === "점검중" || prop.issues.length > 0).length}곳`,
+    ],
+    settlement: [
+      `정산 대상 ${currentInsight?.count || 0}곳`,
+      `고수익 ${(filtered.filter(prop => prop.revenue >= 500000)).length}곳`,
+      `평점 주의 ${(filtered.filter(prop => Number(prop.rating) < 4.3)).length}곳`,
+    ],
+  }[stage] || [
+    `전체 ${currentInsight?.count || 0}곳`,
+    `수동 개입 ${stageManualCount}곳`,
+    `미응답 ${stageUnreadCount}건`,
+  ];
 
   const runPrimaryAction = prop => {
     const action = getPrimaryAction(prop);
@@ -576,7 +614,9 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
                         {urgentCount>0 && <div className="pipeline-urgent">🔴 {urgentCount}</div>}
                         <div style={{fontSize:"16px",marginBottom:"2px"}}>{item.emoji}</div>
                         <div className="pipeline-count" style={{color:item.color}}>{count}</div>
+                        <div className="pipeline-code">{item.code}</div>
                         <div className="pipeline-label" style={{color:active?item.color:"#475569"}}>{item.label}</div>
+                        <div className="pipeline-meta">{urgentCount > 0 ? `긴급 ${urgentCount}` : `${count}곳 운영 중`}</div>
                       </div>
                     );
                   })}
@@ -585,14 +625,14 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
                 {currentStage.desc && (
                   <div className="cc-focus-strip" style={{background:currentStage.bg,borderBottom:`1px solid ${currentStage.border}`}}>
                     <div className="cc-focus-copy">
-                      <div className="cc-focus-eyebrow">{currentStage.label}</div>
+                      <div className="cc-focus-eyebrow">{currentStage.code} · {currentStage.label}</div>
                       <div className="cc-focus-title">{stageFocusTitle}</div>
                       <div className="cc-focus-desc">{stageFocusDesc}</div>
                       <div className="cc-focus-metrics">
-                        <span>전체 {currentInsight?.count || 0}곳</span>
-                        <span>수동 개입 {stageManualCount}곳</span>
-                        <span>미응답 {stageUnreadCount}건</span>
-                        {bottleneckStage && <span>현재 병목 {bottleneckStage.label}</span>}
+                        {stageFocusMetrics.map(metric=>(
+                          <span key={metric}>{metric}</span>
+                        ))}
+                        {bottleneckStage && <span>현재 병목 {bottleneckStage.code} · {bottleneckStage.label}</span>}
                       </div>
                     </div>
                     <div className="stage-bar-actions">
@@ -616,10 +656,10 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
                 <div className="cc-action-queue">
                   <div className="cc-section-header">
                     <div>
-                      <div className="cc-section-eyebrow">이 단계의 우선 처리 숙소</div>
-                      <div className="cc-section-title">{currentStage.label}에서 지금 먼저 볼 5곳</div>
+                      <div className="cc-section-eyebrow">지금 바로 처리할 숙소</div>
+                      <div className="cc-section-title">우선순위 상위 {stageActionQueue.length}곳</div>
                     </div>
-                    <div className="cc-section-meta">이 단계에서 먼저 처리해야 할 숙소 상위 {stageActionQueue.length}개만 보여줍니다. 나머지는 아래 목록에서 확인합니다.</div>
+                    <div className="cc-section-meta">{currentStage.code} · {currentStage.label} 단계에서 바로 열 숙소만 먼저 추렸습니다. 나머지는 아래 전체 목록에서 확인합니다.</div>
                   </div>
                   {stageActionQueue.length > 0 ? (
                     <div className="cc-queue-grid">
@@ -652,9 +692,9 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
                 </div>
 
                 <div className="toolbar">
-                  <input className="srch" placeholder="숙소 검색..." value={search} onChange={e=>setSearch(e.target.value)} />
+                  <input className="srch" placeholder={`${currentStage.label} 숙소 검색...`} value={search} onChange={e=>setSearch(e.target.value)} />
                   <div style={{flex:1}} />
-                  <span style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#a0aec0",fontWeight:"500"}}>{filtered.length}개</span>
+                  <span style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#a0aec0",fontWeight:"500"}}>전체 목록 {filtered.length}개</span>
                   <div style={{display:"flex",border:"1.5px solid #e2e8f0",borderRadius:"20px",overflow:"hidden"}}>
                     {[["grid","▦"],["list","≡"]].map(([mode, icon])=>(
                       <button key={mode} onClick={()=>setGMode(mode)} style={{padding:"5px 10px",fontSize:"14px",cursor:"pointer",border:"none",background:gMode===mode?"#2563eb":"transparent",color:gMode===mode?"#fff":"#a0aec0",transition:"all 0.15s"}}>{icon}</button>
