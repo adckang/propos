@@ -54,3 +54,11 @@
 - `npm run verify:dist`
 - `npm run test`
 - `npm run test:smoke`
+- `npm run verify:all`
+
+## Verification Results
+
+- `npm run verify:all` runs the full verification chain in one command.
+- Latest results are always written to `artifacts/verification/latest/`.
+- Each run is also stored in `artifacts/verification/history/<timestamp>/`.
+- Start with `artifacts/verification/latest/summary.md`, then open the matching `*.log` file if a step failed.

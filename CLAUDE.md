@@ -9,6 +9,11 @@
 - 빌드 산출물: `dist/`
 - 목표: Vercel(웹) + 라즈베리파이(IoT 허브) 하이브리드
 
+## AI 작업 규칙
+- 작업 전후 검증은 가능하면 `npm run verify:all`을 우선 사용
+- 검증 결과 보고 기준 파일은 `artifacts/verification/latest/summary.md`
+- 실패 원인 확인은 같은 폴더의 단계별 `*.log` 파일 사용
+
 ## UI/UX 원칙 (절대 준수)
 - 라이트 테마 유지
 - 한 화면에 정보 최소화, 점진적 공개
@@ -73,6 +78,7 @@ propos/
 
 ## 운영 명령
 - 개발 서버: `npm run dev`
+- 전체 검증 + 로그 저장: `npm run verify:all`
 - 시나리오 드리프트 검증: `npm run verify:scenarios`
 - 배포 준비 검증: `npm run verify:deploy`
 - 빌드: `npm run build`
@@ -84,6 +90,7 @@ propos/
 |------|--------|
 | `dist` 직접 수정 | 금지. `src` 수정 후 `npm run build` |
 | 시나리오 드리프트 | `npm run verify:scenarios` |
+| 검증 결과 위치 | `artifacts/verification/latest/summary.md` 먼저 확인 |
 
 ---
 상세 내용: @.claude/CLAUDE.md
