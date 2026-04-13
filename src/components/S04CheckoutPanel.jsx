@@ -653,7 +653,7 @@ function S04CheckoutPanel({ onBack }) {
       <div style={{ padding: '18px 24px 0', background: '#f0f4f8' }}>
         <div className="s04-top-grid">
           <div style={{ background: focusTone.bg, border: `1.5px solid ${focusTone.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 10px 28px rgba(15,23,42,0.04)' }}>
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 8 }}>지금 먼저 처리할 것</div>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 8 }}>지금 할 일</div>
             <div style={{ fontSize: 20, fontWeight: 800, color: focusTone.text, lineHeight: 1.45, letterSpacing: '-0.3px' }}>{focusTitle}</div>
             <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.7, marginTop: 8 }}>{focusDesc}</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
@@ -714,7 +714,7 @@ function S04CheckoutPanel({ onBack }) {
           </div>
 
           <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: 16, padding: '16px 18px' }}>
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 10 }}>최근 예외 또는 메모</div>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 10 }}>방금 뜬 알림</div>
             {latestAlert ? (
               <>
                 <div style={{ fontSize: 14, fontWeight: 800, color: latestAlert.type === 'error' ? '#dc2626' : latestAlert.type === 'warn' ? '#d97706' : '#1d4ed8', lineHeight: 1.5 }}>{latestAlert.prop}</div>
@@ -752,7 +752,7 @@ function S04CheckoutPanel({ onBack }) {
             textTransform: 'uppercase', letterSpacing: '0.06em',
             marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
             <span style={{ width: 3, height: 13, background: '#059669', borderRadius: 2, flexShrink: 0 }} />
-            숙소 현황
+            숙소 목록
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {_S04_PROPS.map(prop => {
@@ -974,7 +974,7 @@ function S04CheckoutPanel({ onBack }) {
             textTransform: 'uppercase', letterSpacing: '0.06em',
             marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
             <span style={{ width: 3, height: 13, background: '#dc2626', borderRadius: 2, flexShrink: 0 }} />
-            자동화 알림
+            실시간 알림
           </div>
           <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px' }}>
             <AlertFeedS04 alerts={alerts} onAck={ackAlert} onAckAll={ackAllAlerts} />

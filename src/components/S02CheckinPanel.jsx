@@ -533,7 +533,7 @@ function S02CheckinPanel({ bookings: propBookings, onBack }) {
       <div style={{ padding:'18px 20px 0', background:'#f0f4f8', flexShrink:0 }}>
         <div style={{ display:'grid', gridTemplateColumns:'1.7fr 1fr', gap:14, marginBottom:14 }}>
           <div style={{ background:focusTone.bg, border:`1.5px solid ${focusTone.border}`, borderRadius:16, padding:'18px 20px', boxShadow:'0 10px 28px rgba(15,23,42,0.04)' }}>
-            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:8 }}>지금 확인할 것</div>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:8 }}>지금 할 일</div>
             <div style={{ fontSize:20, fontWeight:800, color:focusTone.text, lineHeight:1.45, letterSpacing:'-0.3px' }}>{focusTitle}</div>
             <div style={{ fontSize:13, color:'#64748b', lineHeight:1.7, marginTop:8 }}>{focusDesc}</div>
             <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:12 }}>
@@ -558,7 +558,7 @@ function S02CheckinPanel({ bookings: propBookings, onBack }) {
           </div>
 
           <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:16, padding:'16px 18px' }}>
-            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:10 }}>최근 예외</div>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:10 }}>방금 뜬 알림</div>
             {latestError ? (
               <>
                 <div style={{ fontSize:14, fontWeight:800, color:latestError.type === 'error' ? '#dc2626' : '#d97706', lineHeight:1.5 }}>{latestError.prop}</div>
@@ -593,7 +593,7 @@ function S02CheckinPanel({ bookings: propBookings, onBack }) {
           <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'16px 14px' }}>
             <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
               <span style={{ width:3, height:13, background:'#059669', borderRadius:2, flexShrink:0 }} />
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>숙소 현황</span>
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>숙소 목록</span>
             </div>
             {bookings.map(b => <PropStatusCard key={b.propId} booking={b} status={propStatuses[b.propId] || 'vacant'} />)}
           </div>
@@ -655,7 +655,7 @@ function S02CheckinPanel({ bookings: propBookings, onBack }) {
 
           <div style={{ display:'flex', alignItems:'center', gap:8, paddingBottom:10, borderBottom:'1.5px solid #e2e8f0' }}>
             <span style={{ width:3, height:13, background:'#2563eb', borderRadius:2, flexShrink:0 }} />
-            <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>체크인 자동화 흐름</span>
+            <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>처리 흐름</span>
             {eventResults.length > 0 && (
               <button onClick={() => setEventResults([])} style={{ marginLeft:'auto', padding:'3px 9px', borderRadius:5, background:'#f8fafc', border:'1.5px solid #e2e8f0', color:'#64748b', fontSize:10, cursor:'pointer', fontWeight:600 }}>초기화</button>
             )}
@@ -758,7 +758,7 @@ function S02CheckinPanel({ bookings: propBookings, onBack }) {
         <div style={{ display:'flex', flexDirection:'column', overflow:'hidden', background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'12px 16px', borderBottom:'1.5px solid #e2e8f0', flexShrink:0 }}>
             <span style={{ width:3, height:13, background:'#d97706', borderRadius:2, flexShrink:0 }} />
-            <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1 }}>알림 피드</span>
+            <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1 }}>실시간 알림</span>
             {alerts.length > 0 && <span style={{ background:'#dc2626', color:'#fff', borderRadius:10, padding:'1px 7px', fontSize:10, fontWeight:700 }}>{alerts.length}</span>}
             {alerts.length > 0 && (
               <button onClick={() => setAlerts([])} style={{ padding:'3px 9px', borderRadius:5, background:'#f8fafc', border:'1.5px solid #e2e8f0', color:'#64748b', fontSize:10, cursor:'pointer', fontWeight:600 }}>전체 확인</button>

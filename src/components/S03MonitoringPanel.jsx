@@ -670,7 +670,7 @@ function S03MonitoringPanel({ onBack }) {
       <div style={{ padding:'18px 24px 0', flexShrink:0 }}>
         <div style={{ display:'grid', gridTemplateColumns:'1.7fr 1fr', gap:14, marginBottom:14 }}>
           <div style={{ background:focusTone.bg, border:`1.5px solid ${focusTone.border}`, borderRadius:16, padding:'18px 20px', boxShadow:'0 10px 28px rgba(15,23,42,0.04)' }}>
-            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:8 }}>지금 먼저 볼 것</div>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:8 }}>지금 할 일</div>
             <div style={{ fontSize:20, fontWeight:800, color:focusTone.text, lineHeight:1.45, letterSpacing:'-0.3px' }}>{focusTitle}</div>
             <div style={{ fontSize:13, color:'#64748b', lineHeight:1.7, marginTop:8 }}>{focusDesc}</div>
             <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:12 }}>
@@ -769,7 +769,7 @@ function S03MonitoringPanel({ onBack }) {
               textTransform: 'uppercase', letterSpacing: '0.06em',
               marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
               <span style={{ width: 3, height: 13, background: '#d97706', borderRadius: 2, flexShrink: 0 }} />
-              <span style={{ flex: 1 }}>알림 피드</span>
+              <span style={{ flex: 1 }}>실시간 알림</span>
               {alerts.length > 0 && (
                 <button
                   onClick={ackAllAlerts}
@@ -812,7 +812,7 @@ function S03MonitoringPanel({ onBack }) {
               textTransform: 'uppercase', letterSpacing: '0.06em',
               marginBottom: 14, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
               <span style={{ width: 3, height: 13, background: '#2563eb', borderRadius: 2, flexShrink: 0 }} />
-              실시간 센서 현황
+              센서 현황
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <SensorCard

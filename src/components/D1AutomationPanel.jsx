@@ -702,7 +702,7 @@ function D1AutomationPanel({ onBack }) {
             <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, overflow:'hidden', flexShrink:0 }}>
               <div style={{ padding:'12px 16px', borderBottom:'1.5px solid #e2e8f0', display:'flex', alignItems:'center', gap:8 }}>
                 <span style={{ width:3, height:13, background:'#059669', borderRadius:2, flexShrink:0 }} />
-                <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1 }}>숙소 현황</span>
+                <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1 }}>숙소 목록</span>
                 {isRealData && <span style={{ width:7, height:7, borderRadius:'50%', background:'#059669', animation:'d1pulse 2s ease-in-out infinite' }} />}
               </div>
               <div style={{ padding:'10px 14px' }}>
@@ -789,7 +789,7 @@ function D1AutomationPanel({ onBack }) {
             <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, overflow:'hidden', flexShrink:0 }}>
               <div style={{ padding:'12px 16px', borderBottom:'1.5px solid #e2e8f0', display:'flex', alignItems:'center', gap:8 }}>
                 <span style={{ width:3, height:13, background:'#2563eb', borderRadius:2, flexShrink:0 }} />
-                <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>D-1 자동화 흐름</span>
+                <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>처리 흐름</span>
               </div>
               <div style={{ padding:'16px', display:'flex', flexDirection:'column', gap:10 }}>
                 {[
@@ -845,7 +845,7 @@ function D1AutomationPanel({ onBack }) {
           <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, overflow:'hidden', display:'flex', flexDirection:'column' }}>
             <div style={{ padding:'12px 16px', borderBottom:'1.5px solid #e2e8f0', display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
               <span style={{ width:3, height:13, background:'#d97706', borderRadius:2, flexShrink:0 }} />
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1 }}>자동화 알림</span>
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1 }}>실시간 알림</span>
               {alerts.length > 0 && <span style={{ background:'#dc2626', color:'#fff', borderRadius:10, padding:'1px 7px', fontSize:10, fontWeight:700 }}>{alerts.length}</span>}
               {alerts.length > 0 && <button onClick={ackAllAlerts} style={{ padding:'3px 9px', borderRadius:5, background:'#f8fafc', border:'1.5px solid #e2e8f0', color:'#64748b', fontSize:10, cursor:'pointer', fontWeight:600 }}>전체 확인</button>}
             </div>

@@ -76,7 +76,7 @@ test.describe("PROPOS smoke", () => {
     await returnButton().click();
 
     await landingStageCard("체크인 당일").click();
-    await expect(page.getByText("숙소 현황")).toBeVisible();
+    await expect(page.getByText("숙소 목록")).toBeVisible();
     await expect(page.getByText("도어락 열림 감지")).toBeVisible();
     await returnButton().click();
 
@@ -86,13 +86,13 @@ test.describe("PROPOS smoke", () => {
     await returnButton().click();
 
     await landingStageCard("퇴실·청소").click();
-    await expect(page.getByText("다음 예약 준비")).toBeVisible();
-    await expect(page.getByText("지금 먼저 처리할 것")).toBeVisible();
+    await expect(page.getByText("S04 · 퇴실·청소")).toBeVisible();
+    await expect(page.getByText("지금 할 일")).toBeVisible();
     await returnButton().click();
 
     await landingStageCard("수익 정산").click();
     await expect(page.getByText("이번 달 수익 정리")).toBeVisible();
-    await expect(page.getByText("이번 달 정산에서 먼저 볼 것")).toBeVisible();
+    await expect(page.getByText("지금 할 일")).toBeVisible();
     await returnButton().click();
 
     expect(pageErrors).toEqual([]);

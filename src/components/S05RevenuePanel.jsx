@@ -537,7 +537,7 @@ function S05RevenuePanel({ onBack }) {
     { label:'영업이익', value: revenueData ? _s05.won(revenueData.operatingProfit) : '대기', desc: revenueData ? '운영비 반영 후 기준' : '정산 실행 후 계산', tone:{ bg:'#ecfdf5', border:'#a7f3d0', text:'#059669' } },
     { label:'추천 적용 대기', value: pricingData ? `${selectedProps.length}건` : '대기', desc: pricingData ? '검토 후 즉시 반영 가능' : 'AI 분석 전', tone:{ bg:'#fff7ed', border:'#fed7aa', text:'#c2410c' } },
     { label:'세금 리포트', value: taxData ? '준비 완료' : '대기', desc: taxData ? '부가세·소득세 추정 포함' : '정산 완료 후 생성', tone:{ bg:'#eff6ff', border:'#bfdbfe', text:'#2563eb' } },
-    { label:'자동화 알림', value: `${alerts.length}건`, desc: errorAlerts.length > 0 ? '먼저 확인 필요' : warnAlerts.length > 0 ? '주의 알림 존재' : '현재 큰 예외 없음', tone:{ bg: errorAlerts.length > 0 ? '#fef2f2' : '#f8fafc', border: errorAlerts.length > 0 ? '#fecaca' : '#e2e8f0', text: errorAlerts.length > 0 ? '#dc2626' : '#475569' } },
+    { label:'실시간 알림', value: `${alerts.length}건`, desc: errorAlerts.length > 0 ? '먼저 확인 필요' : warnAlerts.length > 0 ? '주의 알림 존재' : '현재 큰 예외 없음', tone:{ bg: errorAlerts.length > 0 ? '#fef2f2' : '#f8fafc', border: errorAlerts.length > 0 ? '#fecaca' : '#e2e8f0', text: errorAlerts.length > 0 ? '#dc2626' : '#475569' } },
   ];
   const latestAlert = alerts[0] || null;
 
@@ -590,7 +590,7 @@ function S05RevenuePanel({ onBack }) {
       <div style={{ padding:'18px 20px 0', background:'#f0f4f8', flexShrink:0 }}>
         <div className="s05-top-grid">
           <div style={{ background:focusTone.bg, border:`1.5px solid ${focusTone.border}`, borderRadius:16, padding:'18px 20px', boxShadow:'0 10px 28px rgba(15,23,42,0.04)' }}>
-            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:8 }}>이번 달 정산에서 먼저 볼 것</div>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:8 }}>지금 할 일</div>
             <div style={{ fontSize:20, fontWeight:800, color:focusTone.text, lineHeight:1.45, letterSpacing:'-0.3px' }}>{focusTitle}</div>
             <div style={{ fontSize:13, color:'#64748b', lineHeight:1.7, marginTop:8 }}>{focusDesc}</div>
             <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:12 }}>
@@ -623,7 +623,7 @@ function S05RevenuePanel({ onBack }) {
           </div>
 
           <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:16, padding:'16px 18px' }}>
-            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:10 }}>최근 알림</div>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:10 }}>방금 뜬 알림</div>
             {latestAlert ? (
               <>
                 <div style={{ fontSize:14, fontWeight:800, color:latestAlert.type === 'error' ? '#dc2626' : latestAlert.type === 'warn' ? '#d97706' : '#2563eb', lineHeight:1.5 }}>{latestAlert.msg.split("\n")[0]}</div>
@@ -747,7 +747,7 @@ function S05RevenuePanel({ onBack }) {
           <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden', background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12 }}>
             <div style={{ display:'flex', alignItems:'center', gap:8, padding:'12px 16px', borderBottom:'1.5px solid #e2e8f0', flexShrink:0 }}>
               <span style={{ width:3, height:13, background:'#d97706', borderRadius:2, flexShrink:0 }} />
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1 }}>자동화 알림</span>
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1 }}>실시간 알림</span>
               {alerts.length > 0 && <span style={{ background:'#dc2626', color:'#fff', borderRadius:10, padding:'1px 7px', fontSize:10, fontWeight:700 }}>{alerts.length}</span>}
               {alerts.length > 0 && <button onClick={() => setAlerts([])} style={{ padding:'3px 9px', borderRadius:5, background:'#f8fafc', border:'1.5px solid #e2e8f0', color:'#64748b', fontSize:10, cursor:'pointer', fontWeight:600 }}>전체 확인</button>}
             </div>
