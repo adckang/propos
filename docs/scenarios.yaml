@@ -1,5 +1,5 @@
 version: "1"
-updated_at: "2026-04-12"
+updated_at: "2026-04-14"
 source_of_truth:
   registry: docs/scenarios.yaml
   code: src/
@@ -87,8 +87,8 @@ scenarios:
     use_case_id: UC-003
     screen_key: s03
     title: 체류 중 실시간 모니터링
-    stage_label: 체류 중 모니터링
-    landing_label: 체류 중 모니터링
+    stage_label: 체류 중
+    landing_label: 체류 중
     component: src/components/S03MonitoringPanel.jsx
     diagram: myPlantUML/propos-scenario03-sequence.uml
     functional_test: tests/functional/s03.functional.test.js
@@ -107,9 +107,9 @@ scenarios:
   - id: S04
     use_case_id: UC-004
     screen_key: s04
-    title: 체크아웃 및 청소 자동화
-    stage_label: 체크아웃 & 청소
-    landing_label: 체크아웃 & 청소
+    title: 퇴실·청소 자동화
+    stage_label: 퇴실·청소
+    landing_label: 퇴실·청소
     component: src/components/S04CheckoutPanel.jsx
     diagram: myPlantUML/propos-scenario04-sequence.uml
     functional_test: tests/functional/s04.functional.test.js

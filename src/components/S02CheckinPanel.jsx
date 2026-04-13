@@ -287,7 +287,7 @@ function WsStatusBadge({ status }) {
 }
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────────
-function S02CheckinPanel({ bookings: propBookings }) {
+function S02CheckinPanel({ bookings: propBookings, onBack }) {
   const bookings = propBookings || DEFAULT_S02_BOOKINGS;
 
   // ── 상태 ──
@@ -511,9 +511,14 @@ function S02CheckinPanel({ bookings: propBookings }) {
 
       {/* ── 헤더 ── */}
       <div style={{ background:'#ffffff', borderBottom:'1px solid #e2e8f0', padding:'16px 24px', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-        <div>
-          <div style={{ fontWeight:800, fontSize:18, color:'#1e293b' }}>UC-002 — 체크인 당일 자동화</div>
-          <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>입실 감지 → IoT 씬 실행 → 게스트 채팅 오픈 → 상태 갱신</div>
+        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+          {onBack && <button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}>← 홈</button>}
+          {onBack && <div style={{ width:1, height:22, background:'#e2e8f0' }} />}
+          <div>
+            <div style={{ fontSize:10, color:'#94a3b8', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:4 }}>S02 · 체크인 당일</div>
+            <div style={{ fontWeight:800, fontSize:18, color:'#1e293b' }}>입실 이벤트 확인</div>
+            <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>입실 감지부터 IoT 씬 실행, 채널 오픈, 상태 반영까지 한 흐름으로 처리합니다.</div>
+          </div>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           <WsStatusBadge status={wsStatus} />

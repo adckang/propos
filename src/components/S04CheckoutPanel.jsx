@@ -593,8 +593,11 @@ function S04CheckoutPanel({ onBack }) {
         </button>
 
         <div>
+          <div style={{ fontSize:10, color:'#94a3b8', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:4 }}>
+            S04 · 퇴실·청소
+          </div>
           <div style={{ fontWeight: 800, fontSize: 18, color: '#1e293b' }}>
-            퇴실 후 정리 현황
+            다음 예약 준비
           </div>
           <div style={{ fontSize: 12, color: '#64748b' }}>
             퇴실 감지부터 PIN 만료, 청소 배정, 준비 완료까지 한 흐름으로 확인합니다.

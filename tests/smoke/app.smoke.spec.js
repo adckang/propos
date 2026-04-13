@@ -54,10 +54,9 @@ test.describe("PROPOS smoke", () => {
 
     await page.getByRole("button", { name: "커맨드 센터 열기" }).click();
     await expect(page.getByText("전체 관제 센터")).toBeVisible();
-    await expect(page.getByText("운영 원칙")).toBeVisible();
-    await expect(page.getByText("실시간 알림")).toBeVisible();
-    await expect(page.getByText("즉시 대응 큐", { exact: true })).toBeVisible();
-    await ccStage("센서 모니터링").click();
+    await expect(page.getByText("실시간 알림", { exact: true })).toBeVisible();
+    await expect(page.getByText("이 단계의 우선 처리 숙소", { exact: true })).toBeVisible();
+    await ccStage("S03 체류 중").click();
     await expect(page.getByText("전체 폴링 시작")).toBeVisible();
     await page.locator(".pcard").first().click();
     await expect(page.getByText("숙소 정보")).toBeVisible();
@@ -66,8 +65,13 @@ test.describe("PROPOS smoke", () => {
     await returnButton().click();
     await expect(page.getByText("에어비앤비 완전 관리 시스템")).toBeVisible();
 
+    await page.getByRole("button", { name: /D-1 준비/ }).click();
+    await expect(page.getByText("S01 D-1 준비에서 지금 먼저 볼 5곳")).toBeVisible();
+    await returnButton().click();
+    await expect(page.getByText("에어비앤비 완전 관리 시스템")).toBeVisible();
+
     await landingStageCard("D-1 자동화").click();
-    await expect(page.getByText("D-1 체크인 전날 자동화").first()).toBeVisible();
+    await expect(page.getByText("내일 체크인 준비").first()).toBeVisible();
     await expect(page.getByText("자동 실행")).toBeVisible();
     await returnButton().click();
 
@@ -76,18 +80,18 @@ test.describe("PROPOS smoke", () => {
     await expect(page.getByText("도어락 열림 감지")).toBeVisible();
     await returnButton().click();
 
-    await landingStageCard("체류 중 모니터링").click();
-    await expect(page.getByText("UC-003 — 체류 중 실시간 모니터링")).toBeVisible();
+    await landingStageCard("체류 중").click();
+    await expect(page.getByText("실시간 모니터링")).toBeVisible();
     await expect(page.getByRole("button", { name: /폴링 시작/ })).toBeVisible();
     await returnButton().click();
 
-    await landingStageCard("체크아웃 & 청소").click();
-    await expect(page.getByText("퇴실 후 정리 현황")).toBeVisible();
+    await landingStageCard("퇴실·청소").click();
+    await expect(page.getByText("다음 예약 준비")).toBeVisible();
     await expect(page.getByText("지금 먼저 처리할 것")).toBeVisible();
     await returnButton().click();
 
     await landingStageCard("수익 정산").click();
-    await expect(page.getByText("이번 달 수익 정산")).toBeVisible();
+    await expect(page.getByText("이번 달 수익 정리")).toBeVisible();
     await expect(page.getByText("이번 달 정산에서 먼저 볼 것")).toBeVisible();
     await returnButton().click();
 

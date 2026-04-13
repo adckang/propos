@@ -581,11 +581,14 @@ function S03MonitoringPanel({ onBack }) {
         </button>
 
         <div>
+          <div style={{ fontSize:10, color:'#94a3b8', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:4 }}>
+            S03 · 체류 중
+          </div>
           <div style={{ fontWeight: 800, fontSize: 18, color: '#1e293b' }}>
-            UC-003 — 체류 중 실시간 모니터링
+            실시간 모니터링
           </div>
           <div style={{ fontSize: 12, color: '#64748b' }}>
-            센서 LIVE 폴링 · 이상 감지 · AI 답장 초안
+            센서 이상과 메시지 응답 대기를 함께 살펴봅니다.
           </div>
         </div>
 

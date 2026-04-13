@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { ALL_PROPS, AUTO_RULES, CLEANERS, INIT_ALERTS, PC, SC, rand, randN } from "../data/mockData";
+import { ALL_PROPS, CLEANERS, INIT_ALERTS, PC, SC, rand, randN } from "../data/mockData";
 import Toast from "../utils/toast";
 
 // ============================================================
@@ -10,81 +10,68 @@ import Toast from "../utils/toast";
 
 const CC_STAGES = [
   {
-    id:"all",
-    emoji:"◈",
-    label:"전체",
-    color:"#4a5568",
-    bg:"#f7f9fc",
-    border:"#e2e8f0",
-    filter: prop => true,
-    desc:"전체 숙소 현황이에요. 긴급 순으로 정렬돼 있어요. 왼쪽 탭으로 단계별로 집중 관리하세요.",
-    action:null,
-  },
-  {
     id:"d1",
     emoji:"📅",
-    label:"내일 체크인",
+    label:"S01 D-1 준비",
     color:"#2563eb",
     bg:"#eff6ff",
     border:"#bfdbfe",
-    filter: prop => prop.status === "예약됨",
-    desc:"내일 게스트가 들어오는 숙소예요. PIN 발급, 웰컴 메시지, 스마트홈 초기화가 준비됐는지 확인하세요. 아직 안 된 곳은 [D-1 자동화 전체 실행]으로 한 번에 처리하세요.",
+    filter: prop => prop.status === "예약됨" && prop.priority === "OK" && prop.unreadMsg === 0,
+    desc:"내일 체크인 전에 준비를 끝내는 단계입니다. PIN, 웰컴 메시지, 스마트홈 준비가 미리 끝났는지 확인합니다.",
     action:"⚡ D-1 자동화 전체 실행",
   },
   {
-    id:"occupied",
-    emoji:"🏠",
-    label:"지금 숙박 중",
+    id:"checkin",
+    emoji:"🚪",
+    label:"S02 체크인 당일",
     color:"#059669",
     bg:"#ecfdf5",
     border:"#a7f3d0",
-    filter: prop => prop.status === "입실중" && prop.priority === "OK",
-    desc:"현재 게스트가 머물고 있는 숙소예요. 미읽은 메시지나 긴급 요청이 있는 숙소를 먼저 확인하세요.",
-    action:null,
+    filter: prop => prop.status === "예약됨" && (prop.priority !== "OK" || prop.unreadMsg > 0),
+    desc:"입실 직전 또는 당일 개입이 필요한 예약 숙소를 모읍니다. 도어락 이벤트, 채널 오픈, 첫 메시지 대응을 놓치지 않는 단계입니다.",
+    action:"🚪 체크인 확인 큐 열기",
   },
   {
-    id:"monitoring",
+    id:"stay",
     emoji:"📡",
-    label:"센서 모니터링",
+    label:"S03 체류 중",
     color:"#7c3aed",
     bg:"#f5f3ff",
     border:"#ddd6fe",
-    filter: prop => prop.status === "입실중" && (prop.priority === "HIGH" || prop.priority === "MED"),
-    desc:"온도·습도·소음·전력 이상이 감지된 숙소예요. 빨간 숙소는 지금 즉시 확인이 필요해요. 클릭해서 어떤 센서가 문제인지 보세요.",
+    filter: prop => prop.status === "입실중",
+    desc:"체류 중 숙소를 관리하는 단계입니다. 센서 이상, 게스트 메시지, 현장 제어가 필요한 숙소를 먼저 찾습니다.",
     action:"📡 전체 폴링 시작",
   },
   {
     id:"checkout",
     emoji:"🚪",
-    label:"퇴실·청소 중",
+    label:"S04 퇴실·청소",
     color:"#d97706",
     bg:"#fffbeb",
     border:"#fde68a",
-    filter: prop => prop.status === "청소중",
-    desc:"오늘 체크아웃이 완료됐거나 청소가 진행 중이에요. 청소 완료된 숙소를 확인하고 다음 예약 준비를 시작하세요.",
+    filter: prop => prop.status === "청소중" || prop.status === "점검중",
+    desc:"퇴실 이후 다음 예약 준비를 끝내는 단계입니다. 청소 배정, 유지보수, 준비 완료 전환이 여기서 관리됩니다.",
     action:"🧹 청소팀 전체 소집",
   },
   {
     id:"settlement",
     emoji:"💰",
-    label:"이달 정산",
+    label:"S05 수익 정산",
     color:"#0891b2",
     bg:"#ecfeff",
     border:"#a5f3fc",
     filter: prop => true,
-    desc:"이번 달 전체 숙소의 수익을 집계하고 AI 가격 최적화 추천을 받을 수 있어요. [월 정산 실행]으로 한 번에 처리하세요.",
+    desc:"운영 흐름의 마지막 단계입니다. 월간 수익을 모으고 가격 추천과 정산 검토가 필요한 숙소를 봅니다.",
     action:"💰 월 정산 실행",
   },
 ];
 
-function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant}) {
-  const [stage, setStage] = useState("all");
-  const [view, setView] = useState("command");
+function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStage = "stay"}) {
+  const [stage, setStage] = useState("stay");
   const [props, setProps] = useState(ALL_PROPS);
   const [alerts, setAlerts] = useState(INIT_ALERTS);
   const [selProp, setSelProp] = useState(null);
   const [search, setSearch] = useState("");
-  const [rules, setRules] = useState(AUTO_RULES);
   const [now, setNow] = useState(new Date());
   const [showGcmd, setShowGcmd] = useState(false);
   const [dTab, setDTab] = useState("info");
@@ -119,6 +106,10 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant}) {
     };
   },[props]);
 
+  useEffect(()=>{
+    setStage(initialStage || "stay");
+  },[initialStage]);
+
   const toggleDev = (id, dev) => setProps(list=>list.map(item=>item.id!==id ? item : {...item, [dev]:!item[dev]}));
   const adjAc = (id, delta) => setProps(list=>list.map(item=>item.id!==id ? item : {...item, acTemp:Math.max(16, Math.min(30, item.acTemp + delta))}));
   const ackAlert = id => setAlerts(list=>list.map(item=>item.id===id ? {...item, ack:true} : item));
@@ -142,57 +133,34 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant}) {
       const order = {HIGH:0, MED:1, OK:2};
       return order[a.priority] - order[b.priority];
     });
-  const stageProps = stage==="all" ? props : props.filter(currentStage.filter);
-  const leadAlert = alerts.find(alert=>!alert.ack) || alerts[0];
-
   const occupied = props.filter(prop=>prop.status==="입실중").length;
-  const vacant = props.filter(prop=>prop.status==="공실").length;
-  const cleaning = props.filter(prop=>prop.status==="청소중").length;
-  const highAlert = props.filter(prop=>prop.priority==="HIGH").length;
-  const totalMsg = props.reduce((sum, prop)=>sum + prop.unreadMsg, 0);
-  const totalRev = props.reduce((sum, prop)=>sum + prop.revenue, 0);
   const unack = alerts.filter(alert=>!alert.ack).length;
-  const occ = Math.round((occupied / props.length) * 100);
-  const stageInsights = CC_STAGES.filter(item=>item.id!=="all").map(item=>{
+  const stageInsights = CC_STAGES.map(item=>{
     const count = props.filter(item.filter).length;
     const urgent = props.filter(item.filter).filter(prop=>prop.priority==="HIGH" || prop.issues.length > 0).length;
+    const unread = props.filter(item.filter).reduce((sum, prop)=>sum + prop.unreadMsg, 0);
     return {
       id: item.id,
       label: item.label,
       count,
       urgent,
-      score: urgent * 3 + count,
+      unread,
+      score: urgent * 3 + unread + count,
     };
   });
   const bottleneckStage = [...stageInsights].sort((a, b)=>b.score - a.score)[0];
   const stageDrilldownMap = {
     d1: { screen: "d1", label: "D-1 상세 열기" },
-    occupied: { screen: "ha", label: "대표 숙소 해결 화면" },
-    monitoring: { screen: "s03", label: "모니터링 상세 열기" },
+    checkin: { screen: "s02", label: "체크인 상세 열기" },
+    stay: { screen: "s03", label: "체류 중 상세 열기" },
     checkout: { screen: "s04", label: "퇴실·청소 상세 열기" },
-    settlement: { screen: "s05", label: "정산 상세 열기" },
+    settlement: { screen: "s05", label: "수익 정산 상세 열기" },
   };
   const currentDrilldown = stageDrilldownMap[stage] || null;
-  const commandBriefCards = [
-    {
-      label: "운영 원칙",
-      value: "예외 먼저",
-      desc: "여기서는 전체 예외 숙소를 찾고, 상세 처리는 단계 패널이나 대표 숙소 화면으로 내려갑니다.",
-      tone: { bg: "#eff6ff", border: "#bfdbfe", text: "#2563eb" },
-    },
-    {
-      label: "가장 막힌 단계",
-      value: bottleneckStage ? bottleneckStage.label : "대기",
-      desc: bottleneckStage ? `긴급 ${bottleneckStage.urgent}건 · 전체 ${bottleneckStage.count}곳에 영향` : "현재 큰 병목이 없습니다.",
-      tone: { bg: "#fff7ed", border: "#fed7aa", text: "#c2410c" },
-    },
-    {
-      label: "바로 열기",
-      value: currentDrilldown ? currentDrilldown.label : "대표 숙소 해결",
-      desc: currentDrilldown ? "현재 선택한 단계의 상세 패널로 바로 이동합니다." : "대표 숙소 흐름 화면으로 이동합니다.",
-      tone: { bg: "#f5f3ff", border: "#ddd6fe", text: "#7c3aed" },
-    },
-  ];
+  const currentInsight = stageInsights.find(item=>item.id===stage) || stageInsights[0];
+  const stageManualCount = filtered.filter(prop => prop.priority !== "OK" || prop.issues.length > 0).length;
+  const stageUnreadCount = filtered.reduce((sum, prop)=>sum + prop.unreadMsg, 0);
+  const stageLeadProp = filtered[0] || null;
 
   const getPrimaryAction = prop => {
     if(prop.priority==="HIGH" || prop.issues.length > 0){
@@ -221,13 +189,13 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant}) {
     }
     if(prop.status==="예약됨"){
       return {
-        label:"체크인 준비",
+        label:"D-1 준비",
         detail:`${prop.checkIn || "내일"} 체크인을 준비하세요.`,
         tab:"info",
         color:"#2563eb",
         bg:"#eff6ff",
         border:"#bfdbfe",
-        toast:"체크인 준비 상태를 확인합니다.",
+        toast:"D-1 준비 상태를 확인합니다.",
         tone:"i",
       };
     }
@@ -255,38 +223,22 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant}) {
     };
   };
 
+  const stageFocusTitle = stageLeadProp
+    ? `${currentStage.label}에서 ${stageLeadProp.name}부터 처리하면 됩니다`
+    : `${currentStage.label} 단계에서 바로 처리할 숙소는 아직 없습니다`;
+  const stageFocusDesc = stageLeadProp
+    ? getPrimaryAction(stageLeadProp).detail
+    : currentStage.desc;
+
   const runPrimaryAction = prop => {
     const action = getPrimaryAction(prop);
     focusProperty(prop, action.tab);
     Toast.show(`${prop.name.split("#")[0].trim()} · ${action.toast}`, action.tone);
   };
 
-  const stageOverviewCards = [
-    {
-      label:"즉시 대응",
-      value: stageProps.filter(prop=>prop.priority==="HIGH" || prop.issues.length > 0).length,
-      desc:"긴급 이슈와 유지보수",
-      tone:{bg:"#fef2f2", border:"#fecaca", text:"#dc2626"},
-    },
-    {
-      label:"체크인 준비",
-      value: stageProps.filter(prop=>prop.status==="예약됨").length,
-      desc:"내일 또는 당일 입실 예정",
-      tone:{bg:"#eff6ff", border:"#bfdbfe", text:"#2563eb"},
-    },
-    {
-      label:"메시지 응답",
-      value: stageProps.filter(prop=>prop.unreadMsg > 0).length,
-      desc:"게스트 응답 대기",
-      tone:{bg:"#f5f3ff", border:"#ddd6fe", text:"#7c3aed"},
-    },
-    {
-      label:"청소 흐름",
-      value: stageProps.filter(prop=>prop.status==="청소중").length,
-      desc:"퇴실 이후 다음 예약 준비",
-      tone:{bg:"#fffbeb", border:"#fde68a", text:"#d97706"},
-    },
-  ];
+  const openAlertsPanel = () => {
+    Toast.show("오른쪽 실시간 알림 패널에서 바로 확인할 수 있습니다.", "i");
+  };
 
   const stageActionQueue = filtered.slice(0, 5).map(prop=>({
     prop,
@@ -302,20 +254,19 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant}) {
         </div>
       );
     }
-    if(stageId==="occupied"){
+    if(stageId==="checkin"){
+      return (
+        <div className="pcard-kpi">
+          <span className="pcard-kpi-item" style={{color:"#059669"}}>🚪 입실 대응</span>
+          <span className="pcard-kpi-item" style={{color:"#64748b"}}>체크인 {prop.checkIn || "오늘"}</span>
+        </div>
+      );
+    }
+    if(stageId==="stay"){
       return (
         <div className="pcard-kpi">
           {prop.unreadMsg > 0 && <span className="pcard-kpi-item" style={{color:"#7c3aed",fontWeight:700}}>💬 미읽 {prop.unreadMsg}</span>}
           <span className="pcard-kpi-item" style={{color:"#64748b"}}>퇴실 {prop.checkOut || "—"}</span>
-        </div>
-      );
-    }
-    if(stageId==="monitoring"){
-      return (
-        <div className="pcard-kpi">
-          <span className="pcard-kpi-item" style={{color:prop.temp>30?"#dc2626":"#2563eb"}}>🌡 {prop.temp}°C</span>
-          <span className="pcard-kpi-item" style={{color:prop.humidity>80?"#dc2626":"#64748b"}}>💧 {prop.humidity}%</span>
-          <span className="pcard-kpi-item" style={{color:prop.priority==="HIGH"?"#dc2626":"#d97706",fontWeight:700}}>{prop.priority==="HIGH"?"🔴이상":"🟡주의"}</span>
         </div>
       );
     }
@@ -350,14 +301,14 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant}) {
     const primaryAction = getPrimaryAction(p);
     const stageColor =
       stage==="d1" ? "#2563eb" :
-      stage==="occupied" ? "#059669" :
-      stage==="monitoring" ? "#7c3aed" :
+      stage==="checkin" ? "#059669" :
+      stage==="stay" ? "#7c3aed" :
       stage==="checkout" ? "#d97706" :
       stage==="settlement" ? "#0891b2" :
       "transparent";
 
     return (
-      <div className={`pcard ${p.priority} ${isSel ? "sel" : ""}`} onClick={()=>focusProperty(p, "info")} style={{borderTopColor: stage!=="all" ? stageColor : undefined}}>
+      <div className={`pcard ${p.priority} ${isSel ? "sel" : ""}`} onClick={()=>focusProperty(p, "info")} style={{borderTopColor: stageColor}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:"8px"}}>
           <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
             <div
@@ -588,131 +539,15 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant}) {
     );
   };
 
-  const renderAutomation = () => (
-    <div className="view-wrap" style={{display:"flex",flexDirection:"column",gap:16,padding:20}}>
-      <div style={{background:"#ffffff",border:"1.5px solid #e2e8f0",borderRadius:12,padding:18}}>
-        <div className="vt"><span style={{width:3,height:13,background:"#2563eb",borderRadius:2,display:"inline-block",flexShrink:0}} /> 자동화 규칙 관리</div>
-        {rules.map(rule=>(
-          <div className="rule-row" key={rule.id}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:"13px",fontWeight:"700",color:"#1e293b"}}>{rule.name}</div>
-              <div style={{fontSize:"11px",color:"#64748b",marginTop:"3px"}}>트리거: {rule.trigger} → {rule.action}</div>
-            </div>
-            <button className={`tog ${rule.active ? "on" : ""}`} onClick={()=>setRules(list=>list.map(item=>item.id===rule.id ? {...item, active:!item.active} : item))}><div className="tog-d" /></button>
-          </div>
-        ))}
-      </div>
-      <div style={{background:"#ffffff",border:"1.5px solid #e2e8f0",borderRadius:12,padding:18}}>
-        <div className="vt"><span style={{width:3,height:13,background:"#7c3aed",borderRadius:2,display:"inline-block",flexShrink:0}} /> AI 인사이트</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px"}}>
-          {[{ic:"🤖",t:"AI 권장사항",d:"서울 강남 지역 주말 가격 최적화 시 예상 수익 +18%",c:"#2563eb",bg:"#eff6ff"},{ic:"📊",t:"패턴 감지",d:"화~목 공실률 32% — 주중 할인 자동화 권장",c:"#d97706",bg:"#fffbeb"},{ic:"⚡",t:"효율 알림",d:"자동화로 이번 달 절약 시간: 약 14.3시간",c:"#059669",bg:"#ecfdf5"},{ic:"🔮",t:"예측 모델",d:"제주 다음 주 예약률 82% — 청소 인력 사전 배치 권장",c:"#7c3aed",bg:"#f5f3ff"}].map(card=>(
-            <div key={card.t} style={{padding:"16px",background:card.bg,border:`1.5px solid ${card.c}22`,borderRadius:"10px",borderLeft:`4px solid ${card.c}`}}>
-              <div style={{fontSize:"20px",marginBottom:"8px"}}>{card.ic}</div>
-              <div style={{fontSize:"12px",fontWeight:"700",color:card.c,marginBottom:"5px"}}>{card.t}</div>
-              <div style={{fontSize:"12px",color:"#4a5568",lineHeight:"1.6"}}>{card.d}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderRevenue = () => {
-    const top = [...props].sort((a,b)=>b.revenue-a.revenue).slice(0,10);
-    const maxRevenue = top[0]?.revenue || 1;
-    const total = props.reduce((sum, prop)=>sum + prop.revenue, 0);
-    return (
-      <div className="view-wrap" style={{display:"flex",flexDirection:"column",gap:16,padding:20}}>
-        <div style={{background:"#ffffff",border:"1.5px solid #e2e8f0",borderRadius:12,padding:18}}>
-          <div className="vt"><span style={{width:3,height:13,background:"#059669",borderRadius:2,display:"inline-block",flexShrink:0}} /> 수익 분석 센터</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"12px"}}>
-            {[{label:"총 월 수익",value:`${(total/10000).toFixed(0)}만원`,color:"#059669",bg:"#ecfdf5"},{label:"숙소당 평균",value:`${(total/props.length/10000).toFixed(0)}만원`,color:"#2563eb",bg:"#eff6ff"},{label:"점유율",value:`${occ}%`,color:"#d97706",bg:"#fffbeb"},{label:"수수료 추산",value:`${(total*0.11/10000).toFixed(0)}만원`,color:"#dc2626",bg:"#fef2f2"}].map(card=>(
-              <div key={card.label} style={{background:card.bg,border:`1.5px solid ${card.color}22`,borderRadius:"10px",padding:"16px",borderTop:`3px solid ${card.color}`}}>
-                <div style={{fontFamily:"'DM Mono',monospace",fontSize:"22px",fontWeight:"700",color:card.color}}>{card.value}</div>
-                <div style={{fontSize:"11px",color:"#64748b",marginTop:"6px",fontWeight:"600"}}>{card.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div style={{background:"#ffffff",border:"1.5px solid #e2e8f0",borderRadius:12,padding:18}}>
-          <div className="vt"><span style={{width:3,height:13,background:"#2563eb",borderRadius:2,display:"inline-block",flexShrink:0}} /> TOP 10 수익 숙소</div>
-          {top.map(prop=>(
-            <div key={prop.id} className="rev-row">
-              <span style={{fontSize:"11px",color:"#4a5568",fontWeight:"500",width:"80px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{prop.name.split(" ").slice(-1)[0]}</span>
-              <div className="rev-bar"><div className="rev-fill" style={{width:`${(prop.revenue / maxRevenue) * 100}%`}} /></div>
-              <span style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#059669",fontWeight:"600",width:"55px",textAlign:"right"}}>{(prop.revenue / 10000).toFixed(0)}만</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const renderCleaning = () => {
-    const needCleaning = props.filter(prop=>prop.status==="청소중");
-    const issues = props.filter(prop=>prop.issues.length>0);
-
-    return (
-      <div className="view-wrap" style={{display:"flex",flexDirection:"column",gap:16,padding:20}}>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-          <div style={{background:"#ffffff",border:"1.5px solid #e2e8f0",borderRadius:12,padding:18}}>
-            <div className="vt"><span style={{width:3,height:13,background:"#059669",borderRadius:2,display:"inline-block",flexShrink:0}} /> 청소 인력 현황</div>
-            {CLEANERS.map(cleaner=>(
-              <div className="cleaner-card" key={cleaner.id}>
-                <div style={{width:"10px",height:"10px",borderRadius:"50%",background:cleaner.status==="가용"?"#059669":cleaner.status==="작업중"?"#d97706":"#cbd5e0",flexShrink:0}} />
-                <div style={{flex:1}}>
-                  <div style={{fontSize:"13px",fontWeight:"700",color:"#1e293b"}}>{cleaner.name}</div>
-                  <div style={{fontSize:"10px",color:"#64748b",marginTop:"2px"}}>{cleaner.zone}</div>
-                  <div style={{fontSize:"11px",color:cleaner.status==="가용"?"#059669":cleaner.status==="작업중"?"#d97706":"#94a3b8",fontWeight:"600"}}>{cleaner.status}</div>
-                </div>
-                <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#d97706",fontWeight:"600"}}>★{cleaner.rating}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{background:"#ffffff",border:"1.5px solid #e2e8f0",borderRadius:12,padding:18}}>
-            <div className="vt"><span style={{width:3,height:13,background:"#d97706",borderRadius:2,display:"inline-block",flexShrink:0}} /> 청소 대기 ({needCleaning.length})</div>
-            {needCleaning.slice(0,7).map(prop=>(
-              <div key={prop.id} style={{padding:"10px 13px",background:"#f8fafc",border:"1.5px solid #e2e8f0",borderRadius:"8px",marginBottom:"5px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div>
-                  <div style={{fontSize:"12px",fontWeight:"700",color:"#1e293b"}}>{prop.name.split(" ").slice(-2).join(" ")}</div>
-                  <div style={{fontSize:"10px",color:"#94a3b8",marginTop:"2px"}}>{prop.city}</div>
-                </div>
-                <button className="act-btn" style={{color:"#d97706",borderColor:"#fde68a",background:"#fffbeb",fontSize:"11px",padding:"5px 10px"}}>배정</button>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div style={{background:"#ffffff",border:"1.5px solid #e2e8f0",borderRadius:12,padding:18}}>
-          <div className="vt"><span style={{width:3,height:13,background:"#dc2626",borderRadius:2,display:"inline-block",flexShrink:0}} /> 유지보수 이슈 ({issues.length}건)</div>
-          {issues.map(prop=>(
-            <div key={prop.id} style={{padding:"10px 14px",background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:"8px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div>
-                <div style={{fontSize:"12px",color:"#dc2626",fontWeight:"700"}}>{prop.name}</div>
-                <div style={{fontSize:"11px",color:"#dc2626",opacity:0.7,marginTop:"3px"}}>⚠ {prop.issues[0]}</div>
-              </div>
-              <button className="act-btn" style={{color:"#dc2626",borderColor:"#fecaca",background:"#fff",fontSize:"11px",padding:"5px 10px"}} onClick={()=>setProps(list=>list.map(item=>item.id===prop.id ? {...item, issues:[], priority:"OK"} : item))}>처리완료</button>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="app" style={{fontFamily:"'DM Sans',sans-serif"}}>
       <div style={{background:"#fff",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",padding:"0 18px",gap:"10px",flexShrink:0,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",minHeight:54}}>
         <button onClick={onBack} style={{padding:"6px 16px",borderRadius:8,border:"1.5px solid #e2e8f0",background:"#f8fafc",color:"#475569",fontSize:13,fontWeight:600,cursor:"pointer",flexShrink:0,fontFamily:"'DM Sans',sans-serif"}}>← 뒤로</button>
         <div style={{width:"1px",height:"26px",background:"#e2e8f0",flexShrink:0}} />
         <div style={{fontFamily:"'Nunito',sans-serif",fontSize:"17px",fontWeight:"800",color:"#2563eb",whiteSpace:"nowrap",letterSpacing:"-0.5px"}}>PROP<span style={{color:"#dc2626"}}>OS</span></div>
-        <div style={{fontSize:"11px",color:"#94a3b8",fontWeight:500,whiteSpace:"nowrap",paddingTop:1}}>전체 관제 센터 · 100개 숙소 우선순위 대응</div>
+        <div style={{fontSize:"11px",color:"#94a3b8",fontWeight:500,whiteSpace:"nowrap",paddingTop:1}}>전체 관제 센터 · 5단계 흐름에서 막힌 숙소부터 처리</div>
         <div style={{width:"1px",height:"26px",background:"#e2e8f0",flexShrink:0}} />
         <div style={{fontFamily:"'DM Mono',monospace",fontSize:"13px",color:"#475569",fontWeight:"600",flexShrink:0}}>{now.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</div>
-        <div style={{width:"1px",height:"26px",background:"#e2e8f0",flexShrink:0}} />
-        <div className="kpi-top">
-          {[[props.length,"전체","#4a5568"],[occupied,"입실중","#059669"],[props.filter(prop=>prop.status==="예약됨").length,"예약됨","#2563eb"],[vacant,"공실","#94a3b8"],[cleaning,"청소중","#d97706"],[highAlert,"긴급","#dc2626"],[totalMsg,"미읽","#7c3aed"],[`${(totalRev / 10000).toFixed(0)}만`,"수익","#059669"],[`${occ}%`,"점유율","#2563eb"]].map(([value, label, color])=>(
-            <div key={label} className="kpi-t"><div className="kv" style={{color}}>{value}</div><div className="kl">{label}</div></div>
-          ))}
-        </div>
         <div style={{display:"flex",gap:"8px",alignItems:"center",marginLeft:"auto",flexShrink:0}}>
           <button onClick={()=>onOpenHomeAssistant?.()} style={{padding:"7px 14px",borderRadius:8,background:"#ffffff",border:"1.5px solid #e2e8f0",color:"#475569",fontSize:"12px",fontWeight:"700",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>🏠 대표 숙소 보기</button>
           {bulkSel.length>0 && (
@@ -720,7 +555,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant}) {
               {bulkSel.length}개 선택 <span style={{cursor:"pointer",color:"#dc2626",marginLeft:"4px"}} onClick={()=>setBulkSel([])}>×</span>
             </div>
           )}
-          <div style={{position:"relative",cursor:"pointer",padding:"6px 12px",borderRadius:"20px",background:unack>0?"#fef2f2":"#f7f9fc",border:`1.5px solid ${unack>0?"#fecaca":"#e2e8f0"}`,display:"flex",alignItems:"center",gap:"6px",fontSize:"12px",color:unack>0?"#dc2626":"#718096",fontWeight:"700"}} onClick={()=>setView(value=>value==="alerts"?"command":"alerts")}>
+          <div style={{position:"relative",cursor:"pointer",padding:"6px 12px",borderRadius:"20px",background:unack>0?"#fef2f2":"#f7f9fc",border:`1.5px solid ${unack>0?"#fecaca":"#e2e8f0"}`,display:"flex",alignItems:"center",gap:"6px",fontSize:"12px",color:unack>0?"#dc2626":"#718096",fontWeight:"700"}} onClick={openAlertsPanel}>
             🔔 {unack}
             {unack>0 && <div style={{position:"absolute",top:"-2px",right:"-2px",width:"8px",height:"8px",background:"#dc2626",borderRadius:"50%",animation:"pulse 1.5s infinite"}} />}
           </div>
@@ -729,48 +564,16 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant}) {
       </div>
 
       <div className="cc-body">
-        <div className="cc-sidenav">
-          {[["command","◈","지휘"],["automation","⚙","자동화"],["revenue","💰","수익"],["cleaning","🧹","청소"]].map(([id, icon, label])=>(
-            <div key={id} className={`cc-nav-ic ${view===id ? "active" : ""}`} onClick={()=>setView(id)} title={label}>
-              <span style={{fontSize:18,lineHeight:1}}>{icon}</span>
-              <span className="cc-nav-label" style={{color:view===id?"#2563eb":"#94a3b8"}}>{label}</span>
-            </div>
-          ))}
-        </div>
-
         <div className="cc-main">
-          {view==="command" && (
-            <>
-              <div className="prop-panel">
-                <div className="cc-brief-grid">
-                  {commandBriefCards.map(card=>(
-                    <div key={card.label} className="cc-brief-card" style={{background:card.tone.bg,borderColor:card.tone.border}}>
-                      <div className="cc-brief-label">{card.label}</div>
-                      <div className="cc-brief-value" style={{color:card.tone.text}}>{card.value}</div>
-                      <div className="cc-brief-desc">{card.desc}</div>
-                    </div>
-                  ))}
-                  <div className="cc-brief-card" style={{background:"#ffffff",borderColor:"#e2e8f0"}}>
-                    <div className="cc-brief-label">빠른 이동</div>
-                    <div className="cc-brief-value" style={{color:"#1e293b"}}>{currentStage.label}</div>
-                    <div className="cc-brief-desc">전체에서 찾고, 상세는 단계 패널이나 대표 숙소 화면에서 끝내세요.</div>
-                    <div className="cc-brief-actions">
-                      {currentDrilldown && (
-                        <button className="cc-brief-btn cc-brief-btn-strong" onClick={()=>onOpenScenario?.(currentDrilldown.screen)}>{currentDrilldown.label}</button>
-                      )}
-                      <button className="cc-brief-btn" onClick={()=>onOpenHomeAssistant?.()}>홈 어시스턴트 열기</button>
-                    </div>
-                  </div>
-                </div>
-
+          <div className="prop-panel">
                 <div className="pipeline-wrap">
                   {CC_STAGES.map(item=>{
-                    const count = item.id==="all" ? props.length : props.filter(item.filter).length;
-                    const urgentCount = props.filter(item.filter).filter(prop=>prop.priority==="HIGH").length;
+                    const count = props.filter(item.filter).length;
+                    const urgentCount = props.filter(item.filter).filter(prop=>prop.priority==="HIGH" || prop.issues.length > 0).length;
                     const active = stage===item.id;
                     return (
                       <div key={item.id} className={`pipeline-card ${active ? "active" : ""}`} style={{borderColor:active?item.color:item.border,background:active?item.bg:"#fff",color:item.color}} onClick={()=>setStage(item.id)}>
-                        {urgentCount>0 && item.id!=="all" && <div className="pipeline-urgent">🔴 {urgentCount}</div>}
+                        {urgentCount>0 && <div className="pipeline-urgent">🔴 {urgentCount}</div>}
                         <div style={{fontSize:"16px",marginBottom:"2px"}}>{item.emoji}</div>
                         <div className="pipeline-count" style={{color:item.color}}>{count}</div>
                         <div className="pipeline-label" style={{color:active?item.color:"#475569"}}>{item.label}</div>
@@ -779,30 +582,29 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant}) {
                   })}
                 </div>
 
-                {leadAlert && (
-                  <div className="cc-priority-banner">
-                    <div className="cc-priority-copy">
-                      <span className="cc-priority-chip">지금 가장 급한 알림</span>
-                      <div className="cc-priority-title">{leadAlert.prop}</div>
-                      <div className="cc-priority-desc">{leadAlert.msg} · {leadAlert.time}</div>
-                    </div>
-                    <div className="cc-priority-actions">
-                      <button className="cc-banner-btn" onClick={()=>setView("alerts")}>알림 패널 열기</button>
-                      <button className="cc-banner-btn cc-banner-btn-strong" onClick={()=>Toast.show("긴급 대응 큐를 상단에 고정했습니다.", "i")}>즉시 대응 큐 보기</button>
-                    </div>
-                  </div>
-                )}
-
                 {currentStage.desc && (
-                  <div className="stage-bar">
-                    <div className="stage-bar-desc">{currentStage.desc}</div>
+                  <div className="cc-focus-strip" style={{background:currentStage.bg,borderBottom:`1px solid ${currentStage.border}`}}>
+                    <div className="cc-focus-copy">
+                      <div className="cc-focus-eyebrow">{currentStage.label}</div>
+                      <div className="cc-focus-title">{stageFocusTitle}</div>
+                      <div className="cc-focus-desc">{stageFocusDesc}</div>
+                      <div className="cc-focus-metrics">
+                        <span>전체 {currentInsight?.count || 0}곳</span>
+                        <span>수동 개입 {stageManualCount}곳</span>
+                        <span>미응답 {stageUnreadCount}건</span>
+                        {bottleneckStage && <span>현재 병목 {bottleneckStage.label}</span>}
+                      </div>
+                    </div>
                     <div className="stage-bar-actions">
                       {currentDrilldown && (
                         <button className="stage-action-btn" style={{background:"#ffffff",borderColor:"#cbd5e0",color:"#475569"}} onClick={()=>onOpenScenario?.(currentDrilldown.screen)}>
                           {currentDrilldown.label}
                         </button>
                       )}
-                      {currentStage.action && (
+                      <button className="stage-action-btn" style={{background:"#ffffff",borderColor:"#e2e8f0",color:"#475569"}} onClick={openAlertsPanel}>
+                        실시간 알림 보기
+                      </button>
+                      {currentStage.action && filtered.length > 0 && (
                         <button className="stage-action-btn" style={{background:currentStage.bg,borderColor:currentStage.color,color:currentStage.color}} onClick={()=>Toast.show(`${currentStage.action} 실행 중...`, "s")}>
                           {currentStage.action}
                         </button>
@@ -811,47 +613,42 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant}) {
                   </div>
                 )}
 
-                <div className="cc-stage-overview">
-                  {stageOverviewCards.map(card=>(
-                    <div key={card.label} className="cc-stage-card" style={{background:card.tone.bg,borderColor:card.tone.border}}>
-                      <div className="cc-stage-card-head">
-                        <span>{card.label}</span>
-                        <strong style={{color:card.tone.text}}>{card.value}</strong>
-                      </div>
-                      <div className="cc-stage-card-desc">{card.desc}</div>
-                    </div>
-                  ))}
-                </div>
-
                 <div className="cc-action-queue">
                   <div className="cc-section-header">
                     <div>
-                      <div className="cc-section-eyebrow">즉시 대응 큐</div>
-                      <div className="cc-section-title">{currentStage.label}에서 지금 먼저 처리할 숙소</div>
+                      <div className="cc-section-eyebrow">이 단계의 우선 처리 숙소</div>
+                      <div className="cc-section-title">{currentStage.label}에서 지금 먼저 볼 5곳</div>
                     </div>
-                    <div className="cc-section-meta">긴급도와 현재 단계 기준으로 상위 {stageActionQueue.length}개를 먼저 보여줘요.</div>
+                    <div className="cc-section-meta">이 단계에서 먼저 처리해야 할 숙소 상위 {stageActionQueue.length}개만 보여줍니다. 나머지는 아래 목록에서 확인합니다.</div>
                   </div>
-                  <div className="cc-queue-grid">
-                    {stageActionQueue.map(({prop, action})=>(
-                      <button key={prop.id} className="cc-queue-card" onClick={()=>focusProperty(prop, action.tab)}>
-                        <div className="cc-queue-top">
-                          <span className="badge-sm" style={{background:SC[prop.status]+"18",color:SC[prop.status],border:`1px solid ${SC[prop.status]}44`}}>{prop.status}</span>
-                          <span className="cc-queue-priority" style={{color:action.color}}>{action.label}</span>
-                        </div>
-                        <div className="cc-queue-name">{prop.name}</div>
-                        <div className="cc-queue-detail">{action.detail}</div>
-                        <div className="cc-queue-meta">
-                          <span>{prop.guest || "게스트 없음"}</span>
-                          <span>미읽음 {prop.unreadMsg}</span>
-                          <span>이슈 {prop.issues.length}</span>
-                        </div>
-                        <div className="cc-queue-footer">
-                          <span>상세 열기</span>
-                          <span>→</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+                  {stageActionQueue.length > 0 ? (
+                    <div className="cc-queue-grid">
+                      {stageActionQueue.map(({prop, action})=>(
+                        <button key={prop.id} className="cc-queue-card" onClick={()=>focusProperty(prop, action.tab)}>
+                          <div className="cc-queue-top">
+                            <span className="badge-sm" style={{background:SC[prop.status]+"18",color:SC[prop.status],border:`1px solid ${SC[prop.status]}44`}}>{prop.status}</span>
+                            <span className="cc-queue-priority" style={{color:action.color}}>{action.label}</span>
+                          </div>
+                          <div className="cc-queue-name">{prop.name}</div>
+                          <div className="cc-queue-detail">{action.detail}</div>
+                          <div className="cc-queue-meta">
+                            <span>{prop.guest || "게스트 없음"}</span>
+                            <span>미읽음 {prop.unreadMsg}</span>
+                            <span>이슈 {prop.issues.length}</span>
+                          </div>
+                          <div className="cc-queue-footer">
+                            <span>상세 열기</span>
+                            <span>→</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="cc-empty-state">
+                      <div className="cc-empty-title">{currentStage.label} 단계는 지금 안정적입니다</div>
+                      <div className="cc-empty-desc">아래 전체 목록에서 예외 숙소를 다시 확인하거나, 다른 단계를 눌러 병목이 있는지 확인하세요.</div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="toolbar">
@@ -877,38 +674,32 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant}) {
                     {filtered.map(prop=><LRow key={prop.id} p={prop} />)}
                   </div>
                 )}
-              </div>
+          </div>
 
-              <div className="detail-panel">
-                <DetailPanel />
-              </div>
+          <div className="detail-panel">
+            <DetailPanel />
+          </div>
 
-              <div className="alert-panel">
-                <div className="alert-hdr">
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{width:3,height:13,background:"#dc2626",borderRadius:2,display:"inline-block",flexShrink:0}} />
-                    <span style={{fontSize:11,fontWeight:700,letterSpacing:"0.06em",color:"#475569",textTransform:"uppercase"}}>실시간 알림</span>
-                    <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"#dc2626",background:"#fef2f2",border:"1px solid #fecaca",borderRadius:20,padding:"1px 7px",fontWeight:700,marginLeft:4}}>LIVE</span>
-                  </div>
-                  <button onClick={ackAll} style={{fontSize:"10px",color:"#718096",background:"none",border:"1.5px solid #e2e8f0",borderRadius:"20px",padding:"3px 10px",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:"600"}}>전체 확인</button>
+          <div className="alert-panel">
+            <div className="alert-hdr">
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{width:3,height:13,background:"#dc2626",borderRadius:2,display:"inline-block",flexShrink:0}} />
+                <span style={{fontSize:11,fontWeight:700,letterSpacing:"0.06em",color:"#475569",textTransform:"uppercase"}}>실시간 알림</span>
+                <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"#dc2626",background:"#fef2f2",border:"1px solid #fecaca",borderRadius:20,padding:"1px 7px",fontWeight:700,marginLeft:4}}>LIVE</span>
+              </div>
+              <button onClick={ackAll} style={{fontSize:"10px",color:"#718096",background:"none",border:"1.5px solid #e2e8f0",borderRadius:"20px",padding:"3px 10px",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:"600"}}>전체 확인</button>
+            </div>
+            <div className="alert-list-wrap">
+              {alerts.map(alert=>(
+                <div key={alert.id} className={`aitem ${alert.acked ? "acked" : ""}`} style={{borderLeftColor:{error:"#dc2626",warn:"#d97706",info:"#2563eb"}[alert.type],background:{error:"#fef2f2",warn:"#fffbeb",info:"#eff6ff"}[alert.type]}}>
+                  <div style={{fontSize:"10px",fontWeight:"700",color:{error:"#dc2626",warn:"#d97706",info:"#2563eb"}[alert.type],marginBottom:"3px"}}>{alert.prop}</div>
+                  <div style={{fontSize:"12px",color:"#4a5568",fontWeight:"500"}}>{alert.msg}</div>
+                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#a0aec0",marginTop:"3px"}}>{alert.time}</div>
+                  {!alert.acked && <button style={{fontSize:"10px",padding:"3px 9px",borderRadius:"20px",border:`1.5px solid ${{error:"#fecaca",warn:"#fde68a",info:"#bfdbfe"}[alert.type]}`,cursor:"pointer",background:"#fff",color:{error:"#dc2626",warn:"#d97706",info:"#2563eb"}[alert.type],fontFamily:"'DM Sans',sans-serif",marginTop:"5px",fontWeight:"600"}} onClick={()=>ackAlert(alert.id)}>확인</button>}
                 </div>
-                <div className="alert-list-wrap">
-                  {alerts.map(alert=>(
-                    <div key={alert.id} className={`aitem ${alert.acked ? "acked" : ""}`} style={{borderLeftColor:{error:"#dc2626",warn:"#d97706",info:"#2563eb"}[alert.type],background:{error:"#fef2f2",warn:"#fffbeb",info:"#eff6ff"}[alert.type]}}>
-                      <div style={{fontSize:"10px",fontWeight:"700",color:{error:"#dc2626",warn:"#d97706",info:"#2563eb"}[alert.type],marginBottom:"3px"}}>{alert.prop}</div>
-                      <div style={{fontSize:"12px",color:"#4a5568",fontWeight:"500"}}>{alert.msg}</div>
-                      <div style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#a0aec0",marginTop:"3px"}}>{alert.time}</div>
-                      {!alert.acked && <button style={{fontSize:"10px",padding:"3px 9px",borderRadius:"20px",border:`1.5px solid ${{error:"#fecaca",warn:"#fde68a",info:"#bfdbfe"}[alert.type]}`,cursor:"pointer",background:"#fff",color:{error:"#dc2626",warn:"#d97706",info:"#2563eb"}[alert.type],fontFamily:"'DM Sans',sans-serif",marginTop:"5px",fontWeight:"600"}} onClick={()=>ackAlert(alert.id)}>확인</button>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
-
-          {view==="automation" && renderAutomation()}
-          {view==="revenue" && renderRevenue()}
-          {view==="cleaning" && renderCleaning()}
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 

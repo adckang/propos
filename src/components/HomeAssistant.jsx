@@ -62,7 +62,7 @@ function HomeAssistant({onBack, onOpenScenario, onOpenCommandCenter}) {
     {id:"checkin", emoji:"🏠", label:"체크인", sub:"입실 완료", color:"#059669", done:true},
     {id:"stay", emoji:"📡", label:"체류 중", sub:"센서 모니터링", color:"#7c3aed", done:false},
     {id:"checkout", emoji:"🚪", label:"퇴실·청소", sub:"체크아웃 예정", color:"#d97706", done:false},
-    {id:"revenue", emoji:"💰", label:"정산", sub:"이달 정산", color:"#0891b2", done:false},
+    {id:"revenue", emoji:"💰", label:"수익 정산", sub:"이달 정산", color:"#0891b2", done:false},
   ];
   const currentStage = HA_STAGES.find(stage=>stage.id===haStage) || HA_STAGES[2];
   const connectedDevices = devs.filter(device=>device.state).length;
@@ -103,9 +103,9 @@ function HomeAssistant({onBack, onOpenScenario, onOpenCommandCenter}) {
     },
     revenue: {
       title:"이번 예약의 매출, 비용, 순수익을 한 번에 검토하고 다음 가격 판단에 쓰면 됩니다.",
-      desc:"정산 단계는 보기 좋은 숫자보다, 실제 남는 금액이 얼마인지 빠르게 이해되는 것이 중요합니다.",
+      desc:"수익 정산 단계는 보기 좋은 숫자보다, 실제 남는 금액이 얼마인지 빠르게 이해되는 것이 중요합니다.",
       checks:["객실 매출 확인", "비용 누락 점검", "최종 순수익 확인"],
-      primary:{label:"정산 요약 확인", toast:"정산 요약 카드를 기준으로 다시 검토합니다.", tone:"i"},
+      primary:{label:"수익 정산 요약 확인", toast:"수익 정산 요약 카드를 기준으로 다시 검토합니다.", tone:"i"},
       secondary:{label:"수익 내역 검토", toast:"수익 상세 내역을 검토합니다.", tone:"s"},
       tone:{bg:"#ecfeff", border:"#a5f3fc", text:"#0891b2"},
     },
@@ -153,12 +153,12 @@ function HomeAssistant({onBack, onOpenScenario, onOpenCommandCenter}) {
       ? { value: `기기 ${disconnectedDevices}대`, desc: "연결 끊긴 장치부터 확인" }
       : { value: `대화 ${msgs.length}건`, desc: "최근 게스트 응답 흐름 점검" },
     checkout: { value: "청소 마감", desc: "퇴실 뒤 준비 완료 전환" },
-    revenue: { value: "순수익 검토", desc: "비용 누락 없이 정산 확인" },
+    revenue: { value: "순수익 검토", desc: "비용 누락 없이 수익 정산 확인" },
   };
   const nextTransitionMeta = haStage === "revenue"
-    ? { value: "다음 예약 준비", desc: "정산 확인 뒤 다음 가격 판단" }
+    ? { value: "다음 예약 준비", desc: "수익 정산 확인 뒤 다음 가격 판단" }
     : haStage === "checkout"
-    ? { value: "정산 전환", desc: "청소 완료 후 수익 정리 단계" }
+    ? { value: "수익 정산 전환", desc: "청소 완료 후 수익 정리 단계" }
     : { value: checkoutClock, desc: "다음 퇴실 전환까지 남은 시간" };
   const snapshotCards = [
     {

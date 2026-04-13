@@ -571,7 +571,8 @@ function S05RevenuePanel({ onBack }) {
           <button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}>← 홈</button>
           <div style={{ width:1, height:22, background:'#e2e8f0' }} />
           <div>
-            <div style={{ fontWeight:800, fontSize:18, color:'#1e293b' }}>이번 달 수익 정산</div>
+            <div style={{ fontSize:10, color:'#94a3b8', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:4 }}>S05 · 수익 정산</div>
+            <div style={{ fontWeight:800, fontSize:18, color:'#1e293b' }}>이번 달 수익 정리</div>
             <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>멀티플랫폼 수익 집계부터 가격 추천, 세금 리포트까지 한 번에 정리합니다.</div>
           </div>
         </div>

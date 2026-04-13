@@ -641,8 +641,9 @@ function D1AutomationPanel({ onBack }) {
         {onBack && <button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}>← 홈</button>}
         {onBack && <div style={{ width:1, height:22, background:'#e2e8f0' }} />}
         <div style={{ flex:1 }}>
-          <div style={{ fontWeight:800, fontSize:18, color:'#1e293b', lineHeight:1.2 }}>D-1 체크인 전날 자동화</div>
-          <div style={{ fontSize:12, color:'#64748b', marginTop:3 }}>PIN 자동 발급 · 웰컴 메시지 발송 · 스마트홈 초기화</div>
+          <div style={{ fontSize:10, color:'#94a3b8', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:4 }}>S01 · D-1 자동화</div>
+          <div style={{ fontWeight:800, fontSize:18, color:'#1e293b', lineHeight:1.2 }}>내일 체크인 준비</div>
+          <div style={{ fontSize:12, color:'#64748b', marginTop:3 }}>PIN 발급, 웰컴 메시지, 스마트홈 준비를 한 번에 마무리합니다.</div>
         </div>
         <button onClick={handleSync} disabled={syncing || !propConfigs.some(c=>c.icalUrl)}
           style={{ padding:'7px 14px', borderRadius:8,
