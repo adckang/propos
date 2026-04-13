@@ -33,24 +33,27 @@ test.describe("PROPOS smoke", () => {
     await page.goto("/");
 
     await expect(page.getByText("에어비앤비 완전 관리 시스템")).toBeVisible();
-    await expect(page.getByText("홈 어시스턴트")).toBeVisible();
-    await expect(page.getByText("커맨드 센터")).toBeVisible();
+    await expect(page.getByRole("button", { name: "대표 숙소 상세 보기" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "커맨드 센터 열기" })).toBeVisible();
+    await expect(page.getByText("지금 뜬 알림")).toBeVisible();
 
-    await page.getByText("홈 어시스턴트").first().click();
+    await page.getByRole("button", { name: "대표 숙소 상세 보기" }).click();
     await expect(page.getByText("해운대 오션뷰 펜트하우스")).toBeVisible();
     await expect(page.getByText("빠른 제어")).toBeVisible();
+    await expect(page.getByText("지금 할 일")).toBeVisible();
     await haStage(/D-1 자동화\s*내일 체크인/).click();
     await expect(page.getByText("도어락 PIN 발급")).toBeVisible();
     await haStage(/체크인\s*입실 완료/).click();
     await expect(page.getByText("체크인 씬 실행 결과")).toBeVisible();
     await haStage(/퇴실·청소\s*체크아웃 예정/).click();
-    await expect(page.getByText("청소 체크리스트")).toBeVisible();
+    await expect(page.getByText("청소 체크리스트", { exact: true })).toBeVisible();
     await returnButton().click();
     await expect(page.getByText("에어비앤비 완전 관리 시스템")).toBeVisible();
 
-    await page.getByText("커맨드 센터").first().click();
+    await page.getByRole("button", { name: "커맨드 센터 열기" }).click();
     await expect(page.getByText("전체 관제 센터")).toBeVisible();
     await expect(page.getByText("실시간 알림")).toBeVisible();
+    await expect(page.getByText("즉시 대응 큐", { exact: true })).toBeVisible();
     await ccStage("센서 모니터링").click();
     await expect(page.getByText("전체 폴링 시작")).toBeVisible();
     await page.locator(".pcard").first().click();

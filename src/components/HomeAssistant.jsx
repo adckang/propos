@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 
 import { BOOKING, CLEANERS, DEVICES_INIT, EXPENSES, SINGLE_PROP } from "../data/mockData";
+import Toast from "../utils/toast";
 
 // ============================================================
 // HomeAssistant.jsx — 개별 숙소 어시스턴트
@@ -64,6 +65,107 @@ function HomeAssistant({onBack}) {
     {id:"revenue", emoji:"💰", label:"정산", sub:"이달 정산", color:"#0891b2", done:false},
   ];
   const currentStage = HA_STAGES.find(stage=>stage.id===haStage) || HA_STAGES[2];
+  const connectedDevices = devs.filter(device=>device.state).length;
+  const disconnectedDevices = devs.length - connectedDevices;
+  const checkoutClock = `${countdown.days}일 ${countdown.hours}시간`;
+  const stageGuides = {
+    d1: {
+      title:"내일 체크인 전에 PIN, 메시지, 스마트홈 초기화만 다시 확인하면 됩니다.",
+      desc:"자동화는 완료 상태예요. 마지막으로 게스트가 바로 입실할 수 있는지만 체크하면 충분합니다.",
+      checks:["PIN 발급 완료", "웰컴 메시지 발송 완료", "환영 모드 준비 완료"],
+      primary:{label:"D-1 자동화 재실행", toast:"체크인 전날 자동화를 다시 점검했습니다.", tone:"s"},
+      secondary:{label:"PIN 재발급", toast:"도어락 PIN 재발급 절차를 열었습니다.", tone:"i"},
+      tone:{bg:"#eff6ff", border:"#bfdbfe", text:"#2563eb"},
+    },
+    checkin: {
+      title:"입실 로그와 웰컴 씬 실행 결과를 확인하고, 게스트 첫 문의에 바로 답할 준비를 해두세요.",
+      desc:"체크인이 끝난 직후에는 입실 성공 여부와 초기 안내만 명확하면 운영 피로가 크게 줄어듭니다.",
+      checks:["도어락 입실 감지", "웰컴 씬 실행 완료", "입실 안내 메시지 발송"],
+      primary:{label:"체크인 로그 다시 보기", toast:"체크인 흐름 요약을 다시 확인합니다.", tone:"i"},
+      secondary:{label:"환영 메시지 재발송", toast:"환영 메시지 재발송 준비를 열었습니다.", tone:"s", prefill:`${BOOKING.guest.name}님, 입실은 잘 되셨나요? 필요하신 점이 있으면 편하게 말씀해 주세요.`},
+      tone:{bg:"#ecfdf5", border:"#a7f3d0", text:"#059669"},
+    },
+    stay: {
+      title:"센서 이상 여부와 미응답 메시지를 먼저 보면 체류 중 문제의 대부분을 빠르게 막을 수 있습니다.",
+      desc:"운영자는 전체를 다 보는 대신, 연결이 끊겼거나 답장이 밀린 지점만 빠르게 처리하면 됩니다.",
+      checks:["연결 끊긴 기기 확인", "게스트 대화 응답", "체크아웃 전 안내 준비"],
+      primary:{label:"센서 재확인", toast:"현재 센서와 기기 연결 상태를 다시 확인했습니다.", tone:"i"},
+      secondary:{label:"게스트 답장 작성", toast:"메시지 작성 상태로 이동했습니다.", tone:"s", prefill:"확인했습니다. 바로 조치하고 다시 안내드릴게요."},
+      tone:{bg:"#f5f3ff", border:"#ddd6fe", text:"#7c3aed"},
+    },
+    checkout: {
+      title:"퇴실 후에는 청소 배정, 체크리스트, 유지보수 접수까지 한 흐름으로 이어지게 해야 합니다.",
+      desc:"여기서 막히면 다음 예약 준비가 모두 늦어지기 때문에, 청소와 보수 상태를 먼저 확정해야 해요.",
+      checks:["청소 인력 배정", "청소 체크리스트 진행", "유지보수 이슈 접수"],
+      primary:{label:"청소 상태 확인", toast:"퇴실·청소 작업 현황을 다시 점검했습니다.", tone:"w"},
+      secondary:{label:"유지보수 등록", toast:"유지보수 이슈 처리 흐름을 열었습니다.", tone:"i"},
+      tone:{bg:"#fffbeb", border:"#fde68a", text:"#d97706"},
+    },
+    revenue: {
+      title:"이번 예약의 매출, 비용, 순수익을 한 번에 검토하고 다음 가격 판단에 쓰면 됩니다.",
+      desc:"정산 단계는 보기 좋은 숫자보다, 실제 남는 금액이 얼마인지 빠르게 이해되는 것이 중요합니다.",
+      checks:["객실 매출 확인", "비용 누락 점검", "최종 순수익 확인"],
+      primary:{label:"정산 요약 확인", toast:"정산 요약 카드를 기준으로 다시 검토합니다.", tone:"i"},
+      secondary:{label:"수익 내역 검토", toast:"수익 상세 내역을 검토합니다.", tone:"s"},
+      tone:{bg:"#ecfeff", border:"#a5f3fc", text:"#0891b2"},
+    },
+  };
+  const stageEvents = {
+    d1: [
+      {time:"09:00", text:"체크인 전날 자동화 스케줄이 실행됐어요."},
+      {time:"09:03", text:"도어락 PIN 4821 발급을 완료했어요."},
+      {time:"09:05", text:"웰컴 메시지를 게스트에게 발송했어요."},
+    ],
+    checkin: [
+      {time:"15:21", text:"도어락 해제 이벤트를 감지했어요."},
+      {time:"15:23", text:"웰컴 씬과 냉방 설정이 적용됐어요."},
+      {time:"15:25", text:"입실 완료 메시지를 자동 발송했어요."},
+    ],
+    stay: [
+      {time:"09:42", text:"게스트가 체크아웃 시간을 문의했어요."},
+      {time:"10:12", text:"게스트가 전망 만족 메시지를 남겼어요."},
+      {time:"10:18", text:`현재 활성 기기 ${connectedDevices}대, 확인 필요 ${disconnectedDevices}대예요.`},
+    ],
+    checkout: [
+      {time:"10:55", text:"퇴실 예정 시간 5분 전 알림이 발송됐어요."},
+      {time:"11:02", text:"청소팀 배정 가능 상태를 확인했어요."},
+      {time:"11:06", text:"유지보수 접수 여부를 점검 중이에요."},
+    ],
+    revenue: [
+      {time:"18:10", text:"이번 예약 매출과 청소비를 집계했어요."},
+      {time:"18:14", text:"플랫폼 수수료와 소모품 비용을 반영했어요."},
+      {time:"18:18", text:"최종 순수익 계산을 완료했어요."},
+    ],
+  };
+  const currentGuide = stageGuides[haStage];
+  const currentEvents = stageEvents[haStage];
+  const snapshotCards = [
+    {
+      label:"기기 연결",
+      value:`${connectedDevices}/${devs.length}`,
+      desc: disconnectedDevices===0 ? "모든 기기가 연결 중" : `${disconnectedDevices}대 확인 필요`,
+      tone:{bg:"#eff6ff", border:"#bfdbfe", text:"#2563eb"},
+    },
+    {
+      label:"게스트 대화",
+      value:`${msgs.length}건`,
+      desc:"최근 문의 흐름을 바로 볼 수 있어요.",
+      tone:{bg:"#f5f3ff", border:"#ddd6fe", text:"#7c3aed"},
+    },
+    {
+      label:"체크아웃까지",
+      value:checkoutClock,
+      desc:"다음 운영 전환 시점을 알려줘요.",
+      tone:{bg:"#fffbeb", border:"#fde68a", text:"#d97706"},
+    },
+  ];
+
+  const runGuideAction = action => {
+    if(action.prefill){
+      setMsgIn(action.prefill);
+    }
+    Toast.show(action.toast, action.tone);
+  };
 
   return (
     <div className="ha-root">
@@ -84,7 +186,10 @@ function HomeAssistant({onBack}) {
             <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{SINGLE_PROP.address}</div>
           </div>
           <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-            <span style={{background:"#ecfdf5",color:"#059669",border:"1px solid #a7f3d0",fontSize:11,padding:"4px 12px",borderRadius:20,fontWeight:700,whiteSpace:"nowrap"}}>● 입실 중</span>
+            <span style={{background:"#ecfdf5",color:"#059669",border:"1px solid #a7f3d0",fontSize:11,padding:"4px 12px",borderRadius:20,fontWeight:700,whiteSpace:"nowrap"}}>● {currentStage.sub}</span>
+            <span style={{background:disconnectedDevices===0?"#ecfdf5":"#fffbeb",color:disconnectedDevices===0?"#059669":"#d97706",border:`1px solid ${disconnectedDevices===0?"#a7f3d0":"#fde68a"}`,fontSize:11,padding:"4px 12px",borderRadius:20,fontWeight:700,whiteSpace:"nowrap"}}>
+              ● 홈 어시스턴트 {disconnectedDevices===0 ? "연결 정상" : "일부 확인 필요"}
+            </span>
             <div style={{textAlign:"right"}}>
               <div style={{fontFamily:"'DM Mono',monospace",fontSize:18,color:"#2563eb",fontWeight:700}}>
                 {now.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}
@@ -136,6 +241,51 @@ function HomeAssistant({onBack}) {
           <span className="ha-stage-icon">{currentStage.emoji}</span>
           <div className="ha-stage-title" style={{color:currentStage.color}}>{currentStage.label}</div>
           <div className="ha-stage-sub">— {currentStage.sub}</div>
+        </div>
+
+        <div className="ha-focus-card" style={{background:currentGuide.tone.bg,borderColor:currentGuide.tone.border}}>
+          <div className="ha-focus-copy">
+            <div className="ha-focus-eyebrow">지금 할 일</div>
+            <div className="ha-focus-title" style={{color:currentGuide.tone.text}}>{currentGuide.title}</div>
+            <div className="ha-focus-desc">{currentGuide.desc}</div>
+            <div className="ha-focus-checks">
+              {currentGuide.checks.map(check=>(
+                <div key={check} className="ha-focus-check">
+                  <span>✓</span>
+                  <span>{check}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="ha-focus-actions">
+            <button className="ha-focus-btn ha-focus-btn-strong" onClick={()=>runGuideAction(currentGuide.primary)}>{currentGuide.primary.label}</button>
+            <button className="ha-focus-btn" onClick={()=>runGuideAction(currentGuide.secondary)}>{currentGuide.secondary.label}</button>
+          </div>
+        </div>
+
+        <div className="ha-snapshot-grid">
+          {snapshotCards.map(card=>(
+            <div key={card.label} className="ha-snapshot-card" style={{background:card.tone.bg,borderColor:card.tone.border}}>
+              <div className="ha-snapshot-head">
+                <span>{card.label}</span>
+                <strong style={{color:card.tone.text}}>{card.value}</strong>
+              </div>
+              <div className="ha-snapshot-desc">{card.desc}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="ha-event-card">
+          <div className="ha-label">최근 운영 이벤트</div>
+          <div className="ha-event-list">
+            {currentEvents.map(event=>(
+              <div key={`${event.time}-${event.text}`} className="ha-event-row">
+                <div className="ha-event-time">{event.time}</div>
+                <div className="ha-event-dot" style={{background:currentStage.color}} />
+                <div className="ha-event-text">{event.text}</div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {haStage === "d1" && (

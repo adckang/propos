@@ -153,6 +153,7 @@ for (const page of registry.system_pages) {
 for (const scenario of registry.scenarios) {
   const diagramSource = readRepoFile(scenario.diagram);
   const testSource = readRepoFile(scenario.functional_test);
+  const componentSource = readRepoFile(scenario.component);
   const componentBase = path.basename(scenario.component, path.extname(scenario.component));
   const expectedServiceImport = toImportPath(scenario.component, scenario.service);
   const serviceExports = getExportedFunctionNames(scenario.service);
@@ -182,7 +183,11 @@ for (const scenario of registry.scenarios) {
 
   // App 라우터 확인
   assert(appSource.includes(scenario.landing_label), `[verify:scenarios] Landing page is missing stage label: ${scenario.landing_label}`, errors);
-  assert(appSource.includes(scenario.use_case_id), `[verify:scenarios] Landing page is missing use-case badge: ${scenario.use_case_id}`, errors);
+  assert(
+    componentSource.includes(scenario.use_case_id) || testSource.includes(scenario.use_case_id),
+    `[verify:scenarios] Traceability is missing use-case id ${scenario.use_case_id} in component/test: ${scenario.component}`,
+    errors
+  );
 
   // 컴포넌트 ↔ 서비스 연결 확인
   assert(

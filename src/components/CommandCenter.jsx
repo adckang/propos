@@ -126,6 +126,11 @@ function CommandCenter({onBack}) {
   const bulkToggle = (dev, value) => setProps(list=>list.map(item=>bulkSel.includes(item.id) ? {...item, [dev]:value} : item));
 
   const currentStage = CC_STAGES.find(item=>item.id===stage) || CC_STAGES[0];
+  const focusProperty = (prop, tab = "info") => {
+    setSelProp(prop);
+    setDTab(tab);
+    setChat([]);
+  };
 
   const filtered = props
     .filter(prop=>{
@@ -137,6 +142,8 @@ function CommandCenter({onBack}) {
       const order = {HIGH:0, MED:1, OK:2};
       return order[a.priority] - order[b.priority];
     });
+  const stageProps = stage==="all" ? props : props.filter(currentStage.filter);
+  const leadAlert = alerts.find(alert=>!alert.ack) || alerts[0];
 
   const occupied = props.filter(prop=>prop.status==="입실중").length;
   const vacant = props.filter(prop=>prop.status==="공실").length;
@@ -146,6 +153,105 @@ function CommandCenter({onBack}) {
   const totalRev = props.reduce((sum, prop)=>sum + prop.revenue, 0);
   const unack = alerts.filter(alert=>!alert.ack).length;
   const occ = Math.round((occupied / props.length) * 100);
+
+  const getPrimaryAction = prop => {
+    if(prop.priority==="HIGH" || prop.issues.length > 0){
+      return {
+        label:"이슈 확인",
+        detail: prop.issues[0] || "긴급 센서 상태를 바로 확인하세요.",
+        tab:"info",
+        color:"#dc2626",
+        bg:"#fef2f2",
+        border:"#fecaca",
+        toast:"긴급 이슈 상세를 열었습니다.",
+        tone:"e",
+      };
+    }
+    if(prop.unreadMsg > 0){
+      return {
+        label:"메시지 답장",
+        detail:`미읽음 ${prop.unreadMsg}건이 남아 있어요.`,
+        tab:"msg",
+        color:"#7c3aed",
+        bg:"#f5f3ff",
+        border:"#ddd6fe",
+        toast:"메시지 탭으로 이동했습니다.",
+        tone:"i",
+      };
+    }
+    if(prop.status==="예약됨"){
+      return {
+        label:"체크인 준비",
+        detail:`${prop.checkIn || "내일"} 체크인을 준비하세요.`,
+        tab:"info",
+        color:"#2563eb",
+        bg:"#eff6ff",
+        border:"#bfdbfe",
+        toast:"체크인 준비 상태를 확인합니다.",
+        tone:"i",
+      };
+    }
+    if(prop.status==="청소중"){
+      return {
+        label:"청소 배정",
+        detail:"다음 예약 전 청소 상태를 마무리하세요.",
+        tab:"clean",
+        color:"#d97706",
+        bg:"#fffbeb",
+        border:"#fde68a",
+        toast:"청소 배정 탭으로 이동했습니다.",
+        tone:"w",
+      };
+    }
+    return {
+      label:"IoT 확인",
+      detail:"현재 체류 상태와 장치 상태를 빠르게 점검하세요.",
+      tab:"iot",
+      color:"#059669",
+      bg:"#ecfdf5",
+      border:"#a7f3d0",
+      toast:"숙소 상태 확인 화면을 열었습니다.",
+      tone:"s",
+    };
+  };
+
+  const runPrimaryAction = prop => {
+    const action = getPrimaryAction(prop);
+    focusProperty(prop, action.tab);
+    Toast.show(`${prop.name.split("#")[0].trim()} · ${action.toast}`, action.tone);
+  };
+
+  const stageOverviewCards = [
+    {
+      label:"즉시 대응",
+      value: stageProps.filter(prop=>prop.priority==="HIGH" || prop.issues.length > 0).length,
+      desc:"긴급 이슈와 유지보수",
+      tone:{bg:"#fef2f2", border:"#fecaca", text:"#dc2626"},
+    },
+    {
+      label:"체크인 준비",
+      value: stageProps.filter(prop=>prop.status==="예약됨").length,
+      desc:"내일 또는 당일 입실 예정",
+      tone:{bg:"#eff6ff", border:"#bfdbfe", text:"#2563eb"},
+    },
+    {
+      label:"메시지 응답",
+      value: stageProps.filter(prop=>prop.unreadMsg > 0).length,
+      desc:"게스트 응답 대기",
+      tone:{bg:"#f5f3ff", border:"#ddd6fe", text:"#7c3aed"},
+    },
+    {
+      label:"청소 흐름",
+      value: stageProps.filter(prop=>prop.status==="청소중").length,
+      desc:"퇴실 이후 다음 예약 준비",
+      tone:{bg:"#fffbeb", border:"#fde68a", text:"#d97706"},
+    },
+  ];
+
+  const stageActionQueue = filtered.slice(0, 5).map(prop=>({
+    prop,
+    action: getPrimaryAction(prop),
+  }));
 
   const renderStageKPI = (prop, stageId) => {
     if(stageId==="d1"){
@@ -201,6 +307,7 @@ function CommandCenter({onBack}) {
   const PCard = ({p}) => {
     const isSel = selProp?.id === p.id;
     const isBulk = bulkSel.includes(p.id);
+    const primaryAction = getPrimaryAction(p);
     const stageColor =
       stage==="d1" ? "#2563eb" :
       stage==="occupied" ? "#059669" :
@@ -210,7 +317,7 @@ function CommandCenter({onBack}) {
       "transparent";
 
     return (
-      <div className={`pcard ${p.priority} ${isSel ? "sel" : ""}`} onClick={()=>{setSelProp(p); setDTab("info"); setChat([]);}} style={{borderTopColor: stage!=="all" ? stageColor : undefined}}>
+      <div className={`pcard ${p.priority} ${isSel ? "sel" : ""}`} onClick={()=>focusProperty(p, "info")} style={{borderTopColor: stage!=="all" ? stageColor : undefined}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:"8px"}}>
           <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
             <div
@@ -233,6 +340,22 @@ function CommandCenter({onBack}) {
         </div>
         {renderStageKPI(p, stage)}
         {p.issues.length > 0 && <div style={{fontSize:"10px",color:"#dc2626",background:"#fef2f2",border:"1px solid #fecaca",padding:"3px 8px",borderRadius:"4px",marginTop:"5px",display:"inline-block",fontWeight:"600"}}>⚠ {p.issues[0]}</div>}
+        <div className="pcard-action">
+          <div className="pcard-action-text">
+            <span className="pcard-action-label">{primaryAction.label}</span>
+            <span className="pcard-action-detail">{primaryAction.detail}</span>
+          </div>
+          <button
+            className="pcard-action-btn"
+            style={{background:primaryAction.bg,borderColor:primaryAction.border,color:primaryAction.color}}
+            onClick={event=>{
+              event.stopPropagation();
+              runPrimaryAction(p);
+            }}
+          >
+            바로 처리
+          </button>
+        </div>
       </div>
     );
   };
@@ -240,8 +363,9 @@ function CommandCenter({onBack}) {
   const LRow = ({p}) => {
     const isSel = selProp?.id === p.id;
     const isBulk = bulkSel.includes(p.id);
+    const primaryAction = getPrimaryAction(p);
     return (
-      <div className={`lrow ${p.priority} ${isSel ? "sel" : ""}`} onClick={()=>{setSelProp(p); setDTab("info"); setChat([]);}}>
+      <div className={`lrow ${p.priority} ${isSel ? "sel" : ""}`} onClick={()=>focusProperty(p, "info")}>
         <div
           style={{width:"16px",height:"16px",borderRadius:"4px",border:`1.5px solid ${isBulk?"#2563eb":"#e2e8f0"}`,background:isBulk?"#eff6ff":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"10px",color:"#2563eb",cursor:"pointer",flexShrink:0}}
           onClick={e=>{e.stopPropagation(); setBulkSel(list=>isBulk ? list.filter(id=>id!==p.id) : [...list, p.id]);}}
@@ -258,6 +382,16 @@ function CommandCenter({onBack}) {
         <div style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#718096",whiteSpace:"nowrap"}}>🌡{p.temp}° ★{p.rating}</div>
         <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#059669",fontWeight:"600",whiteSpace:"nowrap",minWidth:"45px"}}>{(p.revenue / 10000).toFixed(0)}만</div>
         <div style={{display:"flex",gap:"3px"}}>{p.issues.length>0 && <span style={{fontSize:"11px"}}>⚠️</span>}{p.unreadMsg>0 && <span style={{fontSize:"10px",background:"#2563eb",color:"#fff",borderRadius:"8px",padding:"0 5px",fontWeight:"700",fontFamily:"'DM Mono',monospace"}}>{p.unreadMsg}</span>}</div>
+        <button
+          className="cc-inline-action"
+          style={{background:primaryAction.bg,borderColor:primaryAction.border,color:primaryAction.color}}
+          onClick={event=>{
+            event.stopPropagation();
+            runPrimaryAction(p);
+          }}
+        >
+          {primaryAction.label}
+        </button>
       </div>
     );
   };
@@ -583,6 +717,20 @@ function CommandCenter({onBack}) {
                   })}
                 </div>
 
+                {leadAlert && (
+                  <div className="cc-priority-banner">
+                    <div className="cc-priority-copy">
+                      <span className="cc-priority-chip">지금 가장 급한 알림</span>
+                      <div className="cc-priority-title">{leadAlert.prop}</div>
+                      <div className="cc-priority-desc">{leadAlert.msg} · {leadAlert.time}</div>
+                    </div>
+                    <div className="cc-priority-actions">
+                      <button className="cc-banner-btn" onClick={()=>setView("alerts")}>알림 패널 열기</button>
+                      <button className="cc-banner-btn cc-banner-btn-strong" onClick={()=>Toast.show("긴급 대응 큐를 상단에 고정했습니다.", "i")}>즉시 대응 큐 보기</button>
+                    </div>
+                  </div>
+                )}
+
                 {currentStage.desc && (
                   <div className="stage-bar">
                     <div className="stage-bar-desc">{currentStage.desc}</div>
@@ -593,6 +741,49 @@ function CommandCenter({onBack}) {
                     )}
                   </div>
                 )}
+
+                <div className="cc-stage-overview">
+                  {stageOverviewCards.map(card=>(
+                    <div key={card.label} className="cc-stage-card" style={{background:card.tone.bg,borderColor:card.tone.border}}>
+                      <div className="cc-stage-card-head">
+                        <span>{card.label}</span>
+                        <strong style={{color:card.tone.text}}>{card.value}</strong>
+                      </div>
+                      <div className="cc-stage-card-desc">{card.desc}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="cc-action-queue">
+                  <div className="cc-section-header">
+                    <div>
+                      <div className="cc-section-eyebrow">즉시 대응 큐</div>
+                      <div className="cc-section-title">{currentStage.label}에서 지금 먼저 처리할 숙소</div>
+                    </div>
+                    <div className="cc-section-meta">긴급도와 현재 단계 기준으로 상위 {stageActionQueue.length}개를 먼저 보여줘요.</div>
+                  </div>
+                  <div className="cc-queue-grid">
+                    {stageActionQueue.map(({prop, action})=>(
+                      <button key={prop.id} className="cc-queue-card" onClick={()=>focusProperty(prop, action.tab)}>
+                        <div className="cc-queue-top">
+                          <span className="badge-sm" style={{background:SC[prop.status]+"18",color:SC[prop.status],border:`1px solid ${SC[prop.status]}44`}}>{prop.status}</span>
+                          <span className="cc-queue-priority" style={{color:action.color}}>{action.label}</span>
+                        </div>
+                        <div className="cc-queue-name">{prop.name}</div>
+                        <div className="cc-queue-detail">{action.detail}</div>
+                        <div className="cc-queue-meta">
+                          <span>{prop.guest || "게스트 없음"}</span>
+                          <span>미읽음 {prop.unreadMsg}</span>
+                          <span>이슈 {prop.issues.length}</span>
+                        </div>
+                        <div className="cc-queue-footer">
+                          <span>상세 열기</span>
+                          <span>→</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
                 <div className="toolbar">
                   <input className="srch" placeholder="숙소 검색..." value={search} onChange={e=>setSearch(e.target.value)} />
