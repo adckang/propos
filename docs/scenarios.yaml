@@ -9,8 +9,8 @@ system_pages:
     screen_key: ha
     title: 홈 어시스턴트
     component: src/components/HomeAssistant.jsx
-    primary_user: 단일 숙소를 상세 운영하는 관리자
-    purpose: 한 숙소의 시나리오 1~5를 시간축으로 따라가며 상태를 파악하고 직접 제어한다.
+    primary_user: 대표 숙소 1곳을 끝까지 해결하는 관리자
+    purpose: 한 숙소의 시나리오 1~5를 시간축으로 따라가며 현재 단계, 멈춘 지점, 즉시 제어 액션을 한 화면에서 해결한다.
     stage_coverage:
       - S01
       - S02
@@ -27,7 +27,7 @@ system_pages:
     title: 커맨드 센터
     component: src/components/CommandCenter.jsx
     primary_user: 100개 이상 숙소를 동시에 운영하는 관리자
-    purpose: 1~5 시나리오를 공통 시간축으로 삼아 예외 숙소를 먼저 발견하고 우선순위대로 대응한다.
+    purpose: 1~5 시나리오를 공통 시간축으로 삼아 예외 숙소를 먼저 발견하고, 우선순위를 정한 뒤 상세 패널로 내려가 대응한다.
     stage_coverage:
       - S01
       - S02

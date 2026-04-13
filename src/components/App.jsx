@@ -24,6 +24,26 @@ function App() {
   const urgentCount = ALL_PROPS.filter((prop) => prop.priority === "HIGH").length;
   const unreadCount = ALL_PROPS.reduce((sum, prop) => sum + prop.unreadMsg, 0);
   const checkoutRiskCount = ALL_PROPS.filter((prop) => prop.status === "청소중" || prop.issues.length > 0).length;
+  const workflowGuides = [
+    {
+      step: "1",
+      title: "전체에서 예외 찾기",
+      desc: "긴급 숙소, 병목 단계, 미응답 메시지를 먼저 찾습니다.",
+      tone: { bg: "#eff6ff", border: "#bfdbfe", text: "#2563eb" },
+    },
+    {
+      step: "2",
+      title: "대표 숙소 해결",
+      desc: "한 숙소의 현재 단계와 멈춘 지점을 확인하고 바로 제어합니다.",
+      tone: { bg: "#f5f3ff", border: "#ddd6fe", text: "#7c3aed" },
+    },
+    {
+      step: "3",
+      title: "단계별 상세 처리",
+      desc: "체크인, 모니터링, 청소, 정산 패널에서 깊게 처리합니다.",
+      tone: { bg: "#fffbeb", border: "#fde68a", text: "#d97706" },
+    },
+  ];
   const nextActionCards = [
     {
       title: "지금 대응",
@@ -67,11 +87,21 @@ function App() {
 
   if(screen==="ha") return (
     <div className="app" style={{fontFamily:"'DM Sans',sans-serif"}}>
-      <HomeAssistant onBack={()=>setScreen("landing")} />
+      <HomeAssistant
+        onBack={()=>setScreen("landing")}
+        onOpenScenario={setScreen}
+        onOpenCommandCenter={()=>setScreen("cc")}
+      />
     </div>
   );
 
-  if(screen==="cc") return <CommandCenter onBack={()=>setScreen("landing")} />;
+  if(screen==="cc") return (
+    <CommandCenter
+      onBack={()=>setScreen("landing")}
+      onOpenScenario={setScreen}
+      onOpenHomeAssistant={()=>setScreen("ha")}
+    />
+  );
 
   if(screen==="d1") return (
     <div className="app" style={{fontFamily:"'DM Sans',sans-serif"}}>
@@ -118,16 +148,28 @@ function App() {
           <div className="land-ops-hero">
             <div>
               <div className="land-section-label" style={{marginBottom:10}}>현재 상태 대시보드</div>
-              <div className="land-ops-title">지금 먼저 볼 것은 긴급 {urgentCount}건이에요</div>
+              <div className="land-ops-title">전체에서 예외를 찾고, 숙소 하나는 바로 해결하면 됩니다</div>
               <div className="land-ops-desc">
-                체크인 대기 {reservedCount}곳, 입실 중 {occupiedCount}곳, 청소 중 {cleaningCount}곳을 한 흐름으로 보면서
-                예외 숙소부터 바로 처리할 수 있게 구성했습니다.
+                커맨드 센터는 100개 숙소 전체에서 우선순위를 잡는 화면이고, 홈 어시스턴트는 대표 숙소 1곳을 끝까지 해결하는 화면입니다.
+                지금은 긴급 {urgentCount}건, 체크인 준비 {reservedCount}곳, 청소 흐름 {checkoutRiskCount}곳을 먼저 보면 됩니다.
               </div>
             </div>
             <div className="land-ops-cta">
               <button className="land-primary-btn" onClick={()=>setScreen("cc")}>커맨드 센터 열기</button>
               <button className="land-secondary-btn" onClick={()=>setScreen("ha")}>대표 숙소 상세 보기</button>
             </div>
+          </div>
+
+          <div className="land-flow-grid">
+            {workflowGuides.map((item)=>(
+              <div key={item.step} className="land-flow-card" style={{background:item.tone.bg,borderColor:item.tone.border}}>
+                <div className="land-flow-head">
+                  <span className="land-flow-step" style={{color:item.tone.text}}>STEP {item.step}</span>
+                  <span className="land-flow-title">{item.title}</span>
+                </div>
+                <div className="land-flow-desc">{item.desc}</div>
+              </div>
+            ))}
           </div>
 
           <div className="land-status-grid">
@@ -160,18 +202,18 @@ function App() {
         </div>
 
         <div style={{animation:"slideIn 0.35s ease 0.1s both",width:"100%",maxWidth:1080,marginBottom:28}}>
-          <div className="land-section-label">운영 화면</div>
+          <div className="land-section-label">운영 모드 선택</div>
           <div style={{display:"flex",gap:16}}>
             <div className="land-tool-card" style={{flex:1}} onClick={()=>setScreen("cc")}>
               <span className="land-tool-icon">🛰️</span>
               <div className="land-tool-title">커맨드 센터</div>
-              <div className="land-tool-desc">예외 숙소 우선 발견 · 긴급 액션 바로 실행<br />실시간 알림 · 단계별 병목 확인 · 일괄 제어</div>
-              <div className="land-tool-badge">지금 가장 먼저 봐야 하는 화면 →</div>
+              <div className="land-tool-desc">100개 숙소를 한눈에 보고 싶을 때 여는 화면입니다.<br />지금 가장 위험한 숙소, 막힌 단계, 한 번에 처리할 액션을 먼저 보여줍니다.</div>
+              <div className="land-tool-badge">권장 시작 화면 →</div>
             </div>
             <div className="land-tool-card" style={{flex:1}} onClick={()=>setScreen("ha")}>
               <span className="land-tool-icon">🏠</span>
               <div className="land-tool-title">홈 어시스턴트</div>
-              <div className="land-tool-desc">개별 숙소의 시간축 운영 화면<br />현재 단계 · 멈춘 지점 · 바로 할 액션 확인</div>
+              <div className="land-tool-desc">대표 숙소 1곳을 끝까지 해결할 때 여는 화면입니다.<br />현재 단계, 멈춘 지점, 현장 제어를 숙소 기준으로 묶어 보여줍니다.</div>
               <div className="land-tool-badge">단일 숙소 해결 화면 →</div>
             </div>
           </div>

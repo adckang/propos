@@ -77,7 +77,7 @@ const CC_STAGES = [
   },
 ];
 
-function CommandCenter({onBack}) {
+function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant}) {
   const [stage, setStage] = useState("all");
   const [view, setView] = useState("command");
   const [props, setProps] = useState(ALL_PROPS);
@@ -153,6 +153,46 @@ function CommandCenter({onBack}) {
   const totalRev = props.reduce((sum, prop)=>sum + prop.revenue, 0);
   const unack = alerts.filter(alert=>!alert.ack).length;
   const occ = Math.round((occupied / props.length) * 100);
+  const stageInsights = CC_STAGES.filter(item=>item.id!=="all").map(item=>{
+    const count = props.filter(item.filter).length;
+    const urgent = props.filter(item.filter).filter(prop=>prop.priority==="HIGH" || prop.issues.length > 0).length;
+    return {
+      id: item.id,
+      label: item.label,
+      count,
+      urgent,
+      score: urgent * 3 + count,
+    };
+  });
+  const bottleneckStage = [...stageInsights].sort((a, b)=>b.score - a.score)[0];
+  const stageDrilldownMap = {
+    d1: { screen: "d1", label: "D-1 상세 열기" },
+    occupied: { screen: "ha", label: "대표 숙소 해결 화면" },
+    monitoring: { screen: "s03", label: "모니터링 상세 열기" },
+    checkout: { screen: "s04", label: "퇴실·청소 상세 열기" },
+    settlement: { screen: "s05", label: "정산 상세 열기" },
+  };
+  const currentDrilldown = stageDrilldownMap[stage] || null;
+  const commandBriefCards = [
+    {
+      label: "운영 원칙",
+      value: "예외 먼저",
+      desc: "여기서는 전체 예외 숙소를 찾고, 상세 처리는 단계 패널이나 대표 숙소 화면으로 내려갑니다.",
+      tone: { bg: "#eff6ff", border: "#bfdbfe", text: "#2563eb" },
+    },
+    {
+      label: "가장 막힌 단계",
+      value: bottleneckStage ? bottleneckStage.label : "대기",
+      desc: bottleneckStage ? `긴급 ${bottleneckStage.urgent}건 · 전체 ${bottleneckStage.count}곳에 영향` : "현재 큰 병목이 없습니다.",
+      tone: { bg: "#fff7ed", border: "#fed7aa", text: "#c2410c" },
+    },
+    {
+      label: "바로 열기",
+      value: currentDrilldown ? currentDrilldown.label : "대표 숙소 해결",
+      desc: currentDrilldown ? "현재 선택한 단계의 상세 패널로 바로 이동합니다." : "대표 숙소 흐름 화면으로 이동합니다.",
+      tone: { bg: "#f5f3ff", border: "#ddd6fe", text: "#7c3aed" },
+    },
+  ];
 
   const getPrimaryAction = prop => {
     if(prop.priority==="HIGH" || prop.issues.length > 0){
@@ -664,7 +704,7 @@ function CommandCenter({onBack}) {
         <button onClick={onBack} style={{padding:"6px 16px",borderRadius:8,border:"1.5px solid #e2e8f0",background:"#f8fafc",color:"#475569",fontSize:13,fontWeight:600,cursor:"pointer",flexShrink:0,fontFamily:"'DM Sans',sans-serif"}}>← 뒤로</button>
         <div style={{width:"1px",height:"26px",background:"#e2e8f0",flexShrink:0}} />
         <div style={{fontFamily:"'Nunito',sans-serif",fontSize:"17px",fontWeight:"800",color:"#2563eb",whiteSpace:"nowrap",letterSpacing:"-0.5px"}}>PROP<span style={{color:"#dc2626"}}>OS</span></div>
-        <div style={{fontSize:"11px",color:"#94a3b8",fontWeight:500,whiteSpace:"nowrap",paddingTop:1}}>전체 관제 센터</div>
+        <div style={{fontSize:"11px",color:"#94a3b8",fontWeight:500,whiteSpace:"nowrap",paddingTop:1}}>전체 관제 센터 · 100개 숙소 우선순위 대응</div>
         <div style={{width:"1px",height:"26px",background:"#e2e8f0",flexShrink:0}} />
         <div style={{fontFamily:"'DM Mono',monospace",fontSize:"13px",color:"#475569",fontWeight:"600",flexShrink:0}}>{now.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</div>
         <div style={{width:"1px",height:"26px",background:"#e2e8f0",flexShrink:0}} />
@@ -674,6 +714,7 @@ function CommandCenter({onBack}) {
           ))}
         </div>
         <div style={{display:"flex",gap:"8px",alignItems:"center",marginLeft:"auto",flexShrink:0}}>
+          <button onClick={()=>onOpenHomeAssistant?.()} style={{padding:"7px 14px",borderRadius:8,background:"#ffffff",border:"1.5px solid #e2e8f0",color:"#475569",fontSize:"12px",fontWeight:"700",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>🏠 대표 숙소 보기</button>
           {bulkSel.length>0 && (
             <div style={{fontSize:"11px",color:"#2563eb",fontFamily:"'DM Mono',monospace",border:"1px solid #bfdbfe",padding:"4px 10px",borderRadius:"20px",background:"#eff6ff",fontWeight:"600"}}>
               {bulkSel.length}개 선택 <span style={{cursor:"pointer",color:"#dc2626",marginLeft:"4px"}} onClick={()=>setBulkSel([])}>×</span>
@@ -701,6 +742,27 @@ function CommandCenter({onBack}) {
           {view==="command" && (
             <>
               <div className="prop-panel">
+                <div className="cc-brief-grid">
+                  {commandBriefCards.map(card=>(
+                    <div key={card.label} className="cc-brief-card" style={{background:card.tone.bg,borderColor:card.tone.border}}>
+                      <div className="cc-brief-label">{card.label}</div>
+                      <div className="cc-brief-value" style={{color:card.tone.text}}>{card.value}</div>
+                      <div className="cc-brief-desc">{card.desc}</div>
+                    </div>
+                  ))}
+                  <div className="cc-brief-card" style={{background:"#ffffff",borderColor:"#e2e8f0"}}>
+                    <div className="cc-brief-label">빠른 이동</div>
+                    <div className="cc-brief-value" style={{color:"#1e293b"}}>{currentStage.label}</div>
+                    <div className="cc-brief-desc">전체에서 찾고, 상세는 단계 패널이나 대표 숙소 화면에서 끝내세요.</div>
+                    <div className="cc-brief-actions">
+                      {currentDrilldown && (
+                        <button className="cc-brief-btn cc-brief-btn-strong" onClick={()=>onOpenScenario?.(currentDrilldown.screen)}>{currentDrilldown.label}</button>
+                      )}
+                      <button className="cc-brief-btn" onClick={()=>onOpenHomeAssistant?.()}>홈 어시스턴트 열기</button>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="pipeline-wrap">
                   {CC_STAGES.map(item=>{
                     const count = item.id==="all" ? props.length : props.filter(item.filter).length;
@@ -734,11 +796,18 @@ function CommandCenter({onBack}) {
                 {currentStage.desc && (
                   <div className="stage-bar">
                     <div className="stage-bar-desc">{currentStage.desc}</div>
-                    {currentStage.action && (
-                      <button className="stage-action-btn" style={{background:currentStage.bg,borderColor:currentStage.color,color:currentStage.color}} onClick={()=>Toast.show(`${currentStage.action} 실행 중...`, "s")}>
-                        {currentStage.action}
-                      </button>
-                    )}
+                    <div className="stage-bar-actions">
+                      {currentDrilldown && (
+                        <button className="stage-action-btn" style={{background:"#ffffff",borderColor:"#cbd5e0",color:"#475569"}} onClick={()=>onOpenScenario?.(currentDrilldown.screen)}>
+                          {currentDrilldown.label}
+                        </button>
+                      )}
+                      {currentStage.action && (
+                        <button className="stage-action-btn" style={{background:currentStage.bg,borderColor:currentStage.color,color:currentStage.color}} onClick={()=>Toast.show(`${currentStage.action} 실행 중...`, "s")}>
+                          {currentStage.action}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
 

@@ -8,7 +8,7 @@ import Toast from "../utils/toast";
 // 시나리오 1~5를 한 축으로 재구성한 운영 화면
 // ============================================================
 
-function HomeAssistant({onBack}) {
+function HomeAssistant({onBack, onOpenScenario, onOpenCommandCenter}) {
   const [devs, setDevs] = useState(DEVICES_INIT);
   const [msgs, setMsgs] = useState([
     {id:1,from:"guest",text:"체크아웃 11시 맞죠?",time:"09:42"},
@@ -139,23 +139,44 @@ function HomeAssistant({onBack}) {
   };
   const currentGuide = stageGuides[haStage];
   const currentEvents = stageEvents[haStage];
+  const stageScreenMap = {
+    d1: "d1",
+    checkin: "s02",
+    stay: "s03",
+    checkout: "s04",
+    revenue: "s05",
+  };
+  const immediateActionMeta = {
+    d1: { value: "PIN 재확인", desc: "체크인 전 자동화 마지막 점검" },
+    checkin: { value: "입실 로그", desc: "씬 실행과 메시지 발송 재확인" },
+    stay: disconnectedDevices > 0
+      ? { value: `기기 ${disconnectedDevices}대`, desc: "연결 끊긴 장치부터 확인" }
+      : { value: `대화 ${msgs.length}건`, desc: "최근 게스트 응답 흐름 점검" },
+    checkout: { value: "청소 마감", desc: "퇴실 뒤 준비 완료 전환" },
+    revenue: { value: "순수익 검토", desc: "비용 누락 없이 정산 확인" },
+  };
+  const nextTransitionMeta = haStage === "revenue"
+    ? { value: "다음 예약 준비", desc: "정산 확인 뒤 다음 가격 판단" }
+    : haStage === "checkout"
+    ? { value: "정산 전환", desc: "청소 완료 후 수익 정리 단계" }
+    : { value: checkoutClock, desc: "다음 퇴실 전환까지 남은 시간" };
   const snapshotCards = [
     {
-      label:"기기 연결",
-      value:`${connectedDevices}/${devs.length}`,
-      desc: disconnectedDevices===0 ? "모든 기기가 연결 중" : `${disconnectedDevices}대 확인 필요`,
-      tone:{bg:"#eff6ff", border:"#bfdbfe", text:"#2563eb"},
+      label:"현재 단계",
+      value:currentStage.label,
+      desc: currentStage.sub,
+      tone:{bg:"#eff6ff", border:"#bfdbfe", text:currentStage.color},
     },
     {
-      label:"게스트 대화",
-      value:`${msgs.length}건`,
-      desc:"최근 문의 흐름을 바로 볼 수 있어요.",
+      label:"바로 처리할 일",
+      value:immediateActionMeta[haStage].value,
+      desc:immediateActionMeta[haStage].desc,
       tone:{bg:"#f5f3ff", border:"#ddd6fe", text:"#7c3aed"},
     },
     {
-      label:"체크아웃까지",
-      value:checkoutClock,
-      desc:"다음 운영 전환 시점을 알려줘요.",
+      label:"다음 전환",
+      value:nextTransitionMeta.value,
+      desc:nextTransitionMeta.desc,
       tone:{bg:"#fffbeb", border:"#fde68a", text:"#d97706"},
     },
   ];
@@ -182,6 +203,7 @@ function HomeAssistant({onBack}) {
           {onBack && <div style={{width:1,height:24,background:"#e2e8f0",flexShrink:0}} />}
           <span style={{fontSize:22,flexShrink:0}}>{SINGLE_PROP.emoji || "🏠"}</span>
           <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:10,color:"#94a3b8",fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4}}>홈 어시스턴트 · 대표 숙소 해결 보드</div>
             <div style={{fontWeight:800,fontSize:17,color:"#1e293b",lineHeight:1.2}}>{SINGLE_PROP.name}</div>
             <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{SINGLE_PROP.address}</div>
           </div>
@@ -237,6 +259,18 @@ function HomeAssistant({onBack}) {
       </div>
 
       <div className="ha-content">
+        <div className="ha-role-strip">
+          <div className="ha-role-copy">
+            <div className="ha-role-eyebrow">이 화면의 역할</div>
+            <div className="ha-role-title">대표 숙소 1곳의 현재 단계와 멈춘 지점을 바로 해결하는 곳입니다.</div>
+            <div className="ha-role-desc">전체 우선순위는 커맨드 센터에서 보고, 여기서는 이 숙소 하나의 제어와 후속 작업만 빠르게 끝내는 데 집중합니다.</div>
+          </div>
+          <div className="ha-role-actions">
+            <button className="ha-role-btn ha-role-btn-strong" onClick={()=>onOpenScenario?.(stageScreenMap[haStage])}>이 단계 상세 패널 열기</button>
+            <button className="ha-role-btn" onClick={()=>onOpenCommandCenter?.()}>전체 관제 보기</button>
+          </div>
+        </div>
+
         <div className="ha-stage-header">
           <span className="ha-stage-icon">{currentStage.emoji}</span>
           <div className="ha-stage-title" style={{color:currentStage.color}}>{currentStage.label}</div>
