@@ -508,7 +508,57 @@ function S04CheckoutPanel({ onBack }) {
   }, [haMode, selectedProp]);
 
   const errorCount = alerts.filter(a => a.type === 'error').length;
+  const warnCount = alerts.filter(a => a.type === 'warn').length;
   const infoCount  = alerts.filter(a => a.type === 'info').length;
+  const occupiedProps = _S04_PROPS.filter(prop => (propStatuses[prop.propId] || 'occupied') === 'occupied');
+  const cleaningProps = _S04_PROPS.filter(prop => (propStatuses[prop.propId] || 'occupied') === 'cleaning');
+  const readyProps = _S04_PROPS.filter(prop => (propStatuses[prop.propId] || 'occupied') === 'vacant');
+  const assignedCount = Object.keys(assignments).length;
+  const activeChecklistCount = Object.values(checklists).filter(items =>
+    Array.isArray(items) && items.some(item => !item.done)
+  ).length;
+  const nextOccupiedProp = occupiedProps.find(prop => prop.propId !== selectedProp) || occupiedProps[0] || null;
+  const firstPendingItem = currentItems?.find(item => !item.done) || null;
+  const latestAlert = alerts[0] || null;
+  const focusTone = errorCount > 0
+    ? { bg:'#fef2f2', border:'#fecaca', text:'#dc2626' }
+    : warnCount > 0
+    ? { bg:'#fffbeb', border:'#fde68a', text:'#d97706' }
+    : currentStatus === 'occupied'
+    ? { bg:'#fff7ed', border:'#fed7aa', text:'#c2410c' }
+    : currentStatus === 'cleaning'
+    ? { bg:'#eff6ff', border:'#bfdbfe', text:'#2563eb' }
+    : { bg:'#ecfdf5', border:'#a7f3d0', text:'#059669' };
+  const focusTitle = errorCount > 0
+    ? `긴급 알림 ${errorCount}건부터 처리해야 합니다.`
+    : warnCount > 0
+    ? `청소 진행 중 경고 ${warnCount}건을 먼저 확인하세요.`
+    : currentStatus === 'occupied'
+    ? `${currentBooking?.propName}의 퇴실 감지를 먼저 확인하세요.`
+    : currentStatus === 'cleaning'
+    ? `${currentBooking?.propName} 청소 마감만 끝나면 다음 예약 준비가 끝납니다.`
+    : occupiedProps.length > 0
+    ? `준비 완료된 숙소는 ${readyProps.length}곳이고, 다음 퇴실 대기는 ${occupiedProps.length}곳입니다.`
+    : '현재 선택 숙소는 다음 예약을 받을 준비가 끝났습니다.';
+  const focusDesc = errorCount > 0
+    ? 'PIN 만료, 청소 배정, 체크리스트 흐름 중 멈춘 지점을 알림 피드에서 바로 확인해 주세요.'
+    : warnCount > 0
+    ? '수동 확인이 필요한 경고가 남아 있습니다. 누락된 청소 단계나 예외 알림을 먼저 정리하는 편이 안전합니다.'
+    : currentStatus === 'occupied'
+    ? '퇴실 이벤트만 들어오면 PIN 만료와 청소팀 배정이 자동으로 이어집니다. 실제 운영에서는 이 첫 이벤트 확인이 가장 중요합니다.'
+    : currentStatus === 'cleaning'
+    ? firstPendingItem
+    ? `현재 남아 있는 다음 작업은 "${firstPendingItem.label}"입니다. 필수 항목이 모두 끝나면 숙소 상태가 바로 준비 완료로 바뀝니다.`
+    : '필수 청소 항목이 모두 끝났습니다. 마지막 완료 처리만 하면 숙소가 다시 판매 가능한 상태로 전환됩니다.'
+    : occupiedProps.length > 0
+    ? `지금은 ${readyProps.length}곳이 준비 완료 상태입니다. 다음으로는 ${nextOccupiedProp?.propName || occupiedProps[0]?.propName}의 퇴실 예정 흐름을 챙기면 됩니다.`
+    : '현재 예외나 미완료 작업이 없어서, 알림과 청소팀 상태만 가볍게 확인하면 됩니다.';
+  const summaryCards = [
+    { label:'퇴실 대기', value:`${occupiedProps.length}곳`, desc:'체크아웃 이벤트 확인 필요', tone:{ bg:'#fff7ed', border:'#fed7aa', text:'#c2410c' } },
+    { label:'청소 진행', value:`${cleaningProps.length}곳`, desc:'체크리스트 마감 대기', tone:{ bg:'#eff6ff', border:'#bfdbfe', text:'#2563eb' } },
+    { label:'청소 배정', value:`${assignedCount}건`, desc:'담당자 배정 완료', tone:{ bg:'#fefce8', border:'#fde68a', text:'#ca8a04' } },
+    { label:'준비 완료', value:`${readyProps.length}곳`, desc:'다음 예약 수용 가능', tone:{ bg:'#ecfdf5', border:'#a7f3d0', text:'#059669' } },
+  ];
 
   // HA 연결 상태 뱃지 텍스트
   const wsLabel = {
@@ -523,6 +573,14 @@ function S04CheckoutPanel({ onBack }) {
       <style>{`
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
         @keyframes spin   { from{transform:rotate(0)} to{transform:rotate(360deg)} }
+        .s04-top-grid { display:grid; grid-template-columns:1.7fr 1fr; gap:14px; margin-bottom:14px; }
+        .s04-summary-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; margin-bottom:14px; }
+        .s04-main-grid { display:grid; grid-template-columns:260px 1fr 340px; gap:20px; padding:6px 24px 24px; max-width:1400px; margin:0 auto; }
+        @media (max-width: 1180px) {
+          .s04-top-grid,
+          .s04-summary-grid,
+          .s04-main-grid { grid-template-columns:1fr; }
+        }
       `}</style>
 
       {/* 헤더 */}
@@ -536,10 +594,10 @@ function S04CheckoutPanel({ onBack }) {
 
         <div>
           <div style={{ fontWeight: 800, fontSize: 18, color: '#1e293b' }}>
-            UC-004 — 체크아웃 & 청소 자동화
+            퇴실 후 정리 현황
           </div>
           <div style={{ fontSize: 12, color: '#64748b' }}>
-            퇴실 감지 · PIN 즉시 만료 · 청소팀 자동 배정 · 체크리스트
+            퇴실 감지부터 PIN 만료, 청소 배정, 준비 완료까지 한 흐름으로 확인합니다.
           </div>
         </div>
 
@@ -589,8 +647,100 @@ function S04CheckoutPanel({ onBack }) {
         </div>
       </div>
 
+      <div style={{ padding: '18px 24px 0', background: '#f0f4f8' }}>
+        <div className="s04-top-grid">
+          <div style={{ background: focusTone.bg, border: `1.5px solid ${focusTone.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 10px 28px rgba(15,23,42,0.04)' }}>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 8 }}>지금 먼저 처리할 것</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: focusTone.text, lineHeight: 1.45, letterSpacing: '-0.3px' }}>{focusTitle}</div>
+            <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.7, marginTop: 8 }}>{focusDesc}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#475569', background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(226,232,240,0.9)', borderRadius: 999, padding: '6px 10px' }}>
+                선택 숙소 · {currentBooking?.propName}
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#475569', background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(226,232,240,0.9)', borderRadius: 999, padding: '6px 10px' }}>
+                미완료 체크리스트 {activeChecklistCount}건
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#475569', background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(226,232,240,0.9)', borderRadius: 999, padding: '6px 10px' }}>
+                알림 {alerts.length}건
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+              {currentStatus === 'occupied' ? (
+                <button
+                  onClick={() => handleCheckoutEvent('door_locked')}
+                  disabled={processing}
+                  style={{ padding: '10px 16px', borderRadius: 10, border: '1.5px solid #c2410c', background: processing ? '#ffedd5' : '#ea580c', color: processing ? '#9a3412' : '#ffffff', fontSize: 12, fontWeight: 700, cursor: processing ? 'default' : 'pointer' }}
+                >
+                  {processing ? '퇴실 처리 중' : '퇴실 이벤트 바로 확인'}
+                </button>
+              ) : currentStatus === 'cleaning' && firstPendingItem ? (
+                <button
+                  onClick={() => toggleChecklistItem(firstPendingItem.id)}
+                  style={{ padding: '10px 16px', borderRadius: 10, border: '1.5px solid #1d4ed8', background: '#2563eb', color: '#ffffff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  다음 청소 항목 처리
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (nextOccupiedProp) {
+                      setSelectedProp(nextOccupiedProp.propId);
+                    }
+                  }}
+                  disabled={!nextOccupiedProp}
+                  style={{ padding: '10px 16px', borderRadius: 10, border: '1.5px solid #059669', background: nextOccupiedProp ? '#16a34a' : '#dcfce7', color: nextOccupiedProp ? '#ffffff' : '#86efac', fontSize: 12, fontWeight: 700, cursor: nextOccupiedProp ? 'pointer' : 'default' }}
+                >
+                  다음 퇴실 예정 보기
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (latestAlert) {
+                    const target = _S04_PROPS.find(prop => prop.propName === latestAlert.prop || prop.propId === latestAlert.prop);
+                    if (target) {
+                      setSelectedProp(target.propId);
+                    }
+                  }
+                }}
+                disabled={!latestAlert}
+                style={{ padding: '10px 16px', borderRadius: 10, border: '1.5px solid #e2e8f0', background: '#ffffff', color: latestAlert ? '#475569' : '#94a3b8', fontSize: 12, fontWeight: 700, cursor: latestAlert ? 'pointer' : 'default' }}
+              >
+                최근 알림 보기
+              </button>
+            </div>
+          </div>
+
+          <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: 16, padding: '16px 18px' }}>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 10 }}>최근 예외 또는 메모</div>
+            {latestAlert ? (
+              <>
+                <div style={{ fontSize: 14, fontWeight: 800, color: latestAlert.type === 'error' ? '#dc2626' : latestAlert.type === 'warn' ? '#d97706' : '#1d4ed8', lineHeight: 1.5 }}>{latestAlert.prop}</div>
+                <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.65, marginTop: 6 }}>{latestAlert.msg}</div>
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 10, fontFamily: "'DM Mono',monospace" }}>{latestAlert.time}</div>
+              </>
+            ) : (
+              <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.7 }}>
+                큰 예외는 없습니다. 지금은 퇴실 대기 숙소와 청소팀 부하만 확인하면 운영 흐름이 안정적으로 유지됩니다.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="s04-summary-grid">
+          {summaryCards.map(card => (
+            <div key={card.label} style={{ background: card.tone.bg, border: `1.5px solid ${card.tone.border}`, borderRadius: 14, padding: '14px 16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#475569', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{card.label}</span>
+                <strong style={{ fontFamily: "'DM Mono',monospace", fontSize: 18, fontWeight: 800, color: card.tone.text }}>{card.value}</strong>
+              </div>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 10, lineHeight: 1.55 }}>{card.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* 메인 레이아웃 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr 340px', gap: 20, padding: 24, maxWidth: 1400, margin: '0 auto' }}>
+      <div className="s04-main-grid">
 
         {/* 왼쪽: 숙소 목록 */}
         <div>

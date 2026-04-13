@@ -504,9 +504,56 @@ function S05RevenuePanel({ onBack }) {
   }
 
   const allDone = steps.start && steps.data && steps.pricing && steps.tax;
+  const errorAlerts = alerts.filter(alert => alert.type === 'error');
+  const warnAlerts = alerts.filter(alert => alert.type === 'warn');
+  const focusTone = running
+    ? { bg:'#eff6ff', border:'#bfdbfe', text:'#2563eb' }
+    : errorAlerts.length > 0
+    ? { bg:'#fef2f2', border:'#fecaca', text:'#dc2626' }
+    : pricingData && selectedProps.length > 0
+    ? { bg:'#fff7ed', border:'#fed7aa', text:'#c2410c' }
+    : allDone
+    ? { bg:'#ecfdf5', border:'#a7f3d0', text:'#059669' }
+    : { bg:'#f8fafc', border:'#e2e8f0', text:'#475569' };
+  const focusTitle = running
+    ? `${month}월 정산이 진행 중입니다.`
+    : errorAlerts.length > 0
+    ? `정산 예외 ${errorAlerts.length}건을 먼저 확인해야 합니다.`
+    : pricingData && selectedProps.length > 0
+    ? `가격 추천 ${selectedProps.length}건을 검토하고 적용하세요.`
+    : allDone
+    ? `${month}월 정산이 완료되었습니다.`
+    : `${month}월 정산을 아직 시작하지 않았습니다.`;
+  const focusDesc = running
+    ? '플랫폼별 수익 수집, 가격 추천, 세금 리포트 생성이 순서대로 이어지고 있습니다. 진행 상태와 알림 패널을 함께 보면 멈춘 지점을 바로 찾을 수 있습니다.'
+    : errorAlerts.length > 0
+    ? '플랫폼 수집 실패나 적용 오류가 남아 있으면 결과를 신뢰하기 어렵습니다. 알림을 먼저 정리한 뒤 가격 적용 또는 리포트 확인으로 넘어가는 편이 안전합니다.'
+    : pricingData && selectedProps.length > 0
+    ? `현재 선택된 ${selectedProps.length}개 숙소에 대해 AI 추천 단가를 바로 적용할 수 있습니다. 추천 사유와 증가 폭을 보고 필요한 숙소만 골라 반영해도 됩니다.`
+    : allDone
+    ? '수익 집계와 세금 리포트가 모두 준비되었습니다. 이제 이번 달 결과를 확인하고 다음 달 가격 전략만 결정하면 됩니다.'
+    : '정산을 실행하면 플랫폼 수익 집계, AI 가격 최적화, 세금 리포트가 한 번에 이어집니다.';
+  const summaryCards = [
+    { label:'영업이익', value: revenueData ? _s05.won(revenueData.operatingProfit) : '대기', desc: revenueData ? '운영비 반영 후 기준' : '정산 실행 후 계산', tone:{ bg:'#ecfdf5', border:'#a7f3d0', text:'#059669' } },
+    { label:'추천 적용 대기', value: pricingData ? `${selectedProps.length}건` : '대기', desc: pricingData ? '검토 후 즉시 반영 가능' : 'AI 분석 전', tone:{ bg:'#fff7ed', border:'#fed7aa', text:'#c2410c' } },
+    { label:'세금 리포트', value: taxData ? '준비 완료' : '대기', desc: taxData ? '부가세·소득세 추정 포함' : '정산 완료 후 생성', tone:{ bg:'#eff6ff', border:'#bfdbfe', text:'#2563eb' } },
+    { label:'자동화 알림', value: `${alerts.length}건`, desc: errorAlerts.length > 0 ? '먼저 확인 필요' : warnAlerts.length > 0 ? '주의 알림 존재' : '현재 큰 예외 없음', tone:{ bg: errorAlerts.length > 0 ? '#fef2f2' : '#f8fafc', border: errorAlerts.length > 0 ? '#fecaca' : '#e2e8f0', text: errorAlerts.length > 0 ? '#dc2626' : '#475569' } },
+  ];
+  const latestAlert = alerts[0] || null;
 
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontFamily:"'DM Sans',sans-serif" }}>
+      <style>{`
+        .s05-top-grid { display:grid; grid-template-columns:1.7fr 1fr; gap:14px; margin-bottom:14px; }
+        .s05-summary-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; margin-bottom:14px; }
+        .s05-main-grid { flex:1; display:grid; grid-template-columns:260px 1fr 340px; gap:20px; padding:6px 20px 20px; overflow:hidden; }
+        @media (max-width: 1180px) {
+          .s05-top-grid,
+          .s05-summary-grid,
+          .s05-main-grid { grid-template-columns:1fr; }
+          .s05-main-grid { overflow:auto; }
+        }
+      `}</style>
 
       {/* 정산일 자동 트리거 배너 */}
       {autoBanner && !running && !allDone && (
@@ -524,8 +571,8 @@ function S05RevenuePanel({ onBack }) {
           <button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}>← 홈</button>
           <div style={{ width:1, height:22, background:'#e2e8f0' }} />
           <div>
-            <div style={{ fontWeight:800, fontSize:18, color:'#1e293b' }}>UC-005 — 수익 정산 자동화</div>
-            <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>멀티플랫폼 통합 · AI 가격 최적화 · 세금 리포트</div>
+            <div style={{ fontWeight:800, fontSize:18, color:'#1e293b' }}>이번 달 수익 정산</div>
+            <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>멀티플랫폼 수익 집계부터 가격 추천, 세금 리포트까지 한 번에 정리합니다.</div>
           </div>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
@@ -539,8 +586,72 @@ function S05RevenuePanel({ onBack }) {
         </div>
       </div>
 
+      <div style={{ padding:'18px 20px 0', background:'#f0f4f8', flexShrink:0 }}>
+        <div className="s05-top-grid">
+          <div style={{ background:focusTone.bg, border:`1.5px solid ${focusTone.border}`, borderRadius:16, padding:'18px 20px', boxShadow:'0 10px 28px rgba(15,23,42,0.04)' }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:8 }}>이번 달 정산에서 먼저 볼 것</div>
+            <div style={{ fontSize:20, fontWeight:800, color:focusTone.text, lineHeight:1.45, letterSpacing:'-0.3px' }}>{focusTitle}</div>
+            <div style={{ fontSize:13, color:'#64748b', lineHeight:1.7, marginTop:8 }}>{focusDesc}</div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:12 }}>
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
+                정산 기간 · {settlementPeriod.label}
+              </span>
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
+                시장 트렌드 · {marketTrend}
+              </span>
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
+                선택 추천 {selectedProps.length}건
+              </span>
+            </div>
+            <div style={{ display:'flex', gap:8, marginTop:14, flexWrap:'wrap' }}>
+              <button
+                onClick={running ? undefined : runSettlement}
+                disabled={running}
+                style={{ padding:'10px 16px', borderRadius:10, border:'1.5px solid #1d4ed8', background: running ? '#dbeafe' : '#2563eb', color: running ? '#2563eb' : '#fff', fontSize:12, fontWeight:700, cursor: running ? 'default' : 'pointer' }}
+              >
+                {running ? '정산 진행 중' : `${month}월 정산 다시 실행`}
+              </button>
+              <button
+                onClick={applyPricing}
+                disabled={applying || !pricingData || selectedProps.length === 0}
+                style={{ padding:'10px 16px', borderRadius:10, border:'1.5px solid #e2e8f0', background: applying || !pricingData || selectedProps.length === 0 ? '#f8fafc' : '#fff', color: applying || !pricingData || selectedProps.length === 0 ? '#94a3b8' : '#475569', fontSize:12, fontWeight:700, cursor: applying || !pricingData || selectedProps.length === 0 ? 'default' : 'pointer' }}
+              >
+                {applying ? '추천 적용 중' : '선택 추천 바로 적용'}
+              </button>
+            </div>
+          </div>
+
+          <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:16, padding:'16px 18px' }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:10 }}>최근 알림</div>
+            {latestAlert ? (
+              <>
+                <div style={{ fontSize:14, fontWeight:800, color:latestAlert.type === 'error' ? '#dc2626' : latestAlert.type === 'warn' ? '#d97706' : '#2563eb', lineHeight:1.5 }}>{latestAlert.msg.split("\n")[0]}</div>
+                <div style={{ fontSize:12, color:'#475569', lineHeight:1.65, marginTop:6, whiteSpace:'pre-line' }}>{latestAlert.msg}</div>
+                <div style={{ fontSize:11, color:'#94a3b8', marginTop:10, fontFamily:"'DM Mono',monospace" }}>{latestAlert.time}</div>
+              </>
+            ) : (
+              <div style={{ fontSize:12, color:'#64748b', lineHeight:1.7 }}>
+                정산 관련 알림이 아직 없습니다. 실행 후에는 플랫폼 수집 결과와 적용 상태가 여기에 차례대로 쌓입니다.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="s05-summary-grid">
+          {summaryCards.map(card => (
+            <div key={card.label} style={{ background:card.tone.bg, border:`1.5px solid ${card.tone.border}`, borderRadius:14, padding:'14px 16px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
+                <span style={{ fontSize:11, fontWeight:700, color:'#475569', letterSpacing:'0.05em', textTransform:'uppercase' }}>{card.label}</span>
+                <strong style={{ fontFamily:"'DM Mono',monospace", fontSize:18, fontWeight:800, color:card.tone.text }}>{card.value}</strong>
+              </div>
+              <div style={{ fontSize:12, color:'#64748b', marginTop:10, lineHeight:1.55 }}>{card.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* ── 본문 3열 ── */}
-      <div style={{ flex:1, display:'grid', gridTemplateColumns:'260px 1fr 340px', gap:20, padding:20, overflow:'hidden' }}>
+      <div className="s05-main-grid">
 
         {/* 좌측: 정산 설정 + 진행 상태 */}
         <div style={{ display:'flex', flexDirection:'column', gap:14, overflowY:'auto' }}>

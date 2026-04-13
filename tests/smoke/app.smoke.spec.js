@@ -80,13 +80,13 @@ test.describe("PROPOS smoke", () => {
     await returnButton().click();
 
     await landingStageCard("체크아웃 & 청소").click();
-    await expect(page.getByText("UC-004 — 체크아웃 & 청소 자동화")).toBeVisible();
-    await expect(page.getByText("퇴실 감지", { exact: true })).toBeVisible();
+    await expect(page.getByText("퇴실 후 정리 현황")).toBeVisible();
+    await expect(page.getByText("지금 먼저 처리할 것")).toBeVisible();
     await returnButton().click();
 
     await landingStageCard("수익 정산").click();
-    await expect(page.getByText("UC-005 — 수익 정산 자동화")).toBeVisible();
-    await expect(page.getByText("정산 설정")).toBeVisible();
+    await expect(page.getByText("이번 달 수익 정산")).toBeVisible();
+    await expect(page.getByText("이번 달 정산에서 먼저 볼 것")).toBeVisible();
     await returnButton().click();
 
     expect(pageErrors).toEqual([]);
