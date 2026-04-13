@@ -51,6 +51,12 @@ function makeDeps(overrides = {}) {
   };
 }
 
+async function runSuccessSettlement(overrides = {}) {
+  const deps = makeDeps(overrides);
+  const result = await runMonthlySettlement(makeParams(), deps);
+  return { deps, result };
+}
+
 // ============================================================
 // TC-F-055 ~ 079
 // ============================================================
@@ -108,6 +114,18 @@ describe('TC-F-055: runMonthlySettlement 전체 성공', () => {
     const result = await runMonthlySettlement(makeParams(), deps);
     assert.equal(result.error, null);
   });
+
+  test('반환값과 store가 서로 일치하고 핵심 수치가 내부적으로 정합적이다', async () => {
+    const { deps, result } = await runSuccessSettlement();
+
+    assert.deepEqual(result.revenueData, deps._store.revenueData);
+    assert.deepEqual(result.pricingData, deps._store.pricingData);
+    assert.deepEqual(result.taxData, deps._store.taxData);
+    assert.equal(result.steps.dataCollected, true);
+    assert.equal(result.steps.pricingOptimized, true);
+    assert.equal(result.steps.taxReported, true);
+    assert.ok(result.taxData.netAfterTax <= result.revenueData.operatingProfit);
+  });
 });
 
 describe('TC-F-056: runMonthlySettlement — 알림 순서 검증', () => {
@@ -144,6 +162,21 @@ describe('TC-F-056: runMonthlySettlement — 알림 순서 검증', () => {
     await runMonthlySettlement(makeParams(), deps);
     const found = deps._alerts.find(a => a.msg.includes('세금 리포트 생성 완료'));
     assert.ok(found, '세금 리포트 완료 알림 없음');
+  });
+
+  test('핵심 알림이 정산 시작 → 수익 집계 → AI 최적화 → 세금 리포트 순서로 누적된다', async () => {
+    const { deps } = await runSuccessSettlement();
+    const messages = deps._alerts.map(alert => alert.msg);
+
+    const startIndex = messages.findIndex(msg => msg.includes('정산 시작'));
+    const revenueIndex = messages.findIndex(msg => msg.includes('수익 데이터 수집 완료'));
+    const pricingIndex = messages.findIndex(msg => msg.includes('AI 가격 최적화 완료'));
+    const taxIndex = messages.findIndex(msg => msg.includes('세금 리포트 생성 완료'));
+
+    assert.ok(startIndex >= 0, '정산 시작 알림 없음');
+    assert.ok(revenueIndex > startIndex, '수익 집계 알림 순서 불일치');
+    assert.ok(pricingIndex > revenueIndex, 'AI 최적화 알림 순서 불일치');
+    assert.ok(taxIndex > pricingIndex, '세금 리포트 알림 순서 불일치');
   });
 });
 
@@ -216,6 +249,25 @@ describe('TC-F-058: runMonthlySettlement — 에어비앤비 API 3회 실패', (
     const warnAlerts = deps._alerts.filter(a => a.type === 'warn');
     assert.ok(warnAlerts.length >= 1, 'warn 알림 없음');
   });
+
+  test('실패 시 반환값과 store가 부분 생성 없이 일관되게 비어 있다', async () => {
+    const deps = makeDeps({
+      fetchAirbnb: async () => { throw new Error('503 Service Unavailable'); },
+    });
+    const result = await runMonthlySettlement(makeParams(), deps);
+
+    assert.equal(result.status, 'failed');
+    assert.equal(result.steps.dataCollected, false);
+    assert.equal(result.steps.pricingOptimized, false);
+    assert.equal(result.steps.taxReported, false);
+    assert.equal(result.revenueData, null);
+    assert.equal(result.pricingData, null);
+    assert.equal(result.taxData, null);
+    assert.equal(deps._store.revenueData, null);
+    assert.equal(deps._store.pricingData, null);
+    assert.equal(deps._store.taxData, null);
+    assert.ok(result.error.includes('에어비앤비 API 실패'));
+  });
 });
 
 describe('TC-F-059: runMonthlySettlement — params 누락', () => {
@@ -238,12 +290,17 @@ describe('TC-F-059: runMonthlySettlement — params 누락', () => {
 
 describe('TC-F-060: fetchWithRetry — 첫 번째 시도 성공', () => {
   test('데이터 반환됨', async () => {
+    let attempts = 0;
     const result = await fetchWithRetry(
-      async () => ({ value: 42 }),
+      async () => {
+        attempts++;
+        return { value: 42 };
+      },
       3,
       { platform: '에어비앤비', addAlert: () => {} },
     );
     assert.equal(result.value, 42);
+    assert.equal(attempts, 1);
   });
 
   test('알림 없음 (성공 시)', async () => {
@@ -284,20 +341,28 @@ describe('TC-F-061: fetchWithRetry — 1회 실패 후 성공', () => {
       3,
       { platform: '에어비앤비', addAlert: (a) => alerts.push(a) },
     );
+    assert.equal(attempts, 2);
     assert.equal(alerts.filter(a => a.type === 'warn').length, 1);
+    assert.ok(alerts[0].msg.includes('에어비앤비'));
+    assert.ok(alerts[0].msg.includes('1/3'));
   });
 });
 
 describe('TC-F-062: fetchWithRetry — 3회 모두 실패', () => {
   test('throw 발생', async () => {
+    let attempts = 0;
     await assert.rejects(
       () => fetchWithRetry(
-        async () => { throw new Error('API 다운'); },
+        async () => {
+          attempts++;
+          throw new Error('API 다운');
+        },
         3,
         { platform: '에어비앤비', addAlert: () => {} },
       ),
       /에어비앤비 API 실패/,
     );
+    assert.equal(attempts, 3);
   });
 
   test('error 알림 1개 생성됨', async () => {
@@ -322,6 +387,8 @@ describe('TC-F-062: fetchWithRetry — 3회 모두 실패', () => {
       );
     } catch (_) {}
     assert.equal(alerts.filter(a => a.type === 'warn').length, 2);
+    assert.ok(alerts.some(a => a.msg.includes('1/3')));
+    assert.ok(alerts.some(a => a.msg.includes('2/3')));
   });
 });
 
@@ -352,18 +419,23 @@ describe('TC-F-063: applyPricingRecommendations — 전체 적용 성공', () =>
     };
     await applyPricingRecommendations(['P-042'], RECOMMENDATIONS, deps);
     assert.ok(alerts.some(a => a.msg.includes('가격') && a.msg.includes('완료')));
+    assert.ok(alerts.some(a => a.type === 'info'));
   });
 
   test('propIds에 없는 숙소는 제외됨', async () => {
-    const applied_listings = [];
+    const airbnbListings = [];
+    const yanoljaListings = [];
     const deps = {
-      updateAirbnbPricing:  async (lst) => { applied_listings.push(...lst); },
-      updateYanoljaPricing: async () => {},
+      updateAirbnbPricing:  async (lst) => { airbnbListings.push(...lst); },
+      updateYanoljaPricing: async (lst) => { yanoljaListings.push(...lst); },
       addAlert: () => {},
     };
     await applyPricingRecommendations(['P-042'], RECOMMENDATIONS, deps);
-    assert.equal(applied_listings.length, 1);
-    assert.equal(applied_listings[0].propId, 'P-042');
+    assert.equal(airbnbListings.length, 1);
+    assert.equal(yanoljaListings.length, 1);
+    assert.equal(airbnbListings[0].propId, 'P-042');
+    assert.equal(airbnbListings[0].suggestedRate, 101_200);
+    assert.deepEqual(airbnbListings, yanoljaListings);
   });
 });
 
@@ -386,7 +458,8 @@ describe('TC-F-064: applyPricingRecommendations — 가격 업데이트 실패',
       addAlert: () => {},
     };
     const result = await applyPricingRecommendations(['P-042', 'P-043'], RECOMMENDATIONS, deps);
-    assert.ok(result.failed > 0);
+    assert.equal(result.applied, 0);
+    assert.equal(result.failed, 2);
   });
 });
 

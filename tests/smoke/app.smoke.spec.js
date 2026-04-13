@@ -4,6 +4,7 @@ test.describe("PROPOS smoke", () => {
   test("landing and key pages render without runtime errors", async ({ page }) => {
     const pageErrors = [];
     const consoleErrors = [];
+    const failedResponses = [];
     const returnButton = () => page.getByRole("button", { name: /← (홈|뒤로)/ }).first();
     const haStage = text => page.locator(".ha-step").filter({ hasText: text }).first();
     const ccStage = label => page.locator(".pipeline-card").filter({ hasText: label }).first();
@@ -21,9 +22,19 @@ test.describe("PROPOS smoke", () => {
       }
     });
 
+    page.on("response", response => {
+      const url = response.url();
+      const status = response.status();
+      if (status >= 500) {
+        failedResponses.push(`${status} ${url}`);
+      }
+    });
+
     await page.goto("/");
 
     await expect(page.getByText("에어비앤비 완전 관리 시스템")).toBeVisible();
+    await expect(page.getByText("홈 어시스턴트")).toBeVisible();
+    await expect(page.getByText("커맨드 센터")).toBeVisible();
 
     await page.getByText("홈 어시스턴트").first().click();
     await expect(page.getByText("해운대 오션뷰 펜트하우스")).toBeVisible();
@@ -35,6 +46,7 @@ test.describe("PROPOS smoke", () => {
     await haStage(/퇴실·청소\s*체크아웃 예정/).click();
     await expect(page.getByText("청소 체크리스트")).toBeVisible();
     await returnButton().click();
+    await expect(page.getByText("에어비앤비 완전 관리 시스템")).toBeVisible();
 
     await page.getByText("커맨드 센터").first().click();
     await expect(page.getByText("전체 관제 센터")).toBeVisible();
@@ -46,28 +58,35 @@ test.describe("PROPOS smoke", () => {
     await page.locator(".dtab").filter({ hasText: "IoT" }).click();
     await expect(page.getByText("IoT 디바이스")).toBeVisible();
     await returnButton().click();
+    await expect(page.getByText("에어비앤비 완전 관리 시스템")).toBeVisible();
 
     await page.getByText("D-1 자동화").first().click();
     await expect(page.getByText("D-1 체크인 전날 자동화").first()).toBeVisible();
+    await expect(page.getByText("자동 실행")).toBeVisible();
     await returnButton().click();
 
     await page.getByText("체크인 당일").first().click();
     await expect(page.getByText("UC-002 — 체크인 당일 자동화")).toBeVisible();
+    await expect(page.getByText("도어락 열림 감지")).toBeVisible();
     await returnButton().click();
 
     await page.getByText("체류 중 모니터링").first().click();
     await expect(page.getByText("UC-003 — 체류 중 실시간 모니터링")).toBeVisible();
+    await expect(page.getByRole("button", { name: /폴링 시작/ })).toBeVisible();
     await returnButton().click();
 
     await page.getByText("체크아웃 & 청소").first().click();
     await expect(page.getByText("UC-004 — 체크아웃 & 청소 자동화")).toBeVisible();
+    await expect(page.getByText("퇴실 감지", { exact: true })).toBeVisible();
     await returnButton().click();
 
     await page.getByText("수익 정산").first().click();
     await expect(page.getByText("UC-005 — 수익 정산 자동화")).toBeVisible();
+    await expect(page.getByText("정산 설정")).toBeVisible();
     await returnButton().click();
 
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);
+    expect(failedResponses).toEqual([]);
   });
 });

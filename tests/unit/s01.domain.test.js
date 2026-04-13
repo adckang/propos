@@ -4,6 +4,10 @@ import assert from "node:assert/strict";
 import { filterTomorrowCheckIns } from "../../src/domain/bookingDomain.js";
 import { generatePIN, calcExpiry } from "../../src/domain/pinDomain.js";
 import { buildWelcomeMessage } from "../../src/domain/messageDomain.js";
+import {
+  makeCheckinBooking,
+  makeSecondaryCheckinBooking,
+} from "../helpers/checkinFixtures.js";
 
 // ============================================================
 // bookingDomain
@@ -11,11 +15,30 @@ import { buildWelcomeMessage } from "../../src/domain/messageDomain.js";
 describe('bookingDomain.filterTomorrowCheckIns', () => {
 
   const BOOKINGS = [
-    { propId: 'P-001', guestName: '김민준', checkIn: '2026-03-28T15:00:00', checkOut: '2026-03-30T11:00:00', status: 'confirmed', pinRequired: true },
-    { propId: 'P-002', guestName: '이수진', checkIn: '2026-03-28T14:00:00', checkOut: '2026-03-29T11:00:00', status: 'confirmed', pinRequired: true },
-    { propId: 'P-003', guestName: '박지호', checkIn: '2026-03-28T16:00:00', checkOut: '2026-03-31T11:00:00', status: 'pending',   pinRequired: true },
-    { propId: 'P-004', guestName: '최유나', checkIn: '2026-03-29T15:00:00', checkOut: '2026-03-31T11:00:00', status: 'confirmed', pinRequired: true },
-    { propId: 'P-005', guestName: '정민서', checkIn: '2026-03-27T15:00:00', checkOut: '2026-03-28T11:00:00', status: 'confirmed', pinRequired: true },
+    makeCheckinBooking({ propId: "P-001" }),
+    makeSecondaryCheckinBooking({ propId: "P-002" }),
+    makeCheckinBooking({
+      propId: "P-003",
+      guestName: "박지호",
+      guestId: "guest_003",
+      checkIn: "2026-03-28T16:00:00",
+      checkOut: "2026-03-31T11:00:00",
+      status: "pending",
+    }),
+    makeCheckinBooking({
+      propId: "P-004",
+      guestName: "최유나",
+      guestId: "guest_004",
+      checkIn: "2026-03-29T15:00:00",
+      checkOut: "2026-03-31T11:00:00",
+    }),
+    makeCheckinBooking({
+      propId: "P-005",
+      guestName: "정민서",
+      guestId: "guest_005",
+      checkIn: "2026-03-27T15:00:00",
+      checkOut: "2026-03-28T11:00:00",
+    }),
   ];
 
   test('내일 체크인 + confirmed 만 반환한다', () => {
@@ -140,13 +163,10 @@ describe('pinDomain.calcExpiry', () => {
 // ============================================================
 describe('messageDomain.buildWelcomeMessage', () => {
 
-  const BOOKING = {
-    guestName: '김민준',
-    propName:  '해운대 오션뷰 펜트하우스',
-    checkIn:   '2026-03-28T15:00:00.000Z',
-    checkOut:  '2026-03-30T11:00:00.000Z',
-    wifi:      { ssid: 'ProposGuest_5G', pw: '1234567890' },
-  };
+  const BOOKING = makeCheckinBooking({
+    checkIn: "2026-03-28T15:00:00.000Z",
+    checkOut: "2026-03-30T11:00:00.000Z",
+  });
 
   const PIN_RECORD = { pin: '492817', validFrom: '2026-03-28T14:00:00.000Z', validUntil: '2026-03-30T11:00:00.000Z' };
 

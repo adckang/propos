@@ -20,40 +20,32 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 
 import { handleDoorUnlocked, handlePinLockout } from "../../src/application/checkinService.js";
+import {
+  makeCheckinBooking,
+  makeDoorUnlockedEvent,
+} from "../helpers/checkinFixtures.js";
 
 // ============================================================
 // 공통 픽스처
 // ============================================================
 
 const BOOKINGS = [
-  {
-    propId:    'P-042',
-    propName:  '해운대 오션뷰 펜트하우스',
-    guestName: '김민준',
-    guestId:   'guest_001',
-    checkIn:   '2026-03-28T15:00:00',
-    checkOut:  '2026-03-30T11:00:00',
-    status:    'confirmed',
-  },
-  {
-    propId:    'P-007',
-    propName:  '강남 럭셔리 스위트',
-    guestName: '이수진',
-    guestId:   'guest_002',
-    checkIn:   '2026-03-28T14:00:00',
-    checkOut:  '2026-03-29T11:00:00',
-    status:    'pending',
-  },
+  makeCheckinBooking({ pinRequired: undefined, wifi: undefined }),
+  makeCheckinBooking({
+    propId: "P-007",
+    propName: "강남 럭셔리 스위트",
+    guestName: "이수진",
+    guestId: "guest_002",
+    checkIn: "2026-03-28T14:00:00",
+    checkOut: "2026-03-29T11:00:00",
+    status: "pending",
+    pinRequired: undefined,
+    wifi: undefined,
+  }),
 ];
 
 // checkIn 15:00 → window 14:00~20:00
-const EVENT_CHECKIN = {
-  event:     'door_unlocked',
-  propId:    'P-042',
-  time:      '15:12',
-  context:   'guest_checkin',
-  failCount: 0,
-};
+const EVENT_CHECKIN = makeDoorUnlockedEvent();
 
 const NOW_VALID   = '15:12';  // 시간창 내
 const NOW_OUTSIDE = '13:00';  // 시간창 외

@@ -18,6 +18,9 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 
 import { runD1Automation } from "../../src/application/checkinPreparationService.js";
+import {
+  makeCheckinBookings,
+} from "../helpers/checkinFixtures.js";
 
 // ============================================================
 // 공통 픽스처
@@ -25,42 +28,7 @@ import { runD1Automation } from "../../src/application/checkinPreparationService
 
 const TODAY = '2026-03-27';
 
-const BOOKINGS = [
-  {
-    propId:    'P-042',
-    propName:  '해운대 오션뷰 펜트하우스',
-    guestName: '김민준',
-    guestId:   'guest_001',
-    checkIn:   '2026-03-28T15:00:00',
-    checkOut:  '2026-03-30T11:00:00',
-    status:    'confirmed',
-    pinRequired: true,
-    wifi:      { ssid: 'ProposGuest_5G', pw: '1234567890' },
-  },
-  {
-    propId:    'P-007',
-    propName:  '강남 럭셔리 스위트',
-    guestName: '이수진',
-    guestId:   'guest_002',
-    checkIn:   '2026-03-28T14:00:00',
-    checkOut:  '2026-03-29T11:00:00',
-    status:    'confirmed',
-    pinRequired: true,
-    wifi:      { ssid: 'ProposGuest_7', pw: 'abcde12345' },
-  },
-  // 오늘 체크인 (제외 대상)
-  {
-    propId:    'P-099',
-    propName:  '제주 바다뷰',
-    guestName: '박지호',
-    guestId:   'guest_003',
-    checkIn:   '2026-03-27T15:00:00',
-    checkOut:  '2026-03-29T11:00:00',
-    status:    'confirmed',
-    pinRequired: true,
-    wifi:      { ssid: 'Jeju_5G', pw: 'jeju1234' },
-  },
-];
+const BOOKINGS = makeCheckinBookings();
 
 /**
  * 모든 deps가 성공하는 기본 mock 생성

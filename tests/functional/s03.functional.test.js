@@ -59,11 +59,15 @@ function makeDeps(overrides = {}) {
 describe('TC-F-024: 정상 센서값 폴링 — 이상 없음', () => {
   test('status=ok, anomaly.isAnomaly=false, addAlert 미호출', async () => {
     let alertCalled = false;
-    let readingsUpdated = false;
+    let updatedPropId = null;
+    let updatedReading = null;
 
     const deps = makeDeps({
       getSensorStates: async () => makeReading({ temp: 25, humidity: 60, noise: 40, power: 500 }),
-      updateReadings:  () => { readingsUpdated = true; },
+      updateReadings:  (propId, reading) => {
+        updatedPropId = propId;
+        updatedReading = reading;
+      },
       addAlert:        () => { alertCalled = true; },
     });
 
@@ -73,7 +77,10 @@ describe('TC-F-024: 정상 센서값 폴링 — 이상 없음', () => {
     assert.equal(result.propId, 'P-001');
     assert.equal(result.error, null);
     assert.equal(result.anomaly.isAnomaly, false);
-    assert.equal(readingsUpdated, true, 'updateReadings 호출되어야 함');
+    assert.equal(result.anomaly.severity, null);
+    assert.deepEqual(result.anomaly.sensors, []);
+    assert.equal(updatedPropId, 'P-001', 'updateReadings에 propId가 전달되어야 함');
+    assert.deepEqual(updatedReading, result.reading, 'updateReadings에 전달된 reading이 반환값과 일치해야 함');
     assert.equal(alertCalled, false, '정상 시 addAlert 호출 안됨');
   });
 });
@@ -94,10 +101,13 @@ describe('TC-F-025: warn 이상 감지 — 알림 생성', () => {
 
     assert.equal(result.status, 'anomaly');
     assert.equal(result.anomaly.severity, 'warn');
+    assert.deepEqual(result.anomaly.sensors, ['temp']);
+    assert.equal(result.reading.temp, 31);
     assert.equal(alerts.length, 1);
     assert.equal(alerts[0].type, 'warn');
     assert.ok(alerts[0].msg.includes('[경고]'), `알림 메시지: ${alerts[0].msg}`);
     assert.equal(alerts[0].prop, 'P-001');
+    assert.equal(alerts[0].time, '14:00');
   });
 });
 
@@ -117,9 +127,11 @@ describe('TC-F-026: critical 이상 감지 — 긴급 알림 생성', () => {
 
     assert.equal(result.status, 'anomaly');
     assert.equal(result.anomaly.severity, 'critical');
+    assert.deepEqual(result.anomaly.sensors, ['temp']);
     assert.equal(alerts.length, 1);
     assert.equal(alerts[0].type, 'error');
     assert.ok(alerts[0].msg.includes('[긴급]'), `알림 메시지: ${alerts[0].msg}`);
+    assert.equal(alerts[0].prop, 'P-001');
   });
 });
 
@@ -185,6 +197,9 @@ describe('TC-F-028: 폴링 실패 — HA 연결 오류 처리', () => {
     assert.equal(results[1].status, 'error');
     assert.equal(results[2].status, 'ok');
     assert.equal(successCount, 2); // P-001, P-003 성공
+    assert.equal(alerts.length, 1);
+    assert.equal(alerts[0].prop, 'P-002');
+    assert.ok(alerts[0].msg.includes('P-002 timeout'));
   });
 });
 
@@ -211,8 +226,15 @@ describe('TC-F-029: pollAll — 여러 숙소 일괄 폴링', () => {
   });
 
   test('빈 배열 → 빈 결과 반환', async () => {
-    const results = await pollAll([], T, makeDeps());
+    let called = false;
+    const results = await pollAll([], T, makeDeps({
+      getSensorStates: async () => {
+        called = true;
+        return makeReading();
+      },
+    }));
     assert.deepEqual(results, []);
+    assert.equal(called, false, '빈 배열이면 개별 센서 조회가 없어야 함');
   });
 });
 
@@ -238,6 +260,9 @@ describe('TC-F-030: handleGuestMessage — WiFi 키워드 → 초안 생성', ()
     assert.ok(draftText.includes('WiFi') || draftText.includes('와이파이'), `초안: ${draftText}`);
     assert.equal(alerts.length, 1);
     assert.equal(alerts[0].type, 'info');
+    assert.equal(alerts[0].prop, 'P-001');
+    assert.equal(alerts[0].time, '15:10');
+    assert.ok(alerts[0].msg.includes('AI 답장 초안 생성 완료'));
   });
 });
 
@@ -246,10 +271,12 @@ describe('TC-F-030: handleGuestMessage — WiFi 키워드 → 초안 생성', ()
 // ─────────────────────────────────────────────
 describe('TC-F-031: handleGuestMessage — 온도 키워드 → 온도 초안', () => {
   test('"덥다" 메시지 → 에어컨/온도 관련 초안', () => {
+    const alerts = [];
     let draftText = null;
 
     const deps = makeDeps({
       setDraft: (_, text) => { draftText = text; },
+      addAlert: (alert) => alerts.push(alert),
     });
 
     handleGuestMessage(
@@ -259,6 +286,9 @@ describe('TC-F-031: handleGuestMessage — 온도 키워드 → 온도 초안', 
     );
 
     assert.ok(draftText.includes('에어컨') || draftText.includes('온도') || draftText.includes('냉방'));
+    assert.ok(draftText.includes('김민준'));
+    assert.equal(alerts.length, 1);
+    assert.equal(alerts[0].time, '16:00');
   });
 });
 
@@ -267,10 +297,12 @@ describe('TC-F-031: handleGuestMessage — 온도 키워드 → 온도 초안', 
 // ─────────────────────────────────────────────
 describe('TC-F-032: handleGuestMessage — 키워드 없음 → 일반 응대', () => {
   test('키워드 없는 메시지 → 일반 응대 초안 + 게스트 이름 포함', () => {
+    const alerts = [];
     let draftText = null;
 
     const deps = makeDeps({
       setDraft: (_, text) => { draftText = text; },
+      addAlert: (alert) => alerts.push(alert),
     });
 
     handleGuestMessage(
@@ -281,6 +313,8 @@ describe('TC-F-032: handleGuestMessage — 키워드 없음 → 일반 응대', 
 
     assert.ok(draftText.includes('김민준'), `초안: ${draftText}`);
     assert.ok(draftText.length > 0);
+    assert.equal(alerts.length, 1);
+    assert.equal(alerts[0].type, 'info');
   });
 });
 
@@ -309,9 +343,17 @@ describe('TC-F-033: handleGuestMessage — 인수 누락 예외', () => {
 describe('TC-F-034: pollSensors — updateReadings 이상 여부 무관 항상 호출', () => {
   test('정상 읽기 → updateReadings 호출', async () => {
     let called = false;
-    const deps = makeDeps({ updateReadings: () => { called = true; } });
+    let updated = null;
+    const deps = makeDeps({
+      updateReadings: (propId, reading) => {
+        called = true;
+        updated = { propId, reading };
+      },
+    });
     await pollSensors('P-001', T, deps);
     assert.equal(called, true);
+    assert.equal(updated.propId, 'P-001');
+    assert.equal(updated.reading.propId, 'P-001');
   });
 
   test('이상 감지 → updateReadings도 여전히 호출', async () => {
@@ -349,6 +391,8 @@ describe('TC-F-035: pollSensors — S03PollResult 구조 검증', () => {
     }));
 
     assert.equal(result.status, 'error');
+    assert.equal(result.reading, null);
+    assert.equal(result.anomaly, null);
     assert.ok(result.error.includes('HA down'));
   });
 });
@@ -375,9 +419,10 @@ describe('TC-F-036: handleGuestMessage — 알림에 메시지 수신 시각 포
   });
 
   test('msg.time 없어도 에러 없이 처리됨 (현재 시각으로 대체)', () => {
+    const alerts = [];
     const deps = makeDeps({
       setDraft: () => {},
-      addAlert: () => {},
+      addAlert: (alert) => alerts.push(alert),
     });
 
     assert.doesNotThrow(() =>
@@ -387,5 +432,9 @@ describe('TC-F-036: handleGuestMessage — 알림에 메시지 수신 시각 포
         deps
       )
     );
+    assert.equal(alerts.length, 1);
+    assert.equal(alerts[0].prop, 'P-001');
+    assert.equal(typeof alerts[0].time, 'string');
+    assert.match(alerts[0].time, /^\d{2}:\d{2}$/);
   });
 });

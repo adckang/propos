@@ -3,27 +3,21 @@ import assert from "node:assert/strict";
 
 import { isCheckinEvent, getCheckinWindow } from "../../src/domain/checkinDomain.js";
 import { buildCheckinConfirmMessage, buildPinLockoutAlert } from "../../src/domain/messageDomain.js";
+import {
+  makeCheckinBooking,
+  makeDoorUnlockedEvent,
+} from "../helpers/checkinFixtures.js";
 
 // ============================================================
 // 공통 픽스처
 // ============================================================
 
-const BOOKING_CONFIRMED = {
-  propId:    'P-042',
-  propName:  '해운대 오션뷰 펜트하우스',
-  guestName: '김민준',
-  guestId:   'guest_42',
-  checkIn:   '2026-03-28T15:00:00',
-  checkOut:  '2026-03-30T11:00:00',
-  status:    'confirmed',
-};
-
-const EVENT_CHECKIN = {
-  event:   'door_unlocked',
-  propId:  'P-042',
-  time:    '15:12',
-  context: 'guest_checkin',
-};
+const BOOKING_CONFIRMED = makeCheckinBooking({
+  guestId: "guest_42",
+  pinRequired: undefined,
+  wifi: undefined,
+});
+const EVENT_CHECKIN = makeDoorUnlockedEvent();
 
 // ============================================================
 // checkinDomain.getCheckinWindow
