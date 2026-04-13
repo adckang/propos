@@ -457,6 +457,49 @@ function S02CheckinPanel({ bookings: propBookings }) {
   const sc2 = getSC(step2done, step2fail, s2run, 2);
   const sc3 = getSC(step3done, step3fail, s3run, 3);
   const sc4 = getSC(step4done, step4fail, s4run, 4);
+  const selectedBooking = bookings.find(b => b.propId === simPropId) || bookings[0];
+  const occupiedCount = Object.values(propStatuses).filter(status => status === 'occupied').length;
+  const checkingInCount = Object.values(propStatuses).filter(status => status === 'checking_in').length;
+  const vacantCount = Object.values(propStatuses).filter(status => status === 'vacant').length;
+  const resultCount = eventResults.length;
+  const failedCount = eventResults.filter(result => result.status === 'failed' || result.status === 'partial').length;
+  const latestError = alerts.find(alert => alert.type === 'error') || alerts[0] || null;
+  const currentStatus = propStatuses[simPropId] || 'vacant';
+  const focusTone = running
+    ? { bg:'#eff6ff', border:'#bfdbfe', text:'#2563eb' }
+    : lr?.status === 'failed'
+    ? { bg:'#fef2f2', border:'#fecaca', text:'#dc2626' }
+    : lr?.status === 'partial'
+    ? { bg:'#fffbeb', border:'#fde68a', text:'#d97706' }
+    : currentStatus === 'occupied'
+    ? { bg:'#ecfdf5', border:'#a7f3d0', text:'#059669' }
+    : { bg:'#f8fafc', border:'#e2e8f0', text:'#475569' };
+  const focusTitle = running
+    ? `${selectedBooking.propName} 체크인 자동화를 진행 중입니다.`
+    : lr?.status === 'failed'
+    ? `${lr.propName} 체크인 자동화가 실패했습니다.`
+    : lr?.status === 'partial'
+    ? `${lr.propName} 체크인은 일부만 완료되어 후속 확인이 필요합니다.`
+    : currentStatus === 'occupied'
+    ? `${selectedBooking.propName} 입실이 완료되어 후속 안내만 확인하면 됩니다.`
+    : timeInWindow
+    ? `${selectedBooking.propName} 체크인 시간이에요. 입실 이벤트만 확인하면 자동화가 이어집니다.`
+    : `${selectedBooking.propName}의 체크인 시간 전입니다. 다음 입실 가능 구간을 확인하세요.`;
+  const focusDesc = running
+    ? '씬 실행, 채널 오픈, 메시지 발송이 순서대로 이어지고 있어요. 단계 카드에서 멈춘 지점을 바로 확인할 수 있습니다.'
+    : lr?.status === 'failed'
+    ? lr.error || '실패 원인을 확인한 뒤 다시 처리해야 합니다.'
+    : lr?.status === 'partial'
+    ? '게스트 입실은 감지됐지만 일부 후속 작업이 남아 있습니다. 채널 오픈과 메시지 발송 결과를 먼저 보세요.'
+    : timeInWindow
+    ? `현재 선택 숙소의 체크인 가능 시간은 ${simWindow?.from} ~ ${simWindow?.until}입니다.`
+    : `현재 선택 숙소의 체크인 가능 시간은 ${simWindow?.from} ~ ${simWindow?.until}이며, 시간창 밖 이벤트는 자동으로 무시됩니다.`;
+  const summaryCards = [
+    { label:'입실 완료', value:`${occupiedCount}곳`, desc:'후속 안내만 확인', tone:{ bg:'#ecfdf5', border:'#a7f3d0', text:'#059669' } },
+    { label:'처리 중', value:`${checkingInCount}곳`, desc:'자동화 진행 중', tone:{ bg:'#eff6ff', border:'#bfdbfe', text:'#2563eb' } },
+    { label:'대기 중', value:`${vacantCount}곳`, desc:'입실 이벤트 대기', tone:{ bg:'#f8fafc', border:'#e2e8f0', text:'#475569' } },
+    { label:'주의 필요', value:`${failedCount || alerts.length}건`, desc:'실패 또는 알림 확인', tone:{ bg:'#fffbeb', border:'#fde68a', text:'#d97706' } },
+  ];
 
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontFamily:"'DM Sans',sans-serif" }}>
@@ -482,8 +525,62 @@ function S02CheckinPanel({ bookings: propBookings }) {
         </div>
       </div>
 
+      <div style={{ padding:'18px 20px 0', background:'#f0f4f8', flexShrink:0 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1.7fr 1fr', gap:14, marginBottom:14 }}>
+          <div style={{ background:focusTone.bg, border:`1.5px solid ${focusTone.border}`, borderRadius:16, padding:'18px 20px', boxShadow:'0 10px 28px rgba(15,23,42,0.04)' }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:8 }}>지금 확인할 것</div>
+            <div style={{ fontSize:20, fontWeight:800, color:focusTone.text, lineHeight:1.45, letterSpacing:'-0.3px' }}>{focusTitle}</div>
+            <div style={{ fontSize:13, color:'#64748b', lineHeight:1.7, marginTop:8 }}>{focusDesc}</div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:12 }}>
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
+                선택 숙소 · {selectedBooking.propId}
+              </span>
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
+                최근 처리 {resultCount}건
+              </span>
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
+                미확인 알림 {alerts.length}건
+              </span>
+            </div>
+            <div style={{ display:'flex', gap:8, marginTop:14 }}>
+              <button onClick={simulate} disabled={running} style={{ padding:'10px 16px', borderRadius:10, border:'1.5px solid #1d4ed8', background:running ? '#dbeafe' : '#2563eb', color:running ? '#2563eb' : '#fff', fontSize:12, fontWeight:700, cursor:running ? 'default' : 'pointer' }}>
+                {running ? '자동화 진행 중' : '선택 숙소 이벤트 확인'}
+              </button>
+              <button onClick={() => setDevOpen(true)} style={{ padding:'10px 16px', borderRadius:10, border:'1.5px solid #e2e8f0', background:'#fff', color:'#475569', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                시뮬레이터 열기
+              </button>
+            </div>
+          </div>
+
+          <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:16, padding:'16px 18px' }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:10 }}>최근 예외</div>
+            {latestError ? (
+              <>
+                <div style={{ fontSize:14, fontWeight:800, color:latestError.type === 'error' ? '#dc2626' : '#d97706', lineHeight:1.5 }}>{latestError.prop}</div>
+                <div style={{ fontSize:12, color:'#475569', lineHeight:1.65, marginTop:6 }}>{latestError.msg}</div>
+                <div style={{ fontSize:11, color:'#94a3b8', marginTop:10, fontFamily:"'DM Mono',monospace" }}>{latestError.time}</div>
+              </>
+            ) : (
+              <div style={{ fontSize:12, color:'#64748b', lineHeight:1.7 }}>현재는 체크인 관련 예외가 없습니다. 체크인 가능 시간에 맞춰 이벤트만 확인하면 자동화가 이어집니다.</div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4, minmax(0, 1fr))', gap:10, marginBottom:14 }}>
+          {summaryCards.map(card => (
+            <div key={card.label} style={{ background:card.tone.bg, border:`1.5px solid ${card.tone.border}`, borderRadius:14, padding:'14px 16px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
+                <span style={{ fontSize:11, fontWeight:700, color:'#475569', letterSpacing:'0.05em', textTransform:'uppercase' }}>{card.label}</span>
+                <strong style={{ fontFamily:"'DM Mono',monospace", fontSize:18, fontWeight:800, color:card.tone.text }}>{card.value}</strong>
+              </div>
+              <div style={{ fontSize:12, color:'#64748b', marginTop:10, lineHeight:1.55 }}>{card.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* ── 본문 3열 ── */}
-      <div style={{ flex:1, display:'grid', gridTemplateColumns:'260px 1fr 340px', gap:20, padding:20, overflow:'hidden' }}>
+      <div style={{ flex:1, display:'grid', gridTemplateColumns:'260px 1fr 340px', gap:20, padding:'6px 20px 20px', overflow:'hidden' }}>
 
         {/* 좌측: 숙소 현황 + 개발 옵션 */}
         <div style={{ display:'flex', flexDirection:'column', gap:14, overflowY:'auto' }}>
@@ -500,7 +597,7 @@ function S02CheckinPanel({ bookings: propBookings }) {
             <button onClick={() => setDevOpen(v => !v)}
               style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background: devOpen ? '#fefce8' : '#fafafa', border:'none', cursor:'pointer', borderBottom: devOpen ? '1px solid #e2e8f0' : 'none' }}>
               <span style={{ width:3, height:13, background:'#7c3aed', borderRadius:2, flexShrink:0 }} />
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1, textAlign:'left' }}>🔧 개발 옵션</span>
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1, textAlign:'left' }}>🔧 개발 모드 · 시뮬레이터</span>
               <span style={{ fontSize:10, color:'#7c3aed', fontWeight:600 }}>{devOpen ? '▲ 접기' : '▼ 펼치기'}</span>
             </button>
             {devOpen && (

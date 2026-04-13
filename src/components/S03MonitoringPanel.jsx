@@ -518,10 +518,52 @@ function S03MonitoringPanel({ onBack }) {
   const currentReading = readings[selectedProp];
   const errorCount  = alerts.filter(a => a.type === 'error').length;
   const warnCount   = alerts.filter(a => a.type === 'warn').length;
+  const propDiagnostics = PROPS.map(prop => {
+    const reading = readings[prop.propId];
+    const anomaly = reading ? _s03.isAnomaly(reading, _DEFAULT_THRESHOLDS) : null;
+    return { prop, reading, anomaly: anomaly?.isAnomaly ? anomaly : null };
+  });
+  const criticalItems = propDiagnostics.filter(item => item.anomaly?.severity === 'critical');
+  const warningItems = propDiagnostics.filter(item => item.anomaly?.severity === 'warn');
+  const pendingItems = propDiagnostics.filter(item => !item.reading);
+  const draftCount = Object.values(drafts).filter(Boolean).length;
+  const selectedDiagnostic = propDiagnostics.find(item => item.prop.propId === selectedProp);
+  const focusTarget = criticalItems[0]?.prop || warningItems[0]?.prop || currentProp;
+  const focusTone = criticalItems.length > 0
+    ? { bg:'#fef2f2', border:'#fecaca', text:'#dc2626' }
+    : warningItems.length > 0
+    ? { bg:'#fffbeb', border:'#fde68a', text:'#d97706' }
+    : draftCount > 0
+    ? { bg:'#eff6ff', border:'#bfdbfe', text:'#2563eb' }
+    : { bg:'#ecfdf5', border:'#a7f3d0', text:'#059669' };
+  const focusTitle = criticalItems.length > 0
+    ? `${focusTarget.propName}에서 긴급 이상이 감지됐습니다.`
+    : warningItems.length > 0
+    ? `${focusTarget.propName}의 경고 상태를 먼저 확인하세요.`
+    : draftCount > 0
+    ? `게스트 응답 초안 ${draftCount}건이 준비되어 있습니다.`
+    : polling
+    ? '현재 폴링 중이며 큰 이상은 감지되지 않았습니다.'
+    : '모니터링이 멈춰 있습니다. 폴링을 시작해 현재 상태를 확인하세요.';
+  const focusDesc = criticalItems.length > 0
+    ? `이상 센서: ${criticalItems[0].anomaly.sensors.join(", ")} · 즉시 숙소를 열어 제어 또는 연락이 필요합니다.`
+    : warningItems.length > 0
+    ? `이상 센서: ${warningItems[0].anomaly.sensors.join(", ")} · 추세가 더 커지기 전에 확인하면 운영 피로를 줄일 수 있습니다.`
+    : draftCount > 0
+    ? '게스트 문의는 답변이 늦어질수록 체감 품질이 떨어집니다. 초안부터 먼저 검토하세요.'
+    : polling
+    ? `마지막 폴링 ${lastPoll || "대기 중"} · ${pendingItems.length > 0 ? `${pendingItems.length}개 숙소는 아직 첫 수집 전입니다.` : '센서 데이터가 정상적으로 수집되고 있습니다.'}`
+    : '센서 이상 감지와 게스트 메시지 초안 생성은 폴링 시작 후에 자동으로 이어집니다.';
+  const overviewCards = [
+    { label:'긴급 숙소', value:`${criticalItems.length}곳`, desc:'즉시 대응 필요', tone:{ bg:'#fef2f2', border:'#fecaca', text:'#dc2626' } },
+    { label:'경고 숙소', value:`${warningItems.length}곳`, desc:'추세 확인 필요', tone:{ bg:'#fffbeb', border:'#fde68a', text:'#d97706' } },
+    { label:'답장 초안', value:`${draftCount}건`, desc:'게스트 응답 대기', tone:{ bg:'#eff6ff', border:'#bfdbfe', text:'#2563eb' } },
+    { label:'데이터 대기', value:`${pendingItems.length}곳`, desc:'첫 폴링 전 또는 미수집', tone:{ bg:'#f8fafc', border:'#e2e8f0', text:'#475569' } },
+  ];
 
   // ── 렌더 ──
   return (
-    <div style={{ minHeight: '100vh', background: '#f0f4f8', fontFamily: "'DM Sans', 'Nunito', sans-serif" }}>
+    <div style={{ height: '100vh', background: '#f0f4f8', fontFamily: "'DM Sans', 'Nunito', sans-serif", display:'flex', flexDirection:'column' }}>
 
       {/* CSS pulse animation */}
       <style>{`
@@ -622,7 +664,76 @@ function S03MonitoringPanel({ onBack }) {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 0, height: 'calc(100vh - 65px)' }}>
+      <div style={{ padding:'18px 24px 0', flexShrink:0 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1.7fr 1fr', gap:14, marginBottom:14 }}>
+          <div style={{ background:focusTone.bg, border:`1.5px solid ${focusTone.border}`, borderRadius:16, padding:'18px 20px', boxShadow:'0 10px 28px rgba(15,23,42,0.04)' }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:8 }}>지금 먼저 볼 것</div>
+            <div style={{ fontSize:20, fontWeight:800, color:focusTone.text, lineHeight:1.45, letterSpacing:'-0.3px' }}>{focusTitle}</div>
+            <div style={{ fontSize:13, color:'#64748b', lineHeight:1.7, marginTop:8 }}>{focusDesc}</div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:12 }}>
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
+                선택 숙소 · {currentProp.propName}
+              </span>
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
+                마지막 폴링 · {lastPoll || '대기'}
+              </span>
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
+                알림 {alerts.length}건
+              </span>
+            </div>
+            <div style={{ display:'flex', gap:8, marginTop:14 }}>
+              <button
+                onClick={() => pollAll()}
+                style={{ padding:'10px 16px', borderRadius:10, border:'1.5px solid #1d4ed8', background:'#2563eb', color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer' }}
+              >
+                현재 즉시 재폴링
+              </button>
+              <button
+                onClick={() => setSelectedProp(focusTarget.propId)}
+                style={{ padding:'10px 16px', borderRadius:10, border:'1.5px solid #e2e8f0', background:'#fff', color:'#475569', fontSize:12, fontWeight:700, cursor:'pointer' }}
+              >
+                우선 숙소로 이동
+              </button>
+            </div>
+          </div>
+
+          <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:16, padding:'16px 18px' }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:10 }}>선택 숙소 상태</div>
+            <div style={{ fontSize:15, fontWeight:800, color:selectedDiagnostic?.anomaly?.severity === 'critical' ? '#dc2626' : selectedDiagnostic?.anomaly?.severity === 'warn' ? '#d97706' : '#1e293b' }}>
+              {currentProp.propName}
+            </div>
+            <div style={{ fontSize:12, color:'#64748b', lineHeight:1.65, marginTop:6 }}>
+              {selectedDiagnostic?.anomaly
+                ? `이상 센서: ${selectedDiagnostic.anomaly.sensors.join(", ")}`
+                : currentReading
+                ? '현재 선택 숙소는 정상 범위로 보입니다.'
+                : '아직 센서 데이터가 수집되지 않았습니다.'}
+            </div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:12 }}>
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:999, padding:'6px 10px' }}>
+                초안 {drafts[selectedProp] ? '있음' : '없음'}
+              </span>
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:999, padding:'6px 10px' }}>
+                네트워크 {networkError ? '주의' : '정상'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4, minmax(0, 1fr))', gap:10, marginBottom:14 }}>
+          {overviewCards.map(card => (
+            <div key={card.label} style={{ background:card.tone.bg, border:`1.5px solid ${card.tone.border}`, borderRadius:14, padding:'14px 16px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
+                <span style={{ fontSize:11, fontWeight:700, color:'#475569', letterSpacing:'0.05em', textTransform:'uppercase' }}>{card.label}</span>
+                <strong style={{ fontFamily:"'DM Mono',monospace", fontSize:18, fontWeight:800, color:card.tone.text }}>{card.value}</strong>
+              </div>
+              <div style={{ fontSize:12, color:'#64748b', marginTop:10, lineHeight:1.55 }}>{card.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 0, flex:1, minHeight:0 }}>
 
         {/* 좌측: 숙소 목록 + 알림 피드 */}
         <div style={{ width: 280, background: '#ffffff', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>

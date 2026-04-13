@@ -8,6 +8,7 @@ test.describe("PROPOS smoke", () => {
     const returnButton = () => page.getByRole("button", { name: /← (홈|뒤로)/ }).first();
     const haStage = text => page.locator(".ha-step").filter({ hasText: text }).first();
     const ccStage = label => page.locator(".pipeline-card").filter({ hasText: label }).first();
+    const landingStageCard = label => page.locator(".land-sc-card").filter({ hasText: label }).first();
 
     page.on("pageerror", error => {
       pageErrors.push(String(error));
@@ -63,27 +64,27 @@ test.describe("PROPOS smoke", () => {
     await returnButton().click();
     await expect(page.getByText("에어비앤비 완전 관리 시스템")).toBeVisible();
 
-    await page.getByText("D-1 자동화").first().click();
+    await landingStageCard("D-1 자동화").click();
     await expect(page.getByText("D-1 체크인 전날 자동화").first()).toBeVisible();
     await expect(page.getByText("자동 실행")).toBeVisible();
     await returnButton().click();
 
-    await page.getByText("체크인 당일").first().click();
-    await expect(page.getByText("UC-002 — 체크인 당일 자동화")).toBeVisible();
+    await landingStageCard("체크인 당일").click();
+    await expect(page.getByText("숙소 현황")).toBeVisible();
     await expect(page.getByText("도어락 열림 감지")).toBeVisible();
     await returnButton().click();
 
-    await page.getByText("체류 중 모니터링").first().click();
+    await landingStageCard("체류 중 모니터링").click();
     await expect(page.getByText("UC-003 — 체류 중 실시간 모니터링")).toBeVisible();
     await expect(page.getByRole("button", { name: /폴링 시작/ })).toBeVisible();
     await returnButton().click();
 
-    await page.getByText("체크아웃 & 청소").first().click();
+    await landingStageCard("체크아웃 & 청소").click();
     await expect(page.getByText("UC-004 — 체크아웃 & 청소 자동화")).toBeVisible();
     await expect(page.getByText("퇴실 감지", { exact: true })).toBeVisible();
     await returnButton().click();
 
-    await page.getByText("수익 정산").first().click();
+    await landingStageCard("수익 정산").click();
     await expect(page.getByText("UC-005 — 수익 정산 자동화")).toBeVisible();
     await expect(page.getByText("정산 설정")).toBeVisible();
     await returnButton().click();
