@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 
 import checkinService from "../application/checkinService.js";
+import BatchConsoleGuide from "./BatchConsoleGuide";
 import haBrowserClient from "../infrastructure/haBrowserClient.js";
 import { createStatePollingConnection } from "../infrastructure/haBrowserPolling.js";
 
@@ -512,7 +513,7 @@ function S02CheckinPanel({ bookings: propBookings, onBack }) {
       {/* ── 헤더 ── */}
       <div style={{ background:'#ffffff', borderBottom:'1px solid #e2e8f0', padding:'16px 24px', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          {onBack && <button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}>← 홈</button>}
+          {onBack && <button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}>← 커맨드 센터</button>}
           {onBack && <div style={{ width:1, height:22, background:'#e2e8f0' }} />}
           <div>
             <div style={{ fontSize:10, color:'#94a3b8', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:4 }}>S02 · 체크인 당일</div>
@@ -529,6 +530,8 @@ function S02CheckinPanel({ bookings: propBookings, onBack }) {
           )}
         </div>
       </div>
+
+      <BatchConsoleGuide stageId="checkin" onBack={onBack} />
 
       <div style={{ padding:'18px 20px 0', background:'#f0f4f8', flexShrink:0 }}>
         <div style={{ display:'grid', gridTemplateColumns:'1.7fr 1fr', gap:14, marginBottom:14 }}>
@@ -549,10 +552,10 @@ function S02CheckinPanel({ bookings: propBookings, onBack }) {
             </div>
             <div style={{ display:'flex', gap:8, marginTop:14 }}>
               <button onClick={simulate} disabled={running} style={{ padding:'10px 16px', borderRadius:10, border:'1.5px solid #1d4ed8', background:running ? '#dbeafe' : '#2563eb', color:running ? '#2563eb' : '#fff', fontSize:12, fontWeight:700, cursor:running ? 'default' : 'pointer' }}>
-                {running ? '자동화 진행 중' : '선택 숙소 이벤트 확인'}
+                {running ? '입실 흐름 확인 중' : '선택 숙소 다시 확인'}
               </button>
               <button onClick={() => setDevOpen(true)} style={{ padding:'10px 16px', borderRadius:10, border:'1.5px solid #e2e8f0', background:'#fff', color:'#475569', fontSize:12, fontWeight:700, cursor:'pointer' }}>
-                시뮬레이터 열기
+                개발용 시뮬레이터 열기
               </button>
             </div>
           </div>
@@ -566,7 +569,7 @@ function S02CheckinPanel({ bookings: propBookings, onBack }) {
                 <div style={{ fontSize:11, color:'#94a3b8', marginTop:10, fontFamily:"'DM Mono',monospace" }}>{latestError.time}</div>
               </>
             ) : (
-              <div style={{ fontSize:12, color:'#64748b', lineHeight:1.7 }}>현재는 체크인 관련 예외가 없습니다. 체크인 가능 시간에 맞춰 이벤트만 확인하면 자동화가 이어집니다.</div>
+              <div style={{ fontSize:12, color:'#64748b', lineHeight:1.7 }}>지금 바로 확인할 알림은 없어요. 체크인 가능 시간에 맞춰 입실 이벤트만 보면 자동화가 이어집니다.</div>
             )}
           </div>
         </div>
@@ -593,7 +596,7 @@ function S02CheckinPanel({ bookings: propBookings, onBack }) {
           <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'16px 14px' }}>
             <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
               <span style={{ width:3, height:13, background:'#059669', borderRadius:2, flexShrink:0 }} />
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>숙소 목록</span>
+              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>한 번에 볼 숙소</span>
             </div>
             {bookings.map(b => <PropStatusCard key={b.propId} booking={b} status={propStatuses[b.propId] || 'vacant'} />)}
           </div>
@@ -678,9 +681,9 @@ function S02CheckinPanel({ bookings: propBookings, onBack }) {
                   <span style={{ marginLeft:'auto', fontFamily:"'DM Mono',monospace", fontSize:12, color:'#64748b' }}>{lr.time}</span>
                 </div>
               )}
-              {!step1done && <div style={{ color:'#94a3b8', fontSize:13, marginBottom:10, textAlign:'center' }}>도어락 열림 이벤트 대기 중...</div>}
+              {!step1done && <div style={{ color:'#94a3b8', fontSize:13, marginBottom:10, textAlign:'center' }}>아직 들어온 입실 이벤트가 없어요.</div>}
               <button onClick={simulate} disabled={running} style={{ width:'100%', padding:'10px', borderRadius:8, background: running ? '#e2e8f0' : 'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)', border:`2px solid ${running ? '#cbd5e1' : '#1e40af'}`, color: running ? '#94a3b8' : '#ffffff', fontSize:13, fontWeight:700, cursor: running ? 'not-allowed' : 'pointer', boxShadow: running ? 'none' : '0 4px 12px rgba(37,99,235,0.35)' }}>
-                {running ? <><span style={{ animation:'s02spin 1s linear infinite', display:'inline-block' }}>↻</span> 처리 중...</> : '🚪 도어락 열림 이벤트 발생'}
+                {running ? <><span style={{ animation:'s02spin 1s linear infinite', display:'inline-block' }}>↻</span> 확인 중...</> : '🚪 입실 이벤트 다시 확인'}
               </button>
             </div>
           </div>
@@ -768,7 +771,7 @@ function S02CheckinPanel({ bookings: propBookings, onBack }) {
             {alerts.length === 0 ? (
               <div style={{ textAlign:'center', padding:'32px 20px', color:'#94a3b8', fontSize:13 }}>
                 <div style={{ fontSize:28, marginBottom:8, opacity:0.4 }}>🔔</div>
-                알림 없음
+                지금 바로 확인할 알림은 없어요.
               </div>
             ) : (
               alerts.map(a => <AlertItem key={a.id} alert={a} onAck={ackAlert} />)

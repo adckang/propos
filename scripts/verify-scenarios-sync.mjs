@@ -141,13 +141,19 @@ function toImportPath(fromFile, targetFile) {
 
 const registry = loadScenarioRegistry();
 const appSource = readRepoFile("src/components/App.jsx");
+const operationsModelSource = readRepoFile("src/config/operationsModel.js");
+const landingSource = `${appSource}\n${operationsModelSource}`;
 const smokeSource = readRepoFile("tests/smoke/app.smoke.spec.js");
 const errors = [];
 
 for (const page of registry.system_pages) {
   assert(repoFileExists(page.component), `[verify:scenarios] Missing component: ${page.component}`, errors);
   assert(appSource.includes(page.screen_key), `[verify:scenarios] App router is missing screen key: ${page.screen_key}`, errors);
-  assert(appSource.includes(page.title), `[verify:scenarios] Landing page is missing system page title: ${page.title}`, errors);
+  assert(
+    appSource.includes(page.landing_entry_label),
+    `[verify:scenarios] Landing page is missing system page entry label: ${page.landing_entry_label}`,
+    errors
+  );
 }
 
 for (const scenario of registry.scenarios) {
@@ -182,7 +188,7 @@ for (const scenario of registry.scenarios) {
   }
 
   // App 라우터 확인
-  assert(appSource.includes(scenario.landing_label), `[verify:scenarios] Landing page is missing stage label: ${scenario.landing_label}`, errors);
+  assert(landingSource.includes(scenario.landing_label), `[verify:scenarios] Landing page is missing stage label: ${scenario.landing_label}`, errors);
   assert(
     componentSource.includes(scenario.use_case_id) || testSource.includes(scenario.use_case_id),
     `[verify:scenarios] Traceability is missing use-case id ${scenario.use_case_id} in component/test: ${scenario.component}`,

@@ -4,6 +4,7 @@ import monitoringService from "../application/monitoringService.js";
 import PROPOS_CONFIG from "../config/publicConfig.js";
 import sensorDomain from "../domain/sensorDomain.js";
 import haBrowserClient from "../infrastructure/haBrowserClient.js";
+import BatchConsoleGuide from "./BatchConsoleGuide";
 
 // ============================================================
 // S03MonitoringPanel.jsx — UC-003 체류 중 실시간 모니터링 UI
@@ -577,7 +578,7 @@ function S03MonitoringPanel({ onBack }) {
           onClick={onBack}
           style={{ padding: '6px 16px', borderRadius: 8, border: '1.5px solid #e2e8f0', background: '#f8fafc', color: '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
         >
-          ← 뒤로
+          ← 커맨드 센터
         </button>
 
         <div>
@@ -667,6 +668,8 @@ function S03MonitoringPanel({ onBack }) {
         </div>
       </div>
 
+      <BatchConsoleGuide stageId="stay" onBack={onBack} />
+
       <div style={{ padding:'18px 24px 0', flexShrink:0 }}>
         <div style={{ display:'grid', gridTemplateColumns:'1.7fr 1fr', gap:14, marginBottom:14 }}>
           <div style={{ background:focusTone.bg, border:`1.5px solid ${focusTone.border}`, borderRadius:16, padding:'18px 20px', boxShadow:'0 10px 28px rgba(15,23,42,0.04)' }}>
@@ -678,10 +681,10 @@ function S03MonitoringPanel({ onBack }) {
                 선택 숙소 · {currentProp.propName}
               </span>
               <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
-                마지막 폴링 · {lastPoll || '대기'}
+                마지막 확인 · {lastPoll || '대기'}
               </span>
               <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
-                알림 {alerts.length}건
+                미확인 알림 {alerts.length}건
               </span>
             </div>
             <div style={{ display:'flex', gap:8, marginTop:14 }}>
@@ -689,19 +692,19 @@ function S03MonitoringPanel({ onBack }) {
                 onClick={() => pollAll()}
                 style={{ padding:'10px 16px', borderRadius:10, border:'1.5px solid #1d4ed8', background:'#2563eb', color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer' }}
               >
-                현재 즉시 재폴링
+                지금 다시 확인
               </button>
               <button
                 onClick={() => setSelectedProp(focusTarget.propId)}
                 style={{ padding:'10px 16px', borderRadius:10, border:'1.5px solid #e2e8f0', background:'#fff', color:'#475569', fontSize:12, fontWeight:700, cursor:'pointer' }}
               >
-                우선 숙소로 이동
+                이 숙소 보기
               </button>
             </div>
           </div>
 
           <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:16, padding:'16px 18px' }}>
-            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:10 }}>선택 숙소 상태</div>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:10 }}>지금 보고 있는 숙소</div>
             <div style={{ fontSize:15, fontWeight:800, color:selectedDiagnostic?.anomaly?.severity === 'critical' ? '#dc2626' : selectedDiagnostic?.anomaly?.severity === 'warn' ? '#d97706' : '#1e293b' }}>
               {currentProp.propName}
             </div>
@@ -747,7 +750,7 @@ function S03MonitoringPanel({ onBack }) {
               textTransform: 'uppercase', letterSpacing: '0.06em',
               marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
               <span style={{ width: 3, height: 13, background: '#2563eb', borderRadius: 2, flexShrink: 0 }} />
-              모니터링 중 ({PROPS.length})
+              한 번에 볼 숙소 ({PROPS.length})
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {PROPS.map(prop => (
@@ -847,7 +850,7 @@ function S03MonitoringPanel({ onBack }) {
                 color: '#94a3b8', fontSize: 13,
                 border: '1.5px dashed #e2e8f0', borderRadius: 12,
               }}>
-                폴링 시작 버튼을 눌러 센서 모니터링을 시작하세요
+                폴링을 시작하면 지금 바로 볼 숙소가 표시됩니다.
               </div>
             )}
           </div>

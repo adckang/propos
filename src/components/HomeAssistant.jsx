@@ -8,7 +8,7 @@ import Toast from "../utils/toast";
 // 시나리오 1~5를 한 축으로 재구성한 운영 화면
 // ============================================================
 
-function HomeAssistant({onBack, onOpenScenario, onOpenCommandCenter}) {
+function HomeAssistant({onBack, onOpenCommandCenter, initialStage = "stay"}) {
   const [devs, setDevs] = useState(DEVICES_INIT);
   const [msgs, setMsgs] = useState([
     {id:1,from:"guest",text:"체크아웃 11시 맞죠?",time:"09:42"},
@@ -24,6 +24,10 @@ function HomeAssistant({onBack, onOpenScenario, onOpenCommandCenter}) {
     const timer = setInterval(()=>setNow(new Date()), 1000);
     return ()=>clearInterval(timer);
   },[]);
+
+  useEffect(()=>{
+    setHaStage(initialStage || "stay");
+  },[initialStage]);
 
   useEffect(()=>{
     if(chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
@@ -62,7 +66,7 @@ function HomeAssistant({onBack, onOpenScenario, onOpenCommandCenter}) {
     {id:"checkin", emoji:"🏠", label:"체크인", sub:"입실 완료", color:"#059669", done:true},
     {id:"stay", emoji:"📡", label:"체류 중", sub:"센서 모니터링", color:"#7c3aed", done:false},
     {id:"checkout", emoji:"🚪", label:"퇴실·청소", sub:"체크아웃 예정", color:"#d97706", done:false},
-    {id:"revenue", emoji:"💰", label:"수익 정산", sub:"이달 정산", color:"#0891b2", done:false},
+    {id:"settlement", emoji:"💰", label:"수익 정산", sub:"이달 정산", color:"#0891b2", done:false},
   ];
   const currentStage = HA_STAGES.find(stage=>stage.id===haStage) || HA_STAGES[2];
   const connectedDevices = devs.filter(device=>device.state).length;
@@ -101,7 +105,7 @@ function HomeAssistant({onBack, onOpenScenario, onOpenCommandCenter}) {
       secondary:{label:"유지보수 등록", toast:"유지보수 이슈 처리 흐름을 열었습니다.", tone:"i"},
       tone:{bg:"#fffbeb", border:"#fde68a", text:"#d97706"},
     },
-    revenue: {
+    settlement: {
       title:"이번 예약의 매출, 비용, 순수익을 한 번에 검토하고 다음 가격 판단에 쓰면 됩니다.",
       desc:"수익 정산 단계는 보기 좋은 숫자보다, 실제 남는 금액이 얼마인지 빠르게 이해되는 것이 중요합니다.",
       checks:["객실 매출 확인", "비용 누락 점검", "최종 순수익 확인"],
@@ -131,7 +135,7 @@ function HomeAssistant({onBack, onOpenScenario, onOpenCommandCenter}) {
       {time:"11:02", text:"청소팀 배정 가능 상태를 확인했어요."},
       {time:"11:06", text:"유지보수 접수 여부를 점검 중이에요."},
     ],
-    revenue: [
+    settlement: [
       {time:"18:10", text:"이번 예약 매출과 청소비를 집계했어요."},
       {time:"18:14", text:"플랫폼 수수료와 소모품 비용을 반영했어요."},
       {time:"18:18", text:"최종 순수익 계산을 완료했어요."},
@@ -139,13 +143,6 @@ function HomeAssistant({onBack, onOpenScenario, onOpenCommandCenter}) {
   };
   const currentGuide = stageGuides[haStage];
   const currentEvents = stageEvents[haStage];
-  const stageScreenMap = {
-    d1: "d1",
-    checkin: "s02",
-    stay: "s03",
-    checkout: "s04",
-    revenue: "s05",
-  };
   const immediateActionMeta = {
     d1: { value: "PIN 재확인", desc: "체크인 전 자동화 마지막 점검" },
     checkin: { value: "입실 로그", desc: "씬 실행과 메시지 발송 재확인" },
@@ -153,9 +150,9 @@ function HomeAssistant({onBack, onOpenScenario, onOpenCommandCenter}) {
       ? { value: `기기 ${disconnectedDevices}대`, desc: "연결 끊긴 장치부터 확인" }
       : { value: `대화 ${msgs.length}건`, desc: "최근 게스트 응답 흐름 점검" },
     checkout: { value: "청소 마감", desc: "퇴실 뒤 준비 완료 전환" },
-    revenue: { value: "순수익 검토", desc: "비용 누락 없이 수익 정산 확인" },
+    settlement: { value: "순수익 검토", desc: "비용 누락 없이 수익 정산 확인" },
   };
-  const nextTransitionMeta = haStage === "revenue"
+  const nextTransitionMeta = haStage === "settlement"
     ? { value: "다음 예약 준비", desc: "수익 정산 확인 뒤 다음 가격 판단" }
     : haStage === "checkout"
     ? { value: "수익 정산 전환", desc: "청소 완료 후 수익 정리 단계" }
@@ -262,12 +259,11 @@ function HomeAssistant({onBack, onOpenScenario, onOpenCommandCenter}) {
         <div className="ha-role-strip">
           <div className="ha-role-copy">
             <div className="ha-role-eyebrow">이 화면의 역할</div>
-            <div className="ha-role-title">대표 숙소 1곳의 현재 단계와 멈춘 지점을 바로 해결하는 곳입니다.</div>
-            <div className="ha-role-desc">전체 우선순위는 커맨드 센터에서 보고, 여기서는 이 숙소 하나의 제어와 후속 작업만 빠르게 끝내는 데 집중합니다.</div>
+            <div className="ha-role-title">이 숙소 하나만 끝까지 처리하는 화면입니다.</div>
+            <div className="ha-role-desc">전체 우선순위는 커맨드 센터에서 보고, 여기서는 메시지, 기기, 청소처럼 이 숙소에 필요한 일만 끝냅니다. 같은 단계 숙소가 여러 곳이면 다시 커맨드 센터로 돌아가 묶어서 처리합니다.</div>
           </div>
           <div className="ha-role-actions">
-            <button className="ha-role-btn ha-role-btn-strong" onClick={()=>onOpenScenario?.(stageScreenMap[haStage])}>이 단계 상세 패널 열기</button>
-            <button className="ha-role-btn" onClick={()=>onOpenCommandCenter?.()}>전체 관제 보기</button>
+            <button className="ha-role-btn ha-role-btn-strong" onClick={()=>onOpenCommandCenter?.(haStage)}>전체 관제로 돌아가기</button>
           </div>
         </div>
 
@@ -508,7 +504,7 @@ function HomeAssistant({onBack, onOpenScenario, onOpenCommandCenter}) {
           </>
         )}
 
-        {haStage === "revenue" && (
+        {haStage === "settlement" && (
           <>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px",marginBottom:"14px"}}>
               {[

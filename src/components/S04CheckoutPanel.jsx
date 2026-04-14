@@ -3,6 +3,7 @@ import React from "react";
 import checkoutService from "../application/checkoutService.js";
 import haBrowserClient from "../infrastructure/haBrowserClient.js";
 import { createStatePollingConnection } from "../infrastructure/haBrowserPolling.js";
+import BatchConsoleGuide from "./BatchConsoleGuide";
 
 // ============================================================
 // S04CheckoutPanel.jsx — UC-004 체크아웃 & 청소 자동화 UI
@@ -278,7 +279,7 @@ function AlertFeedS04({ alerts, onAck, onAckAll }) {
   if (alerts.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8', fontSize: 13 }}>
-        알림 없음 — 대기 중
+        지금 바로 확인할 알림은 없어요.
       </div>
     );
   }
@@ -589,7 +590,7 @@ function S04CheckoutPanel({ onBack }) {
           onClick={onBack}
           style={{ padding: '6px 16px', borderRadius: 8, border: '1.5px solid #e2e8f0', background: '#f8fafc', color: '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
         >
-          ← 뒤로
+          ← 커맨드 센터
         </button>
 
         <div>
@@ -650,6 +651,8 @@ function S04CheckoutPanel({ onBack }) {
         </div>
       </div>
 
+      <BatchConsoleGuide stageId="checkout" onBack={onBack} />
+
       <div style={{ padding: '18px 24px 0', background: '#f0f4f8' }}>
         <div className="s04-top-grid">
           <div style={{ background: focusTone.bg, border: `1.5px solid ${focusTone.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 10px 28px rgba(15,23,42,0.04)' }}>
@@ -674,14 +677,14 @@ function S04CheckoutPanel({ onBack }) {
                   disabled={processing}
                   style={{ padding: '10px 16px', borderRadius: 10, border: '1.5px solid #c2410c', background: processing ? '#ffedd5' : '#ea580c', color: processing ? '#9a3412' : '#ffffff', fontSize: 12, fontWeight: 700, cursor: processing ? 'default' : 'pointer' }}
                 >
-                  {processing ? '퇴실 처리 중' : '퇴실 이벤트 바로 확인'}
+                  {processing ? '퇴실 흐름 확인 중' : '퇴실 흐름 다시 확인'}
                 </button>
               ) : currentStatus === 'cleaning' && firstPendingItem ? (
                 <button
                   onClick={() => toggleChecklistItem(firstPendingItem.id)}
                   style={{ padding: '10px 16px', borderRadius: 10, border: '1.5px solid #1d4ed8', background: '#2563eb', color: '#ffffff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
                 >
-                  다음 청소 항목 처리
+                  다음 청소 항목 보기
                 </button>
               ) : (
                 <button
@@ -693,7 +696,7 @@ function S04CheckoutPanel({ onBack }) {
                   disabled={!nextOccupiedProp}
                   style={{ padding: '10px 16px', borderRadius: 10, border: '1.5px solid #059669', background: nextOccupiedProp ? '#16a34a' : '#dcfce7', color: nextOccupiedProp ? '#ffffff' : '#86efac', fontSize: 12, fontWeight: 700, cursor: nextOccupiedProp ? 'pointer' : 'default' }}
                 >
-                  다음 퇴실 예정 보기
+                  다음 숙소 보기
                 </button>
               )}
               <button
@@ -708,7 +711,7 @@ function S04CheckoutPanel({ onBack }) {
                 disabled={!latestAlert}
                 style={{ padding: '10px 16px', borderRadius: 10, border: '1.5px solid #e2e8f0', background: '#ffffff', color: latestAlert ? '#475569' : '#94a3b8', fontSize: 12, fontWeight: 700, cursor: latestAlert ? 'pointer' : 'default' }}
               >
-                최근 알림 보기
+                이 알림 따라가기
               </button>
             </div>
           </div>
@@ -723,7 +726,7 @@ function S04CheckoutPanel({ onBack }) {
               </>
             ) : (
               <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.7 }}>
-                큰 예외는 없습니다. 지금은 퇴실 대기 숙소와 청소팀 부하만 확인하면 운영 흐름이 안정적으로 유지됩니다.
+                지금 바로 확인할 알림은 없어요. 퇴실 대기 숙소와 청소팀 부하만 보면 운영 흐름을 유지할 수 있습니다.
               </div>
             )}
           </div>
@@ -752,7 +755,7 @@ function S04CheckoutPanel({ onBack }) {
             textTransform: 'uppercase', letterSpacing: '0.06em',
             marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
             <span style={{ width: 3, height: 13, background: '#059669', borderRadius: 2, flexShrink: 0 }} />
-            숙소 목록
+            한 번에 볼 숙소
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {_S04_PROPS.map(prop => {

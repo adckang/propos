@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import checkinPreparationService from "../application/checkinPreparationService.js";
 import PROPOS_CONFIG from "../config/publicConfig.js";
+import BatchConsoleGuide from "./BatchConsoleGuide";
 import haBrowserClient from "../infrastructure/haBrowserClient.js";
 import Toast from "../utils/toast";
 
@@ -638,7 +639,7 @@ function D1AutomationPanel({ onBack }) {
       {/* ── 헤더 ── */}
       <div style={{ background:'#ffffff', borderBottom:'1px solid #e2e8f0', padding:'16px 24px',
         display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
-        {onBack && <button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}>← 홈</button>}
+        {onBack && <button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}>← 커맨드 센터</button>}
         {onBack && <div style={{ width:1, height:22, background:'#e2e8f0' }} />}
         <div style={{ flex:1 }}>
           <div style={{ fontSize:10, color:'#94a3b8', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:4 }}>S01 · D-1 자동화</div>
@@ -672,10 +673,12 @@ function D1AutomationPanel({ onBack }) {
               fontSize:13, fontWeight:800, cursor: running?'not-allowed':'pointer',
               display:'flex', alignItems:'center', gap:8,
               boxShadow: running ? 'none' : '0 2px 8px rgba(37,99,235,0.4)' }}>
-            {running ? <><span style={{ display:'inline-block', animation:'d1spin 1s linear infinite' }}>↻</span> 처리 중...</> : '▶ D-1 자동화 실행'}
+            {running ? <><span style={{ display:'inline-block', animation:'d1spin 1s linear infinite' }}>↻</span> 준비 중...</> : '▶ D-1 준비 다시 확인'}
           </button>
         )}
       </div>
+
+      <BatchConsoleGuide stageId="d1" onBack={onBack} />
 
       {/* ── 바디 ── */}
       {view === 'settings' ? (
@@ -702,7 +705,7 @@ function D1AutomationPanel({ onBack }) {
             <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, overflow:'hidden', flexShrink:0 }}>
               <div style={{ padding:'12px 16px', borderBottom:'1.5px solid #e2e8f0', display:'flex', alignItems:'center', gap:8 }}>
                 <span style={{ width:3, height:13, background:'#059669', borderRadius:2, flexShrink:0 }} />
-                <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1 }}>숙소 목록</span>
+                <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1 }}>한 번에 볼 숙소</span>
                 {isRealData && <span style={{ width:7, height:7, borderRadius:'50%', background:'#059669', animation:'d1pulse 2s ease-in-out infinite' }} />}
               </div>
               <div style={{ padding:'10px 14px' }}>
@@ -725,7 +728,7 @@ function D1AutomationPanel({ onBack }) {
                 ))}
                 {/* 카운트다운 */}
                 <div style={{ marginTop:8, display:'flex', alignItems:'center', gap:6, padding:'7px 10px', background:'#eff6ff', borderRadius:7, border:'1px solid #bfdbfe' }}>
-                  <span style={{ fontSize:10, color:'#64748b' }}>자동 실행까지</span>
+                  <span style={{ fontSize:10, color:'#64748b' }}>다음 자동 실행</span>
                   <span style={{ fontFamily:"'DM Mono',monospace", fontSize:12, fontWeight:700, color: countdown.secs<300?'#dc2626':countdown.secs<3600?'#d97706':'#2563eb' }}>⏱ {countdown.label}</span>
                 </div>
               </div>
@@ -820,7 +823,7 @@ function D1AutomationPanel({ onBack }) {
                 {results.length === 0 && !running ? (
                   <div style={{ textAlign:'center', padding:'40px 20px', color:'#94a3b8', fontSize:12 }}>
                     <div style={{ fontSize:32, marginBottom:10, opacity:0.4 }}>🏠</div>
-                    D-1 자동화를 실행하면<br/>숙소별 처리 결과가 표시됩니다.
+                    D-1 준비를 다시 확인하면<br/>숙소별 처리 결과가 표시됩니다.
                     {!isRealData && <div style={{ fontSize:11, color:'#d97706', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:6, padding:'6px 10px', marginTop:12 }}>⚠ 목업 데이터 사용 중</div>}
                   </div>
                 ) : (
@@ -851,7 +854,7 @@ function D1AutomationPanel({ onBack }) {
             </div>
             <div style={{ flex:1, overflow:'auto', padding:'10px 12px' }}>
               {alerts.length === 0
-                ? <div style={{ textAlign:'center', padding:'40px 20px', color:'#94a3b8', fontSize:12 }}><div style={{ fontSize:32, marginBottom:10, opacity:0.4 }}>🔔</div>알림 없음</div>
+                ? <div style={{ textAlign:'center', padding:'40px 20px', color:'#94a3b8', fontSize:12 }}><div style={{ fontSize:32, marginBottom:10, opacity:0.4 }}>🔔</div>지금 바로 확인할 알림은 없어요.</div>
                 : alerts.map(a => <D1AlertItem key={a.id} alert={a} onAck={ackAlert} />)
               }
             </div>

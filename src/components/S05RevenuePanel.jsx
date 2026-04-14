@@ -1,6 +1,7 @@
 import React from "react";
 
 import settlementService from "../application/settlementService.js";
+import BatchConsoleGuide from "./BatchConsoleGuide";
 
 // ============================================================
 // S05RevenuePanel.jsx — UC-005 수익 정산 자동화 UI
@@ -340,14 +341,14 @@ function PricingRecommendationList({ pricingData, selectedProps, onToggleProp, o
           );
         })}
       </div>
-      <div style={{ marginTop:8, fontSize:11, color:'#94a3b8' }}>* 체크박스 클릭으로 적용 대상 선택</div>
+      <div style={{ marginTop:8, fontSize:11, color:'#94a3b8' }}>* 체크해서 이번에 반영할 숙소만 고르세요.</div>
     </div>
   );
 }
 
 function AlertFeedS05({ alerts, onAck }) {
   if (alerts.length === 0) return (
-    <div style={{ textAlign:'center', padding:'24px 0', color:'#94a3b8', fontSize:12 }}>알림 없음</div>
+    <div style={{ textAlign:'center', padding:'24px 0', color:'#94a3b8', fontSize:12 }}>지금 바로 확인할 알림은 없어요.</div>
   );
   const typeStyle = {
     info:  { bg:'#eff6ff', border:'#bfdbfe', color:'#1d4ed8', icon:'ℹ' },
@@ -529,7 +530,7 @@ function S05RevenuePanel({ onBack }) {
     : errorAlerts.length > 0
     ? '플랫폼 수집 실패나 적용 오류가 남아 있으면 결과를 신뢰하기 어렵습니다. 알림을 먼저 정리한 뒤 가격 적용 또는 리포트 확인으로 넘어가는 편이 안전합니다.'
     : pricingData && selectedProps.length > 0
-    ? `현재 선택된 ${selectedProps.length}개 숙소에 대해 AI 추천 단가를 바로 적용할 수 있습니다. 추천 사유와 증가 폭을 보고 필요한 숙소만 골라 반영해도 됩니다.`
+    ? `현재 선택된 ${selectedProps.length}개 숙소에 대해 AI 추천 단가를 바로 반영할 수 있습니다. 추천 사유와 증가 폭을 보고 필요한 숙소만 골라 반영해도 됩니다.`
     : allDone
     ? '수익 집계와 세금 리포트가 모두 준비되었습니다. 이제 이번 달 결과를 확인하고 다음 달 가격 전략만 결정하면 됩니다.'
     : '정산을 실행하면 플랫폼 수익 집계, AI 가격 최적화, 세금 리포트가 한 번에 이어집니다.';
@@ -568,7 +569,7 @@ function S05RevenuePanel({ onBack }) {
       {/* ── 헤더 ── */}
       <div style={{ background:'#ffffff', borderBottom:'1px solid #e2e8f0', padding:'16px 24px', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          <button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}>← 홈</button>
+          <button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}>← 커맨드 센터</button>
           <div style={{ width:1, height:22, background:'#e2e8f0' }} />
           <div>
             <div style={{ fontSize:10, color:'#94a3b8', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:4 }}>S05 · 수익 정산</div>
@@ -581,11 +582,13 @@ function S05RevenuePanel({ onBack }) {
             style={{ padding:'9px 20px', borderRadius:8, border:`1.5px solid ${running?'#e2e8f0':'#059669'}`, background: running ? '#f8fafc' : '#059669', color: running ? '#94a3b8' : '#fff', fontSize:13, fontWeight:700, cursor: running?'default':'pointer', display:'flex', alignItems:'center', gap:6 }}>
             {running
               ? <><div style={{ width:12, height:12, border:'2px solid #94a3b8', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />정산 중...</>
-              : `▶ ${month}월 정산 실행`}
+              : `▶ ${month}월 정산 시작`}
           </button>
           {allDone && <button onClick={resetAll} style={{ padding:'9px 14px', borderRadius:8, border:'1.5px solid #e2e8f0', background:'#f8fafc', color:'#64748b', fontSize:13, fontWeight:600, cursor:'pointer' }}>↺ 초기화</button>}
         </div>
       </div>
+
+      <BatchConsoleGuide stageId="settlement" onBack={onBack} />
 
       <div style={{ padding:'18px 20px 0', background:'#f0f4f8', flexShrink:0 }}>
         <div className="s05-top-grid">
@@ -610,14 +613,14 @@ function S05RevenuePanel({ onBack }) {
                 disabled={running}
                 style={{ padding:'10px 16px', borderRadius:10, border:'1.5px solid #1d4ed8', background: running ? '#dbeafe' : '#2563eb', color: running ? '#2563eb' : '#fff', fontSize:12, fontWeight:700, cursor: running ? 'default' : 'pointer' }}
               >
-                {running ? '정산 진행 중' : `${month}월 정산 다시 실행`}
+                {running ? '정산 확인 중' : `${month}월 정산 다시 확인`}
               </button>
               <button
                 onClick={applyPricing}
                 disabled={applying || !pricingData || selectedProps.length === 0}
                 style={{ padding:'10px 16px', borderRadius:10, border:'1.5px solid #e2e8f0', background: applying || !pricingData || selectedProps.length === 0 ? '#f8fafc' : '#fff', color: applying || !pricingData || selectedProps.length === 0 ? '#94a3b8' : '#475569', fontSize:12, fontWeight:700, cursor: applying || !pricingData || selectedProps.length === 0 ? 'default' : 'pointer' }}
               >
-                {applying ? '추천 적용 중' : '선택 추천 바로 적용'}
+                {applying ? '추천 반영 중' : '선택 추천 반영'}
               </button>
             </div>
           </div>
@@ -632,7 +635,7 @@ function S05RevenuePanel({ onBack }) {
               </>
             ) : (
               <div style={{ fontSize:12, color:'#64748b', lineHeight:1.7 }}>
-                정산 관련 알림이 아직 없습니다. 실행 후에는 플랫폼 수집 결과와 적용 상태가 여기에 차례대로 쌓입니다.
+                지금 바로 확인할 알림은 없어요. 정산을 시작하면 수집 결과와 반영 상태가 여기에 쌓입니다.
               </div>
             )}
           </div>
@@ -724,7 +727,7 @@ function S05RevenuePanel({ onBack }) {
           ) : (
             <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'28px', textAlign:'center', color:'#94a3b8', fontSize:13 }}>
               <div style={{ fontSize:28, marginBottom:8, opacity:0.4 }}>🤖</div>
-              정산 실행 후 AI 분석 결과가 표시됩니다
+              정산을 시작하면 AI 분석 결과가 표시됩니다
             </div>
           )}
         </div>
@@ -740,7 +743,7 @@ function S05RevenuePanel({ onBack }) {
             <TaxReportCard taxData={taxData} />
           ) : (
             <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'20px', textAlign:'center', color:'#94a3b8', fontSize:13 }}>
-              정산 실행 후 세금 리포트가 표시됩니다
+              정산을 시작하면 세금 리포트가 표시됩니다
             </div>
           )}
 
