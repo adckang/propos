@@ -11,6 +11,29 @@ import Toast from "../utils/toast";
 
 const CC_STAGES = OPERATIONS_STAGES;
 
+function hasUrgentSignal(prop) {
+  return prop.priority === "HIGH" || prop.issues.length > 0;
+}
+
+function isActionableForStage(stageId, prop) {
+  if(stageId === "d1"){
+    return prop.status === "예약됨";
+  }
+  if(stageId === "checkin"){
+    return prop.status === "예약됨" && (hasUrgentSignal(prop) || prop.unreadMsg > 0);
+  }
+  if(stageId === "stay"){
+    return prop.status === "입실중" && (hasUrgentSignal(prop) || prop.unreadMsg > 0);
+  }
+  if(stageId === "checkout"){
+    return prop.status === "청소중" || prop.status === "점검중" || prop.issues.length > 0;
+  }
+  if(stageId === "settlement"){
+    return Number(prop.rating) < 4.3 || prop.revenue >= 500000;
+  }
+  return false;
+}
+
 function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStage = "stay"}) {
   const [stage, setStage] = useState("stay");
   const [props] = useState(ALL_PROPS);
@@ -48,6 +71,10 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
     setStage(initialStage || "stay");
   },[initialStage]);
 
+  useEffect(()=>{
+    setSelProp(null);
+  },[stage]);
+
   const ackAlert = id => setAlerts(list=>list.map(item=>item.id===id ? {...item, ack:true} : item));
   const ackAll = () => setAlerts(list=>list.map(item=>({...item, ack:true})));
 
@@ -56,9 +83,15 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
     setSelProp(prop);
   };
 
-  const filtered = props
+  const stageMatchedProps = props.filter(prop=>currentStage.filter(prop));
+  const actionableProps = stageMatchedProps
+    .filter(prop=>isActionableForStage(stage, prop))
+    .sort((a, b)=>{
+      const order = {HIGH:0, MED:1, OK:2};
+      return order[a.priority] - order[b.priority];
+    });
+  const filtered = stageMatchedProps
     .filter(prop=>{
-      if(!currentStage.filter(prop)) return false;
       if(search && !prop.name.toLowerCase().includes(search.toLowerCase()) && !(prop.guest || "").toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     })
@@ -68,29 +101,32 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
     });
   const unack = alerts.filter(alert=>!alert.ack).length;
   const stageInsights = CC_STAGES.map(item=>{
-    const count = props.filter(item.filter).length;
-    const urgent = props.filter(item.filter).filter(prop=>prop.priority==="HIGH" || prop.issues.length > 0).length;
-    const unread = props.filter(item.filter).reduce((sum, prop)=>sum + prop.unreadMsg, 0);
+    const matched = props.filter(item.filter);
+    const count = matched.length;
+    const actionable = matched.filter(prop=>isActionableForStage(item.id, prop)).length;
+    const urgent = matched.filter(prop=>hasUrgentSignal(prop)).length;
+    const unread = matched.reduce((sum, prop)=>sum + prop.unreadMsg, 0);
     return {
       id: item.id,
       code: item.code,
       label: item.label,
       count,
+      actionable,
       urgent,
       unread,
-      score: urgent * 3 + unread + count,
+      score: actionable * 3 + urgent + unread,
     };
   });
   const currentDrilldown = currentStage?.scenarioScreen
     ? { screen: currentStage.scenarioScreen, label: currentStage.batchActionLabel }
     : null;
   const currentInsight = stageInsights.find(item=>item.id===stage) || stageInsights[0];
-  const stageLeadProp = filtered[0] || null;
+  const stageLeadProp = actionableProps[0] || filtered[0] || null;
 
   const getPrimaryAction = prop => {
     if(prop.priority==="HIGH" || prop.issues.length > 0){
       return {
-        label:"이슈 확인",
+        label:"긴급 이슈",
         detail: prop.issues[0] || "긴급 센서 상태를 바로 확인하세요.",
         tab:"info",
         color:"#dc2626",
@@ -102,7 +138,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
     }
     if(prop.unreadMsg > 0){
       return {
-        label:"메시지 답장",
+        label:"메시지 확인",
         detail:`미읽음 ${prop.unreadMsg}건이 남아 있어요.`,
         tab:"msg",
         color:"#7c3aed",
@@ -114,7 +150,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
     }
     if(prop.status==="예약됨"){
       return {
-        label:"D-1 준비",
+        label:"체크인 준비",
         detail:`${prop.checkIn || "내일"} 체크인을 준비하세요.`,
         tab:"info",
         color:"#2563eb",
@@ -126,7 +162,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
     }
     if(prop.status==="청소중"){
       return {
-        label:"청소 배정",
+        label:"청소 확인",
         detail:"다음 예약 전 청소 상태를 마무리하세요.",
         tab:"clean",
         color:"#d97706",
@@ -137,8 +173,8 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
       };
     }
     return {
-      label:"IoT 확인",
-      detail:"현재 체류 상태와 장치 상태를 빠르게 점검하세요.",
+      label:"운영 점검",
+      detail:"현재 체류 상태와 장치 연결을 빠르게 점검하세요.",
       tab:"iot",
       color:"#059669",
       bg:"#ecfdf5",
@@ -152,19 +188,19 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
     ? `${stageLeadProp.name}부터 보면 됩니다`
     : `${currentStage.label} 단계는 지금 안정적입니다`;
   const stageFocusDesc = stageLeadProp
-    ? `${getPrimaryAction(stageLeadProp).detail} 여기서는 숙소를 고르고, 대표 숙소로 넘길지 일괄 처리로 넘길지만 결정하면 됩니다.`
+    ? `${getPrimaryAction(stageLeadProp).detail} 커맨드 센터에서는 우선순위만 정하고, 숙소 한 곳은 대표 숙소 보드로 넘기거나 같은 문제 여러 곳은 일괄 처리로 넘기면 됩니다.`
     : "지금 바로 넘길 숙소는 없어요. 다른 단계를 눌러 막힌 곳이 있는지 확인해 보세요.";
   const stageDecisionCards = [
     {
       label: "지금 볼 숙소",
       value: selProp ? selProp.name : stageLeadProp ? stageLeadProp.name : "선택 대기",
-      desc: "복잡한 예외는 대표 숙소 상세 보기로 넘깁니다.",
+      desc: "숙소 1건은 대표 숙소 보드에서 처리합니다.",
       tone: { bg: "#eff6ff", border: "#bfdbfe", text: "#2563eb" },
     },
     {
-      label: "같은 문제 한 번에",
-      value: `${currentInsight?.count || 0}곳`,
-      desc: `${currentStage.label} 단계 숙소를 한 번에 정리합니다.`,
+      label: "확인 필요한 숙소",
+      value: `${currentInsight?.actionable || 0}곳`,
+      desc: `${currentStage.label} 단계에서 사람 확인이 필요한 숙소 수입니다.`,
       tone: { bg: currentStage.bg, border: currentStage.border, text: currentStage.color },
     },
     {
@@ -177,8 +213,21 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
 
   const openPropertyWorkspace = prop => {
     focusProperty(prop);
-    onOpenHomeAssistant?.(stage);
-    Toast.show(`${prop.name.split("#")[0].trim()} · 대표 숙소 화면으로 넘깁니다.`, "i");
+    const primaryAction = getPrimaryAction(prop);
+    const routeReason = prop.issues.length > 0
+      ? prop.issues[0]
+      : prop.unreadMsg > 0
+      ? `미읽음 메시지 ${prop.unreadMsg}건`
+      : primaryAction.detail;
+    onOpenHomeAssistant?.(stage, {
+      source: "command-center",
+      stage,
+      property: prop,
+      headline: primaryAction.label,
+      reason: routeReason,
+      nextActionLabel: primaryAction.label,
+    });
+    Toast.show(`${prop.name.split("#")[0].trim()} · 대표 숙소 보드로 넘깁니다.`, "i");
   };
 
   const openBatchWorkspace = () => {
@@ -190,7 +239,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
     Toast.show("오른쪽 실시간 알림 패널에서 바로 확인할 수 있습니다.", "i");
   };
 
-  const stageActionQueue = filtered.slice(0, 5).map(prop=>({
+  const stageActionQueue = actionableProps.slice(0, 5).map(prop=>({
     prop,
     action: getPrimaryAction(prop),
   }));
@@ -287,7 +336,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
               openPropertyWorkspace(p);
             }}
           >
-            끝까지 처리
+            대표 숙소 보기
           </button>
         </div>
       </div>
@@ -317,7 +366,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
             openPropertyWorkspace(p);
           }}
         >
-          끝까지 처리
+          대표 숙소 보기
         </button>
       </div>
     );
@@ -381,7 +430,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
           <div style={{display:"flex",flexDirection:"column",gap:"8px",marginBottom:"14px"}}>
             {[
               `1. 이 숙소가 지금 우선인지 확인합니다.`,
-              `2. 숙소 1건이면 대표 숙소 화면으로 넘깁니다.`,
+              `2. 숙소 1건이면 대표 숙소 보드로 넘깁니다.`,
               `3. 같은 단계 숙소가 여러 곳이면 ${currentStage.label} 일괄 처리로 넘깁니다.`,
             ].map(item=>(
               <div key={item} style={{fontSize:"12px",color:"#475569",lineHeight:"1.7",padding:"9px 12px",border:"1px solid #e2e8f0",borderRadius:"10px",background:"#f8fafc"}}>
@@ -391,7 +440,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
           </div>
 
           <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-            <button className="act-btn" style={{color:"#ffffff",borderColor:"#2563eb",background:"#2563eb",fontSize:"11px"}} onClick={()=>openPropertyWorkspace(p)}>이 숙소 끝까지 처리</button>
+            <button className="act-btn" style={{color:"#ffffff",borderColor:"#2563eb",background:"#2563eb",fontSize:"11px"}} onClick={()=>openPropertyWorkspace(p)}>대표 숙소 보드 열기</button>
             {currentDrilldown && (
               <button className="act-btn" style={{color:currentStage.color,borderColor:currentStage.border,background:currentStage.bg,fontSize:"11px"}} onClick={openBatchWorkspace}>
                 {currentDrilldown.label}
@@ -427,17 +476,18 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
           <div className="prop-panel">
                 <div className="pipeline-wrap">
                   {CC_STAGES.map(item=>{
-                    const count = props.filter(item.filter).length;
-                    const urgentCount = props.filter(item.filter).filter(prop=>prop.priority==="HIGH" || prop.issues.length > 0).length;
+                    const matched = props.filter(item.filter);
+                    const count = matched.length;
+                    const actionableCount = matched.filter(prop=>isActionableForStage(item.id, prop)).length;
                     const active = stage===item.id;
                     return (
                       <div key={item.id} className={`pipeline-card ${active ? "active" : ""}`} style={{borderColor:active?item.color:item.border,background:active?item.bg:"#fff",color:item.color}} onClick={()=>setStage(item.id)}>
-                        {urgentCount>0 && <div className="pipeline-urgent">🔴 {urgentCount}</div>}
+                        {actionableCount>0 && <div className="pipeline-urgent">🔴 {actionableCount}</div>}
                         <div style={{fontSize:"16px",marginBottom:"2px"}}>{item.emoji}</div>
-                        <div className="pipeline-count" style={{color:item.color}}>{count}</div>
+                        <div className="pipeline-count" style={{color:item.color}}>{actionableCount}</div>
                         <div className="pipeline-code">{item.code}</div>
                         <div className="pipeline-label" style={{color:active?item.color:"#475569"}}>{item.label}</div>
-                        <div className="pipeline-meta">{urgentCount > 0 ? `긴급 ${urgentCount}` : `${count}곳 운영 중`}</div>
+                        <div className="pipeline-meta">확인 필요 {actionableCount} · 전체 {count}</div>
                       </div>
                     );
                   })}
@@ -460,7 +510,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
                     <div className="stage-bar-actions">
                       {selProp && (
                         <button className="stage-action-btn" style={{background:"#2563eb",borderColor:"#1d4ed8",color:"#ffffff"}} onClick={()=>openPropertyWorkspace(selProp)}>
-                          이 숙소 끝까지 처리
+                          대표 숙소 보드 열기
                         </button>
                       )}
                       {currentDrilldown && (
@@ -479,9 +529,13 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
                   <div className="cc-section-header">
                     <div>
                       <div className="cc-section-eyebrow">먼저 볼 숙소</div>
-                      <div className="cc-section-title">바로 확인할 {stageActionQueue.length}곳</div>
+                      <div className="cc-section-title">바로 확인할 우선 {stageActionQueue.length}곳</div>
                     </div>
-                    <div className="cc-section-meta">하나를 고르면 대표 숙소로 넘기고, 여러 곳을 묶어야 하면 단계별 일괄 처리로 넘어갑니다.</div>
+                    <div className="cc-section-meta">
+                      {currentInsight?.actionable > stageActionQueue.length
+                        ? `확인 필요한 전체 ${currentInsight.actionable}곳 중 우선순위 상위 ${stageActionQueue.length}곳만 먼저 보여줍니다.`
+                        : "숙소 1건은 대표 숙소 보드로 넘기고, 여러 곳이면 단계별 일괄 처리로 넘어갑니다."}
+                    </div>
                   </div>
                   {stageActionQueue.length > 0 ? (
                     <div className="cc-queue-grid">
@@ -499,7 +553,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
                             <span>이슈 {prop.issues.length}</span>
                           </div>
                           <div className="cc-queue-footer">
-                            <span>숙소 선택</span>
+                            <span>대표 숙소 보드로 넘기기</span>
                             <span>→</span>
                           </div>
                         </button>

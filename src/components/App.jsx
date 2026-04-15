@@ -19,6 +19,7 @@ function App() {
   const [screen, setScreen] = useState("landing");
   const [ccStage, setCcStage] = useState("stay");
   const [haStage, setHaStage] = useState("stay");
+  const [haContext, setHaContext] = useState(null);
   const [now, setNow] = useState(new Date());
 
   const reservedCount = ALL_PROPS.filter((prop) => prop.status === "예약됨").length;
@@ -28,8 +29,9 @@ function App() {
     setCcStage(stage);
     setScreen("cc");
   };
-  const openHA = (stage = "stay") => {
+  const openHA = (stage = "stay", context = null) => {
     setHaStage(stage);
+    setHaContext(context);
     setScreen("ha");
   };
   const portalStageCards = getPortalStageCards(ALL_PROPS);
@@ -40,12 +42,21 @@ function App() {
     return ()=>clearInterval(timer);
   },[]);
 
+  const closeHA = () => {
+    if(haContext?.source === "command-center"){
+      openCC(haStage || "stay");
+      return;
+    }
+    setScreen("landing");
+  };
+
   if(screen==="ha") return (
     <div className="app" style={{fontFamily:"'DM Sans',sans-serif"}}>
       <HomeAssistant
-        onBack={()=>setScreen("landing")}
+        onBack={closeHA}
         onOpenCommandCenter={(stage)=>openCC(stage || "stay")}
         initialStage={haStage}
+        handoff={haContext}
       />
     </div>
   );
@@ -54,7 +65,7 @@ function App() {
     <CommandCenter
       onBack={()=>setScreen("landing")}
       onOpenScenario={setScreen}
-      onOpenHomeAssistant={(stage)=>openHA(stage || "stay")}
+      onOpenHomeAssistant={(stage, context)=>openHA(stage || "stay", context || null)}
       initialStage={ccStage}
     />
   );

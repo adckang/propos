@@ -43,7 +43,7 @@ test.describe("PROPOS smoke", () => {
     await page.getByRole("button", { name: "대표 숙소 상세 보기" }).click();
     await expect(page.getByText("해운대 오션뷰 펜트하우스")).toBeVisible();
     await expect(page.getByText("빠른 제어")).toBeVisible();
-    await expect(page.getByText("이 숙소 하나만 끝까지 처리하는 화면입니다.")).toBeVisible();
+    await expect(page.getByText("이 숙소 한 곳에서 해야 할 일만 끝내는 화면입니다.")).toBeVisible();
     await expect(page.getByRole("button", { name: "전체 관제로 돌아가기" })).toBeVisible();
     await expect(page.getByText("지금 할 일")).toBeVisible();
     await haStage(/D-1 자동화\s*내일 체크인/).click();
@@ -63,10 +63,12 @@ test.describe("PROPOS smoke", () => {
     await expect(page.getByRole("button", { name: "체류 중 예외 일괄 처리" }).first()).toBeVisible();
     await page.locator(".pcard").first().click();
     await expect(page.getByText("왜 이 숙소를 봐야 하나")).toBeVisible();
-    await expect(page.getByRole("button", { name: "이 숙소 끝까지 처리" }).first()).toBeVisible();
-    await page.getByRole("button", { name: "이 숙소 끝까지 처리" }).first().click();
-    await expect(page.getByText("해운대 오션뷰 펜트하우스")).toBeVisible();
-    await expect(page.getByText("연결 끊긴 기기 확인")).toBeVisible();
+    await expect(page.getByRole("button", { name: "대표 숙소 보드 열기" }).first()).toBeVisible();
+    await page.getByRole("button", { name: "대표 숙소 보드 열기" }).first().click();
+    await expect(page.getByText("커맨드 센터에서 넘긴 이유")).toBeVisible();
+    await expect(page.getByText("먼저 센서 재확인")).toBeVisible();
+    await returnButton().click();
+    await expect(page.getByText("전체 관제 센터")).toBeVisible();
     await returnButton().click();
     await expect(page.getByText("에어비앤비 완전 관리 시스템")).toBeVisible();
 

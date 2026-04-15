@@ -8,7 +8,7 @@ import Toast from "../utils/toast";
 // 시나리오 1~5를 한 축으로 재구성한 운영 화면
 // ============================================================
 
-function HomeAssistant({onBack, onOpenCommandCenter, initialStage = "stay"}) {
+function HomeAssistant({onBack, onOpenCommandCenter, initialStage = "stay", handoff = null}) {
   const [devs, setDevs] = useState(DEVICES_INIT);
   const [msgs, setMsgs] = useState([
     {id:1,from:"guest",text:"체크아웃 11시 맞죠?",time:"09:42"},
@@ -143,6 +143,11 @@ function HomeAssistant({onBack, onOpenCommandCenter, initialStage = "stay"}) {
   };
   const currentGuide = stageGuides[haStage];
   const currentEvents = stageEvents[haStage];
+  const handoffProperty = handoff?.property || null;
+  const displayPropertyName = handoffProperty?.name || SINGLE_PROP.name;
+  const displayPropertyMeta = handoffProperty
+    ? `${handoffProperty.city} · ${handoffProperty.type} · ${handoffProperty.status}${handoffProperty.guest ? ` · ${handoffProperty.guest}` : ""}`
+    : SINGLE_PROP.address;
   const immediateActionMeta = {
     d1: { value: "PIN 재확인", desc: "체크인 전 자동화 마지막 점검" },
     checkin: { value: "입실 로그", desc: "씬 실행과 메시지 발송 재확인" },
@@ -201,8 +206,8 @@ function HomeAssistant({onBack, onOpenCommandCenter, initialStage = "stay"}) {
           <span style={{fontSize:22,flexShrink:0}}>{SINGLE_PROP.emoji || "🏠"}</span>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:10,color:"#94a3b8",fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4}}>홈 어시스턴트 · 대표 숙소 해결 보드</div>
-            <div style={{fontWeight:800,fontSize:17,color:"#1e293b",lineHeight:1.2}}>{SINGLE_PROP.name}</div>
-            <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{SINGLE_PROP.address}</div>
+            <div style={{fontWeight:800,fontSize:17,color:"#1e293b",lineHeight:1.2}}>{displayPropertyName}</div>
+            <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{displayPropertyMeta}</div>
           </div>
           <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
             <span style={{background:"#ecfdf5",color:"#059669",border:"1px solid #a7f3d0",fontSize:11,padding:"4px 12px",borderRadius:20,fontWeight:700,whiteSpace:"nowrap"}}>● {currentStage.sub}</span>
@@ -259,13 +264,44 @@ function HomeAssistant({onBack, onOpenCommandCenter, initialStage = "stay"}) {
         <div className="ha-role-strip">
           <div className="ha-role-copy">
             <div className="ha-role-eyebrow">이 화면의 역할</div>
-            <div className="ha-role-title">이 숙소 하나만 끝까지 처리하는 화면입니다.</div>
-            <div className="ha-role-desc">전체 우선순위는 커맨드 센터에서 보고, 여기서는 메시지, 기기, 청소처럼 이 숙소에 필요한 일만 끝냅니다. 같은 단계 숙소가 여러 곳이면 다시 커맨드 센터로 돌아가 묶어서 처리합니다.</div>
+            <div className="ha-role-title">이 숙소 한 곳에서 해야 할 일만 끝내는 화면입니다.</div>
+            <div className="ha-role-desc">전체 우선순위는 커맨드 센터에서 보고, 여기서는 메시지, 기기, 청소처럼 이 숙소에 필요한 일만 처리합니다. 같은 단계 숙소가 여러 곳이면 다시 커맨드 센터로 돌아가 묶어서 처리합니다.</div>
           </div>
           <div className="ha-role-actions">
             <button className="ha-role-btn ha-role-btn-strong" onClick={()=>onOpenCommandCenter?.(haStage)}>전체 관제로 돌아가기</button>
           </div>
         </div>
+
+        {handoffProperty && (
+          <div className="ha-focus-card" style={{background:"#fff7ed",borderColor:"#fed7aa",marginTop:"14px"}}>
+            <div className="ha-focus-copy">
+              <div className="ha-focus-eyebrow">커맨드 센터에서 넘긴 이유</div>
+              <div className="ha-focus-title" style={{color:"#c2410c"}}>{displayPropertyName}에서 {handoff?.headline || "확인"}이 필요합니다.</div>
+              <div className="ha-focus-desc">
+                {handoff?.reason || "이 숙소를 먼저 확인해야 합니다."}
+                {" "}여기서는 이 숙소 한 곳만 보면 되고, 먼저 아래의 "{currentGuide.primary.label}" 버튼부터 누르면 됩니다.
+              </div>
+              <div className="ha-focus-checks">
+                <div className="ha-focus-check">
+                  <span>•</span>
+                  <span>숙소 상태: {handoffProperty.status}</span>
+                </div>
+                <div className="ha-focus-check">
+                  <span>•</span>
+                  <span>미읽음 메시지: {handoffProperty.unreadMsg}건</span>
+                </div>
+                <div className="ha-focus-check">
+                  <span>•</span>
+                  <span>이슈: {handoffProperty.issues.length}건</span>
+                </div>
+              </div>
+            </div>
+            <div className="ha-focus-actions">
+              <button className="ha-focus-btn ha-focus-btn-strong" onClick={()=>runGuideAction(currentGuide.primary)}>먼저 {currentGuide.primary.label}</button>
+              <button className="ha-focus-btn" onClick={()=>onOpenCommandCenter?.(haStage)}>커맨드 센터로 돌아가기</button>
+            </div>
+          </div>
+        )}
 
         <div className="ha-stage-header">
           <span className="ha-stage-icon">{currentStage.emoji}</span>
