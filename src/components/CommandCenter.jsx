@@ -118,6 +118,17 @@ function getStageSummary(stageId, matched) {
   };
 }
 
+function getIoTIssueSummary(prop) {
+  const dl = prop.doorLockStatus;
+  const sh = prop.sensorHealth;
+  if (dl === "오프라인") return "도어락이 완전히 오프라인이에요. 현장 확인이 필요합니다.";
+  if (dl === "미응답") return "도어락이 응답하지 않아요. 원격 제어가 불가능한 상태입니다.";
+  if (dl === "배터리부족") return "도어락 배터리가 부족해요. 교체 전 게스트 안내가 필요해요.";
+  if (sh === "미연결") return "센서 전체가 미연결이에요. IoT 허브 상태를 확인해야 해요.";
+  if (sh === "일부불량") return "일부 센서가 끊겼어요. 어떤 센서인지 확인이 필요해요.";
+  return null;
+}
+
 function getIssueSummary(issue = "") {
   if(issue.includes("Wi-Fi")){
     return "Wi-Fi가 자꾸 끊겨요. 공유기나 회선 상태를 봐야 해요.";
@@ -137,6 +148,24 @@ function getIssueSummary(issue = "") {
   if(issue.includes("소음")){
     return "소음 민원이 들어왔어요. 바로 연락해서 상황을 눌러줘야 해요.";
   }
+  if(issue.includes("PIN")){
+    return "PIN이 아직 발급되지 않았어요. 체크인 전에 반드시 발급해야 해요.";
+  }
+  if(issue.includes("웰컴") || issue.includes("메시지")){
+    return "웰컴 메시지가 아직 발송되지 않았어요. 지금 바로 보내야 해요.";
+  }
+  if(issue.includes("스마트홈") || issue.includes("초기화")){
+    return "스마트홈 초기화가 실패했어요. 씬 재실행이 필요해요.";
+  }
+  if(issue.includes("유지보수")){
+    return "유지보수 이슈가 접수됐어요. 다음 예약 전에 처리해야 해요.";
+  }
+  if(issue.includes("청소팀")){
+    return "청소팀이 아직 배정되지 않았어요. 바로 연락해서 잡아야 해요.";
+  }
+  if(issue.includes("충돌")){
+    return "다음 예약과 청소 시간이 겹쳐요. 일정 조율이 필요합니다.";
+  }
   return issue || "운영 이슈 확인";
 }
 
@@ -153,6 +182,10 @@ function getMessageTopic(prop, stageId) {
 }
 
 function getActionBrief(prop, stageId) {
+  // IoT 물리 상태 이상이 최우선
+  const iotSummary = getIoTIssueSummary(prop);
+  if(iotSummary) return iotSummary;
+
   if(prop.issues.length > 0){
     return getIssueSummary(prop.issues[0]);
   }
@@ -187,12 +220,21 @@ function getActionBrief(prop, stageId) {
     return `실내 온도가 ${prop.temp}°로 높아요. 냉방 상태를 확인해야 해요.`;
   }
 
-  return `센서값이 흔들려요. 온도 ${prop.temp}° · 습도 ${prop.humidity}%예요.`;
+  return `센서 정상 · 온도 ${prop.temp}° · 습도 ${prop.humidity}%`;
 }
 
 function getActionInstruction(prop, stageId) {
   const issue = prop.issues[0] || "";
   const topic = getMessageTopic(prop, stageId);
+
+  // IoT 물리 상태 해결책 우선
+  const dl = prop.doorLockStatus;
+  const sh = prop.sensorHealth;
+  if(dl === "오프라인") return "HA에서 도어락 엔티티 상태를 확인하고, 오프라인이면 현장 방문 또는 배터리 교체 기사를 바로 잡아주세요.";
+  if(dl === "미응답") return "HA에서 도어락에 원격 명령을 한 번 보내보고 응답이 없으면 배터리 또는 허브 연결을 확인해주세요.";
+  if(dl === "배터리부족") return "배터리 교체 기사를 먼저 잡고, 게스트에겐 배터리 교체 예정 시간과 비상 연락처를 바로 안내해주세요.";
+  if(sh === "미연결") return "HA 허브(라즈베리파이) 전원과 Tailscale 연결을 먼저 확인해주세요. 전체 센서가 끊겼을 때는 허브 재시작이 가장 빠릅니다.";
+  if(sh === "일부불량") return "HA 대시보드에서 unavailable 엔티티부터 찾고, 해당 기기 전원과 Wi-Fi 연결을 확인해주세요.";
 
   if(issue.includes("Wi-Fi")){
     return "공유기 전원과 인터넷 연결부터 보고, 필요하면 재부팅 안내를 바로 보내주세요.";
@@ -211,6 +253,24 @@ function getActionInstruction(prop, stageId) {
   }
   if(issue.includes("소음")){
     return "민원 들어온 시간과 객실부터 확인하고, 게스트에게 조용히 부탁 메시지를 바로 보내주세요.";
+  }
+  if(issue.includes("PIN")){
+    return "D-1 자동화에서 PIN 발급을 다시 실행해주세요. 발급 후 웰컴 메시지에 포함해서 바로 발송하면 됩니다.";
+  }
+  if(issue.includes("웰컴") || issue.includes("메시지")){
+    return "게스트 연락처로 체크인 안내 메시지를 지금 바로 발송해주세요. PIN 번호를 꼭 포함해서 보내세요.";
+  }
+  if(issue.includes("스마트홈") || issue.includes("초기화")){
+    return "D-1 패널에서 스마트홈 씬을 다시 실행해주세요. 에어컨·조명·도어락 초기화 상태를 하나씩 확인해주세요.";
+  }
+  if(issue.includes("청소팀")){
+    return "청소 인력 목록에서 가용 인원을 확인하고 바로 배정해주세요. 없으면 외부 업체에 긴급 요청해야 해요.";
+  }
+  if(issue.includes("유지보수")){
+    return "유지보수 이슈를 접수하고, 다음 체크인 전에 처리가 가능한 시간인지 먼저 확인해주세요.";
+  }
+  if(issue.includes("충돌")){
+    return "청소 완료 예정 시간과 다음 체크인 시간을 비교해주세요. 늦으면 다음 게스트에게 지연 안내를 미리 보내야 해요.";
   }
 
   if(prop.unreadMsg > 0){

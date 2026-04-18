@@ -15,11 +15,19 @@ const CITIES      = ["서울 강남","서울 마포","서울 용산","서울 성
 const TYPES       = ["펜트하우스","아파트","스튜디오","한옥","빌라","원룸","게스트하우스","복층"];
 const GUESTS_LIST = ["김민준","이지수","박도현","Sarah M.","田中花子",
                      "Mike J.","Emma C.","최현아","정준호","王芳","Ana S.","David K."];
-const ISSUES_POOL      = ["Wi-Fi 불안정","에어컨 오류","도어락 배터리 부족","온수 문제","청소 미완료","소음 민원"];
 const STATUSES         = ["입실중","입실중","입실중","예약됨","예약됨","공실","청소중","점검중"];
 const DOOR_LOCK_STATUS = ["정상","정상","정상","정상","정상","배터리부족","미응답","오프라인"];
 const SENSOR_HEALTH    = ["정상","정상","정상","정상","일부불량","일부불량","미연결"];
 const LAST_CONTROL     = ["방금","방금","5분 전","1시간 전","미기록"];
+
+// 스테이지별 이슈 풀 — 각 단계에 실제로 발생할 수 있는 문제만
+const STAGE_ISSUES = {
+  예약됨:   ["PIN 미발급","웰컴 메시지 미발송","스마트홈 초기화 실패","입실 안내 누락"],
+  입실중:   ["Wi-Fi 불안정","에어컨 오류","소음 민원","온수 문제","도어락 배터리 부족"],
+  청소중:   ["청소 미완료","청소팀 미배정","청소 지연","유지보수 이슈 접수 필요"],
+  점검중:   ["유지보수 미완료","청소 지연","다음 예약 충돌 위험"],
+  공실:     [],
+};
 
 // ── 전체 숙소 목록 (CommandCenter용) ─────────────────────
 export const ALL_PROPS = Array.from({length: 48}, (_, i) => {
@@ -43,7 +51,7 @@ export const ALL_PROPS = Array.from({length: 48}, (_, i) => {
     acOn:      status === "입실중" && Math.random() > 0.3,
     acTemp:    randN(20, 26),
     lightsOn:  status === "입실중",
-    issues:          Math.random() < 0.18 ? [rand(ISSUES_POOL)] : [],
+    issues:          Math.random() < 0.18 ? (STAGE_ISSUES[status]?.length ? [rand(STAGE_ISSUES[status])] : []) : [],
     cleaning:        status === "청소중" ? "진행중" : "완료",
     priority:        Math.random() < 0.18 ? "HIGH" : Math.random() < 0.25 ? "MED" : "OK",
     unreadMsg:       Math.random() < 0.25 ? randN(1, 4) : 0,
