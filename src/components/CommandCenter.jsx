@@ -148,6 +148,10 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
     return () => { clearInterval(clock); clearInterval(alertFeed); };
   }, [props]);
 
+  useEffect(() => {
+    if (initialStage && initialStage !== "stay") setStage(initialStage);
+  }, [initialStage]);
+
   useEffect(() => { setSelProp(null); }, [healthFilter, stage]);
 
   const ackAlert = id => setAlerts(list => list.map(a => a.id === id ? {...a, ack:true} : a));
