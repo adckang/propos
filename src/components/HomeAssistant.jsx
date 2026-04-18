@@ -339,6 +339,65 @@ function HomeAssistant({onBack, onOpenCommandCenter, initialStage = "stay", hand
           </div>
         </div>
 
+        {/* ── 디지털 트윈: 기기 현황 + 빠른 제어 ── */}
+        {(()=>{
+          const categories = [
+            {key:"security",      label:"보안",   color:"#dc2626"},
+            {key:"climate",       label:"냉난방", color:"#2563eb"},
+            {key:"lighting",      label:"조명",   color:"#d97706"},
+            {key:"entertainment", label:"엔터",   color:"#7c3aed"},
+            {key:"comfort",       label:"편의",   color:"#059669"},
+          ];
+          const SCENES = [
+            {label:"🌅 아침 모드",  action:"morning"},
+            {label:"🌙 취침 모드",  action:"sleep"},
+            {label:"🎬 영화 모드",  action:"movie"},
+            {label:"🏠 퇴실 모드",  action:"checkout"},
+          ];
+          const activeCount = devs.filter(d=>d.state).length;
+          const offlineCount = devs.filter(d=>!d.state).length;
+          return (
+            <div style={{background:"#fff",border:"1.5px solid #e2e8f0",borderRadius:"14px",marginBottom:"14px",overflow:"hidden"}}>
+              <div style={{padding:"12px 16px",borderBottom:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f8fafc"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+                  <span style={{fontSize:"13px",fontWeight:800,color:"#1e293b"}}>기기 현황</span>
+                  <span style={{fontSize:"11px",color:"#94a3b8",fontWeight:600}}>· 빠른 제어</span>
+                  <span style={{fontSize:"11px",background:"#ecfdf5",color:"#059669",border:"1px solid #a7f3d0",borderRadius:"20px",padding:"2px 8px",fontWeight:700}}>ON {activeCount}</span>
+                  <span style={{fontSize:"11px",background:"#f8fafc",color:"#64748b",border:"1px solid #e2e8f0",borderRadius:"20px",padding:"2px 8px",fontWeight:700}}>OFF {offlineCount}</span>
+                </div>
+                <div style={{display:"flex",gap:"6px"}}>
+                  {SCENES.map(scene=>(
+                    <button key={scene.action} onClick={()=>Toast.show(`${scene.label} 씬을 실행했습니다.`, "s")} style={{fontSize:"10px",padding:"4px 9px",borderRadius:"20px",border:"1.5px solid #bfdbfe",background:"#eff6ff",color:"#2563eb",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:700}}>{scene.label}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"0",borderBottom:"none"}}>
+                {categories.map(cat=>{
+                  const catDevs = devs.filter(d=>d.category===cat.key);
+                  if(catDevs.length===0) return null;
+                  return (
+                    <div key={cat.key} style={{borderRight:"1px solid #f1f5f9",padding:"10px 12px",lastChild:{borderRight:"none"}}}>
+                      <div style={{fontSize:"9px",fontWeight:800,color:"#94a3b8",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:"8px"}}>{cat.label}</div>
+                      {catDevs.map(dev=>(
+                        <div key={dev.id} onClick={()=>toggleDev(dev.id)} style={{display:"flex",alignItems:"center",gap:"6px",padding:"6px 8px",borderRadius:"8px",cursor:"pointer",marginBottom:"4px",background:dev.state?`${cat.color}10`:"#f8fafc",border:`1px solid ${dev.state?`${cat.color}33`:"#f1f5f9"}`,transition:"all 0.15s"}}>
+                          <span style={{fontSize:"14px",flexShrink:0}}>{dev.icon}</span>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:"10px",fontWeight:700,color:dev.state?cat.color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dev.label}</div>
+                            {dev.temp && <div style={{fontSize:"9px",color:"#94a3b8",fontFamily:"'DM Mono',monospace"}}>{dev.temp}°C</div>}
+                          </div>
+                          <div style={{width:"28px",height:"16px",borderRadius:"8px",background:dev.state?cat.color:"#e2e8f0",position:"relative",flexShrink:0,transition:"background 0.2s"}}>
+                            <div style={{position:"absolute",top:"2px",width:"12px",height:"12px",borderRadius:"50%",background:"#fff",left:dev.state?"calc(100% - 14px)":"2px",transition:"left 0.2s",boxShadow:"0 1px 2px rgba(0,0,0,0.2)"}} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         <div className="ha-stage-header">
           <span className="ha-stage-icon">{currentStage.emoji}</span>
           <div className="ha-stage-title" style={{color:currentStage.color}}>{currentStage.label}</div>
@@ -580,21 +639,6 @@ function HomeAssistant({onBack, onOpenCommandCenter, initialStage = "stay", hand
         )}
       </div>
 
-      <div className="ha-quick-strip">
-        <div className="ha-quick-label">빠른 제어</div>
-        {devs.slice(0,5).map(device=>(
-          <div key={device.id} onClick={()=>toggleDev(device.id)} style={{display:"flex",alignItems:"center",gap:"5px",padding:"6px 12px",borderRadius:"20px",background:device.state?"#eff6ff":"#f7f9fc",border:`1.5px solid ${device.state?"#bfdbfe":"#e2e8f0"}`,cursor:"pointer",transition:"all 0.15s",flexShrink:0}}>
-            <span style={{fontSize:"13px"}}>{device.icon}</span>
-            <span style={{fontSize:"11px",fontWeight:"600",color:device.state?"#2563eb":"#718096"}}>{device.label}</span>
-            <span style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:device.state?"#2563eb":"#a0aec0",marginLeft:2}}>{device.state?"ON":"OFF"}</span>
-          </div>
-        ))}
-        <div style={{marginLeft:"auto",display:"flex",gap:"6px",flexShrink:0}}>
-          {["🌅 아침","🌙 취침","🎬 영화","🏠 퇴실"].map(scene=>(
-            <button key={scene} className="act-btn" style={{color:"#2563eb",borderColor:"#bfdbfe",background:"#eff6ff",fontSize:"11px",padding:"5px 10px"}}>{scene}</button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
