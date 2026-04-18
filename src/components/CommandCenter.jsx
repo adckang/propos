@@ -131,42 +131,42 @@ function getIoTIssueSummary(prop) {
 
 function getIssueSummary(issue = "") {
   if(issue.includes("Wi-Fi")){
-    return "Wi-Fi가 자꾸 끊겨요. 공유기나 회선 상태를 봐야 해요.";
+    return "WiFi 허브 자동복구 실패 · 원격 재부팅 필요";
   }
   if(issue.includes("에어컨")){
-    return "에어컨 응답이 없어요. 원격 제어가 되는지 확인해야 해요.";
+    return "에어컨 자동제어 무응답 · HA 엔티티 재연동 필요";
   }
   if(issue.includes("도어락")){
-    return "도어락 배터리가 낮아요. 배터리 교체 전 안내가 필요해요.";
+    return "도어락 배터리 임계치 도달 · 현장 교체 예약 필요";
   }
   if(issue.includes("온수")){
-    return "온수 문제가 있어요. 보일러 상태를 바로 확인해야 해요.";
+    return "온수 센서 이상 감지 · 보일러 원격 상태 확인 필요";
   }
   if(issue.includes("청소")){
-    return "청소가 아직 안 끝났어요. 다음 예약 전에 마감 확인이 필요해요.";
+    return "청소 완료 신호 미수신 · 다음 체크인 전 확인 필요";
   }
   if(issue.includes("소음")){
-    return "소음 민원이 들어왔어요. 바로 연락해서 상황을 눌러줘야 해요.";
+    return "소음 임계치 초과 감지 · 자동 경보 발송 완료 · 추가 조치 확인";
   }
   if(issue.includes("PIN")){
-    return "PIN이 아직 발급되지 않았어요. 체크인 전에 반드시 발급해야 해요.";
+    return "PIN 자동 발급 실패 · D-1 자동화 재실행 필요";
   }
   if(issue.includes("웰컴") || issue.includes("메시지")){
-    return "웰컴 메시지가 아직 발송되지 않았어요. 지금 바로 보내야 해요.";
+    return "웰컴 씬 자동 발송 실패 · 수동 트리거 필요";
   }
   if(issue.includes("스마트홈") || issue.includes("초기화")){
-    return "스마트홈 초기화가 실패했어요. 씬 재실행이 필요해요.";
+    return "스마트홈 초기화 씬 실행 실패 · HA에서 재실행 필요";
   }
   if(issue.includes("유지보수")){
-    return "유지보수 이슈가 접수됐어요. 다음 예약 전에 처리해야 해요.";
+    return "유지보수 항목 미처리 · 다음 체크인 전 완료 필요";
   }
   if(issue.includes("청소팀")){
-    return "청소팀이 아직 배정되지 않았어요. 바로 연락해서 잡아야 해요.";
+    return "청소팀 자동 배정 실패 · 수동 배정 필요";
   }
   if(issue.includes("충돌")){
-    return "다음 예약과 청소 시간이 겹쳐요. 일정 조율이 필요합니다.";
+    return "청소 일정 ↔ 다음 체크인 시간 충돌 · 일정 조율 필요";
   }
-  return issue || "운영 이슈 확인";
+  return issue || "자동화 이슈 확인";
 }
 
 function getMessageTopic(prop, stageId) {
@@ -213,14 +213,14 @@ function getActionBrief(prop, stageId) {
   }
 
   if(prop.humidity >= 60){
-    return `습도가 ${prop.humidity}%로 높아요. 공기 상태를 바로 봐야 해요.`;
+    return `습도 ${prop.humidity}% 임계치 초과 · 제습 자동화 확인 필요`;
   }
 
   if(prop.temp >= 27){
-    return `실내 온도가 ${prop.temp}°로 높아요. 냉방 상태를 확인해야 해요.`;
+    return `실내 온도 ${prop.temp}° 상승 · 에어컨 원격 가동 필요`;
   }
 
-  return `센서 정상 · 온도 ${prop.temp}° · 습도 ${prop.humidity}%`;
+  return `자동 모니터링 정상 · 온도 ${prop.temp}° · 습도 ${prop.humidity}%`;
 }
 
 function getActionInstruction(prop, stageId) {
@@ -237,112 +237,82 @@ function getActionInstruction(prop, stageId) {
   if(sh === "일부불량") return "HA 대시보드에서 unavailable 엔티티부터 찾고, 해당 기기 전원과 Wi-Fi 연결을 확인해주세요.";
 
   if(issue.includes("Wi-Fi")){
-    return "공유기 전원과 인터넷 연결부터 보고, 필요하면 재부팅 안내를 바로 보내주세요.";
+    return "HA → 스마트 플러그 엔티티에서 WiFi 허브 전원을 원격 재부팅하세요. 재연결 실패 시 현장 출동으로 전환합니다.";
   }
   if(issue.includes("에어컨")){
-    return "에어컨 전원이 들어오는지 보고, 원격으로 24도로 한 번 켜주세요.";
+    return "HA에서 climate 엔티티 상태를 확인 후 24°C로 원격 재설정하세요. 엔티티 자체가 unavailable이면 허브 재부팅이 필요합니다.";
   }
   if(issue.includes("도어락")){
-    return "배터리 교체 기사부터 잡고, 게스트에겐 비상 연락 방법을 먼저 보내주세요.";
+    return "도어락 배터리 교체 일정을 잡고, 다음 체크인 전 완료되도록 현장 조치를 예약하세요.";
   }
   if(issue.includes("온수")){
-    return "보일러 상태를 먼저 확인하고, 복구 전이면 예상 시간부터 안내해주세요.";
+    return "HA에서 보일러 엔티티 상태를 확인하고, unavailable이면 스마트 플러그 재부팅으로 보일러를 재시작하세요.";
   }
   if(issue.includes("청소")){
-    return "청소팀에 완료 예정 시간부터 받고, 늦으면 다음 예약팀에 바로 알려주세요.";
+    return "청소팀 앱에서 완료 상태를 확인하세요. 미완료면 다음 체크인까지 완료 가능한지 확인 후 일정을 재조정합니다.";
   }
   if(issue.includes("소음")){
-    return "민원 들어온 시간과 객실부터 확인하고, 게스트에게 조용히 부탁 메시지를 바로 보내주세요.";
+    return "HA 소음 센서 로그에서 발생 시간대와 수치를 확인하세요. 임계치 초과 알림은 자동 발송 완료됩니다.";
   }
   if(issue.includes("PIN")){
-    return "D-1 자동화에서 PIN 발급을 다시 실행해주세요. 발급 후 웰컴 메시지에 포함해서 바로 발송하면 됩니다.";
+    return "D-1 자동화 패널에서 PIN 발급을 수동으로 재실행하세요. 발급 완료 후 HA persistent_notification에서 PIN을 확인할 수 있습니다.";
   }
   if(issue.includes("웰컴") || issue.includes("메시지")){
-    return "게스트 연락처로 체크인 안내 메시지를 지금 바로 발송해주세요. PIN 번호를 꼭 포함해서 보내세요.";
+    return "D-1 패널에서 웰컴 씬을 수동 트리거하세요. HA에서 automation 실행 로그를 확인해 실패 원인을 파악합니다.";
   }
   if(issue.includes("스마트홈") || issue.includes("초기화")){
-    return "D-1 패널에서 스마트홈 씬을 다시 실행해주세요. 에어컨·조명·도어락 초기화 상태를 하나씩 확인해주세요.";
+    return "HA에서 스마트홈 초기화 씬을 수동으로 재실행하세요. 조명·에어컨·도어락 초기화 순서로 각 엔티티 응답을 확인합니다.";
   }
   if(issue.includes("청소팀")){
-    return "청소 인력 목록에서 가용 인원을 확인하고 바로 배정해주세요. 없으면 외부 업체에 긴급 요청해야 해요.";
+    return "청소 인력 목록에서 가용 인원을 확인하고 수동 배정하세요. 가용 인원이 없으면 외부 업체에 긴급 배정을 요청합니다.";
   }
   if(issue.includes("유지보수")){
-    return "유지보수 이슈를 접수하고, 다음 체크인 전에 처리가 가능한 시간인지 먼저 확인해주세요.";
+    return "유지보수 항목을 확인하고, 다음 체크인 전 완료 가능한 일정인지 판단하세요. 불가능하면 예약 조정이 필요합니다.";
   }
   if(issue.includes("충돌")){
-    return "청소 완료 예정 시간과 다음 체크인 시간을 비교해주세요. 늦으면 다음 게스트에게 지연 안내를 미리 보내야 해요.";
+    return "청소 완료 예정 시간과 다음 체크인 시간을 비교하세요. 충돌이 확정되면 다음 예약에 지연 안내를 선제적으로 발송합니다.";
   }
 
   if(prop.unreadMsg > 0){
-    if(topic.includes("체크아웃 시간")){
-      return "11시 체크아웃이라고 짧게 답장하고, 짐 보관 가능 여부만 함께 안내해주세요.";
-    }
-    if(topic.includes("와이파이")){
-      return "와이파이 이름과 비밀번호를 바로 보내고, 연결되는지 확인 부탁해주세요.";
+    if(topic.includes("와이파이") || topic.includes("WiFi")){
+      return "HA에서 WiFi AP 상태를 확인 후 원격 재부팅하세요. 복구 완료 후 게스트에게 재연결 안내를 발송합니다.";
     }
     if(topic.includes("온도")){
-      return "원격으로 온도부터 맞추고, 조정했다고 짧게 답장해주세요.";
+      return "HA에서 현재 실내 온도를 확인하고 에어컨 설정값을 원격으로 조정하세요.";
     }
-    if(topic.includes("주차")){
-      return "주차 위치와 들어오는 방법만 짧게 안내해주세요.";
+    if(topic.includes("PIN") || topic.includes("입실 방법")){
+      return "HA 자동화 로그에서 PIN 발급 이력을 확인하세요. 발급 실패면 D-1 패널에서 수동 재발급합니다.";
     }
-    if(topic.includes("입실 방법")){
-      return "도어락 여는 방법이랑 PIN만 다시 보내주세요.";
-    }
-    if(topic.includes("PIN")){
-      return "PIN 번호를 다시 보내고, 안 되면 바로 알려달라고 답장해주세요.";
-    }
-    if(topic.includes("체크인 시간")){
-      return "체크인 가능 시간만 다시 알려주고, 늦으면 메시지 달라고 적어주세요.";
-    }
-    if(topic.includes("짐 보관")){
-      return "짐 보관 가능 시간과 장소를 먼저 안내해주세요.";
-    }
-    if(topic.includes("분실물")){
-      return "분실물 위치 확인부터 하고, 찾는 대로 바로 연락드린다고 답장해주세요.";
-    }
-    if(topic.includes("청소 시간")){
-      return "청소 끝나는 예상 시간만 먼저 안내해주세요.";
-    }
-    if(topic.includes("리뷰 정산")){
-      return "리뷰 반영 여부와 정산 시점을 먼저 확인해주세요.";
-    }
-    if(topic.includes("할인 반영")){
-      return "할인 적용 내역부터 보고, 차감된 금액이 맞는지 확인해주세요.";
-    }
-    if(topic.includes("가격 변경")){
-      return "변경된 가격이 실제 반영됐는지 먼저 확인해주세요.";
-    }
-    return `게스트가 "${topic}" 관련으로 남겼어요. 지금 답장부터 먼저 보내주세요.`;
+    return `게스트 미확인 메시지 ${prop.unreadMsg}건 · HA 자동 답장 로그를 먼저 확인하세요.`;
   }
 
   if(stageId === "d1"){
-    return "PIN하고 사전 안내 메시지만 다시 확인하면 됩니다.";
+    return "D-1 자동화 체크리스트 — PIN 발급, 웰컴 씬, 스마트홈 초기화 상태를 순서대로 확인하세요.";
   }
 
   if(stageId === "checkin"){
-    return "입실 로그부터 보고, 체크인 흐름이 끊기지 않았는지 확인해주세요.";
+    return "HA 입실 자동화 실행 로그를 확인하세요. 씬 실행 실패 항목이 있으면 수동으로 재트리거합니다.";
   }
 
   if(stageId === "checkout"){
     return prop.status === "점검중"
-      ? "점검이 밀렸어요. 다음 예약 전에 끝나는지만 먼저 확인해주세요."
-      : "청소 마감만 확인하면 됩니다. 완료 시간부터 잡아주세요.";
+      ? "점검 항목 완료 여부를 확인하고, 다음 체크인 전까지 완료 가능한 일정인지 판단하세요."
+      : "청소 완료 신호를 확인하세요. 신호가 없으면 청소팀 앱에서 수동으로 완료 처리합니다.";
   }
 
   if(stageId === "settlement"){
-    return "수익이 큰 편이에요. 이번 달 정산만 먼저 검토해주세요.";
+    return "이달 수익 정산 내역을 검토하세요. AI 가격 최적화 추천이 적용됐는지 확인합니다.";
   }
 
   if(prop.humidity >= 60){
-    return "습도가 너무 높아요. 에어컨이나 제습기를 가동할 필요 있어요.";
+    return `현재 습도 ${prop.humidity}% — HA에서 에어컨 제습 모드를 원격으로 실행하세요.`;
   }
 
   if(prop.temp >= 27){
-    return "실내가 더워요. 에어컨을 먼저 켜고 온도가 내려가는지 봐주세요.";
+    return `현재 온도 ${prop.temp}° — HA에서 에어컨을 24°C로 원격 가동하세요.`;
   }
 
-  return "센서값이 흔들려요. 지금 들어가서 온도랑 습도부터 다시 확인해주세요.";
+  return `센서 정상 · 온도 ${prop.temp}° / 습도 ${prop.humidity}% — 자동 모니터링 중`;
 }
 
 function getActionToneKey(prop) {
