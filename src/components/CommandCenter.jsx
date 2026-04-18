@@ -468,6 +468,19 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
     setSelProp(prop);
   };
 
+  // ── IoT 시스템 헬스 버킷 (전체 숙소 기준) ──────────────────
+  const iotBuckets = {
+    offline:    props.filter(p => p.doorLockStatus === "오프라인" || p.sensorHealth === "미연결"),
+    needHuman:  props.filter(p => p.doorLockStatus !== "오프라인" && p.sensorHealth !== "미연결"
+                                && (p.doorLockStatus === "미응답" || p.sensorHealth === "일부불량"
+                                    || p.priority === "HIGH" || p.issues.length > 0)),
+    autoOk:     props.filter(p => p.doorLockStatus === "정상" && p.sensorHealth === "정상"
+                                && p.priority !== "HIGH" && p.issues.length === 0 && p.unreadMsg === 0),
+  };
+  iotBuckets.watchMsg = props.filter(p =>
+    !iotBuckets.offline.includes(p) && !iotBuckets.needHuman.includes(p) && !iotBuckets.autoOk.includes(p)
+  );
+
   const stageMatchedProps = props.filter(prop=>currentStage.filter(prop));
   const actionableProps = stageMatchedProps
     .filter(prop=>isActionableForStage(stage, prop))
@@ -865,6 +878,34 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
             {unack>0 && <div style={{position:"absolute",top:"-2px",right:"-2px",width:"8px",height:"8px",background:TRIAGE_TONES.critical.strong,borderRadius:"50%",animation:"pulse 1.5s infinite"}} />}
           </div>
         </div>
+      </div>
+
+      {/* ── IoT 시스템 헬스 바 ── */}
+      <div style={{background:"#fff",borderBottom:"1px solid #e2e8f0",padding:"8px 18px",display:"flex",gap:"10px",alignItems:"center",flexShrink:0}}>
+        <span style={{fontSize:"10px",fontWeight:800,color:"#94a3b8",letterSpacing:"0.08em",textTransform:"uppercase",whiteSpace:"nowrap",marginRight:4}}>IoT 시스템</span>
+        {[
+          {key:"offline",    label:"시스템 이상",    color:"#dc2626", bg:"#fef2f2", border:"#fecaca",  count: iotBuckets.offline.length},
+          {key:"needHuman",  label:"사람 개입 필요", color:"#ea580c", bg:"#fff7ed", border:"#fdba74",  count: iotBuckets.needHuman.length},
+          {key:"watchMsg",   label:"확인 필요",      color:"#d97706", bg:"#fffbeb", border:"#fde68a",  count: iotBuckets.watchMsg.length},
+          {key:"autoOk",     label:"자동 제어 정상", color:"#059669", bg:"#f0fdf4", border:"#a7f3d0",  count: iotBuckets.autoOk.length},
+        ].map(bucket => (
+          <div key={bucket.key} style={{display:"flex",alignItems:"center",gap:"6px",padding:"4px 10px",borderRadius:"20px",background:bucket.bg,border:`1px solid ${bucket.border}`}}>
+            <span style={{width:"6px",height:"6px",borderRadius:"50%",background:bucket.color,display:"inline-block",flexShrink:0}} />
+            <span style={{fontFamily:"'DM Mono',monospace",fontSize:"12px",fontWeight:800,color:bucket.color}}>{bucket.count}</span>
+            <span style={{fontSize:"11px",color:bucket.color,fontWeight:600,whiteSpace:"nowrap"}}>{bucket.label}</span>
+          </div>
+        ))}
+        <div style={{marginLeft:"auto",height:"6px",flex:1,maxWidth:200,borderRadius:4,overflow:"hidden",background:"#f1f5f9",display:"flex"}}>
+          {[
+            {count: iotBuckets.offline.length,   color:"#dc2626"},
+            {count: iotBuckets.needHuman.length,  color:"#ea580c"},
+            {count: iotBuckets.watchMsg.length,   color:"#d97706"},
+            {count: iotBuckets.autoOk.length,     color:"#059669"},
+          ].map((seg, i) => (
+            <div key={i} style={{height:"100%",width:`${(seg.count / props.length) * 100}%`,background:seg.color,transition:"width 0.3s"}} />
+          ))}
+        </div>
+        <span style={{fontSize:"10px",color:"#94a3b8",fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap"}}>{props.length}개 전체</span>
       </div>
 
       <div className="cc-body">
