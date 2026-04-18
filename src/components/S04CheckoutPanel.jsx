@@ -3,7 +3,6 @@ import React from "react";
 import checkoutService from "../application/checkoutService.js";
 import haBrowserClient from "../infrastructure/haBrowserClient.js";
 import { createStatePollingConnection } from "../infrastructure/haBrowserPolling.js";
-import BatchConsoleGuide from "./BatchConsoleGuide";
 
 // ============================================================
 // S04CheckoutPanel.jsx — UC-004 체크아웃 & 청소 자동화 UI
@@ -569,420 +568,177 @@ function S04CheckoutPanel({ onBack }) {
 
   // ── 렌더 ──
   return (
-    <div style={{ minHeight: '100vh', background: '#f0f4f8', fontFamily: "'DM Sans', 'Nunito', sans-serif" }}>
-
+    <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontFamily:"'DM Sans',sans-serif" }}>
       <style>{`
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
         @keyframes spin   { from{transform:rotate(0)} to{transform:rotate(360deg)} }
-        .s04-top-grid { display:grid; grid-template-columns:1.7fr 1fr; gap:14px; margin-bottom:14px; }
-        .s04-summary-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; margin-bottom:14px; }
-        .s04-main-grid { display:grid; grid-template-columns:260px 1fr 340px; gap:20px; padding:6px 24px 24px; max-width:1400px; margin:0 auto; }
-        @media (max-width: 1180px) {
-          .s04-top-grid,
-          .s04-summary-grid,
-          .s04-main-grid { grid-template-columns:1fr; }
-        }
       `}</style>
 
       {/* 헤더 */}
-      <div style={{ background: '#ffffff', borderBottom: '1px solid #e2e8f0', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 16 }}>
-        <button
-          onClick={onBack}
-          style={{ padding: '6px 16px', borderRadius: 8, border: '1.5px solid #e2e8f0', background: '#f8fafc', color: '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-        >
-          ← 커맨드 센터
-        </button>
-
-        <div>
-          <div style={{ fontSize:10, color:'#94a3b8', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:4 }}>
-            S04 · 퇴실·청소
-          </div>
-          <div style={{ fontWeight: 800, fontSize: 18, color: '#1e293b' }}>
-            다음 예약 준비
-          </div>
-          <div style={{ fontSize: 12, color: '#64748b' }}>
-            퇴실 감지부터 PIN 만료, 청소 배정, 준비 완료까지 한 흐름으로 확인합니다.
-          </div>
+      <div style={{ background:'#fff', borderBottom:'1px solid #e2e8f0', padding:'12px 20px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+        {onBack && <button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}>← 커맨드 센터</button>}
+        {onBack && <div style={{ width:1, height:22, background:'#e2e8f0' }} />}
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:10, color:'#94a3b8', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase' }}>S04 · 퇴실·청소 · 같은 단계 예외를 묶어서 처리</div>
+          <div style={{ fontWeight:800, fontSize:16, color:'#1e293b', marginTop:2 }}>퇴실 감지 → PIN 만료 → 청소 배정 → 체크리스트</div>
         </div>
-
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-          {/* 알림 수 */}
-          {errorCount > 0 && (
-            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 20, padding: '3px 10px', fontSize: 12, color: '#dc2626', fontWeight: 700 }}>
-              긴급 {errorCount}
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          {haMode && <div style={{ fontSize:11, fontWeight:600, padding:'3px 9px', borderRadius:20, background: wsStatus==='connected'?'#dcfce7':'#fffbeb', border:`1px solid ${wsStatus==='connected'?'#86efac':'#fde68a'}`, color: wsStatus==='connected'?'#059669':'#d97706' }}>{wsLabel}</div>}
+          <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#94a3b8' }}>
+            Mock
+            <div onClick={() => setHaMode(m => !m)} style={{ width:36, height:18, borderRadius:9, background: haMode?'#2563eb':'#e2e8f0', cursor:'pointer', position:'relative', transition:'background 0.2s' }}>
+              <div style={{ position:'absolute', top:2, left: haMode?18:2, width:14, height:14, borderRadius:'50%', background:'#fff', transition:'left 0.2s' }} />
             </div>
-          )}
-          {infoCount > 0 && (
-            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 20, padding: '3px 10px', fontSize: 12, color: '#2563eb', fontWeight: 600 }}>
-              알림 {infoCount}
-            </div>
-          )}
-
-          {/* HA 상태 뱃지 (HA 모드일 때) */}
-          {haMode && (
-            <div style={{
-              fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
-              background: wsStatus === 'connected' ? '#dcfce7' : wsStatus === 'error' ? '#fee2e2' : '#fffbeb',
-              border: `1px solid ${wsStatus === 'connected' ? '#86efac' : wsStatus === 'error' ? '#fca5a5' : '#fde68a'}`,
-              color: wsStatus === 'connected' ? '#059669' : wsStatus === 'error' ? '#dc2626' : '#d97706',
-            }}>{wsLabel}</div>
-          )}
-
-          {/* Mock/HA 모드 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 8, padding: '5px 12px' }}>
-            <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>Mock</span>
-            <div
-              onClick={() => setHaMode(m => !m)}
-              style={{
-                width: 36, height: 18, borderRadius: 9, cursor: 'pointer',
-                background: haMode ? '#2563eb' : '#cbd5e1',
-                position: 'relative', transition: 'background 0.2s',
-              }}
-            >
-              <div style={{
-                position: 'absolute', top: 2,
-                left: haMode ? 20 : 2,
-                width: 14, height: 14, borderRadius: '50%',
-                background: '#ffffff', transition: 'left 0.2s',
-              }} />
-            </div>
-            <span style={{ fontSize: 12, color: haMode ? '#2563eb' : '#64748b', fontWeight: haMode ? 700 : 500 }}>HA</span>
+            <span style={{ color: haMode?'#2563eb':'#94a3b8', fontWeight: haMode?700:400 }}>HA</span>
           </div>
         </div>
       </div>
 
-      <BatchConsoleGuide stageId="checkout" onBack={onBack} />
+      <div style={{ flex:1, overflowY:'auto', padding:'16px 20px', display:'flex', flexDirection:'column', gap:12 }}>
 
-      <div style={{ padding: '18px 24px 0', background: '#f0f4f8' }}>
-        <div className="s04-top-grid">
-          <div style={{ background: focusTone.bg, border: `1.5px solid ${focusTone.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 10px 28px rgba(15,23,42,0.04)' }}>
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 8 }}>지금 할 일</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: focusTone.text, lineHeight: 1.45, letterSpacing: '-0.3px' }}>{focusTitle}</div>
-            <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.7, marginTop: 8 }}>{focusDesc}</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#475569', background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(226,232,240,0.9)', borderRadius: 999, padding: '6px 10px' }}>
-                선택 숙소 · {currentBooking?.propName}
-              </span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#475569', background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(226,232,240,0.9)', borderRadius: 999, padding: '6px 10px' }}>
-                미완료 체크리스트 {activeChecklistCount}건
-              </span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#475569', background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(226,232,240,0.9)', borderRadius: 999, padding: '6px 10px' }}>
-                알림 {alerts.length}건
-              </span>
+        {/* ── 히어로 카드: 빨강(처리필요) / 녹색(안정) ── */}
+        {(occupiedProps.length > 0 || errorCount > 0) ? (
+          <div style={{ background:'#fef2f2', border:'2px solid #fecaca', borderRadius:16, padding:'16px 20px', display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:16 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#dc2626', marginBottom:6 }}>지금 처리해야 할 것</div>
+              <div style={{ fontSize:18, fontWeight:800, color:'#b91c1c', lineHeight:1.3, marginBottom:10 }}>
+                {errorCount > 0
+                  ? `자동화 오류 ${errorCount}건 — 수동 확인이 필요합니다`
+                  : `퇴실 대기 ${occupiedProps.length}곳 — 체크아웃 이벤트를 확인하세요`}
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {occupiedProps.slice(0,3).map(prop => (
+                  <div key={prop.propId} onClick={() => setSelectedProp(prop.propId)}
+                    style={{ display:'flex', gap:8, alignItems:'center', padding:'7px 10px', background:'#fff', border:'1.5px solid #fecaca', borderRadius:8, cursor:'pointer' }}>
+                    <span style={{ width:6, height:6, borderRadius:'50%', background:'#dc2626', flexShrink:0, animation:'pulse 1.5s ease-in-out infinite' }} />
+                    <span style={{ fontSize:12, color:'#7f1d1d', fontWeight:600, flex:1 }}>{prop.propName} — {prop.guestName}님</span>
+                    <span style={{ fontSize:10, fontWeight:700, color:'#dc2626', background:'#fff', border:'1px solid #fca5a5', borderRadius:4, padding:'2px 6px', flexShrink:0 }}>퇴실 대기</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-              {currentStatus === 'occupied' ? (
-                <button
-                  onClick={() => handleCheckoutEvent('door_locked')}
-                  disabled={processing}
-                  style={{ padding: '10px 16px', borderRadius: 10, border: '1.5px solid #c2410c', background: processing ? '#ffedd5' : '#ea580c', color: processing ? '#9a3412' : '#ffffff', fontSize: 12, fontWeight: 700, cursor: processing ? 'default' : 'pointer' }}
-                >
-                  {processing ? '퇴실 흐름 확인 중' : '퇴실 흐름 다시 확인'}
-                </button>
-              ) : currentStatus === 'cleaning' && firstPendingItem ? (
-                <button
-                  onClick={() => toggleChecklistItem(firstPendingItem.id)}
-                  style={{ padding: '10px 16px', borderRadius: 10, border: '1.5px solid #1d4ed8', background: '#2563eb', color: '#ffffff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
-                >
-                  다음 청소 항목 보기
-                </button>
-              ) : (
-                <button
-                  onClick={() => {
-                    if (nextOccupiedProp) {
-                      setSelectedProp(nextOccupiedProp.propId);
-                    }
-                  }}
-                  disabled={!nextOccupiedProp}
-                  style={{ padding: '10px 16px', borderRadius: 10, border: '1.5px solid #059669', background: nextOccupiedProp ? '#16a34a' : '#dcfce7', color: nextOccupiedProp ? '#ffffff' : '#86efac', fontSize: 12, fontWeight: 700, cursor: nextOccupiedProp ? 'pointer' : 'default' }}
-                >
-                  다음 숙소 보기
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  if (latestAlert) {
-                    const target = _S04_PROPS.find(prop => prop.propName === latestAlert.prop || prop.propId === latestAlert.prop);
-                    if (target) {
-                      setSelectedProp(target.propId);
-                    }
-                  }
-                }}
-                disabled={!latestAlert}
-                style={{ padding: '10px 16px', borderRadius: 10, border: '1.5px solid #e2e8f0', background: '#ffffff', color: latestAlert ? '#475569' : '#94a3b8', fontSize: 12, fontWeight: 700, cursor: latestAlert ? 'pointer' : 'default' }}
-              >
-                이 알림 따라가기
+            <div style={{ display:'flex', flexDirection:'column', gap:8, flexShrink:0 }}>
+              <button onClick={() => handleCheckoutEvent('door_locked')} disabled={processing}
+                style={{ padding:'10px 18px', borderRadius:10, background:'#dc2626', border:'1.5px solid #b91c1c', color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer' }}>
+                {processing ? '처리 중...' : '퇴실 흐름 다시 확인'}
+              </button>
+              {alerts.length > 0 && <button onClick={ackAllAlerts} style={{ padding:'8px 18px', borderRadius:10, background:'#fff', border:'1.5px solid #fecaca', color:'#dc2626', fontSize:12, fontWeight:600, cursor:'pointer' }}>알림 전체 확인</button>}
+            </div>
+          </div>
+        ) : (
+          <div style={{ background:'#f0fdf4', border:'2px solid #a7f3d0', borderRadius:16, padding:'16px 20px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:16 }}>
+            <div>
+              <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#059669', marginBottom:6 }}>
+                {readyProps.length === _S04_PROPS.length ? '전체 준비 완료' : '청소 진행 중'}
+              </div>
+              <div style={{ fontSize:18, fontWeight:800, color:'#047857', lineHeight:1.3 }}>
+                {readyProps.length === _S04_PROPS.length
+                  ? `${readyProps.length}개 숙소 다음 예약 준비 완료`
+                  : `청소 진행 ${cleaningProps.length}곳 · 준비 완료 ${readyProps.length}곳`}
+              </div>
+            </div>
+            <button onClick={() => nextOccupiedProp && setSelectedProp(nextOccupiedProp.propId)} disabled={!nextOccupiedProp}
+              style={{ padding:'10px 18px', borderRadius:10, background:'#059669', border:'1.5px solid #047857', color:'#fff', fontSize:13, fontWeight:700, cursor: nextOccupiedProp ? 'pointer' : 'default', flexShrink:0, opacity: nextOccupiedProp ? 1 : 0.5 }}>
+              다음 숙소 확인
+            </button>
+          </div>
+        )}
+
+        {/* ── 숙소별 상태: 빨강(처리필요) / 녹색(완료) ── */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+          <div style={{ background:'#fef2f2', border:'1.5px solid #fecaca', borderRadius:12, padding:'14px' }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#dc2626', marginBottom:10, textTransform:'uppercase' }}>
+              처리 필요 · {occupiedProps.length + cleaningProps.length}곳
+            </div>
+            {occupiedProps.length === 0 && cleaningProps.length === 0
+              ? <div style={{ fontSize:12, color:'#94a3b8', textAlign:'center', padding:'12px 0' }}>없음</div>
+              : <>
+                {occupiedProps.map(prop => (
+                  <div key={prop.propId} onClick={() => setSelectedProp(prop.propId)}
+                    style={{ display:'flex', gap:8, alignItems:'center', padding:'8px 0', borderBottom:'1px solid #fecaca', cursor:'pointer' }}>
+                    <span style={{ width:6, height:6, borderRadius:'50%', background:'#dc2626', flexShrink:0, animation:'pulse 1.2s ease-in-out infinite' }} />
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:'#7f1d1d', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{prop.propName}</div>
+                      <div style={{ fontSize:10, color:'#dc2626' }}>{prop.guestName} · 퇴실 이벤트 대기</div>
+                    </div>
+                    <span style={{ fontSize:10, fontWeight:700, color:'#dc2626', background:'#fff', border:'1px solid #fca5a5', borderRadius:4, padding:'2px 6px', flexShrink:0 }}>퇴실 대기</span>
+                  </div>
+                ))}
+                {cleaningProps.map(prop => {
+                  const items = checklists[prop.propId] || [];
+                  const done = items.filter(i => i.done).length;
+                  return (
+                    <div key={prop.propId} onClick={() => setSelectedProp(prop.propId)}
+                      style={{ display:'flex', gap:8, alignItems:'center', padding:'8px 0', borderBottom:'1px solid #fecaca', cursor:'pointer' }}>
+                      <span style={{ width:6, height:6, borderRadius:'50%', background:'#d97706', flexShrink:0 }} />
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:'#92400e', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{prop.propName}</div>
+                        <div style={{ fontSize:10, color:'#d97706' }}>{assignments[prop.propId]?.cleanerName || '배정 중'} · {done}/{items.length} 완료</div>
+                      </div>
+                      <span style={{ fontSize:10, fontWeight:700, color:'#d97706', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:4, padding:'2px 6px', flexShrink:0 }}>청소 중</span>
+                    </div>
+                  );
+                })}
+              </>
+            }
+          </div>
+          <div style={{ background:'#f0fdf4', border:'1.5px solid #a7f3d0', borderRadius:12, padding:'14px' }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#059669', marginBottom:10, textTransform:'uppercase' }}>
+              준비 완료 · {readyProps.length}곳
+            </div>
+            {readyProps.length === 0
+              ? <div style={{ fontSize:12, color:'#94a3b8', textAlign:'center', padding:'12px 0' }}>아직 없음</div>
+              : readyProps.map(prop => (
+                  <div key={prop.propId} style={{ display:'flex', gap:8, alignItems:'center', padding:'8px 0', borderBottom:'1px solid #a7f3d0' }}>
+                    <span style={{ width:6, height:6, borderRadius:'50%', background:'#059669', flexShrink:0 }} />
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:'#065f46', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{prop.propName}</div>
+                      <div style={{ fontSize:10, color:'#059669' }}>다음 예약 수용 가능</div>
+                    </div>
+                    <span style={{ fontSize:10, fontWeight:700, color:'#059669', background:'#dcfce7', border:'1px solid #86efac', borderRadius:4, padding:'2px 6px', flexShrink:0 }}>완료</span>
+                  </div>
+                ))
+            }
+          </div>
+        </div>
+
+        {/* ── 선택 숙소 자동화 흐름 ── */}
+        <div style={{ background:'#fff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'14px 16px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#475569', textTransform:'uppercase', flex:1 }}>
+              청소 체크리스트 — {currentBooking?.propName}
+            </div>
+            <PropStatusBadge status={currentStatus} />
+          </div>
+          {currentStatus === 'occupied' ? (
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={() => handleCheckoutEvent('door_locked')} disabled={processing}
+                style={{ flex:1, padding:'9px 0', borderRadius:8, border:`1.5px solid ${processing?'#e2e8f0':'#dc2626'}`, background: processing?'#f8fafc':'#dc2626', color: processing?'#94a3b8':'#fff', fontSize:13, fontWeight:700, cursor: processing?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                {processing ? <><div style={{ width:13, height:13, border:'2px solid #94a3b8', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />처리 중...</> : '🔒 도어락 잠금 (퇴실 감지)'}
+              </button>
+              <button onClick={() => handleCheckoutEvent('manual_checkout')} disabled={processing}
+                style={{ flex:1, padding:'9px 0', borderRadius:8, border:`1.5px solid ${processing?'#e2e8f0':'#d97706'}`, background: processing?'#f8fafc':'#fffbeb', color: processing?'#94a3b8':'#d97706', fontSize:13, fontWeight:700, cursor: processing?'default':'pointer' }}>
+                📋 수동 체크아웃
               </button>
             </div>
-          </div>
-
-          <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: 16, padding: '16px 18px' }}>
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 10 }}>방금 뜬 알림</div>
-            {latestAlert ? (
-              <>
-                <div style={{ fontSize: 14, fontWeight: 800, color: latestAlert.type === 'error' ? '#dc2626' : latestAlert.type === 'warn' ? '#d97706' : '#1d4ed8', lineHeight: 1.5 }}>{latestAlert.prop}</div>
-                <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.65, marginTop: 6 }}>{latestAlert.msg}</div>
-                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 10, fontFamily: "'DM Mono',monospace" }}>{latestAlert.time}</div>
-              </>
-            ) : (
-              <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.7 }}>
-                지금 바로 확인할 알림은 없어요. 퇴실 대기 숙소와 청소팀 부하만 보면 운영 흐름을 유지할 수 있습니다.
-              </div>
-            )}
-          </div>
+          ) : currentItems ? (
+            <CleaningChecklist items={currentItems} onToggle={toggleChecklistItem} onFinalize={handleFinalizeClean} propStatus={currentStatus} />
+          ) : (
+            <div style={{ fontSize:12, color:'#94a3b8', textAlign:'center', padding:'16px 0' }}>퇴실 감지 후 체크리스트가 자동 생성됩니다</div>
+          )}
         </div>
 
-        <div className="s04-summary-grid">
-          {summaryCards.map(card => (
-            <div key={card.label} style={{ background: card.tone.bg, border: `1.5px solid ${card.tone.border}`, borderRadius: 14, padding: '14px 16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#475569', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{card.label}</span>
-                <strong style={{ fontFamily: "'DM Mono',monospace", fontSize: 18, fontWeight: 800, color: card.tone.text }}>{card.value}</strong>
-              </div>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 10, lineHeight: 1.55 }}>{card.desc}</div>
+        {/* ── 알림 ── */}
+        {alerts.length > 0 && (
+          <div style={{ background:'#fff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'14px 16px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+              <span style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#dc2626', textTransform:'uppercase', flex:1 }}>실시간 알림 {alerts.length}건</span>
+              <button onClick={ackAllAlerts} style={{ padding:'3px 9px', borderRadius:5, background:'#f8fafc', border:'1px solid #e2e8f0', color:'#64748b', fontSize:10, cursor:'pointer', fontWeight:600 }}>전체 확인</button>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 메인 레이아웃 */}
-      <div className="s04-main-grid">
-
-        {/* 왼쪽: 숙소 목록 */}
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8,
-            fontSize: 11, fontWeight: 700, color: '#475569',
-            textTransform: 'uppercase', letterSpacing: '0.06em',
-            marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
-            <span style={{ width: 3, height: 13, background: '#059669', borderRadius: 2, flexShrink: 0 }} />
-            한 번에 볼 숙소
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {_S04_PROPS.map(prop => {
-              const status   = propStatuses[prop.propId] || 'occupied';
-              const selected = selectedProp === prop.propId;
-              const hasAssign = !!assignments[prop.propId];
-              return (
-                <div
-                  key={prop.propId}
-                  onClick={() => setSelectedProp(prop.propId)}
-                  style={{
-                    background: selected ? '#eff6ff' : '#ffffff',
-                    border: `2px solid ${selected ? '#2563eb' : '#e2e8f0'}`,
-                    borderRadius: 10, padding: '12px 14px', cursor: 'pointer',
-                    transition: 'all 0.2s',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ fontWeight: 700, fontSize: 13, color: '#1e293b' }}>{prop.propName}</span>
-                    <PropStatusBadge status={status} />
-                  </div>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>{prop.guestName}님</div>
-                  {hasAssign && (
-                    <div style={{ fontSize: 11, color: '#d97706', marginTop: 4, fontWeight: 600 }}>
-                      🧹 {assignments[prop.propId].cleanerName} 배정됨
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* 청소팀 현황 */}
-          <div style={{ marginTop: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: 11, fontWeight: 700, color: '#475569',
-              textTransform: 'uppercase', letterSpacing: '0.06em',
-              marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
-              <span style={{ width: 3, height: 13, background: '#d97706', borderRadius: 2, flexShrink: 0 }} />
-              청소팀 현황
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {_S04_CLEANERS.map(c => (
-                <div key={c.id} style={{
-                  background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px',
-                  display: 'flex', alignItems: 'center', gap: 8,
-                }}>
-                  <div style={{
-                    width: 8, height: 8, borderRadius: '50%',
-                    background: c.available ? '#16a34a' : '#94a3b8',
-                    animation: c.available ? 'pulse 2s infinite' : 'none',
-                  }} />
-                  <span style={{ fontSize: 13, color: '#1e293b', fontWeight: 500 }}>{c.name}</span>
-                  <span style={{ marginLeft: 'auto', fontSize: 11, color: '#64748b' }}>
-                    {c.available ? `진행 ${c.activeJobs}건` : '비가용'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* 가운데: 4단계 자동화 흐름 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-          {/* 숙소 정보 헤더 */}
-          <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <span style={{ fontWeight: 800, fontSize: 15, color: '#1e293b' }}>{currentBooking?.propName}</span>
-                <PropStatusBadge status={currentStatus} />
-              </div>
-              <div style={{ display: 'flex', gap: 16, fontSize: 12, color: '#64748b' }}>
-                <span>게스트: <b style={{ color: '#1e293b' }}>{currentBooking?.guestName}님</b></span>
-                <span>체크아웃: <b style={{ color: '#1e293b', fontFamily: "'DM Mono',monospace" }}>{currentBooking?.checkOut?.slice(11,16) || '—'}</b></span>
-                <span>가능 시간창: <b style={{ color: '#1e293b', fontFamily: "'DM Mono',monospace" }}>
-                  {currentBooking ? (() => { try { const d = new Date(currentBooking.checkOut); const f = new Date(d.getTime()-7200000); const u = new Date(d.getTime()+10800000); return `${String(f.getHours()).padStart(2,'0')}:${String(f.getMinutes()).padStart(2,'0')}~${String(u.getHours()).padStart(2,'0')}:${String(u.getMinutes()).padStart(2,'0')}`; } catch(_) { return '—'; } })() : '—'}
-                </b></span>
-              </div>
-            </div>
-          </div>
-
-          {/* ── STEP 1: 퇴실 감지 ── */}
-          <div style={{ background: '#ffffff', border: `2px solid ${currentStatus !== 'occupied' ? '#86efac' : '#e2e8f0'}`, borderRadius: 12, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: currentStatus !== 'occupied' ? '#f0fdf4' : '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-              <div style={{ width: 22, height: 22, borderRadius: '50%', background: currentStatus !== 'occupied' ? '#16a34a' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                {currentStatus !== 'occupied'
-                  ? <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>✓</span>
-                  : <span style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8' }}>1</span>}
-              </div>
-              <span style={{ fontSize: 13, fontWeight: 700, color: currentStatus !== 'occupied' ? '#15803d' : '#374151' }}>퇴실 감지</span>
-              {currentStatus !== 'occupied' && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#16a34a', fontWeight: 600 }}>완료</span>}
-            </div>
-            <div style={{ padding: '14px 16px' }}>
-              {currentStatus === 'occupied' ? (
-                <>
-                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>도어락 잠금 이벤트를 수신하면 자동으로 체크아웃 처리가 시작됩니다.</div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => handleCheckoutEvent('door_locked')} disabled={processing}
-                      style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: `1.5px solid ${processing ? '#e2e8f0' : '#dc2626'}`, background: processing ? '#f8fafc' : '#dc2626', color: processing ? '#94a3b8' : '#ffffff', fontSize: 13, fontWeight: 700, cursor: processing ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                      {processing ? (<><div style={{ width: 13, height: 13, border: '2px solid #94a3b8', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />처리 중...</>) : '🔒 도어락 잠금 (퇴실 감지)'}
-                    </button>
-                    <button onClick={() => handleCheckoutEvent('manual_checkout')} disabled={processing}
-                      style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: `1.5px solid ${processing ? '#e2e8f0' : '#d97706'}`, background: processing ? '#f8fafc' : '#fffbeb', color: processing ? '#94a3b8' : '#d97706', fontSize: 13, fontWeight: 700, cursor: processing ? 'default' : 'pointer' }}>
-                      📋 수동 체크아웃
-                    </button>
-                  </div>
-                  <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>* 실제 환경에서는 HA 상태 변화를 감지해 자동으로 시작됩니다</div>
-                </>
-              ) : (
-                <div style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>
-                  {currentBooking?.guestName}님 퇴실이 감지되어 자동화가 시작되었습니다.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── STEP 2: PIN 즉시 만료 ── */}
-          <div style={{ background: '#ffffff', border: `2px solid ${pinDone[selectedProp] ? '#86efac' : pinCountdown && !pinDone[selectedProp] ? '#fca5a5' : '#e2e8f0'}`, borderRadius: 12, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: pinDone[selectedProp] ? '#f0fdf4' : pinCountdown && !pinDone[selectedProp] ? '#fef2f2' : '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-              <div style={{ width: 22, height: 22, borderRadius: '50%', background: pinDone[selectedProp] ? '#16a34a' : pinCountdown && !pinDone[selectedProp] ? '#dc2626' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                {pinDone[selectedProp]
-                  ? <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>✓</span>
-                  : pinCountdown && !pinDone[selectedProp]
-                    ? <span style={{ color: '#fff', fontSize: 11, fontWeight: 800 }}>⚡</span>
-                    : <span style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8' }}>2</span>}
-              </div>
-              <span style={{ fontSize: 13, fontWeight: 700, color: pinDone[selectedProp] ? '#15803d' : pinCountdown && !pinDone[selectedProp] ? '#dc2626' : '#94a3b8' }}>도어락 PIN 즉시 만료</span>
-              {pinDone[selectedProp] && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#16a34a', fontWeight: 600 }}>완료</span>}
-              {pinCountdown && !pinDone[selectedProp] && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#dc2626', fontWeight: 700, animation: 'pulse 0.8s infinite' }}>처리 중...</span>}
-            </div>
-            <div style={{ padding: '14px 16px' }}>
-              {pinDone[selectedProp] ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 20 }}>🔒</span>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#15803d' }}>PIN 만료 완료</div>
-                    <div style={{ fontSize: 11, color: '#64748b' }}>도어락이 비활성화되어 재입실이 불가합니다</div>
-                  </div>
-                </div>
-              ) : pinCountdown && !pinDone[selectedProp] ? (
-                <PinExpireCountdown active={true} onDone={() => setPinCountdown(false)} />
-              ) : (
-                <div style={{ fontSize: 12, color: '#94a3b8' }}>퇴실 감지 후 5초 내 자동으로 PIN이 비활성화됩니다.</div>
-              )}
-            </div>
-          </div>
-
-          {/* ── STEP 3: 청소팀 배정 ── */}
-          <div style={{ background: '#ffffff', border: `2px solid ${currentAssign ? '#86efac' : '#e2e8f0'}`, borderRadius: 12, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: currentAssign ? '#f0fdf4' : '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-              <div style={{ width: 22, height: 22, borderRadius: '50%', background: currentAssign ? '#16a34a' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                {currentAssign
-                  ? <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>✓</span>
-                  : <span style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8' }}>3</span>}
-              </div>
-              <span style={{ fontSize: 13, fontWeight: 700, color: currentAssign ? '#15803d' : '#94a3b8' }}>청소팀 자동 배정</span>
-              {currentAssign && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#16a34a', fontWeight: 600 }}>배정 완료</span>}
-            </div>
-            <div style={{ padding: '14px 16px' }}>
-              {currentAssign ? (
-                <div style={{ display: 'flex', gap: 20 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fffbeb', border: '2px solid #fde68a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>🧹</div>
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: 15, color: '#1e293b' }}>{currentAssign.cleanerName}</div>
-                      <div style={{ fontSize: 11, color: '#64748b' }}>배정 시각: {currentAssign.assignedAt}</div>
-                    </div>
-                  </div>
-                  <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                    <div style={{ fontSize: 11, color: '#64748b' }}>예상 도착</div>
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 20, fontWeight: 800, color: '#d97706' }}>{currentAssign.estimatedArrival}</div>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ fontSize: 12, color: '#94a3b8' }}>퇴실 감지 후 가용 청소팀 중 부하가 가장 적은 담당자가 자동 배정됩니다.</div>
-              )}
-            </div>
-          </div>
-
-          {/* ── STEP 4: 청소 체크리스트 ── */}
-          <div style={{ background: '#ffffff', border: `2px solid ${currentStatus === 'vacant' ? '#86efac' : currentItems ? '#bfdbfe' : '#e2e8f0'}`, borderRadius: 12, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: currentStatus === 'vacant' ? '#f0fdf4' : currentItems ? '#eff6ff' : '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-              <div style={{ width: 22, height: 22, borderRadius: '50%', background: currentStatus === 'vacant' ? '#16a34a' : currentItems ? '#2563eb' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                {currentStatus === 'vacant'
-                  ? <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>✓</span>
-                  : currentItems
-                    ? <span style={{ color: '#fff', fontSize: 11, fontWeight: 800 }}>📋</span>
-                    : <span style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8' }}>4</span>}
-              </div>
-              <span style={{ fontSize: 13, fontWeight: 700, color: currentStatus === 'vacant' ? '#15803d' : currentItems ? '#1d4ed8' : '#94a3b8' }}>청소 체크리스트</span>
-              {currentItems && currentStatus !== 'vacant' && (
-                <span style={{ marginLeft: 'auto', fontSize: 11, color: '#2563eb', fontWeight: 600 }}>
-                  {currentItems.filter(i => i.done).length}/{currentItems.length} 완료
-                </span>
-              )}
-              {currentStatus === 'vacant' && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#16a34a', fontWeight: 600 }}>청소 완료</span>}
-            </div>
-            <div style={{ padding: '14px 16px' }}>
-              {currentItems ? (
-                <CleaningChecklist
-                  items={currentItems}
-                  onToggle={toggleChecklistItem}
-                  onFinalize={handleFinalizeClean}
-                  propStatus={currentStatus}
-                />
-              ) : (
-                <div style={{ fontSize: 12, color: '#94a3b8' }}>청소팀 배정 후 표준 체크리스트가 자동 생성됩니다.<br/>청소 완료 항목을 하나씩 체크하고, 전체 완료 시 숙소 상태가 "준비 완료"로 변경됩니다.</div>
-              )}
-            </div>
-          </div>
-
-        </div>
-
-        {/* 오른쪽: 알림 피드 */}
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8,
-            fontSize: 11, fontWeight: 700, color: '#475569',
-            textTransform: 'uppercase', letterSpacing: '0.06em',
-            marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
-            <span style={{ width: 3, height: 13, background: '#dc2626', borderRadius: 2, flexShrink: 0 }} />
-            실시간 알림
-          </div>
-          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px' }}>
             <AlertFeedS04 alerts={alerts} onAck={ackAlert} onAckAll={ackAllAlerts} />
           </div>
-        </div>
+        )}
+
       </div>
     </div>
   );

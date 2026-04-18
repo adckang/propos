@@ -502,281 +502,211 @@ function S02CheckinPanel({ bookings: propBookings, onBack }) {
     { label:'주의 필요', value:`${failedCount || alerts.length}건`, desc:'실패 또는 알림 확인', tone:{ bg:'#fffbeb', border:'#fde68a', text:'#d97706' } },
   ];
 
+  // ── 히어로 카드 판단 ──
+  const hasIssue = failedCount > 0 || alerts.some(a => a.type === 'error');
+  const allDone  = occupiedCount === bookings.length;
+
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontFamily:"'DM Sans',sans-serif" }}>
-
       <style>{`
         @keyframes s02spin  { to { transform: rotate(360deg); } }
         @keyframes s02pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
       `}</style>
 
       {/* ── 헤더 ── */}
-      <div style={{ background:'#ffffff', borderBottom:'1px solid #e2e8f0', padding:'16px 24px', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          {onBack && <button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}>← 커맨드 센터</button>}
-          {onBack && <div style={{ width:1, height:22, background:'#e2e8f0' }} />}
-          <div>
-            <div style={{ fontSize:10, color:'#94a3b8', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:4 }}>S02 · 체크인 당일</div>
-            <div style={{ fontWeight:800, fontSize:18, color:'#1e293b' }}>입실 이벤트 확인</div>
-            <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>입실 감지부터 IoT 씬 실행, 채널 오픈, 상태 반영까지 한 흐름으로 처리합니다.</div>
-          </div>
+      <div style={{ background:'#fff', borderBottom:'1px solid #e2e8f0', padding:'12px 20px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+        {onBack && <button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}>← 커맨드 센터</button>}
+        {onBack && <div style={{ width:1, height:22, background:'#e2e8f0' }} />}
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:10, color:'#94a3b8', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase' }}>S02 · 체크인 당일 · 같은 단계 예외를 묶어서 처리</div>
+          <div style={{ fontWeight:800, fontSize:16, color:'#1e293b', marginTop:2 }}>입실 이벤트 확인 — 감지 → 씬 실행 → 채팅 오픈 → 메시지 발송</div>
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-          <WsStatusBadge status={wsStatus} />
-          {wsStatus === 'simulating' || wsStatus === 'disconnected' ? (
-            <button onClick={connectWS} style={{ padding:'7px 16px', borderRadius:8, background:'#2563eb', border:'1.5px solid #1d4ed8', color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer' }}>HA 연결</button>
-          ) : (
-            <button onClick={disconnectWS} style={{ padding:'7px 16px', borderRadius:8, background:'#fee2e2', border:'1.5px solid #fca5a5', color:'#dc2626', fontSize:12, fontWeight:600, cursor:'pointer' }}>연결 해제</button>
-          )}
-        </div>
+        <WsStatusBadge status={wsStatus} />
+        {wsStatus === 'simulating' || wsStatus === 'disconnected'
+          ? <button onClick={connectWS} style={{ padding:'6px 14px', borderRadius:8, background:'#2563eb', border:'1.5px solid #1d4ed8', color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer' }}>HA 연결</button>
+          : <button onClick={disconnectWS} style={{ padding:'6px 14px', borderRadius:8, background:'#fee2e2', border:'1.5px solid #fca5a5', color:'#dc2626', fontSize:12, fontWeight:600, cursor:'pointer' }}>연결 해제</button>
+        }
       </div>
 
-      <BatchConsoleGuide stageId="checkin" onBack={onBack} />
+      <div style={{ flex:1, overflowY:'auto', padding:'16px 20px', display:'flex', flexDirection:'column', gap:12 }}>
 
-      <div style={{ padding:'18px 20px 0', background:'#f0f4f8', flexShrink:0 }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1.7fr 1fr', gap:14, marginBottom:14 }}>
-          <div style={{ background:focusTone.bg, border:`1.5px solid ${focusTone.border}`, borderRadius:16, padding:'18px 20px', boxShadow:'0 10px 28px rgba(15,23,42,0.04)' }}>
-            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:8 }}>지금 할 일</div>
-            <div style={{ fontSize:20, fontWeight:800, color:focusTone.text, lineHeight:1.45, letterSpacing:'-0.3px' }}>{focusTitle}</div>
-            <div style={{ fontSize:13, color:'#64748b', lineHeight:1.7, marginTop:8 }}>{focusDesc}</div>
-            <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:12 }}>
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
-                선택 숙소 · {selectedBooking.propId}
-              </span>
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
-                최근 처리 {resultCount}건
-              </span>
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
-                미확인 알림 {alerts.length}건
-              </span>
+        {/* ── 히어로 카드: 빨강(처리필요) / 녹색(안정) ── */}
+        {hasIssue ? (
+          <div style={{ background:'#fef2f2', border:'2px solid #fecaca', borderRadius:16, padding:'16px 20px', display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:16 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#dc2626', marginBottom:6 }}>지금 처리해야 할 것</div>
+              <div style={{ fontSize:18, fontWeight:800, color:'#b91c1c', lineHeight:1.3, marginBottom:10 }}>
+                {failedCount > 0 ? `체크인 자동화 실패 ${failedCount}건 — 재처리가 필요합니다` : `알림 ${alerts.length}건 확인 필요`}
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {alerts.filter(a => a.type === 'error').slice(0,3).map(a => (
+                  <div key={a.id} style={{ display:'flex', gap:8, alignItems:'center', padding:'7px 10px', background:'#fff', border:'1.5px solid #fecaca', borderRadius:8 }}>
+                    <span style={{ width:6, height:6, borderRadius:'50%', background:'#dc2626', flexShrink:0, display:'inline-block' }} />
+                    <span style={{ fontSize:12, color:'#7f1d1d', fontWeight:600 }}>{a.prop} — {a.msg}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div style={{ display:'flex', gap:8, marginTop:14 }}>
-              <button onClick={simulate} disabled={running} style={{ padding:'10px 16px', borderRadius:10, border:'1.5px solid #1d4ed8', background:running ? '#dbeafe' : '#2563eb', color:running ? '#2563eb' : '#fff', fontSize:12, fontWeight:700, cursor:running ? 'default' : 'pointer' }}>
-                {running ? '입실 흐름 확인 중' : '선택 숙소 다시 확인'}
+            <div style={{ display:'flex', flexDirection:'column', gap:8, flexShrink:0 }}>
+              <button onClick={simulate} disabled={running} style={{ padding:'10px 18px', borderRadius:10, background:'#dc2626', border:'1.5px solid #b91c1c', color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer' }}>
+                {running ? '확인 중...' : '입실 이벤트 다시 확인'}
               </button>
-              <button onClick={() => setDevOpen(true)} style={{ padding:'10px 16px', borderRadius:10, border:'1.5px solid #e2e8f0', background:'#fff', color:'#475569', fontSize:12, fontWeight:700, cursor:'pointer' }}>
-                개발용 시뮬레이터 열기
-              </button>
+              <button onClick={() => setAlerts([])} style={{ padding:'8px 18px', borderRadius:10, background:'#fff', border:'1.5px solid #fecaca', color:'#dc2626', fontSize:12, fontWeight:600, cursor:'pointer' }}>알림 전체 확인</button>
             </div>
           </div>
+        ) : (
+          <div style={{ background:'#f0fdf4', border:'2px solid #a7f3d0', borderRadius:16, padding:'16px 20px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:16 }}>
+            <div>
+              <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#059669', marginBottom:6 }}>
+                {allDone ? '전체 입실 완료' : running ? '처리 중' : '대기 중 — 이상 없음'}
+              </div>
+              <div style={{ fontSize:18, fontWeight:800, color:'#047857', lineHeight:1.3 }}>
+                {allDone
+                  ? `${occupiedCount}개 숙소 입실 완료 — 후속 안내만 확인하면 됩니다`
+                  : running
+                  ? `${selectedBooking.propName} 체크인 자동화 진행 중...`
+                  : `${vacantCount}개 숙소 입실 대기 — 체크인 시간에 맞춰 감지됩니다`}
+              </div>
+            </div>
+            <button onClick={simulate} disabled={running} style={{ padding:'10px 18px', borderRadius:10, background:'#059669', border:'1.5px solid #047857', color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer', flexShrink:0 }}>
+              {running ? '확인 중...' : '입실 이벤트 다시 확인'}
+            </button>
+          </div>
+        )}
 
-          <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:16, padding:'16px 18px' }}>
-            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:10 }}>방금 뜬 알림</div>
-            {latestError ? (
-              <>
-                <div style={{ fontSize:14, fontWeight:800, color:latestError.type === 'error' ? '#dc2626' : '#d97706', lineHeight:1.5 }}>{latestError.prop}</div>
-                <div style={{ fontSize:12, color:'#475569', lineHeight:1.65, marginTop:6 }}>{latestError.msg}</div>
-                <div style={{ fontSize:11, color:'#94a3b8', marginTop:10, fontFamily:"'DM Mono',monospace" }}>{latestError.time}</div>
-              </>
-            ) : (
-              <div style={{ fontSize:12, color:'#64748b', lineHeight:1.7 }}>지금 바로 확인할 알림은 없어요. 체크인 가능 시간에 맞춰 입실 이벤트만 보면 자동화가 이어집니다.</div>
+        {/* ── 숙소별 상태: 빨강(미완/실패) / 녹색(입실완료) ── */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+          <div style={{ background:'#fef2f2', border:'1.5px solid #fecaca', borderRadius:12, padding:'14px' }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#dc2626', marginBottom:10, textTransform:'uppercase' }}>
+              처리 필요 · {vacantCount + checkingInCount}곳
+            </div>
+            {bookings.filter(b => propStatuses[b.propId] !== 'occupied').length === 0
+              ? <div style={{ fontSize:12, color:'#94a3b8', textAlign:'center', padding:'12px 0' }}>없음</div>
+              : bookings.filter(b => propStatuses[b.propId] !== 'occupied').map(b => {
+                  const st = propStatuses[b.propId] || 'vacant';
+                  const w  = _s02.getCheckinWindow(b.checkIn);
+                  return (
+                    <div key={b.propId} style={{ display:'flex', gap:8, alignItems:'center', padding:'8px 0', borderBottom:'1px solid #fecaca' }}>
+                      <span style={{ width:6, height:6, borderRadius:'50%', background: st === 'checking_in' ? '#2563eb' : '#dc2626', flexShrink:0 }} />
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:'#7f1d1d', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{b.propName}</div>
+                        <div style={{ fontSize:10, color:'#dc2626' }}>{b.guestName} · 체크인 {w.from}~{w.until}</div>
+                      </div>
+                      <span style={{ fontSize:10, fontWeight:700, color: st === 'checking_in' ? '#2563eb' : '#dc2626', background:'#fff', border:`1px solid ${st === 'checking_in' ? '#93c5fd' : '#fca5a5'}`, borderRadius:4, padding:'2px 6px', flexShrink:0 }}>
+                        {st === 'checking_in' ? '처리중' : '대기'}
+                      </span>
+                    </div>
+                  );
+                })
+            }
+          </div>
+          <div style={{ background:'#f0fdf4', border:'1.5px solid #a7f3d0', borderRadius:12, padding:'14px' }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#059669', marginBottom:10, textTransform:'uppercase' }}>
+              입실 완료 · {occupiedCount}곳
+            </div>
+            {bookings.filter(b => propStatuses[b.propId] === 'occupied').length === 0
+              ? <div style={{ fontSize:12, color:'#94a3b8', textAlign:'center', padding:'12px 0' }}>아직 없음</div>
+              : bookings.filter(b => propStatuses[b.propId] === 'occupied').map(b => (
+                  <div key={b.propId} style={{ display:'flex', gap:8, alignItems:'center', padding:'8px 0', borderBottom:'1px solid #a7f3d0' }}>
+                    <span style={{ width:6, height:6, borderRadius:'50%', background:'#059669', flexShrink:0 }} />
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:'#065f46', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{b.propName}</div>
+                      <div style={{ fontSize:10, color:'#059669' }}>{b.guestName} · 입실 완료</div>
+                    </div>
+                    <span style={{ fontSize:10, fontWeight:700, color:'#059669', background:'#dcfce7', border:'1px solid #86efac', borderRadius:4, padding:'2px 6px', flexShrink:0 }}>완료</span>
+                  </div>
+                ))
+            }
+          </div>
+        </div>
+
+        {/* ── 자동화 흐름 (최근 1건) ── */}
+        {(step1done || running) && (
+          <div style={{ background:'#fff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'14px 16px' }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#475569', textTransform:'uppercase', marginBottom:12 }}>자동화 흐름 — 최근 처리</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
+              {[
+                { sc:sc1, label:'도어락 감지',    done:step1done, run:false },
+                { sc:sc2, label:'씬 실행',        done:step2done, run:s2run },
+                { sc:sc3, label:'채팅 오픈',      done:step3done, run:s3run },
+                { sc:sc4, label:'메시지 발송',    done:step4done, run:s4run },
+              ].map(({ sc, label, run }) => (
+                <div key={label} style={{ background:sc.hBg, border:`1.5px solid ${sc.b}`, borderRadius:10, padding:'10px', textAlign:'center' }}>
+                  <div style={{ width:24, height:24, borderRadius:'50%', background:sc.cBg, display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 6px', fontSize:12, fontWeight:800, color:sc.cFg, animation: run ? 's02spin 1s linear infinite' : 'none' }}>{sc.lbl}</div>
+                  <div style={{ fontSize:11, fontWeight:700, color:sc.tc }}>{label}</div>
+                </div>
+              ))}
+            </div>
+            {lr && lr.error && (
+              <div style={{ marginTop:10, fontSize:11, color:'#b91c1c', background:'#fff1f2', border:'1px solid #fca5a5', borderRadius:6, padding:'6px 10px', fontFamily:"'DM Mono',monospace" }}>{lr.error}</div>
+            )}
+            {eventResults.length > 0 && (
+              <button onClick={() => setEventResults([])} style={{ marginTop:10, padding:'4px 10px', borderRadius:5, background:'#f8fafc', border:'1px solid #e2e8f0', color:'#64748b', fontSize:10, cursor:'pointer', fontWeight:600 }}>이력 초기화</button>
             )}
           </div>
-        </div>
+        )}
 
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4, minmax(0, 1fr))', gap:10, marginBottom:14 }}>
-          {summaryCards.map(card => (
-            <div key={card.label} style={{ background:card.tone.bg, border:`1.5px solid ${card.tone.border}`, borderRadius:14, padding:'14px 16px' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
-                <span style={{ fontSize:11, fontWeight:700, color:'#475569', letterSpacing:'0.05em', textTransform:'uppercase' }}>{card.label}</span>
-                <strong style={{ fontFamily:"'DM Mono',monospace", fontSize:18, fontWeight:800, color:card.tone.text }}>{card.value}</strong>
-              </div>
-              <div style={{ fontSize:12, color:'#64748b', marginTop:10, lineHeight:1.55 }}>{card.desc}</div>
+        {/* ── 알림 ── */}
+        {alerts.length > 0 && (
+          <div style={{ background:'#fff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'14px 16px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+              <span style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#dc2626', textTransform:'uppercase', flex:1 }}>실시간 알림 {alerts.length}건</span>
+              <button onClick={() => setAlerts([])} style={{ padding:'3px 9px', borderRadius:5, background:'#f8fafc', border:'1px solid #e2e8f0', color:'#64748b', fontSize:10, cursor:'pointer', fontWeight:600 }}>전체 확인</button>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── 본문 3열 ── */}
-      <div style={{ flex:1, display:'grid', gridTemplateColumns:'260px 1fr 340px', gap:20, padding:'6px 20px 20px', overflow:'hidden' }}>
-
-        {/* 좌측: 숙소 현황 + 개발 옵션 */}
-        <div style={{ display:'flex', flexDirection:'column', gap:14, overflowY:'auto' }}>
-
-          <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'16px 14px' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
-              <span style={{ width:3, height:13, background:'#059669', borderRadius:2, flexShrink:0 }} />
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>한 번에 볼 숙소</span>
-            </div>
-            {bookings.map(b => <PropStatusCard key={b.propId} booking={b} status={propStatuses[b.propId] || 'vacant'} />)}
+            {alerts.slice(0,5).map(a => <AlertItem key={a.id} alert={a} onAck={ackAlert} />)}
           </div>
+        )}
 
-          <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, overflow:'hidden' }}>
-            <button onClick={() => setDevOpen(v => !v)}
-              style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background: devOpen ? '#fefce8' : '#fafafa', border:'none', cursor:'pointer', borderBottom: devOpen ? '1px solid #e2e8f0' : 'none' }}>
-              <span style={{ width:3, height:13, background:'#7c3aed', borderRadius:2, flexShrink:0 }} />
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1, textAlign:'left' }}>🔧 개발 모드 · 시뮬레이터</span>
-              <span style={{ fontSize:10, color:'#7c3aed', fontWeight:600 }}>{devOpen ? '▲ 접기' : '▼ 펼치기'}</span>
-            </button>
-            {devOpen && (
-              <div style={{ padding:'12px 14px', background:'#fefce8', display:'flex', flexDirection:'column', gap:10 }}>
-                <div>
-                  <div style={{ fontSize:10, color:'#92400e', marginBottom:3, fontWeight:600 }}>테스트 숙소</div>
-                  <select value={simPropId} onChange={e => setSimPropId(e.target.value)} style={{ ..._inp, width:'100%', background:'#fffbeb' }}>
-                    {bookings.map(b => <option key={b.propId} value={b.propId}>{b.propId} — {b.propName}</option>)}
+        {/* ── 시뮬레이터 (접이식) ── */}
+        <div style={{ background:'#fff', border:'1.5px solid #e2e8f0', borderRadius:12, overflow:'hidden' }}>
+          <button onClick={() => setDevOpen(v => !v)} style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background: devOpen ? '#fefce8' : '#fafafa', border:'none', cursor:'pointer' }}>
+            <span style={{ fontSize:11, fontWeight:700, color:'#94a3b8', flex:1, textAlign:'left' }}>🔧 시뮬레이터 / 개발 모드</span>
+            <span style={{ fontSize:10, color:'#94a3b8' }}>{devOpen ? '▲' : '▼'}</span>
+          </button>
+          {devOpen && (
+            <div style={{ padding:'12px 14px', background:'#fefce8', display:'flex', flexDirection:'column', gap:10 }}>
+              <div>
+                <div style={{ fontSize:10, color:'#92400e', marginBottom:3, fontWeight:600 }}>테스트 숙소</div>
+                <select value={simPropId} onChange={e => setSimPropId(e.target.value)} style={{ ..._inp, width:'100%', background:'#fffbeb' }}>
+                  {bookings.map(b => <option key={b.propId} value={b.propId}>{b.propId} — {b.propName}</option>)}
+                </select>
+              </div>
+              <div style={{ display:'flex', gap:6 }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:10, color:'#92400e', marginBottom:3, fontWeight:600 }}>이벤트 context</div>
+                  <select value={simContext} onChange={e => setSimContext(e.target.value)} style={{ ..._inp, width:'100%', background:'#fffbeb' }}>
+                    <option value="guest_checkin">guest_checkin</option>
+                    <option value="manual">manual (무시됨)</option>
+                    <option value="maintenance">maintenance (무시됨)</option>
                   </select>
                 </div>
-                <div style={{ display:'flex', gap:6 }}>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:10, color:'#92400e', marginBottom:3, fontWeight:600 }}>이벤트 context</div>
-                    <select value={simContext} onChange={e => setSimContext(e.target.value)} style={{ ..._inp, width:'100%', background:'#fffbeb' }}>
-                      <option value="guest_checkin">guest_checkin</option>
-                      <option value="manual">manual (무시됨)</option>
-                      <option value="maintenance">maintenance (무시됨)</option>
-                    </select>
-                  </div>
-                  <div style={{ width:72 }}>
-                    <div style={{ fontSize:10, color:'#92400e', marginBottom:3, fontWeight:600 }}>시각</div>
-                    <input type="time" value={simTime} onChange={e => setSimTime(e.target.value)} style={{ ..._inp, width:'100%', fontFamily:"'DM Mono',monospace", background:'#fffbeb' }} />
-                  </div>
+                <div style={{ width:72 }}>
+                  <div style={{ fontSize:10, color:'#92400e', marginBottom:3, fontWeight:600 }}>시각</div>
+                  <input type="time" value={simTime} onChange={e => setSimTime(e.target.value)} style={{ ..._inp, width:'100%', fontFamily:"'DM Mono',monospace", background:'#fffbeb' }} />
                 </div>
-                {simWindow && (
-                  <div style={{ fontSize:10, padding:'4px 8px', borderRadius:5, background: timeInWindow ? '#f0fdf4' : '#fff7ed', border: `1px solid ${timeInWindow ? '#86efac' : '#fed7aa'}`, color: timeInWindow ? '#166534' : '#92400e', fontFamily:"'DM Mono',monospace" }}>
-                    체크인 가능: {simWindow.from} ~ {simWindow.until}{timeInWindow ? ' ✓' : ' ← 시간창 외'}
-                  </div>
-                )}
-                <div style={{ display:'flex', gap:6 }}>
-                  {[{ key:'sceneFail', label:'씬 실패', val:sceneFail, set:setSceneFail }, { key:'channelFail', label:'채널 실패', val:channelFail, set:setChannelFail }].map(({ key, label, val, set }) => (
-                    <button key={key} onClick={() => set(v => !v)} style={{ flex:1, padding:'4px 6px', borderRadius:5, fontSize:10, fontWeight:600, cursor:'pointer', background: val ? '#fee2e2' : '#fffbeb', border: `1.5px solid ${val ? '#fca5a5' : '#fde68a'}`, color: val ? '#dc2626' : '#92400e' }}>
-                      {val ? '✕ ' : ''}{label}
-                    </button>
-                  ))}
+              </div>
+              {simWindow && (
+                <div style={{ fontSize:10, padding:'4px 8px', borderRadius:5, background: timeInWindow ? '#f0fdf4' : '#fff7ed', border:`1px solid ${timeInWindow ? '#86efac' : '#fed7aa'}`, color: timeInWindow ? '#166534' : '#92400e', fontFamily:"'DM Mono',monospace" }}>
+                  체크인 가능: {simWindow.from} ~ {simWindow.until}{timeInWindow ? ' ✓' : ' ← 시간창 외'}
                 </div>
-                <button onClick={() => setUseRealHA(v => !v)} style={{ padding:'5px 8px', borderRadius:5, fontSize:10, fontWeight:600, cursor:'pointer', background: useRealHA ? '#ede9fe' : '#fafafa', border: `1.5px solid ${useRealHA ? '#c4b5fd' : '#e2e8f0'}`, color: useRealHA ? '#7c3aed' : '#64748b' }}>
+              )}
+              <div style={{ display:'flex', gap:6 }}>
+                {[{ key:'sceneFail', label:'씬 실패', val:sceneFail, set:setSceneFail }, { key:'channelFail', label:'채널 실패', val:channelFail, set:setChannelFail }].map(({ key, label, val, set }) => (
+                  <button key={key} onClick={() => set(v => !v)} style={{ flex:1, padding:'4px 6px', borderRadius:5, fontSize:10, fontWeight:600, cursor:'pointer', background: val ? '#fee2e2' : '#fffbeb', border:`1.5px solid ${val ? '#fca5a5' : '#fde68a'}`, color: val ? '#dc2626' : '#92400e' }}>
+                    {val ? '✕ ' : ''}{label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display:'flex', gap:6 }}>
+                <button onClick={() => setUseRealHA(v => !v)} style={{ flex:1, padding:'5px 8px', borderRadius:5, fontSize:10, fontWeight:600, cursor:'pointer', background: useRealHA ? '#ede9fe' : '#fafafa', border:`1.5px solid ${useRealHA ? '#c4b5fd' : '#e2e8f0'}`, color: useRealHA ? '#7c3aed' : '#64748b' }}>
                   {useRealHA ? '⚡ 실제 HA 모드' : '○ Mock 모드'}
                 </button>
-                <button onClick={() => handlePinLockout(simPropId, 3)} style={{ padding:'6px', borderRadius:6, background:'#fff7ed', border:'1.5px solid #fed7aa', color:'#92400e', fontSize:11, fontWeight:600, cursor:'pointer' }}>
+                <button onClick={() => handlePinLockout(simPropId, 3)} style={{ flex:1, padding:'5px 8px', borderRadius:5, background:'#fff7ed', border:'1.5px solid #fed7aa', color:'#92400e', fontSize:10, fontWeight:600, cursor:'pointer' }}>
                   ⚠ PIN 오류 3회 시뮬
                 </button>
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* 중앙: 자동화 흐름 */}
-        <div style={{ display:'flex', flexDirection:'column', gap:12, overflowY:'auto' }}>
-
-          <div style={{ display:'flex', alignItems:'center', gap:8, paddingBottom:10, borderBottom:'1.5px solid #e2e8f0' }}>
-            <span style={{ width:3, height:13, background:'#2563eb', borderRadius:2, flexShrink:0 }} />
-            <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>처리 흐름</span>
-            {eventResults.length > 0 && (
-              <button onClick={() => setEventResults([])} style={{ marginLeft:'auto', padding:'3px 9px', borderRadius:5, background:'#f8fafc', border:'1.5px solid #e2e8f0', color:'#64748b', fontSize:10, cursor:'pointer', fontWeight:600 }}>초기화</button>
-            )}
-          </div>
-
-          {/* STEP 1 */}
-          <div style={{ background:'#ffffff', border:`2px solid ${sc1.b}`, borderRadius:12, overflow:'hidden' }}>
-            <div style={{ background:sc1.hBg, borderBottom:'1px solid #e2e8f0', padding:'10px 14px', display:'flex', alignItems:'center', gap:8 }}>
-              <div style={{ width:22, height:22, borderRadius:'50%', background:sc1.cBg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                <span style={{ color:sc1.cFg, fontWeight:800, fontSize:12 }}>{sc1.lbl}</span>
-              </div>
-              <span style={{ fontWeight:700, fontSize:13, color:sc1.tc }}>STEP 1 · 도어락 열림 감지</span>
-            </div>
-            <div style={{ padding:'14px 16px' }}>
-              {step1done && (
-                <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:10, flexWrap:'wrap' }}>
-                  <span style={{ fontFamily:"'DM Mono',monospace", fontSize:12, fontWeight:700, color:'#1e293b', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:4, padding:'2px 7px' }}>{lr.propId}</span>
-                  <span style={{ fontSize:13, color:'#1e293b', fontWeight:600 }}>{lr.propName}</span>
-                  <span style={{ fontSize:12, color:'#64748b' }}>— {lr.guestName}님</span>
-                  <span style={{ marginLeft:'auto', fontFamily:"'DM Mono',monospace", fontSize:12, color:'#64748b' }}>{lr.time}</span>
-                </div>
-              )}
-              {!step1done && <div style={{ color:'#94a3b8', fontSize:13, marginBottom:10, textAlign:'center' }}>아직 들어온 입실 이벤트가 없어요.</div>}
-              <button onClick={simulate} disabled={running} style={{ width:'100%', padding:'10px', borderRadius:8, background: running ? '#e2e8f0' : 'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)', border:`2px solid ${running ? '#cbd5e1' : '#1e40af'}`, color: running ? '#94a3b8' : '#ffffff', fontSize:13, fontWeight:700, cursor: running ? 'not-allowed' : 'pointer', boxShadow: running ? 'none' : '0 4px 12px rgba(37,99,235,0.35)' }}>
-                {running ? <><span style={{ animation:'s02spin 1s linear infinite', display:'inline-block' }}>↻</span> 확인 중...</> : '🚪 입실 이벤트 다시 확인'}
-              </button>
-            </div>
-          </div>
-
-          {/* STEP 2 */}
-          <div style={{ background:'#ffffff', border:`2px solid ${sc2.b}`, borderRadius:12, overflow:'hidden' }}>
-            <div style={{ background:sc2.hBg, borderBottom:'1px solid #e2e8f0', padding:'10px 14px', display:'flex', alignItems:'center', gap:8 }}>
-              <div style={{ width:22, height:22, borderRadius:'50%', background:sc2.cBg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                <span style={{ color:sc2.cFg, fontWeight:800, fontSize:12, animation: s2run ? 's02spin 1s linear infinite' : 'none', display:'inline-block' }}>{sc2.lbl}</span>
-              </div>
-              <span style={{ fontWeight:700, fontSize:13, color:sc2.tc }}>STEP 2 · IoT 체크인 씬 실행</span>
-            </div>
-            <div style={{ padding:'14px 16px', fontSize:13 }}>
-              {step2done ? <span style={{ color:'#059669' }}>체크인 웰컴 씬 실행 완료 — 조명 켜짐, 에어컨 설정 완료</span>
-              : step2fail ? <span style={{ color:'#dc2626' }}>{lr?.error || 'IoT 씬 실행 실패'}</span>
-              : s2run    ? <span style={{ color:'#2563eb' }}>씬 실행 중... (HA REST API 호출)</span>
-              :             <span style={{ color:'#94a3b8' }}>입실 감지 후 자동 실행됩니다</span>}
-            </div>
-          </div>
-
-          {/* STEP 3 */}
-          <div style={{ background:'#ffffff', border:`2px solid ${sc3.b}`, borderRadius:12, overflow:'hidden' }}>
-            <div style={{ background:sc3.hBg, borderBottom:'1px solid #e2e8f0', padding:'10px 14px', display:'flex', alignItems:'center', gap:8 }}>
-              <div style={{ width:22, height:22, borderRadius:'50%', background:sc3.cBg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                <span style={{ color:sc3.cFg, fontWeight:800, fontSize:12, animation: s3run ? 's02spin 1s linear infinite' : 'none', display:'inline-block' }}>{sc3.lbl}</span>
-              </div>
-              <span style={{ fontWeight:700, fontSize:13, color:sc3.tc }}>STEP 3 · 게스트 채팅 채널 오픈</span>
-            </div>
-            <div style={{ padding:'14px 16px', fontSize:13 }}>
-              {step3done ? <span style={{ color:'#059669' }}>게스트 채팅 채널 오픈 완료</span>
-              : step3fail ? <span style={{ color:'#dc2626' }}>채팅 채널 오픈 실패 (부분 완료로 계속 진행)</span>
-              : s3run    ? <span style={{ color:'#2563eb' }}>채팅 채널 오픈 중...</span>
-              :             <span style={{ color:'#94a3b8' }}>씬 실행 완료 후 자동 오픈됩니다</span>}
-            </div>
-          </div>
-
-          {/* STEP 4 */}
-          <div style={{ background:'#ffffff', border:`2px solid ${sc4.b}`, borderRadius:12, overflow:'hidden' }}>
-            <div style={{ background:sc4.hBg, borderBottom:'1px solid #e2e8f0', padding:'10px 14px', display:'flex', alignItems:'center', gap:8 }}>
-              <div style={{ width:22, height:22, borderRadius:'50%', background:sc4.cBg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                <span style={{ color:sc4.cFg, fontWeight:800, fontSize:12, animation: s4run ? 's02spin 1s linear infinite' : 'none', display:'inline-block' }}>{sc4.lbl}</span>
-              </div>
-              <span style={{ fontWeight:700, fontSize:13, color:sc4.tc }}>STEP 4 · 입실 확인 메시지 발송</span>
-            </div>
-            <div style={{ padding:'14px 16px', fontSize:13 }}>
-              {step4done ? (
-                <div>
-                  <div style={{ color:'#059669', marginBottom:6 }}>입실 확인 메시지 발송 완료</div>
-                  <div style={{ fontSize:11, color:'#475569', fontFamily:"'DM Mono',monospace", background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:6, padding:'8px 10px', whiteSpace:'pre-wrap', lineHeight:1.5 }}>
-                    {_s02.buildCheckinConfirmMessage(bookings.find(b => b.propId === lr?.propId) || bookings[0], lr?.time || _s02.hhmm())}
-                  </div>
-                </div>
-              )
-              : step4fail ? <span style={{ color:'#dc2626' }}>메시지 발송 실패 (부분 완료)</span>
-              : s4run    ? <span style={{ color:'#2563eb' }}>입실 확인 메시지 발송 중...</span>
-              :             <span style={{ color:'#94a3b8' }}>채팅 채널 오픈 후 자동 발송됩니다</span>}
-            </div>
-          </div>
-
-          {/* 처리 이력 */}
-          {eventResults.length > 1 && (
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:8, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0', marginBottom:10 }}>
-                <span style={{ width:3, height:13, background:'#94a3b8', borderRadius:2, flexShrink:0 }} />
-                <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>처리 이력</span>
-              </div>
-              {eventResults.slice(1).map((r, i) => (
-                <EventResultCard key={`${r.propId}-${r.time}-${i}`} result={r} />
-              ))}
             </div>
           )}
-        </div>
-
-        {/* 우측: 알림 피드 */}
-        <div style={{ display:'flex', flexDirection:'column', overflow:'hidden', background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'12px 16px', borderBottom:'1.5px solid #e2e8f0', flexShrink:0 }}>
-            <span style={{ width:3, height:13, background:'#d97706', borderRadius:2, flexShrink:0 }} />
-            <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1 }}>실시간 알림</span>
-            {alerts.length > 0 && <span style={{ background:'#dc2626', color:'#fff', borderRadius:10, padding:'1px 7px', fontSize:10, fontWeight:700 }}>{alerts.length}</span>}
-            {alerts.length > 0 && (
-              <button onClick={() => setAlerts([])} style={{ padding:'3px 9px', borderRadius:5, background:'#f8fafc', border:'1.5px solid #e2e8f0', color:'#64748b', fontSize:10, cursor:'pointer', fontWeight:600 }}>전체 확인</button>
-            )}
-          </div>
-          <div style={{ flex:1, overflowY:'auto', padding:'8px 10px' }}>
-            {alerts.length === 0 ? (
-              <div style={{ textAlign:'center', padding:'32px 20px', color:'#94a3b8', fontSize:13 }}>
-                <div style={{ fontSize:28, marginBottom:8, opacity:0.4 }}>🔔</div>
-                지금 바로 확인할 알림은 없어요.
-              </div>
-            ) : (
-              alerts.map(a => <AlertItem key={a.id} alert={a} onAck={ackAlert} />)
-            )}
-          </div>
         </div>
 
       </div>

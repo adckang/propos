@@ -261,47 +261,83 @@ function HomeAssistant({onBack, onOpenCommandCenter, initialStage = "stay", hand
       </div>
 
       <div className="ha-content">
-        <div className="ha-role-strip">
-          <div className="ha-role-copy">
-            <div className="ha-role-eyebrow">이 화면의 역할</div>
-            <div className="ha-role-title">이 숙소 한 곳에서 해야 할 일만 끝내는 화면입니다.</div>
-            <div className="ha-role-desc">전체 우선순위는 커맨드 센터에서 보고, 여기서는 메시지, 기기, 청소처럼 이 숙소에 필요한 일만 처리합니다. 같은 단계 숙소가 여러 곳이면 다시 커맨드 센터로 돌아가 묶어서 처리합니다.</div>
+        {/* ── 트리아지 카드: 처리 필요(빨강) / 안정(녹색) ── */}
+        {(() => {
+          const issues = handoffProperty?.issues || [];
+          const unread = handoffProperty?.unreadMsg || 0;
+          const hasUrgent = issues.length > 0 || unread > 0 || disconnectedDevices > 0;
+
+          if (hasUrgent) {
+            const urgentItems = [
+              ...issues.map(issue => ({text: issue, key: issue})),
+              ...(unread > 0 ? [{text: `미읽음 메시지 ${unread}건 — 답장이 필요합니다`, key: "unread"}] : []),
+              ...(disconnectedDevices > 0 ? [{text: `연결 끊긴 기기 ${disconnectedDevices}대 — 확인이 필요합니다`, key: "dev"}] : []),
+            ];
+            return (
+              <div style={{background:"#fef2f2",border:"2px solid #fecaca",borderRadius:"16px",padding:"18px 20px",marginBottom:"14px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"16px"}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:"10px",fontWeight:"800",letterSpacing:"0.08em",textTransform:"uppercase",color:"#dc2626",marginBottom:"8px"}}>지금 처리해야 할 것</div>
+                  <div style={{fontSize:"17px",fontWeight:"800",color:"#b91c1c",lineHeight:"1.3",marginBottom:"10px"}}>{handoff?.headline || "확인이 필요한 이슈가 있습니다"}</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+                    {urgentItems.map(item=>(
+                      <div key={item.key} style={{display:"flex",gap:"8px",alignItems:"center",padding:"7px 10px",background:"#fff",border:"1.5px solid #fecaca",borderRadius:"8px"}}>
+                        <span style={{width:"6px",height:"6px",borderRadius:"50%",background:"#dc2626",flexShrink:0,display:"inline-block"}} />
+                        <span style={{fontSize:"13px",color:"#7f1d1d",fontWeight:"600"}}>{item.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:"8px",flexShrink:0}}>
+                  <button className="ha-focus-btn ha-focus-btn-strong" style={{background:"#dc2626",borderColor:"#dc2626",color:"#fff",fontSize:"13px",padding:"10px 18px"}} onClick={()=>runGuideAction(currentGuide.primary)}>{currentGuide.primary.label}</button>
+                  <button className="ha-focus-btn" style={{fontSize:"12px"}} onClick={()=>onOpenCommandCenter?.(haStage)}>← 커맨드 센터</button>
+                </div>
+              </div>
+            );
+          } else {
+            return (
+              <div style={{background:"#f0fdf4",border:"2px solid #a7f3d0",borderRadius:"16px",padding:"18px 20px",marginBottom:"14px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:"16px"}}>
+                <div>
+                  <div style={{fontSize:"10px",fontWeight:"800",letterSpacing:"0.08em",textTransform:"uppercase",color:"#059669",marginBottom:"6px"}}>지금 안정</div>
+                  <div style={{fontSize:"17px",fontWeight:"800",color:"#047857",lineHeight:"1.3"}}>{displayPropertyName} — 지금 개입이 필요한 이슈 없음</div>
+                  <div style={{fontSize:"12px",color:"#059669",marginTop:"6px"}}>{currentGuide.title}</div>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:"8px",flexShrink:0}}>
+                  <button className="ha-focus-btn ha-focus-btn-strong" style={{background:"#059669",borderColor:"#059669",color:"#fff",fontSize:"13px",padding:"10px 18px"}} onClick={()=>runGuideAction(currentGuide.primary)}>{currentGuide.primary.label}</button>
+                  <button className="ha-focus-btn" style={{fontSize:"12px"}} onClick={()=>onOpenCommandCenter?.(haStage)}>← 커맨드 센터</button>
+                </div>
+              </div>
+            );
+          }
+        })()}
+
+        {/* ── 체크리스트: 빨강(미완) / 녹색(완료) ── */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"14px"}}>
+          <div style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:"12px",padding:"14px"}}>
+            <div style={{fontSize:"10px",fontWeight:"800",letterSpacing:"0.06em",color:"#dc2626",marginBottom:"10px",textTransform:"uppercase"}}>처리 필요</div>
+            {(()=>{
+              const needItems = [];
+              if(disconnectedDevices > 0) needItems.push(`기기 ${disconnectedDevices}대 연결 끊김`);
+              if((handoffProperty?.unreadMsg||0) > 0) needItems.push(`미읽음 메시지 ${handoffProperty.unreadMsg}건`);
+              if((handoffProperty?.issues||[]).length > 0) needItems.push(...(handoffProperty.issues));
+              if(needItems.length === 0) needItems.push(currentGuide.secondary.label);
+              return needItems.map(item=>(
+                <div key={item} style={{display:"flex",gap:"8px",alignItems:"center",padding:"7px 0",borderBottom:"1px solid #fecaca"}}>
+                  <span style={{width:"16px",height:"16px",borderRadius:"4px",background:"#fef2f2",border:"1.5px solid #dc2626",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} />
+                  <span style={{fontSize:"12px",color:"#7f1d1d",fontWeight:"600"}}>{item}</span>
+                </div>
+              ));
+            })()}
           </div>
-          <div className="ha-role-actions">
-            <button className="ha-role-btn ha-role-btn-strong" onClick={()=>onOpenCommandCenter?.(haStage)}>전체 관제로 돌아가기</button>
+          <div style={{background:"#f0fdf4",border:"1.5px solid #a7f3d0",borderRadius:"12px",padding:"14px"}}>
+            <div style={{fontSize:"10px",fontWeight:"800",letterSpacing:"0.06em",color:"#059669",marginBottom:"10px",textTransform:"uppercase"}}>완료 / 정상</div>
+            {currentGuide.checks.map(check=>(
+              <div key={check} style={{display:"flex",gap:"8px",alignItems:"center",padding:"7px 0",borderBottom:"1px solid #a7f3d0"}}>
+                <span style={{width:"16px",height:"16px",borderRadius:"4px",background:"#059669",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:"10px",flexShrink:0,fontWeight:"700"}}>✓</span>
+                <span style={{fontSize:"12px",color:"#065f46",fontWeight:"600"}}>{check}</span>
+              </div>
+            ))}
           </div>
         </div>
-
-        {handoffProperty && (
-          <div className="ha-focus-card" style={{background:"#fff7ed",borderColor:"#fed7aa",marginTop:"14px"}}>
-            <div className="ha-focus-copy">
-              <div className="ha-focus-eyebrow">커맨드 센터에서 넘긴 이유</div>
-              <div className="ha-focus-title" style={{color:"#c2410c"}}>{displayPropertyName}에서 {handoff?.headline || "확인"}이 필요합니다.</div>
-              <div className="ha-focus-desc">
-                {handoff?.reason || "이 숙소를 먼저 확인해야 합니다."}
-                {" "}여기서는 이 숙소 한 곳만 보면 되고, 먼저 아래의 "{currentGuide.primary.label}" 버튼부터 누르면 됩니다.
-              </div>
-              <div className="ha-focus-checks">
-                <div className="ha-focus-check">
-                  <span>•</span>
-                  <span>숙소 상태: {handoffProperty.status}</span>
-                </div>
-                <div className="ha-focus-check">
-                  <span>•</span>
-                  <span>미읽음 메시지: {handoffProperty.unreadMsg}건</span>
-                </div>
-                <div className="ha-focus-check">
-                  <span>•</span>
-                  <span>이슈: {handoffProperty.issues.length}건</span>
-                </div>
-              </div>
-            </div>
-            <div className="ha-focus-actions">
-              <button className="ha-focus-btn ha-focus-btn-strong" onClick={()=>runGuideAction(currentGuide.primary)}>먼저 {currentGuide.primary.label}</button>
-              <button className="ha-focus-btn" onClick={()=>onOpenCommandCenter?.(haStage)}>커맨드 센터로 돌아가기</button>
-            </div>
-          </div>
-        )}
 
         <div className="ha-stage-header">
           <span className="ha-stage-icon">{currentStage.emoji}</span>
@@ -309,39 +345,7 @@ function HomeAssistant({onBack, onOpenCommandCenter, initialStage = "stay", hand
           <div className="ha-stage-sub">— {currentStage.sub}</div>
         </div>
 
-        <div className="ha-focus-card" style={{background:currentGuide.tone.bg,borderColor:currentGuide.tone.border}}>
-          <div className="ha-focus-copy">
-            <div className="ha-focus-eyebrow">지금 할 일</div>
-            <div className="ha-focus-title" style={{color:currentGuide.tone.text}}>{currentGuide.title}</div>
-            <div className="ha-focus-desc">{currentGuide.desc}</div>
-            <div className="ha-focus-checks">
-              {currentGuide.checks.map(check=>(
-                <div key={check} className="ha-focus-check">
-                  <span>✓</span>
-                  <span>{check}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="ha-focus-actions">
-            <button className="ha-focus-btn ha-focus-btn-strong" onClick={()=>runGuideAction(currentGuide.primary)}>{currentGuide.primary.label}</button>
-            <button className="ha-focus-btn" onClick={()=>runGuideAction(currentGuide.secondary)}>{currentGuide.secondary.label}</button>
-          </div>
-        </div>
-
-        <div className="ha-snapshot-grid">
-          {snapshotCards.map(card=>(
-            <div key={card.label} className="ha-snapshot-card" style={{background:card.tone.bg,borderColor:card.tone.border}}>
-              <div className="ha-snapshot-head">
-                <span>{card.label}</span>
-                <strong style={{color:card.tone.text}}>{card.value}</strong>
-              </div>
-              <div className="ha-snapshot-desc">{card.desc}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="ha-event-card">
+        <div className="ha-event-card" style={{marginBottom:"14px"}}>
           <div className="ha-label">최근 운영 이벤트</div>
           <div className="ha-event-list">
             {currentEvents.map(event=>(

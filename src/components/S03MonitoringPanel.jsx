@@ -4,7 +4,6 @@ import monitoringService from "../application/monitoringService.js";
 import PROPOS_CONFIG from "../config/publicConfig.js";
 import sensorDomain from "../domain/sensorDomain.js";
 import haBrowserClient from "../infrastructure/haBrowserClient.js";
-import BatchConsoleGuide from "./BatchConsoleGuide";
 
 // ============================================================
 // S03MonitoringPanel.jsx — UC-003 체류 중 실시간 모니터링 UI
@@ -563,334 +562,217 @@ function S03MonitoringPanel({ onBack }) {
   ];
 
   // ── 렌더 ──
-  return (
-    <div style={{ height: '100vh', background: '#f0f4f8', fontFamily: "'DM Sans', 'Nunito', sans-serif", display:'flex', flexDirection:'column' }}>
+  const anomalyProps = propDiagnostics.filter(item => item.anomaly);
+  const normalProps  = propDiagnostics.filter(item => !item.anomaly && item.reading);
 
-      {/* CSS pulse animation */}
+  return (
+    <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontFamily:"'DM Sans',sans-serif" }}>
       <style>{`
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
         @keyframes spin   { from{transform:rotate(0)} to{transform:rotate(360deg)} }
       `}</style>
 
       {/* 헤더 */}
-      <div style={{ background: '#ffffff', borderBottom: '1px solid #e2e8f0', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 16 }}>
-        <button
-          onClick={onBack}
-          style={{ padding: '6px 16px', borderRadius: 8, border: '1.5px solid #e2e8f0', background: '#f8fafc', color: '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-        >
-          ← 커맨드 센터
-        </button>
-
-        <div>
-          <div style={{ fontSize:10, color:'#94a3b8', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:4 }}>
-            S03 · 체류 중
-          </div>
-          <div style={{ fontWeight: 800, fontSize: 18, color: '#1e293b' }}>
-            실시간 모니터링
-          </div>
-          <div style={{ fontSize: 12, color: '#64748b' }}>
-            센서 이상과 메시지 응답 대기를 함께 살펴봅니다.
-          </div>
+      <div style={{ background:'#fff', borderBottom:'1px solid #e2e8f0', padding:'12px 20px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+        {onBack && <button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}>← 커맨드 센터</button>}
+        {onBack && <div style={{ width:1, height:22, background:'#e2e8f0' }} />}
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:10, color:'#94a3b8', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase' }}>S03 · 체류 중 · 같은 단계 예외를 묶어서 처리</div>
+          <div style={{ fontWeight:800, fontSize:16, color:'#1e293b', marginTop:2 }}>실시간 모니터링 — 센서 이상 감지 · 게스트 메시지 응답</div>
         </div>
-
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
-          {/* 폴링 상태 */}
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           {polling && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#059669', fontWeight: 600 }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#059669', animation: 'pulse 1.5s infinite' }} />
+            <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, color:'#059669', fontWeight:600 }}>
+              <div style={{ width:7, height:7, borderRadius:'50%', background:'#059669', animation:'pulse 1.5s infinite' }} />
               폴링 중 ({countdown}s)
             </div>
           )}
-
-          {/* 네트워크 오류 배지 */}
-          {networkError && (
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 10px' }}>
-              HA 연결 오류 — stale 값 표시 중
-            </div>
-          )}
-
-          {/* 알림 카운터 */}
-          {(errorCount > 0 || warnCount > 0) && (
-            <div style={{ display: 'flex', gap: 6 }}>
-              {errorCount > 0 && <span style={{ fontSize: 11, fontWeight: 700, background: '#dc2626', color: '#ffffff', borderRadius: 10, padding: '2px 8px' }}>긴급 {errorCount}</span>}
-              {warnCount  > 0 && <span style={{ fontSize: 11, fontWeight: 700, background: '#d97706', color: '#ffffff', borderRadius: 10, padding: '2px 8px' }}>경고 {warnCount}</span>}
-            </div>
-          )}
-
-          {/* HA 모드 토글 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#64748b' }}>
-            <span>Mock</span>
-            <div
-              onClick={() => setHaMode(v => !v)}
-              style={{
-                width: 44, height: 24, borderRadius: 12,
-                background: haMode ? '#2563eb' : '#e2e8f0',
-                cursor: 'pointer', position: 'relative', transition: 'background 0.2s',
-              }}
-            >
-              <div style={{
-                position: 'absolute', top: 2,
-                left: haMode ? 22 : 2,
-                width: 20, height: 20, borderRadius: '50%',
-                background: '#ffffff', transition: 'left 0.2s',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-              }} />
-            </div>
-            <span style={{ color: haMode ? '#2563eb' : '#94a3b8', fontWeight: haMode ? 700 : 400 }}>HA 실제</span>
-          </div>
-
-          {/* 폴링 간격 */}
-          <select
-            value={pollInterval}
-            onChange={e => setPollInterval(Number(e.target.value))}
-            disabled={polling}
-            style={{ padding: '4px 8px', borderRadius: 6, border: '1.5px solid #e2e8f0', fontSize: 12, color: '#475569', background: '#f8fafc' }}
-          >
+          {networkError && <div style={{ fontSize:11, fontWeight:700, color:'#dc2626', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:6, padding:'3px 9px' }}>HA 오류</div>}
+          <select value={pollInterval} onChange={e => setPollInterval(Number(e.target.value))} disabled={polling}
+            style={{ padding:'4px 7px', borderRadius:6, border:'1.5px solid #e2e8f0', fontSize:11, color:'#475569', background:'#f8fafc' }}>
             <option value={5}>5초</option>
             <option value={10}>10초</option>
             <option value={30}>30초</option>
             <option value={60}>60초</option>
           </select>
-
-          {/* 폴링 시작/중지 버튼 */}
-          <button
-            onClick={polling ? stopPolling : startPolling}
-            style={{
-              padding: '8px 20px', borderRadius: 8,
-              border: `1.5px solid ${polling ? '#dc2626' : '#2563eb'}`,
-              background: polling ? '#dc2626' : '#2563eb',
-              color: '#ffffff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
-              transition: 'all 0.2s',
-            }}
-          >
+          <button onClick={polling ? stopPolling : startPolling}
+            style={{ padding:'6px 14px', borderRadius:8, border:`1.5px solid ${polling ? '#dc2626' : '#2563eb'}`, background: polling ? '#dc2626' : '#2563eb', color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer' }}>
             {polling ? '■ 폴링 중지' : '▶ 폴링 시작'}
           </button>
+          <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#94a3b8' }}>
+            Mock
+            <div onClick={() => setHaMode(v => !v)} style={{ width:36, height:18, borderRadius:9, background: haMode ? '#2563eb' : '#e2e8f0', cursor:'pointer', position:'relative', transition:'background 0.2s' }}>
+              <div style={{ position:'absolute', top:2, left: haMode ? 18 : 2, width:14, height:14, borderRadius:'50%', background:'#fff', transition:'left 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.2)' }} />
+            </div>
+            <span style={{ color: haMode ? '#2563eb' : '#94a3b8', fontWeight: haMode ? 700 : 400 }}>HA</span>
+          </div>
         </div>
       </div>
 
-      <BatchConsoleGuide stageId="stay" onBack={onBack} />
+      <div style={{ flex:1, overflowY:'auto', padding:'16px 20px', display:'flex', flexDirection:'column', gap:12 }}>
 
-      <div style={{ padding:'18px 24px 0', flexShrink:0 }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1.7fr 1fr', gap:14, marginBottom:14 }}>
-          <div style={{ background:focusTone.bg, border:`1.5px solid ${focusTone.border}`, borderRadius:16, padding:'18px 20px', boxShadow:'0 10px 28px rgba(15,23,42,0.04)' }}>
-            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:8 }}>지금 할 일</div>
-            <div style={{ fontSize:20, fontWeight:800, color:focusTone.text, lineHeight:1.45, letterSpacing:'-0.3px' }}>{focusTitle}</div>
-            <div style={{ fontSize:13, color:'#64748b', lineHeight:1.7, marginTop:8 }}>{focusDesc}</div>
-            <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:12 }}>
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
-                선택 숙소 · {currentProp.propName}
-              </span>
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
-                마지막 확인 · {lastPoll || '대기'}
-              </span>
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
-                미확인 알림 {alerts.length}건
-              </span>
+        {/* ── 히어로 카드: 빨강(이상감지) / 녹색(정상) ── */}
+        {anomalyProps.length > 0 ? (
+          <div style={{ background:'#fef2f2', border:'2px solid #fecaca', borderRadius:16, padding:'16px 20px', display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:16 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#dc2626', marginBottom:6 }}>지금 처리해야 할 것</div>
+              <div style={{ fontSize:18, fontWeight:800, color:'#b91c1c', lineHeight:1.3, marginBottom:10 }}>
+                {criticalItems.length > 0
+                  ? `긴급 이상 ${criticalItems.length}곳 — 즉시 확인이 필요합니다`
+                  : `센서 경고 ${warningItems.length}곳 — 추세 확인이 필요합니다`}
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {anomalyProps.slice(0,3).map(item => (
+                  <div key={item.prop.propId} style={{ display:'flex', gap:8, alignItems:'center', padding:'7px 10px', background:'#fff', border:'1.5px solid #fecaca', borderRadius:8 }}>
+                    <span style={{ width:6, height:6, borderRadius:'50%', background: item.anomaly?.severity === 'critical' ? '#dc2626' : '#d97706', flexShrink:0, display:'inline-block' }} />
+                    <span style={{ fontSize:12, color:'#7f1d1d', fontWeight:600 }}>{item.prop.propName} — {item.anomaly?.sensors?.join(', ')}</span>
+                    <span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color: item.anomaly?.severity === 'critical' ? '#dc2626' : '#d97706', background:'#fff', border:`1px solid ${item.anomaly?.severity === 'critical' ? '#fca5a5' : '#fde68a'}`, borderRadius:4, padding:'2px 6px', flexShrink:0 }}>
+                      {item.anomaly?.severity === 'critical' ? '긴급' : '경고'}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div style={{ display:'flex', gap:8, marginTop:14 }}>
-              <button
-                onClick={() => pollAll()}
-                style={{ padding:'10px 16px', borderRadius:10, border:'1.5px solid #1d4ed8', background:'#2563eb', color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer' }}
-              >
+            <div style={{ display:'flex', flexDirection:'column', gap:8, flexShrink:0 }}>
+              <button onClick={() => pollAll()} style={{ padding:'10px 18px', borderRadius:10, background:'#dc2626', border:'1.5px solid #b91c1c', color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer' }}>
                 지금 다시 확인
               </button>
-              <button
-                onClick={() => setSelectedProp(focusTarget.propId)}
-                style={{ padding:'10px 16px', borderRadius:10, border:'1.5px solid #e2e8f0', background:'#fff', color:'#475569', fontSize:12, fontWeight:700, cursor:'pointer' }}
-              >
-                이 숙소 보기
-              </button>
+              {alerts.length > 0 && <button onClick={ackAllAlerts} style={{ padding:'8px 18px', borderRadius:10, background:'#fff', border:'1.5px solid #fecaca', color:'#dc2626', fontSize:12, fontWeight:600, cursor:'pointer' }}>알림 전체 확인</button>}
             </div>
           </div>
-
-          <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:16, padding:'16px 18px' }}>
-            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:10 }}>지금 보고 있는 숙소</div>
-            <div style={{ fontSize:15, fontWeight:800, color:selectedDiagnostic?.anomaly?.severity === 'critical' ? '#dc2626' : selectedDiagnostic?.anomaly?.severity === 'warn' ? '#d97706' : '#1e293b' }}>
-              {currentProp.propName}
-            </div>
-            <div style={{ fontSize:12, color:'#64748b', lineHeight:1.65, marginTop:6 }}>
-              {selectedDiagnostic?.anomaly
-                ? `이상 센서: ${selectedDiagnostic.anomaly.sensors.join(", ")}`
-                : currentReading
-                ? '현재 선택 숙소는 정상 범위로 보입니다.'
-                : '아직 센서 데이터가 수집되지 않았습니다.'}
-            </div>
-            <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:12 }}>
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:999, padding:'6px 10px' }}>
-                초안 {drafts[selectedProp] ? '있음' : '없음'}
-              </span>
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:999, padding:'6px 10px' }}>
-                네트워크 {networkError ? '주의' : '정상'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4, minmax(0, 1fr))', gap:10, marginBottom:14 }}>
-          {overviewCards.map(card => (
-            <div key={card.label} style={{ background:card.tone.bg, border:`1.5px solid ${card.tone.border}`, borderRadius:14, padding:'14px 16px' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
-                <span style={{ fontSize:11, fontWeight:700, color:'#475569', letterSpacing:'0.05em', textTransform:'uppercase' }}>{card.label}</span>
-                <strong style={{ fontFamily:"'DM Mono',monospace", fontSize:18, fontWeight:800, color:card.tone.text }}>{card.value}</strong>
+        ) : (
+          <div style={{ background:'#f0fdf4', border:'2px solid #a7f3d0', borderRadius:16, padding:'16px 20px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:16 }}>
+            <div>
+              <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#059669', marginBottom:6 }}>
+                {polling ? (normalProps.length > 0 ? '전체 정상' : '폴링 중 — 이상 없음') : '폴링 대기'}
               </div>
-              <div style={{ fontSize:12, color:'#64748b', marginTop:10, lineHeight:1.55 }}>{card.desc}</div>
+              <div style={{ fontSize:18, fontWeight:800, color:'#047857', lineHeight:1.3 }}>
+                {polling
+                  ? normalProps.length > 0
+                    ? `${normalProps.length}개 숙소 정상 — 이상 센서 없음`
+                    : '첫 폴링 데이터 수집 중...'
+                  : '폴링 시작 버튼을 눌러 실시간 감지를 시작하세요'}
+              </div>
+              {lastPoll && <div style={{ fontSize:11, color:'#059669', marginTop:4 }}>마지막 확인 {lastPoll}</div>}
             </div>
-          ))}
-        </div>
-      </div>
+            <button onClick={polling ? stopPolling : startPolling}
+              style={{ padding:'10px 18px', borderRadius:10, background:'#059669', border:'1.5px solid #047857', color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer', flexShrink:0 }}>
+              {polling ? '■ 폴링 중지' : '▶ 폴링 시작'}
+            </button>
+          </div>
+        )}
 
-      <div style={{ display: 'flex', gap: 0, flex:1, minHeight:0 }}>
-
-        {/* 좌측: 숙소 목록 + 알림 피드 */}
-        <div style={{ width: 280, background: '#ffffff', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
-          {/* 숙소 목록 */}
-          <div style={{ padding: '16px', borderBottom: '1.5px solid #e2e8f0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: 11, fontWeight: 700, color: '#475569',
-              textTransform: 'uppercase', letterSpacing: '0.06em',
-              marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
-              <span style={{ width: 3, height: 13, background: '#2563eb', borderRadius: 2, flexShrink: 0 }} />
-              한 번에 볼 숙소 ({PROPS.length})
+        {/* ── 숙소별 상태: 빨강(이상) / 녹색(정상) ── */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+          {/* 처리 필요 */}
+          <div style={{ background:'#fef2f2', border:'1.5px solid #fecaca', borderRadius:12, padding:'14px' }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#dc2626', marginBottom:10, textTransform:'uppercase' }}>
+              처리 필요 · {anomalyProps.length + pendingItems.length}곳
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {PROPS.map(prop => (
-                <PropMonitorBadge
-                  key={prop.propId}
-                  prop={prop}
-                  readings={readings}
-                  selected={selectedProp === prop.propId}
-                  onSelect={setSelectedProp}
-                />
-              ))}
-            </div>
+            {anomalyProps.length === 0 && pendingItems.length === 0
+              ? <div style={{ fontSize:12, color:'#94a3b8', textAlign:'center', padding:'12px 0' }}>없음</div>
+              : <>
+                {anomalyProps.map(item => {
+                  const r = item.reading;
+                  return (
+                    <div key={item.prop.propId} onClick={() => setSelectedProp(item.prop.propId)}
+                      style={{ display:'flex', gap:8, alignItems:'center', padding:'8px 0', borderBottom:'1px solid #fecaca', cursor:'pointer' }}>
+                      <span style={{ width:6, height:6, borderRadius:'50%', background: item.anomaly?.severity === 'critical' ? '#dc2626' : '#d97706', flexShrink:0, animation: item.anomaly?.severity === 'critical' ? 'pulse 1.2s ease-in-out infinite' : 'none' }} />
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:'#7f1d1d', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{item.prop.propName}</div>
+                        <div style={{ fontSize:10, color:'#dc2626' }}>{item.prop.guestName} · {item.anomaly?.sensors?.join(', ')}</div>
+                      </div>
+                      <span style={{ fontSize:10, fontWeight:700, color: item.anomaly?.severity === 'critical' ? '#dc2626' : '#d97706', background:'#fff', border:`1px solid ${item.anomaly?.severity === 'critical' ? '#fca5a5' : '#fde68a'}`, borderRadius:4, padding:'2px 6px', flexShrink:0 }}>
+                        {item.anomaly?.severity === 'critical' ? '긴급' : '경고'}
+                      </span>
+                    </div>
+                  );
+                })}
+                {pendingItems.map(item => (
+                  <div key={item.prop.propId} style={{ display:'flex', gap:8, alignItems:'center', padding:'8px 0', borderBottom:'1px solid #fecaca' }}>
+                    <span style={{ width:6, height:6, borderRadius:'50%', background:'#94a3b8', flexShrink:0 }} />
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:'#475569', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{item.prop.propName}</div>
+                      <div style={{ fontSize:10, color:'#94a3b8' }}>센서 데이터 대기 중</div>
+                    </div>
+                    <span style={{ fontSize:10, fontWeight:700, color:'#64748b', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:4, padding:'2px 6px', flexShrink:0 }}>대기</span>
+                  </div>
+                ))}
+              </>
+            }
           </div>
 
-          {/* 알림 피드 */}
-          <div style={{ flex: 1, padding: 16, overflowY: 'auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: 11, fontWeight: 700, color: '#475569',
-              textTransform: 'uppercase', letterSpacing: '0.06em',
-              marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
-              <span style={{ width: 3, height: 13, background: '#d97706', borderRadius: 2, flexShrink: 0 }} />
-              <span style={{ flex: 1 }}>실시간 알림</span>
-              {alerts.length > 0 && (
-                <button
-                  onClick={ackAllAlerts}
-                  style={{ fontSize: 10, padding: '3px 9px', borderRadius: 5,
-                    border: '1.5px solid #e2e8f0', background: '#f8fafc',
-                    color: '#64748b', cursor: 'pointer', fontWeight: 600 }}
-                >
-                  전체 확인
-                </button>
-              )}
+          {/* 정상 */}
+          <div style={{ background:'#f0fdf4', border:'1.5px solid #a7f3d0', borderRadius:12, padding:'14px' }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#059669', marginBottom:10, textTransform:'uppercase' }}>
+              정상 · {normalProps.length}곳
+            </div>
+            {normalProps.length === 0
+              ? <div style={{ fontSize:12, color:'#94a3b8', textAlign:'center', padding:'12px 0' }}>
+                  {polling ? '수집 중...' : '폴링 시작 후 표시됩니다'}
+                </div>
+              : normalProps.map(item => {
+                  const r = item.reading;
+                  return (
+                    <div key={item.prop.propId} onClick={() => setSelectedProp(item.prop.propId)}
+                      style={{ display:'flex', gap:8, alignItems:'center', padding:'8px 0', borderBottom:'1px solid #a7f3d0', cursor:'pointer' }}>
+                      <span style={{ width:6, height:6, borderRadius:'50%', background:'#059669', flexShrink:0 }} />
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:'#065f46', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{item.prop.propName}</div>
+                        <div style={{ fontSize:10, color:'#059669', fontFamily:"'DM Mono',monospace" }}>
+                          {r.temp != null ? `${r.temp.toFixed(1)}°C` : '—'} · {r.humidity != null ? `${r.humidity.toFixed(0)}%` : '—'}
+                        </div>
+                      </div>
+                      <span style={{ fontSize:10, fontWeight:700, color:'#059669', background:'#dcfce7', border:'1px solid #86efac', borderRadius:4, padding:'2px 6px', flexShrink:0 }}>정상</span>
+                    </div>
+                  );
+                })
+            }
+          </div>
+        </div>
+
+        {/* ── 선택 숙소 센서 상세 ── */}
+        <div style={{ background:'#fff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'14px 16px' }}>
+          <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#475569', textTransform:'uppercase', marginBottom:12 }}>
+            센서 현황 — {currentProp.propName} {selectedDiagnostic?.anomaly ? `⚠ ${selectedDiagnostic.anomaly.sensors.join(', ')}` : currentReading ? '✓ 정상' : '대기'}
+          </div>
+          {currentReading ? (
+            <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+              <SensorCard label="온도" icon="🌡" value={currentReading?.temp} unit="°C"
+                warn={_DEFAULT_THRESHOLDS.temp.warn} critical={_DEFAULT_THRESHOLDS.temp.critical} />
+              <SensorCard label="습도" icon="💧" value={currentReading?.humidity} unit="%"
+                warn={_DEFAULT_THRESHOLDS.humidity.warn} critical={_DEFAULT_THRESHOLDS.humidity.critical} />
+              <SensorCard label="소음" icon="🔊" value={currentReading?.noise} unit="dB"
+                warn={_DEFAULT_THRESHOLDS.noise.warn} critical={_DEFAULT_THRESHOLDS.noise.critical} />
+              <SensorCard label="전력" icon="⚡" value={currentReading?.power} unit="W"
+                warn={_DEFAULT_THRESHOLDS.power.warn} critical={_DEFAULT_THRESHOLDS.power.critical} />
+            </div>
+          ) : (
+            <div style={{ textAlign:'center', padding:'20px 0', color:'#94a3b8', fontSize:12 }}>
+              {polling ? '데이터 수집 중...' : '폴링을 시작하면 센서 값이 표시됩니다'}
+            </div>
+          )}
+        </div>
+
+        {/* ── AI 답장 초안 ── */}
+        <GuestMessagePanel
+          booking={currentProp}
+          draft={drafts[selectedProp] || null}
+          onDraftApply={handleDraftApply}
+          onNewMessage={handleGuestMessage}
+        />
+
+        {/* ── 알림 ── */}
+        {alerts.length > 0 && (
+          <div style={{ background:'#fff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'14px 16px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+              <span style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#dc2626', textTransform:'uppercase', flex:1 }}>실시간 알림 {alerts.length}건</span>
+              <button onClick={ackAllAlerts} style={{ padding:'3px 9px', borderRadius:5, background:'#f8fafc', border:'1px solid #e2e8f0', color:'#64748b', fontSize:10, cursor:'pointer', fontWeight:600 }}>전체 확인</button>
             </div>
             <AlertFeedS03 alerts={alerts} onAck={ackAlert} />
           </div>
-        </div>
+        )}
 
-        {/* 우측: 센서 상세 */}
-        <div style={{ flex: 1, padding: 24, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
-
-          {/* 선택된 숙소 헤더 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 20, color: '#1e293b' }}>{currentProp.propName}</div>
-              <div style={{ fontSize: 13, color: '#64748b' }}>
-                게스트: {currentProp.guestName} &nbsp;·&nbsp;
-                체크인: {currentProp.checkIn?.slice(0,10)} &nbsp;·&nbsp;
-                체크아웃: {currentProp.checkOut?.slice(0,10)}
-              </div>
-            </div>
-            {lastPoll && (
-              <div style={{ marginLeft: 'auto', fontSize: 11, color: '#94a3b8', fontFamily: "'DM Mono', monospace" }}>
-                마지막 폴링: {lastPoll}
-              </div>
-            )}
-          </div>
-
-          {/* 센서 카드 그리드 */}
-          <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: 11, fontWeight: 700, color: '#475569',
-              textTransform: 'uppercase', letterSpacing: '0.06em',
-              marginBottom: 14, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
-              <span style={{ width: 3, height: 13, background: '#2563eb', borderRadius: 2, flexShrink: 0 }} />
-              센서 현황
-            </div>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <SensorCard
-                label="온도" icon="🌡"
-                value={currentReading?.temp}
-                unit="°C"
-                warn={_DEFAULT_THRESHOLDS.temp.warn} critical={_DEFAULT_THRESHOLDS.temp.critical}
-              />
-              <SensorCard
-                label="습도" icon="💧"
-                value={currentReading?.humidity}
-                unit="%"
-                warn={_DEFAULT_THRESHOLDS.humidity.warn} critical={_DEFAULT_THRESHOLDS.humidity.critical}
-              />
-              <SensorCard
-                label="소음" icon="🔊"
-                value={currentReading?.noise}
-                unit="dB"
-                warn={_DEFAULT_THRESHOLDS.noise.warn} critical={_DEFAULT_THRESHOLDS.noise.critical}
-              />
-              <SensorCard
-                label="전력" icon="⚡"
-                value={currentReading?.power}
-                unit="W"
-                warn={_DEFAULT_THRESHOLDS.power.warn} critical={_DEFAULT_THRESHOLDS.power.critical}
-              />
-            </div>
-
-            {!polling && !currentReading && (
-              <div style={{
-                marginTop: 16, textAlign: 'center', padding: '32px 0',
-                color: '#94a3b8', fontSize: 13,
-                border: '1.5px dashed #e2e8f0', borderRadius: 12,
-              }}>
-                폴링을 시작하면 지금 바로 볼 숙소가 표시됩니다.
-              </div>
-            )}
-          </div>
-
-          {/* 임계값 안내 */}
-          <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: 11, fontWeight: 700, color: '#475569',
-              textTransform: 'uppercase', letterSpacing: '0.06em',
-              marginBottom: 12, paddingBottom: 8, borderBottom: '1.5px solid #e2e8f0' }}>
-              <span style={{ width: 3, height: 13, background: '#d97706', borderRadius: 2, flexShrink: 0 }} />
-              이상 감지 임계값
-            </div>
-            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-              {[
-                { label:'온도', warn:`${_DEFAULT_THRESHOLDS.temp.warn}°C`, critical:`${_DEFAULT_THRESHOLDS.temp.critical}°C` },
-                { label:'습도', warn:`${_DEFAULT_THRESHOLDS.humidity.warn}%`, critical:`${_DEFAULT_THRESHOLDS.humidity.critical}%` },
-                { label:'소음', warn:`${_DEFAULT_THRESHOLDS.noise.warn}dB`, critical:`${_DEFAULT_THRESHOLDS.noise.critical}dB` },
-                { label:'전력', warn:`${_DEFAULT_THRESHOLDS.power.warn}W`, critical:`${_DEFAULT_THRESHOLDS.power.critical}W` },
-              ].map(item => (
-                <div key={item.label} style={{ fontSize: 12, color: '#64748b' }}>
-                  <span style={{ fontWeight: 600 }}>{item.label}</span>
-                  &nbsp;
-                  <span style={{ color: '#d97706' }}>경고 &gt;{item.warn}</span>
-                  &nbsp;/&nbsp;
-                  <span style={{ color: '#dc2626' }}>긴급 &gt;{item.critical}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* AI 답장 패널 */}
-          <GuestMessagePanel
-            booking={currentProp}
-            draft={drafts[selectedProp] || null}
-            onDraftApply={handleDraftApply}
-            onNewMessage={handleGuestMessage}
-          />
-
-        </div>
       </div>
     </div>
   );

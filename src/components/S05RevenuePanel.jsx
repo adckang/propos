@@ -1,7 +1,6 @@
 import React from "react";
 
 import settlementService from "../application/settlementService.js";
-import BatchConsoleGuide from "./BatchConsoleGuide";
 
 // ============================================================
 // S05RevenuePanel.jsx — UC-005 수익 정산 자동화 UI
@@ -544,222 +543,206 @@ function S05RevenuePanel({ onBack }) {
 
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', fontFamily:"'DM Sans',sans-serif" }}>
-      <style>{`
-        .s05-top-grid { display:grid; grid-template-columns:1.7fr 1fr; gap:14px; margin-bottom:14px; }
-        .s05-summary-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; margin-bottom:14px; }
-        .s05-main-grid { flex:1; display:grid; grid-template-columns:260px 1fr 340px; gap:20px; padding:6px 20px 20px; overflow:hidden; }
-        @media (max-width: 1180px) {
-          .s05-top-grid,
-          .s05-summary-grid,
-          .s05-main-grid { grid-template-columns:1fr; }
-          .s05-main-grid { overflow:auto; }
-        }
-      `}</style>
+      <style>{`@keyframes spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }`}</style>
 
-      {/* 정산일 자동 트리거 배너 */}
+      {/* 정산일 배너 */}
       {autoBanner && !running && !allDone && (
-        <div style={{ background:'#eff6ff', borderBottom:'2px solid #3b82f6', padding:'10px 24px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
-          <span style={{ fontSize:18 }}>📅</span>
-          <span style={{ flex:1, fontWeight:700, color:'#1d4ed8', fontSize:13 }}>오늘은 정산일입니다 — {settlementPeriod.label} 수익 정산을 자동 실행할까요?</span>
+        <div style={{ background:'#eff6ff', borderBottom:'2px solid #3b82f6', padding:'10px 20px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+          <span style={{ flex:1, fontWeight:700, color:'#1d4ed8', fontSize:13 }}>📅 오늘은 정산일 — {settlementPeriod.label} 수익 정산을 자동 실행할까요?</span>
           <button onClick={() => { setAutoBanner(false); runSettlement(); }} style={{ padding:'6px 16px', borderRadius:7, background:'#2563eb', border:'1.5px solid #1d4ed8', color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer' }}>지금 실행</button>
           <button onClick={() => setAutoBanner(false)} style={{ padding:'6px 12px', borderRadius:7, background:'#f8fafc', border:'1.5px solid #e2e8f0', color:'#64748b', fontSize:12, fontWeight:600, cursor:'pointer' }}>나중에</button>
         </div>
       )}
 
-      {/* ── 헤더 ── */}
-      <div style={{ background:'#ffffff', borderBottom:'1px solid #e2e8f0', padding:'16px 24px', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          <button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}>← 커맨드 센터</button>
-          <div style={{ width:1, height:22, background:'#e2e8f0' }} />
-          <div>
-            <div style={{ fontSize:10, color:'#94a3b8', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:4 }}>S05 · 수익 정산</div>
-            <div style={{ fontWeight:800, fontSize:18, color:'#1e293b' }}>이번 달 수익 정리</div>
-            <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>멀티플랫폼 수익 집계부터 가격 추천, 세금 리포트까지 한 번에 정리합니다.</div>
-          </div>
+      {/* 헤더 */}
+      <div style={{ background:'#fff', borderBottom:'1px solid #e2e8f0', padding:'12px 20px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+        {onBack && <button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#64748b', cursor:'pointer', fontWeight:600 }}>← 커맨드 센터</button>}
+        {onBack && <div style={{ width:1, height:22, background:'#e2e8f0' }} />}
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:10, color:'#94a3b8', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase' }}>S05 · 수익 정산 · 같은 단계 예외를 묶어서 처리</div>
+          <div style={{ fontWeight:800, fontSize:16, color:'#1e293b', marginTop:2 }}>이번 달 수익 정리 — 멀티플랫폼 집계 · AI 가격 최적화 · 세금 리포트</div>
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <button onClick={running ? undefined : runSettlement} disabled={running}
-            style={{ padding:'9px 20px', borderRadius:8, border:`1.5px solid ${running?'#e2e8f0':'#059669'}`, background: running ? '#f8fafc' : '#059669', color: running ? '#94a3b8' : '#fff', fontSize:13, fontWeight:700, cursor: running?'default':'pointer', display:'flex', alignItems:'center', gap:6 }}>
-            {running
-              ? <><div style={{ width:12, height:12, border:'2px solid #94a3b8', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />정산 중...</>
-              : `▶ ${month}월 정산 시작`}
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <select value={marketTrend} onChange={e => setMarketTrend(e.target.value)} disabled={running}
+            style={{ fontSize:11, border:'1.5px solid #e2e8f0', borderRadius:7, padding:'5px 8px', background:'#f8fafc', color:'#475569', fontWeight:600 }}>
+            <option value="spring_peak">🌸 봄 성수기</option>
+            <option value="summer_peak">☀️ 여름 성수기</option>
+            <option value="normal">기본</option>
+            <option value="off_season">❄️ 비수기</option>
+          </select>
+          <button onClick={() => setFailMode(f => !f)}
+            style={{ padding:'5px 10px', borderRadius:6, fontSize:11, fontWeight:600, cursor:'pointer', background: failMode?'#fee2e2':'#f8fafc', border:`1.5px solid ${failMode?'#fca5a5':'#e2e8f0'}`, color: failMode?'#dc2626':'#64748b' }}>
+            {failMode ? 'API 오류 ON' : 'API 오류 OFF'}
           </button>
-          {allDone && <button onClick={resetAll} style={{ padding:'9px 14px', borderRadius:8, border:'1.5px solid #e2e8f0', background:'#f8fafc', color:'#64748b', fontSize:13, fontWeight:600, cursor:'pointer' }}>↺ 초기화</button>}
+          <button onClick={running ? undefined : runSettlement} disabled={running}
+            style={{ padding:'7px 16px', borderRadius:8, border:`1.5px solid ${running?'#e2e8f0':'#059669'}`, background: running?'#f8fafc':'#059669', color: running?'#94a3b8':'#fff', fontSize:12, fontWeight:700, cursor: running?'default':'pointer', display:'flex', alignItems:'center', gap:6 }}>
+            {running ? <><div style={{ width:11, height:11, border:'2px solid #94a3b8', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />정산 중...</> : `▶ ${month}월 정산`}
+          </button>
+          {allDone && <button onClick={resetAll} style={{ padding:'7px 12px', borderRadius:8, border:'1.5px solid #e2e8f0', background:'#f8fafc', color:'#64748b', fontSize:12, fontWeight:600, cursor:'pointer' }}>↺ 초기화</button>}
         </div>
       </div>
 
-      <BatchConsoleGuide stageId="settlement" onBack={onBack} />
+      <div style={{ flex:1, overflowY:'auto', padding:'16px 20px', display:'flex', flexDirection:'column', gap:12 }}>
 
-      <div style={{ padding:'18px 20px 0', background:'#f0f4f8', flexShrink:0 }}>
-        <div className="s05-top-grid">
-          <div style={{ background:focusTone.bg, border:`1.5px solid ${focusTone.border}`, borderRadius:16, padding:'18px 20px', boxShadow:'0 10px 28px rgba(15,23,42,0.04)' }}>
-            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:8 }}>지금 할 일</div>
-            <div style={{ fontSize:20, fontWeight:800, color:focusTone.text, lineHeight:1.45, letterSpacing:'-0.3px' }}>{focusTitle}</div>
-            <div style={{ fontSize:13, color:'#64748b', lineHeight:1.7, marginTop:8 }}>{focusDesc}</div>
-            <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:12 }}>
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
-                정산 기간 · {settlementPeriod.label}
-              </span>
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
-                시장 트렌드 · {marketTrend}
-              </span>
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', background:'rgba(255,255,255,0.85)', border:'1px solid rgba(226,232,240,0.9)', borderRadius:999, padding:'6px 10px' }}>
-                선택 추천 {selectedProps.length}건
-              </span>
+        {/* ── 히어로 카드: 빨강(처리필요) / 녹색(완료) ── */}
+        {errorAlerts.length > 0 ? (
+          <div style={{ background:'#fef2f2', border:'2px solid #fecaca', borderRadius:16, padding:'16px 20px', display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:16 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#dc2626', marginBottom:6 }}>지금 처리해야 할 것</div>
+              <div style={{ fontSize:18, fontWeight:800, color:'#b91c1c', lineHeight:1.3, marginBottom:10 }}>
+                정산 오류 {errorAlerts.length}건 — 수동 확인 후 재실행이 필요합니다
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {errorAlerts.slice(0,3).map(a => (
+                  <div key={a.id} style={{ display:'flex', gap:8, alignItems:'center', padding:'7px 10px', background:'#fff', border:'1.5px solid #fecaca', borderRadius:8 }}>
+                    <span style={{ width:6, height:6, borderRadius:'50%', background:'#dc2626', flexShrink:0, display:'inline-block' }} />
+                    <span style={{ fontSize:12, color:'#7f1d1d', fontWeight:600 }}>{a.msg.split('\n')[0]}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div style={{ display:'flex', gap:8, marginTop:14, flexWrap:'wrap' }}>
-              <button
-                onClick={running ? undefined : runSettlement}
-                disabled={running}
-                style={{ padding:'10px 16px', borderRadius:10, border:'1.5px solid #1d4ed8', background: running ? '#dbeafe' : '#2563eb', color: running ? '#2563eb' : '#fff', fontSize:12, fontWeight:700, cursor: running ? 'default' : 'pointer' }}
-              >
-                {running ? '정산 확인 중' : `${month}월 정산 다시 확인`}
+            <div style={{ display:'flex', flexDirection:'column', gap:8, flexShrink:0 }}>
+              <button onClick={runSettlement} disabled={running}
+                style={{ padding:'10px 18px', borderRadius:10, background:'#dc2626', border:'1.5px solid #b91c1c', color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer' }}>
+                {running ? '정산 중...' : '정산 재실행'}
               </button>
-              <button
-                onClick={applyPricing}
-                disabled={applying || !pricingData || selectedProps.length === 0}
-                style={{ padding:'10px 16px', borderRadius:10, border:'1.5px solid #e2e8f0', background: applying || !pricingData || selectedProps.length === 0 ? '#f8fafc' : '#fff', color: applying || !pricingData || selectedProps.length === 0 ? '#94a3b8' : '#475569', fontSize:12, fontWeight:700, cursor: applying || !pricingData || selectedProps.length === 0 ? 'default' : 'pointer' }}
-              >
-                {applying ? '추천 반영 중' : '선택 추천 반영'}
-              </button>
+              <button onClick={() => setAlerts([])} style={{ padding:'8px 18px', borderRadius:10, background:'#fff', border:'1.5px solid #fecaca', color:'#dc2626', fontSize:12, fontWeight:600, cursor:'pointer' }}>알림 전체 확인</button>
             </div>
           </div>
-
-          <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:16, padding:'16px 18px' }}>
-            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#94a3b8', marginBottom:10 }}>방금 뜬 알림</div>
-            {latestAlert ? (
-              <>
-                <div style={{ fontSize:14, fontWeight:800, color:latestAlert.type === 'error' ? '#dc2626' : latestAlert.type === 'warn' ? '#d97706' : '#2563eb', lineHeight:1.5 }}>{latestAlert.msg.split("\n")[0]}</div>
-                <div style={{ fontSize:12, color:'#475569', lineHeight:1.65, marginTop:6, whiteSpace:'pre-line' }}>{latestAlert.msg}</div>
-                <div style={{ fontSize:11, color:'#94a3b8', marginTop:10, fontFamily:"'DM Mono',monospace" }}>{latestAlert.time}</div>
-              </>
-            ) : (
-              <div style={{ fontSize:12, color:'#64748b', lineHeight:1.7 }}>
-                지금 바로 확인할 알림은 없어요. 정산을 시작하면 수집 결과와 반영 상태가 여기에 쌓입니다.
+        ) : allDone ? (
+          <div style={{ background:'#f0fdf4', border:'2px solid #a7f3d0', borderRadius:16, padding:'16px 20px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:16 }}>
+            <div>
+              <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'#059669', marginBottom:6 }}>정산 완료</div>
+              <div style={{ fontSize:18, fontWeight:800, color:'#047857', lineHeight:1.3 }}>
+                {month}월 정산 완료 — 영업이익 {revenueData ? _s05.won(revenueData.operatingProfit) : '—'}
               </div>
-            )}
+              {pricingData && selectedProps.length > 0 && (
+                <div style={{ fontSize:12, color:'#059669', marginTop:4 }}>AI 가격 추천 {selectedProps.length}건 검토 후 반영하세요</div>
+              )}
+            </div>
+            <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+              {pricingData && selectedProps.length > 0 && (
+                <button onClick={applyPricing} disabled={applying}
+                  style={{ padding:'10px 18px', borderRadius:10, background:'#059669', border:'1.5px solid #047857', color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer' }}>
+                  {applying ? '반영 중...' : '가격 추천 반영'}
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-
-        <div className="s05-summary-grid">
-          {summaryCards.map(card => (
-            <div key={card.label} style={{ background:card.tone.bg, border:`1.5px solid ${card.tone.border}`, borderRadius:14, padding:'14px 16px' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
-                <span style={{ fontSize:11, fontWeight:700, color:'#475569', letterSpacing:'0.05em', textTransform:'uppercase' }}>{card.label}</span>
-                <strong style={{ fontFamily:"'DM Mono',monospace", fontSize:18, fontWeight:800, color:card.tone.text }}>{card.value}</strong>
+        ) : (
+          <div style={{ background: running ? '#eff6ff' : '#f8fafc', border: `2px solid ${running ? '#bfdbfe' : '#e2e8f0'}`, borderRadius:16, padding:'16px 20px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:16 }}>
+            <div>
+              <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color: running ? '#2563eb' : '#94a3b8', marginBottom:6 }}>
+                {running ? '정산 진행 중' : '정산 전'}
               </div>
-              <div style={{ fontSize:12, color:'#64748b', marginTop:10, lineHeight:1.55 }}>{card.desc}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── 본문 3열 ── */}
-      <div className="s05-main-grid">
-
-        {/* 좌측: 정산 설정 + 진행 상태 */}
-        <div style={{ display:'flex', flexDirection:'column', gap:14, overflowY:'auto' }}>
-
-          {/* 정산 설정 */}
-          <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'16px 14px' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
-              <span style={{ width:3, height:13, background:'#059669', borderRadius:2, flexShrink:0 }} />
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>정산 설정</span>
-            </div>
-            <div style={{ display:'flex', gap:8, marginBottom:12 }}>
-              <div style={{ flex:1, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'10px 12px', textAlign:'center' }}>
-                <div style={{ fontSize:10, color:'#94a3b8', fontWeight:600, textTransform:'uppercase', marginBottom:2 }}>연도</div>
-                <div style={{ fontFamily:"'DM Mono',monospace", fontWeight:700, fontSize:16, color:'#1e293b' }}>{year}</div>
-              </div>
-              <div style={{ flex:1, background:'#f0fdf4', border:'1px solid #86efac', borderRadius:8, padding:'10px 12px', textAlign:'center' }}>
-                <div style={{ fontSize:10, color:'#059669', fontWeight:600, textTransform:'uppercase', marginBottom:2 }}>월</div>
-                <div style={{ fontFamily:"'DM Mono',monospace", fontWeight:700, fontSize:16, color:'#059669' }}>{month}월</div>
+              <div style={{ fontSize:18, fontWeight:800, color: running ? '#1d4ed8' : '#64748b', lineHeight:1.3 }}>
+                {running ? `${month}월 수익 집계 중... 잠시 기다려주세요` : `${month}월 정산을 아직 시작하지 않았습니다`}
               </div>
             </div>
-            <div style={{ marginBottom:10 }}>
-              <div style={{ fontSize:10, color:'#64748b', fontWeight:600, marginBottom:4 }}>시장 트렌드</div>
-              <select value={marketTrend} onChange={e => setMarketTrend(e.target.value)} disabled={running}
-                style={{ width:'100%', fontSize:12, border:'1.5px solid #e2e8f0', borderRadius:7, padding:'6px 8px', background:'#f8fafc', color:'#475569', fontWeight:600, cursor:'pointer' }}>
-                <option value="spring_peak">🌸 봄 성수기 (+10%)</option>
-                <option value="summer_peak">☀️ 여름 성수기 (+15%)</option>
-                <option value="normal">기본 (보통)</option>
-                <option value="off_season">❄️ 비수기 (-10%)</option>
-              </select>
-            </div>
-            <button onClick={() => setFailMode(f => !f)}
-              style={{ width:'100%', padding:'6px 8px', borderRadius:6, fontSize:11, fontWeight:600, cursor:'pointer', background: failMode ? '#fee2e2' : '#f8fafc', border: `1.5px solid ${failMode ? '#fca5a5' : '#e2e8f0'}`, color: failMode ? '#dc2626' : '#64748b' }}>
-              {failMode ? '✕ API 오류 시뮬 ON' : '○ API 오류 시뮬 OFF'}
+            <button onClick={running ? undefined : runSettlement} disabled={running}
+              style={{ padding:'10px 18px', borderRadius:10, background: running ? '#eff6ff' : '#2563eb', border:`1.5px solid ${running ? '#bfdbfe' : '#1d4ed8'}`, color: running ? '#2563eb' : '#fff', fontSize:13, fontWeight:700, cursor: running ? 'default' : 'pointer', flexShrink:0 }}>
+              {running ? '진행 중...' : `▶ ${month}월 정산 시작`}
             </button>
           </div>
+        )}
 
-          {/* 진행 상태 */}
-          <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'16px 14px' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14, paddingBottom:8, borderBottom:'1.5px solid #e2e8f0' }}>
-              <span style={{ width:3, height:13, background:'#2563eb', borderRadius:2, flexShrink:0 }} />
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>진행 상태</span>
+        {/* ── 진행 단계 ── */}
+        <div style={{ background:'#fff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'14px 16px' }}>
+          <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#475569', textTransform:'uppercase', marginBottom:12 }}>지금 할 일 — {settlementPeriod.label}</div>
+          <SettlementProgress steps={steps} running={running} />
+        </div>
+
+        {/* ── 수익 / 오류 2컬럼 ── */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+          {/* 처리 필요 */}
+          <div style={{ background:'#fef2f2', border:'1.5px solid #fecaca', borderRadius:12, padding:'14px' }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#dc2626', marginBottom:10, textTransform:'uppercase' }}>
+              처리 필요 · {errorAlerts.length + warnAlerts.length}건
             </div>
-            <SettlementProgress steps={steps} running={running} />
-            {allDone && (
-              <div style={{ marginTop:10, textAlign:'center', color:'#059669', fontSize:12, fontWeight:700, background:'#f0fdf4', border:'1px solid #86efac', borderRadius:6, padding:'6px' }}>
-                ✓ {month}월 정산 완료
+            {errorAlerts.length === 0 && warnAlerts.length === 0
+              ? <div style={{ fontSize:12, color:'#94a3b8', textAlign:'center', padding:'12px 0' }}>없음</div>
+              : [...errorAlerts, ...warnAlerts].slice(0,5).map(a => (
+                  <div key={a.id} style={{ display:'flex', gap:8, alignItems:'flex-start', padding:'7px 0', borderBottom:'1px solid #fecaca' }}>
+                    <span style={{ width:6, height:6, borderRadius:'50%', background: a.type === 'error' ? '#dc2626' : '#d97706', flexShrink:0, marginTop:4 }} />
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color: a.type === 'error' ? '#7f1d1d' : '#92400e', lineHeight:1.4, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.msg.split('\n')[0]}</div>
+                      <div style={{ fontSize:10, color:'#94a3b8', fontFamily:"'DM Mono',monospace" }}>{a.time}</div>
+                    </div>
+                    <button onClick={() => ackAlert(a.id)} style={{ fontSize:10, padding:'2px 6px', borderRadius:4, border:'1px solid #fecaca', background:'#fff', color:'#dc2626', cursor:'pointer', flexShrink:0 }}>확인</button>
+                  </div>
+                ))
+            }
+          </div>
+
+          {/* 완료 / 정상 */}
+          <div style={{ background:'#f0fdf4', border:'1.5px solid #a7f3d0', borderRadius:12, padding:'14px' }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#059669', marginBottom:10, textTransform:'uppercase' }}>
+              완료 / 정상
+            </div>
+            {[
+              { label:'플랫폼 수익 집계', done: steps.data, value: revenueData ? _s05.won(revenueData.totalNet) : null },
+              { label:'AI 가격 최적화', done: steps.pricing, value: pricingData ? `${pricingData.recommendations?.length || 0}건 추천` : null },
+              { label:'세금 리포트', done: steps.tax, value: taxData ? `부가세 ${_s05.won(taxData.vat)}` : null },
+            ].map(item => (
+              <div key={item.label} style={{ display:'flex', gap:8, alignItems:'center', padding:'8px 0', borderBottom:'1px solid #a7f3d0' }}>
+                <span style={{ width:6, height:6, borderRadius:'50%', background: item.done ? '#059669' : '#cbd5e1', flexShrink:0 }} />
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color: item.done ? '#065f46' : '#94a3b8' }}>{item.label}</div>
+                  {item.done && item.value && <div style={{ fontSize:10, color:'#059669', fontFamily:"'DM Mono',monospace" }}>{item.value}</div>}
+                </div>
+                <span style={{ fontSize:10, fontWeight:700, color: item.done ? '#059669' : '#94a3b8', background: item.done ? '#dcfce7' : '#f8fafc', border:`1px solid ${item.done ? '#86efac' : '#e2e8f0'}`, borderRadius:4, padding:'2px 6px', flexShrink:0 }}>
+                  {item.done ? '완료' : '대기'}
+                </span>
               </div>
-            )}
+            ))}
           </div>
         </div>
 
-        {/* 중앙: 플랫폼 수익 + AI 가격 최적화 */}
-        <div style={{ display:'flex', flexDirection:'column', gap:12, overflowY:'auto' }}>
-
-          <div style={{ display:'flex', alignItems:'center', gap:8, paddingBottom:10, borderBottom:'1.5px solid #e2e8f0' }}>
-            <span style={{ width:3, height:13, background:'#FF5A5F', borderRadius:2, flexShrink:0 }} />
-            <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>플랫폼별 수익</span>
+        {/* ── 플랫폼별 수익 (정산 후 표시) ── */}
+        {revenueData && (
+          <div style={{ background:'#fff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'14px 16px' }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#475569', textTransform:'uppercase', marginBottom:12 }}>플랫폼별 수익</div>
+            <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+              <PlatformCard platform="에어비앤비" data={airbnbData}  icon="🏠" color="#FF5A5F" />
+              <PlatformCard platform="야놀자"     data={yanoljaData} icon="🌙" color="#0078FF" />
+            </div>
+            <RevenueSummaryCard revenueData={revenueData} />
           </div>
-          <PlatformCard platform="에어비앤비" data={airbnbData}  icon="🏠" color="#FF5A5F" />
-          <PlatformCard platform="야놀자"     data={yanoljaData} icon="🌙" color="#0078FF" />
-          {revenueData && <RevenueSummaryCard revenueData={revenueData} />}
+        )}
 
-          <div style={{ display:'flex', alignItems:'center', gap:8, paddingBottom:10, borderBottom:'1.5px solid #e2e8f0', marginTop:4 }}>
-            <span style={{ width:3, height:13, background:'#7c3aed', borderRadius:2, flexShrink:0 }} />
-            <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>AI 가격 최적화</span>
-          </div>
-          {pricingData ? (
+        {/* ── AI 가격 최적화 (정산 후 표시) ── */}
+        {pricingData && (
+          <div style={{ background:'#fff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'14px 16px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
+              <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#475569', textTransform:'uppercase', flex:1 }}>AI 가격 최적화</div>
+              <button onClick={applyPricing} disabled={applying || selectedProps.length === 0}
+                style={{ padding:'6px 14px', borderRadius:7, background: applying||selectedProps.length===0 ? '#f8fafc' : '#059669', border:`1.5px solid ${applying||selectedProps.length===0 ? '#e2e8f0' : '#047857'}`, color: applying||selectedProps.length===0 ? '#94a3b8' : '#fff', fontSize:11, fontWeight:700, cursor: applying||selectedProps.length===0 ? 'default' : 'pointer' }}>
+                {applying ? '반영 중...' : `선택 ${selectedProps.length}건 반영`}
+              </button>
+            </div>
             <PricingRecommendationList pricingData={pricingData} selectedProps={selectedProps} onToggleProp={toggleProp} onApply={applyPricing} applying={applying} />
-          ) : (
-            <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'28px', textAlign:'center', color:'#94a3b8', fontSize:13 }}>
-              <div style={{ fontSize:28, marginBottom:8, opacity:0.4 }}>🤖</div>
-              정산을 시작하면 AI 분석 결과가 표시됩니다
-            </div>
-          )}
-        </div>
-
-        {/* 우측: 세금 리포트 + 알림 피드 */}
-        <div style={{ display:'flex', flexDirection:'column', gap:12, overflow:'hidden' }}>
-
-          <div style={{ display:'flex', alignItems:'center', gap:8, paddingBottom:10, borderBottom:'1.5px solid #e2e8f0' }}>
-            <span style={{ width:3, height:13, background:'#059669', borderRadius:2, flexShrink:0 }} />
-            <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>세금 리포트</span>
           </div>
-          {taxData ? (
+        )}
+
+        {/* ── 세금 리포트 (정산 후 표시) ── */}
+        {taxData && (
+          <div style={{ background:'#fff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'14px 16px' }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#475569', textTransform:'uppercase', marginBottom:12 }}>세금 리포트</div>
             <TaxReportCard taxData={taxData} />
-          ) : (
-            <div style={{ background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'20px', textAlign:'center', color:'#94a3b8', fontSize:13 }}>
-              정산을 시작하면 세금 리포트가 표시됩니다
-            </div>
-          )}
-
-          <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden', background:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:12 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:8, padding:'12px 16px', borderBottom:'1.5px solid #e2e8f0', flexShrink:0 }}>
-              <span style={{ width:3, height:13, background:'#d97706', borderRadius:2, flexShrink:0 }} />
-              <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em', flex:1 }}>실시간 알림</span>
-              {alerts.length > 0 && <span style={{ background:'#dc2626', color:'#fff', borderRadius:10, padding:'1px 7px', fontSize:10, fontWeight:700 }}>{alerts.length}</span>}
-              {alerts.length > 0 && <button onClick={() => setAlerts([])} style={{ padding:'3px 9px', borderRadius:5, background:'#f8fafc', border:'1.5px solid #e2e8f0', color:'#64748b', fontSize:10, cursor:'pointer', fontWeight:600 }}>전체 확인</button>}
-            </div>
-            <div style={{ flex:1, overflowY:'auto', padding:'8px 10px' }}>
-              <AlertFeedS05 alerts={alerts} onAck={ackAlert} />
-            </div>
           </div>
+        )}
 
-        </div>
+        {/* ── 알림 ── */}
+        {alerts.length > 0 && (
+          <div style={{ background:'#fff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'14px 16px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+              <span style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#dc2626', textTransform:'uppercase', flex:1 }}>실시간 알림 {alerts.length}건</span>
+              <button onClick={() => setAlerts([])} style={{ padding:'3px 9px', borderRadius:5, background:'#f8fafc', border:'1px solid #e2e8f0', color:'#64748b', fontSize:10, cursor:'pointer', fontWeight:600 }}>전체 확인</button>
+            </div>
+            <AlertFeedS05 alerts={alerts} onAck={ackAlert} />
+          </div>
+        )}
+
       </div>
     </div>
   );

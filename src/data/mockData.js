@@ -15,8 +15,11 @@ const CITIES      = ["서울 강남","서울 마포","서울 용산","서울 성
 const TYPES       = ["펜트하우스","아파트","스튜디오","한옥","빌라","원룸","게스트하우스","복층"];
 const GUESTS_LIST = ["김민준","이지수","박도현","Sarah M.","田中花子",
                      "Mike J.","Emma C.","최현아","정준호","王芳","Ana S.","David K."];
-const ISSUES_POOL = ["Wi-Fi 불안정","에어컨 오류","도어락 배터리 부족","온수 문제","청소 미완료","소음 민원"];
-const STATUSES    = ["입실중","입실중","입실중","예약됨","예약됨","공실","청소중","점검중"];
+const ISSUES_POOL      = ["Wi-Fi 불안정","에어컨 오류","도어락 배터리 부족","온수 문제","청소 미완료","소음 민원"];
+const STATUSES         = ["입실중","입실중","입실중","예약됨","예약됨","공실","청소중","점검중"];
+const DOOR_LOCK_STATUS = ["정상","정상","정상","정상","정상","배터리부족","미응답","오프라인"];
+const SENSOR_HEALTH    = ["정상","정상","정상","정상","일부불량","일부불량","미연결"];
+const LAST_CONTROL     = ["방금","방금","5분 전","1시간 전","미기록"];
 
 // ── 전체 숙소 목록 (CommandCenter용) ─────────────────────
 export const ALL_PROPS = Array.from({length: 48}, (_, i) => {
@@ -40,11 +43,16 @@ export const ALL_PROPS = Array.from({length: 48}, (_, i) => {
     acOn:      status === "입실중" && Math.random() > 0.3,
     acTemp:    randN(20, 26),
     lightsOn:  status === "입실중",
-    issues:    Math.random() < 0.18 ? [rand(ISSUES_POOL)] : [],
-    cleaning:  status === "청소중" ? "진행중" : "완료",
-    priority:  Math.random() < 0.18 ? "HIGH" : Math.random() < 0.25 ? "MED" : "OK",
-    unreadMsg: Math.random() < 0.25 ? randN(1, 4) : 0,
-    platform:  rand(["Airbnb","Booking","직접예약"]),
+    issues:          Math.random() < 0.18 ? [rand(ISSUES_POOL)] : [],
+    cleaning:        status === "청소중" ? "진행중" : "완료",
+    priority:        Math.random() < 0.18 ? "HIGH" : Math.random() < 0.25 ? "MED" : "OK",
+    unreadMsg:       Math.random() < 0.25 ? randN(1, 4) : 0,
+    platform:        rand(["Airbnb","Booking","직접예약"]),
+    doorLockStatus:  rand(DOOR_LOCK_STATUS),
+    sensorHealth:    rand(SENSOR_HEALTH),
+    vacancyMode:     status === "공실",
+    lastControlAt:   rand(LAST_CONTROL),
+    cleanerDetected: status === "청소중" && Math.random() > 0.4,
   };
 });
 
