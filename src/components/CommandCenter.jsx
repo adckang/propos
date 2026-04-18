@@ -990,7 +990,9 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
                             {/* 자동복구 이력 + 사전점검 상태 */}
                             <div style={{display:"flex",gap:"5px",marginTop:"5px",flexWrap:"wrap"}}>
                               {prop.autoRecovery === "unrecovered" && (
-                                <span style={{fontSize:"9px",fontWeight:700,padding:"2px 6px",borderRadius:"10px",background:"#fef2f2",color:"#dc2626",border:"1px solid #fecaca"}}>자동 복구 실패</span>
+                                <span style={{fontSize:"9px",fontWeight:700,padding:"2px 6px",borderRadius:"10px",background:"#fef2f2",color:"#dc2626",border:"1px solid #fecaca"}}>
+                                  자동 복구 실패{prop.recoveryAttempts > 0 ? ` ${prop.recoveryAttempts}회` : ""}
+                                </span>
                               )}
                               {prop.autoRecovery === "recovered" && (
                                 <span style={{fontSize:"9px",fontWeight:700,padding:"2px 6px",borderRadius:"10px",background:"#f0fdf4",color:"#059669",border:"1px solid #a7f3d0"}}>자동 복구 완료</span>
