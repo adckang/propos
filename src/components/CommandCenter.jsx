@@ -432,12 +432,16 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
     const alertFeed = setInterval(()=>{
       if(Math.random() < 0.12){
         const prop = props[randN(0, props.length - 1)];
+        const liveMsg = rand(["게스트 메시지 수신","청소 완료 보고","체크인 완료","Wi-Fi 신호 약화","허브 재부팅 완료","센서 응답 없음","도어락 배터리 부족"]);
+        const liveAudience = liveMsg === "게스트 메시지 수신" || liveMsg === "도어락 배터리 부족" ? "owner"
+          : liveMsg === "허브 재부팅 완료" || liveMsg === "센서 응답 없음" ? "admin" : "log";
         setAlerts(list=>[
           {
             id: Date.now(),
             type: rand(["warn","info"]),
             prop: prop.name,
-            msg: rand(["게스트 메시지 수신","청소 완료 보고","체크인 완료","Wi-Fi 신호 약화"]),
+            msg: liveMsg,
+            audience: liveAudience,
             time: new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}),
             ack: false,
           },
@@ -468,18 +472,16 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
     setSelProp(prop);
   };
 
-  // ── IoT 시스템 헬스 버킷 (전체 숙소 기준) ──────────────────
-  const iotBuckets = {
-    offline:    props.filter(p => p.doorLockStatus === "오프라인" || p.sensorHealth === "미연결"),
-    needHuman:  props.filter(p => p.doorLockStatus !== "오프라인" && p.sensorHealth !== "미연결"
-                                && (p.doorLockStatus === "미응답" || p.sensorHealth === "일부불량"
-                                    || p.priority === "HIGH" || p.issues.length > 0)),
-    autoOk:     props.filter(p => p.doorLockStatus === "정상" && p.sensorHealth === "정상"
-                                && p.priority !== "HIGH" && p.issues.length === 0 && p.unreadMsg === 0),
+  // ── 자동화 건강도 버킷 (automationHealth 기반) ──────────────
+  const healthBuckets = {
+    failed:   props.filter(p => p.automationHealth === "failed"),
+    degraded: props.filter(p => p.automationHealth === "degraded"),
+    watch:    props.filter(p => p.automationHealth === "watch"),
+    healthy:  props.filter(p => p.automationHealth === "healthy"),
   };
-  iotBuckets.watchMsg = props.filter(p =>
-    !iotBuckets.offline.includes(p) && !iotBuckets.needHuman.includes(p) && !iotBuckets.autoOk.includes(p)
-  );
+  const siteActionCount     = props.filter(p => p.siteActionRequired).length;
+  const autoRecoveredCount  = props.filter(p => p.autoRecovery === "recovered").length;
+  const preflightPassedCount = props.filter(p => p.preflightStatus === "passed").length;
 
   const stageMatchedProps = props.filter(prop=>currentStage.filter(prop));
   const actionableProps = stageMatchedProps
@@ -880,32 +882,49 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
         </div>
       </div>
 
-      {/* ── IoT 시스템 헬스 바 ── */}
-      <div style={{background:"#fff",borderBottom:"1px solid #e2e8f0",padding:"8px 18px",display:"flex",gap:"10px",alignItems:"center",flexShrink:0}}>
-        <span style={{fontSize:"10px",fontWeight:800,color:"#94a3b8",letterSpacing:"0.08em",textTransform:"uppercase",whiteSpace:"nowrap",marginRight:4}}>IoT 시스템</span>
-        {[
-          {key:"offline",    label:"시스템 이상",    color:"#dc2626", bg:"#fef2f2", border:"#fecaca",  count: iotBuckets.offline.length},
-          {key:"needHuman",  label:"사람 개입 필요", color:"#ea580c", bg:"#fff7ed", border:"#fdba74",  count: iotBuckets.needHuman.length},
-          {key:"watchMsg",   label:"확인 필요",      color:"#d97706", bg:"#fffbeb", border:"#fde68a",  count: iotBuckets.watchMsg.length},
-          {key:"autoOk",     label:"자동 제어 정상", color:"#059669", bg:"#f0fdf4", border:"#a7f3d0",  count: iotBuckets.autoOk.length},
-        ].map(bucket => (
-          <div key={bucket.key} style={{display:"flex",alignItems:"center",gap:"6px",padding:"4px 10px",borderRadius:"20px",background:bucket.bg,border:`1px solid ${bucket.border}`}}>
-            <span style={{width:"6px",height:"6px",borderRadius:"50%",background:bucket.color,display:"inline-block",flexShrink:0}} />
-            <span style={{fontFamily:"'DM Mono',monospace",fontSize:"12px",fontWeight:800,color:bucket.color}}>{bucket.count}</span>
-            <span style={{fontSize:"11px",color:bucket.color,fontWeight:600,whiteSpace:"nowrap"}}>{bucket.label}</span>
+      {/* ── 자동화 건강도 보드 (1차 축) ── */}
+      <div style={{background:"#fff",borderBottom:"1px solid #e2e8f0",padding:"10px 18px",flexShrink:0}}>
+        <div style={{display:"flex",gap:"10px",alignItems:"center",marginBottom:"8px"}}>
+          <span style={{fontSize:"10px",fontWeight:800,color:"#94a3b8",letterSpacing:"0.08em",textTransform:"uppercase",whiteSpace:"nowrap"}}>자동화 건강도</span>
+          <div style={{flex:1,height:"6px",borderRadius:4,overflow:"hidden",background:"#f1f5f9",display:"flex"}}>
+            {[
+              {count:healthBuckets.failed.length,   color:"#dc2626"},
+              {count:healthBuckets.degraded.length,  color:"#ea580c"},
+              {count:healthBuckets.watch.length,     color:"#d97706"},
+              {count:healthBuckets.healthy.length,   color:"#059669"},
+            ].map((seg, i) => (
+              <div key={i} style={{height:"100%",width:`${(seg.count/props.length)*100}%`,background:seg.color,transition:"width 0.3s"}} />
+            ))}
           </div>
-        ))}
-        <div style={{marginLeft:"auto",height:"6px",flex:1,maxWidth:200,borderRadius:4,overflow:"hidden",background:"#f1f5f9",display:"flex"}}>
-          {[
-            {count: iotBuckets.offline.length,   color:"#dc2626"},
-            {count: iotBuckets.needHuman.length,  color:"#ea580c"},
-            {count: iotBuckets.watchMsg.length,   color:"#d97706"},
-            {count: iotBuckets.autoOk.length,     color:"#059669"},
-          ].map((seg, i) => (
-            <div key={i} style={{height:"100%",width:`${(seg.count / props.length) * 100}%`,background:seg.color,transition:"width 0.3s"}} />
-          ))}
+          <span style={{fontSize:"10px",color:"#94a3b8",fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap"}}>{props.length}개 전체</span>
         </div>
-        <span style={{fontSize:"10px",color:"#94a3b8",fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap"}}>{props.length}개 전체</span>
+        <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+          {[
+            {label:"시스템 장애",    count:healthBuckets.failed.length,   color:"#dc2626", bg:"#fef2f2", border:"#fecaca"},
+            {label:"성능 저하",      count:healthBuckets.degraded.length,  color:"#ea580c", bg:"#fff7ed", border:"#fdba74"},
+            {label:"주시",          count:healthBuckets.watch.length,     color:"#d97706", bg:"#fffbeb", border:"#fde68a"},
+            {label:"자동 제어 정상", count:healthBuckets.healthy.length,   color:"#059669", bg:"#f0fdf4", border:"#a7f3d0"},
+          ].map(b => (
+            <div key={b.label} style={{display:"flex",alignItems:"center",gap:"5px",padding:"3px 10px",borderRadius:"20px",background:b.bg,border:`1px solid ${b.border}`}}>
+              <span style={{fontFamily:"'DM Mono',monospace",fontSize:"13px",fontWeight:800,color:b.color}}>{b.count}</span>
+              <span style={{fontSize:"10px",color:b.color,fontWeight:600,whiteSpace:"nowrap"}}>{b.label}</span>
+            </div>
+          ))}
+          <div style={{marginLeft:"auto",display:"flex",gap:"12px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:"5px"}}>
+              <span style={{fontSize:"10px",color:"#94a3b8"}}>현장 조치 필요</span>
+              <span style={{fontFamily:"'DM Mono',monospace",fontSize:"12px",fontWeight:800,color:siteActionCount>0?"#dc2626":"#059669"}}>{siteActionCount}</span>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:"5px"}}>
+              <span style={{fontSize:"10px",color:"#94a3b8"}}>자동 복구 성공</span>
+              <span style={{fontFamily:"'DM Mono',monospace",fontSize:"12px",fontWeight:800,color:"#059669"}}>{autoRecoveredCount}</span>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:"5px"}}>
+              <span style={{fontSize:"10px",color:"#94a3b8"}}>점검 통과</span>
+              <span style={{fontFamily:"'DM Mono',monospace",fontSize:"12px",fontWeight:800,color:"#059669"}}>{preflightPassedCount}/{props.length}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="cc-body">
@@ -998,6 +1017,21 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
                             </div>
                             <div className="cc-queue-name" onClick={()=>focusProperty(prop)} style={{cursor:"pointer"}}>{prop.name}</div>
                             <div className="cc-queue-problem" style={{color:action.color}}>{action.detail}</div>
+                            {/* 자동복구 이력 + 사전점검 상태 */}
+                            <div style={{display:"flex",gap:"5px",marginTop:"5px",flexWrap:"wrap"}}>
+                              {prop.autoRecovery === "unrecovered" && (
+                                <span style={{fontSize:"9px",fontWeight:700,padding:"2px 6px",borderRadius:"10px",background:"#fef2f2",color:"#dc2626",border:"1px solid #fecaca"}}>자동 복구 실패</span>
+                              )}
+                              {prop.autoRecovery === "recovered" && (
+                                <span style={{fontSize:"9px",fontWeight:700,padding:"2px 6px",borderRadius:"10px",background:"#f0fdf4",color:"#059669",border:"1px solid #a7f3d0"}}>자동 복구 완료</span>
+                              )}
+                              {prop.preflightStatus === "failed" && (
+                                <span style={{fontSize:"9px",fontWeight:700,padding:"2px 6px",borderRadius:"10px",background:"#fff7ed",color:"#ea580c",border:"1px solid #fdba74"}}>점검 실패</span>
+                              )}
+                              {prop.siteActionRequired && (
+                                <span style={{fontSize:"9px",fontWeight:700,padding:"2px 6px",borderRadius:"10px",background:"#fef2f2",color:"#b91c1c",border:"1px solid #fecaca"}}>현장 조치 필요</span>
+                              )}
+                            </div>
                             <div style={{display:"flex",gap:"6px",marginTop:"8px"}}>
                               <button
                                 className="cc-queue-action-btn"
@@ -1078,7 +1112,12 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
                     background:{error:TRIAGE_TONES.critical.bg,warn:TRIAGE_TONES.high.bg,info:TRIAGE_TONES.normal.bg}[alert.type],
                   }}
                 >
-                  <div style={{fontSize:"10px",fontWeight:"700",color:{error:TRIAGE_TONES.critical.strong,warn:TRIAGE_TONES.high.strong,info:TRIAGE_TONES.normal.strong}[alert.type],marginBottom:"3px"}}>{alert.prop}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:"3px"}}>
+                    <span style={{fontSize:"10px",fontWeight:"700",color:{error:TRIAGE_TONES.critical.strong,warn:TRIAGE_TONES.high.strong,info:TRIAGE_TONES.normal.strong}[alert.type]}}>{alert.prop}</span>
+                    {alert.audience === "owner" && <span style={{fontSize:"9px",fontWeight:"700",background:"#fef2f2",color:"#dc2626",border:"1px solid #fecaca",borderRadius:"10px",padding:"1px 6px"}}>현장조치</span>}
+                    {alert.audience === "admin" && <span style={{fontSize:"9px",fontWeight:"700",background:"#eff6ff",color:"#2563eb",border:"1px solid #bfdbfe",borderRadius:"10px",padding:"1px 6px"}}>원격처리</span>}
+                    {alert.audience === "log" && <span style={{fontSize:"9px",fontWeight:"600",background:"#f8fafc",color:"#94a3b8",border:"1px solid #e2e8f0",borderRadius:"10px",padding:"1px 6px"}}>기록</span>}
+                  </div>
                   <div style={{fontSize:"12px",color:"#4a5568",fontWeight:"500"}}>{alert.msg}</div>
                   <div style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#a0aec0",marginTop:"3px"}}>{alert.time}</div>
                   {!alert.acked && <button style={{fontSize:"10px",padding:"3px 9px",borderRadius:"20px",border:`1.5px solid ${{error:TRIAGE_TONES.critical.border,warn:TRIAGE_TONES.high.border,info:TRIAGE_TONES.normal.border}[alert.type]}`,cursor:"pointer",background:"#fff",color:{error:TRIAGE_TONES.critical.strong,warn:TRIAGE_TONES.high.strong,info:TRIAGE_TONES.normal.strong}[alert.type],fontFamily:"'DM Sans',sans-serif",marginTop:"5px",fontWeight:"600"}} onClick={()=>ackAlert(alert.id)}>확인</button>}

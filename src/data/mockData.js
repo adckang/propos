@@ -19,6 +19,8 @@ const STATUSES         = ["입실중","입실중","입실중","예약됨","예�
 const DOOR_LOCK_STATUS = ["정상","정상","정상","정상","정상","배터리부족","미응답","오프라인"];
 const SENSOR_HEALTH    = ["정상","정상","정상","정상","일부불량","일부불량","미연결"];
 const LAST_CONTROL     = ["방금","방금","5분 전","1시간 전","미기록"];
+const LAST_TEST        = ["방금","30분 전","1시간 전","3시간 전","6시간 전","어제"];
+const LAST_REBOOT      = ["오늘 06:00","오늘 03:00","어제 06:00","2일 전","3일 전","미기록"];
 
 // 스테이지별 이슈 풀 — 각 단계에 실제로 발생할 수 있는 문제만
 const STAGE_ISSUES = {
@@ -29,10 +31,76 @@ const STAGE_ISSUES = {
   공실:     [],
 };
 
+// 숙소 운영 모드 — status에서 파생
+function deriveMode(status) {
+  if (status === "입실중") return "stay";
+  if (status === "공실")   return "vacant";
+  if (status === "청소중" || status === "점검중") return "cleaning";
+  if (status === "예약됨") return "welcome";
+  return "vacant";
+}
+
+// 자동화 건강도 — doorLock + sensor + issues 기반으로 파생
+function deriveAutomationHealth(doorLockStatus, sensorHealth, issues, priority) {
+  if (doorLockStatus === "오프라인" || sensorHealth === "미연결") return "failed";
+  if (doorLockStatus === "미응답" || sensorHealth === "일부불량" || (issues.length > 0 && priority === "HIGH")) return "degraded";
+  if (doorLockStatus === "배터리부족" || issues.length > 0) return "watch";
+  return "healthy";
+}
+
+// 개입 이유 — 가장 심각한 원인 1개
+function deriveInterventionReason(doorLockStatus, sensorHealth, issues) {
+  if (doorLockStatus === "오프라인")   return "lock_unreachable";
+  if (sensorHealth   === "미연결")     return "offline";
+  if (doorLockStatus === "미응답")     return "lock_unreachable";
+  if (doorLockStatus === "배터리부족") return "battery";
+  if (sensorHealth   === "일부불량")   return "sensor_unavailable";
+  if (issues.some(i => i.includes("초기화") || i.includes("씬"))) return "scene_failed";
+  return null;
+}
+
+function derivePriority() {
+  if (Math.random() < 0.18) return "HIGH";
+  if (Math.random() < 0.25) return "MED";
+  return "OK";
+}
+
+function deriveIssues(status) {
+  if (Math.random() >= 0.18) return [];
+  const pool = STAGE_ISSUES[status];
+  return pool?.length ? [rand(pool)] : [];
+}
+
+function deriveAutoRecovery(automationHealth) {
+  if (automationHealth === "failed") return "unrecovered";
+  if (automationHealth === "degraded" && Math.random() > 0.5) return "recovered";
+  return "none";
+}
+
+function derivePreflightStatus(automationHealth) {
+  if (automationHealth === "healthy")  return "passed";
+  if (automationHealth === "failed")   return "failed";
+  if (automationHealth === "degraded") return "pending";
+  return Math.random() > 0.3 ? "passed" : "pending";
+}
+
 // ── 전체 숙소 목록 (CommandCenter용) ─────────────────────
 export const ALL_PROPS = Array.from({length: 48}, (_, i) => {
-  const status = rand(STATUSES);
-  const hasG   = status === "입실중" || status === "예약됨";
+  const status         = rand(STATUSES);
+  const hasG           = status === "입실중" || status === "예약됨";
+  const doorLockStatus = rand(DOOR_LOCK_STATUS);
+  const sensorHealth   = rand(SENSOR_HEALTH);
+  const priority       = derivePriority();
+  const issues         = deriveIssues(status);
+
+  const automationHealth      = deriveAutomationHealth(doorLockStatus, sensorHealth, issues, priority);
+  const interventionReason    = deriveInterventionReason(doorLockStatus, sensorHealth, issues);
+  const manualInterventionReq = automationHealth === "failed" || automationHealth === "degraded";
+  const siteActionRequired    = interventionReason === "battery"
+    || (interventionReason === "lock_unreachable" && doorLockStatus === "오프라인");
+  const autoRecovery          = deriveAutoRecovery(automationHealth);
+  const preflightStatus       = derivePreflightStatus(automationHealth);
+
   return {
     id:        i + 1,
     name:      `${rand(CITIES)} ${rand(TYPES)} #${String(i+1).padStart(3,"0")}`,
@@ -51,16 +119,26 @@ export const ALL_PROPS = Array.from({length: 48}, (_, i) => {
     acOn:      status === "입실중" && Math.random() > 0.3,
     acTemp:    randN(20, 26),
     lightsOn:  status === "입실중",
-    issues:          Math.random() < 0.18 ? (STAGE_ISSUES[status]?.length ? [rand(STAGE_ISSUES[status])] : []) : [],
+    issues,
     cleaning:        status === "청소중" ? "진행중" : "완료",
-    priority:        Math.random() < 0.18 ? "HIGH" : Math.random() < 0.25 ? "MED" : "OK",
+    priority,
     unreadMsg:       Math.random() < 0.25 ? randN(1, 4) : 0,
     platform:        rand(["Airbnb","Booking","직접예약"]),
-    doorLockStatus:  rand(DOOR_LOCK_STATUS),
-    sensorHealth:    rand(SENSOR_HEALTH),
+    doorLockStatus,
+    sensorHealth,
     vacancyMode:     status === "공실",
     lastControlAt:   rand(LAST_CONTROL),
     cleanerDetected: status === "청소중" && Math.random() > 0.4,
+    // ── Health Model ──────────────────────────────────────
+    automationHealth,
+    preflightStatus,
+    autoRecovery,
+    currentMode:             deriveMode(status),
+    manualInterventionRequired: manualInterventionReq,
+    interventionReason,
+    siteActionRequired,
+    lastTestAt:    rand(automationHealth === "healthy" ? ["방금","30분 전","1시간 전"] : LAST_TEST),
+    lastRebootAt:  rand(LAST_REBOOT),
   };
 });
 
@@ -68,13 +146,13 @@ export const ALL_PROPS = Array.from({length: 48}, (_, i) => {
 export const SC = {"입실중":"#059669","예약됨":"#2563eb","공실":"#94a3b8","청소중":"#d97706","점검중":"#dc2626"};
 export const PC = {HIGH:"#dc2626", MED:"#d97706", OK:"#059669"};
 
-// ── 실시간 알림 초기값 (CommandCenter용) ─────────────────
+// ── 실시간 알림 (알림 정책: owner=현장조치필요, admin=원격처리가능, log=기록만)
 export const INIT_ALERTS = [
-  {id:1, type:"error", prop:"서울 강남 아파트 #007",          msg:"도어락 배터리 위험 (5%)",         time:"00:32", ack:false},
-  {id:2, type:"warn",  prop:"제주 서귀포 한옥 #019",          msg:"Wi-Fi 연결 끊김 감지",             time:"01:14", ack:false},
-  {id:3, type:"warn",  prop:"부산 해운대 펜트하우스 #003",     msg:"에어컨 설정 온도 미달",            time:"01:45", ack:false},
-  {id:4, type:"info",  prop:"서울 마포 스튜디오 #011",         msg:"체크아웃 완료 — 청소 배정 필요",  time:"02:00", ack:false},
-  {id:5, type:"error", prop:"인천 연수 아파트 #024",           msg:"온수 보일러 응답 없음",            time:"02:18", ack:false},
+  {id:1, type:"error", audience:"owner", prop:"서울 강남 아파트 #007",      msg:"도어락 배터리 5% — 배터리 교체 필요 (현장 조치)",    time:"00:32", ack:false},
+  {id:2, type:"warn",  audience:"admin", prop:"제주 서귀포 한옥 #019",      msg:"Wi-Fi 끊김 — 허브 재부팅 시도 중",                  time:"01:14", ack:false},
+  {id:3, type:"warn",  audience:"admin", prop:"부산 해운대 펜트하우스 #003", msg:"에어컨 온도 미달 — 원격 재설정 필요",               time:"01:45", ack:false},
+  {id:4, type:"info",  audience:"log",   prop:"서울 마포 스튜디오 #011",    msg:"체크아웃 완료 — 공실 모드 자동 전환",               time:"02:00", ack:false},
+  {id:5, type:"error", audience:"owner", prop:"인천 연수 아파트 #024",      msg:"온수 보일러 오프라인 — 자동 복구 2회 실패, 현장 점검 필요", time:"02:18", ack:false},
 ];
 
 // ── 자동화 규칙 (CommandCenter > 자동화 탭) ───────────────
@@ -101,7 +179,36 @@ export const SINGLE_PROP = {
   id:      "hj-001",
   name:    "해운대 오션뷰 펜트하우스",
   address: "부산시 해운대구 해운대해변로 298, 32F",
+  // Health Model
+  automationHealth:          "healthy",
+  preflightStatus:           "passed",
+  autoRecovery:              "none",
+  currentMode:               "stay",
+  manualInterventionRequired: false,
+  interventionReason:        null,
+  siteActionRequired:        false,
+  lastTestAt:                "방금",
+  lastRebootAt:              "오늘 06:00",
 };
+
+// 스마트 스위치 — 재부팅 가능한 허브/콘센트 목록 (HomeAssistant용)
+export const SMART_SWITCHES = [
+  {id:"hub_main",   label:"메인 IoT 허브",   type:"usb",      status:"정상", lastReboot:"오늘 06:00", uptime:"18시간"},
+  {id:"hub_sensor", label:"센서 허브",        type:"usb",      status:"정상", lastReboot:"오늘 06:00", uptime:"18시간"},
+  {id:"plug_ac",    label:"에어컨 스마트 플러그", type:"콘센트", status:"정상", lastReboot:"어제 06:00", uptime:"42시간"},
+  {id:"plug_wifi",  label:"공유기 스마트 플러그", type:"콘센트", status:"주의", lastReboot:"3일 전",    uptime:"72시간+"},
+];
+
+// 운영 이벤트 로그 — 자동화 실행 이력 (HomeAssistant용)
+export const HEALTH_LOG = [
+  {time:"06:00", type:"auto",   status:"ok",   msg:"정기 재부팅 완료 — 메인 IoT 허브, 센서 허브"},
+  {time:"06:05", type:"test",   status:"ok",   msg:"시스템 사전 점검 통과 — 도어락·센서·에어컨 응답 정상"},
+  {time:"09:03", type:"auto",   status:"ok",   msg:"D-1 자동화 실행 — PIN 4821 발급, 웰컴 메시지 발송"},
+  {time:"15:21", type:"event",  status:"ok",   msg:"도어락 해제 이벤트 감지 — 체크인 확인"},
+  {time:"15:23", type:"auto",   status:"ok",   msg:"웰컴 씬 실행 — 에어컨 24°C, 조명 환영 모드"},
+  {time:"15:25", type:"auto",   status:"ok",   msg:"체크인 완료 메시지 자동 발송"},
+  {time:"18:00", type:"test",   status:"ok",   msg:"주요 시점 점검 — 체류 중 센서 전체 응답 정상"},
+];
 
 export const BOOKING = {
   guest:          {name:"田中 花子", avatar:"🇯🇵", phone:"+81-90-1234-5678"},
@@ -140,10 +247,12 @@ export default {
   CLEANERS,
   DEVICES_INIT,
   EXPENSES,
+  HEALTH_LOG,
   INIT_ALERTS,
   PC,
   SC,
   SINGLE_PROP,
+  SMART_SWITCHES,
   rand,
   randN,
 };

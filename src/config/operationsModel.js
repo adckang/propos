@@ -1,3 +1,9 @@
+// ── operationsModel.js ──────────────────────────────────────
+// S01~S04는 자동화 건강도(automationHealth)의 2차 drill-down 필터입니다.
+// 1차 축: 건강도 보드 (CommandCenter 상단)
+// 2차 축: 운영 시점별 예외 숙소 필터 (아래 OPERATIONS_STAGES)
+// S05 수익 정산은 실시간 IoT 파이프라인과 별개 — 서브 메뉴로 분리됩니다.
+
 export const OPERATIONS_STAGES = [
   {
     id: "d1",
@@ -5,8 +11,8 @@ export const OPERATIONS_STAGES = [
     emoji: "📅",
     label: "D-1 준비",
     portalTitle: "내일 체크인 준비",
-    portalDescription: "PIN, 웰컴 메시지, 스마트홈 준비가 덜 끝난 예약 숙소를 먼저 봅니다.",
-    desc: "내일 체크인 전에 준비를 끝내는 단계입니다. PIN, 웰컴 메시지, 스마트홈 준비가 미리 끝났는지 확인합니다.",
+    portalDescription: "체크인 전날 자동화 점검이 필요한 숙소를 봅니다. PIN, 웰컴 씬, 스마트홈 초기화가 정상인지 확인합니다.",
+    desc: "체크인 D-1 시점 필터입니다. 자동화 점검이 필요한 예약 숙소를 찾아 사전에 안정화합니다.",
     color: "#2563eb",
     bg: "#eff6ff",
     border: "#bfdbfe",
@@ -22,8 +28,8 @@ export const OPERATIONS_STAGES = [
     emoji: "🚪",
     label: "체크인 당일",
     portalTitle: "당일 입실 확인",
-    portalDescription: "입실 직전 숙소 중 자동화가 끊기거나 응답이 필요한 예약 숙소를 봅니다.",
-    desc: "입실 직전 또는 당일 개입이 필요한 예약 숙소를 모읍니다. 도어락 이벤트, 채널 오픈, 첫 메시지 대응을 놓치지 않는 단계입니다.",
+    portalDescription: "체크인 당일 자동화 이상 숙소를 봅니다. 도어락 응답, 웰컴 씬 실행 여부를 확인합니다.",
+    desc: "체크인 당일 시점 필터입니다. 입실 자동화가 정상 실행됐는지 확인하고, 실패 시 즉시 복구합니다.",
     color: "#059669",
     bg: "#ecfdf5",
     border: "#a7f3d0",
@@ -39,8 +45,8 @@ export const OPERATIONS_STAGES = [
     emoji: "📡",
     label: "체류 중",
     portalTitle: "체류 중 대응",
-    portalDescription: "센서 이상, 유지보수, 미응답 메시지처럼 사람이 바로 봐야 하는 숙소를 모읍니다.",
-    desc: "체류 중 숙소를 관리하는 단계입니다. 센서 이상, 게스트 메시지, 현장 제어가 필요한 숙소를 먼저 찾습니다.",
+    portalDescription: "체류 중 자동화 이상 숙소를 봅니다. 센서 미응답, 자동복구 실패, 원격 제어가 필요한 숙소를 확인합니다.",
+    desc: "체류 중 시점 필터입니다. 자동 복구가 실패했거나 사람 개입이 필요한 숙소를 먼저 찾아 원격 대응합니다.",
     color: "#7c3aed",
     bg: "#f5f3ff",
     border: "#ddd6fe",
@@ -56,8 +62,8 @@ export const OPERATIONS_STAGES = [
     emoji: "🧹",
     label: "퇴실·청소",
     portalTitle: "다음 예약 준비",
-    portalDescription: "퇴실 이후 청소, 점검, 준비 완료 전환이 막힌 숙소를 정리합니다.",
-    desc: "퇴실 이후 다음 예약 준비를 끝내는 단계입니다. 청소 배정, 유지보수, 준비 완료 전환이 여기서 관리됩니다.",
+    portalDescription: "퇴실 이후 자동화 전환이 막힌 숙소를 봅니다. PIN 만료, 청소팀 배정, 스마트홈 초기화 완료 여부를 확인합니다.",
+    desc: "퇴실·청소 시점 필터입니다. 자동 전환이 완료되지 않은 숙소를 찾아 다음 예약 준비를 안정화합니다.",
     color: "#d97706",
     bg: "#fffbeb",
     border: "#fde68a",
@@ -73,8 +79,8 @@ export const OPERATIONS_STAGES = [
     emoji: "💰",
     label: "수익 정산",
     portalTitle: "정산 검토",
-    portalDescription: "월 정산과 가격 판단에 사람이 검토할 숙소를 빠르게 모아 봅니다.",
-    desc: "운영 흐름의 마지막 단계입니다. 월간 수익을 모으고 가격 추천과 정산 검토가 필요한 숙소를 봅니다.",
+    portalDescription: "IoT 파이프라인과 별개로 운영됩니다. 월 정산과 가격 판단에 사람이 검토할 숙소를 빠르게 모아 봅니다.",
+    desc: "수익 정산은 실시간 자동화 파이프라인과 분리된 서브 메뉴입니다. 가격 추천과 정산 검토가 필요한 숙소를 확인합니다.",
     color: "#0891b2",
     bg: "#ecfeff",
     border: "#a5f3fc",

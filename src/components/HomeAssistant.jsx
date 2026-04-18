@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 
-import { BOOKING, CLEANERS, DEVICES_INIT, EXPENSES, SINGLE_PROP } from "../data/mockData";
+import { BOOKING, CLEANERS, DEVICES_INIT, EXPENSES, HEALTH_LOG, SINGLE_PROP, SMART_SWITCHES } from "../data/mockData";
 import Toast from "../utils/toast";
 
 // ============================================================
@@ -148,40 +148,43 @@ function HomeAssistant({onBack, onOpenCommandCenter, initialStage = "stay", hand
   const displayPropertyMeta = handoffProperty
     ? `${handoffProperty.city} · ${handoffProperty.type} · ${handoffProperty.status}${handoffProperty.guest ? ` · ${handoffProperty.guest}` : ""}`
     : SINGLE_PROP.address;
-  const immediateActionMeta = {
-    d1: { value: "PIN 재확인", desc: "체크인 전 자동화 마지막 점검" },
-    checkin: { value: "입실 로그", desc: "씬 실행과 메시지 발송 재확인" },
-    stay: disconnectedDevices > 0
-      ? { value: `기기 ${disconnectedDevices}대`, desc: "연결 끊긴 장치부터 확인" }
-      : { value: `대화 ${msgs.length}건`, desc: "최근 게스트 응답 흐름 점검" },
-    checkout: { value: "청소 마감", desc: "퇴실 뒤 준비 완료 전환" },
-    settlement: { value: "순수익 검토", desc: "비용 누락 없이 수익 정산 확인" },
-  };
-  const nextTransitionMeta = haStage === "settlement"
-    ? { value: "다음 예약 준비", desc: "수익 정산 확인 뒤 다음 가격 판단" }
-    : haStage === "checkout"
-    ? { value: "수익 정산 전환", desc: "청소 완료 후 수익 정리 단계" }
-    : { value: checkoutClock, desc: "다음 퇴실 전환까지 남은 시간" };
-  const snapshotCards = [
-    {
-      label:"현재 단계",
-      value:currentStage.label,
-      desc: currentStage.sub,
-      tone:{bg:"#eff6ff", border:"#bfdbfe", text:currentStage.color},
-    },
-    {
-      label:"바로 처리할 일",
-      value:immediateActionMeta[haStage].value,
-      desc:immediateActionMeta[haStage].desc,
-      tone:{bg:"#f5f3ff", border:"#ddd6fe", text:"#7c3aed"},
-    },
-    {
-      label:"다음 전환",
-      value:nextTransitionMeta.value,
-      desc:nextTransitionMeta.desc,
-      tone:{bg:"#fffbeb", border:"#fde68a", text:"#d97706"},
-    },
+  // 시스템 건강도 — SINGLE_PROP health model 기준
+  const sysHealth     = SINGLE_PROP.automationHealth;
+  const preflight     = SINGLE_PROP.preflightStatus;
+  const lastTest      = SINGLE_PROP.lastTestAt;
+  const lastReboot    = SINGLE_PROP.lastRebootAt;
+  const currentMode   = SINGLE_PROP.currentMode;
+  const [switches, setSwitches] = React.useState(SMART_SWITCHES);
+  const [healthLog]   = React.useState(HEALTH_LOG);
+
+  const MODES = [
+    {key:"stay",    label:"체류 모드",   color:"#059669", bg:"#ecfdf5", border:"#a7f3d0"},
+    {key:"vacant",  label:"공실 모드",   color:"#64748b", bg:"#f1f5f9", border:"#cbd5e1"},
+    {key:"welcome", label:"웰컴 모드",   color:"#2563eb", bg:"#eff6ff", border:"#bfdbfe"},
+    {key:"cleaning",label:"청소 모드",   color:"#d97706", bg:"#fffbeb", border:"#fde68a"},
+    {key:"winter",  label:"겨울 모드",   color:"#0891b2", bg:"#ecfeff", border:"#a5f3fc"},
+    {key:"summer",  label:"여름 모드",   color:"#7c3aed", bg:"#f5f3ff", border:"#ddd6fe"},
   ];
+
+  const HEALTH_TONE = {
+    healthy:  {label:"자동 제어 정상", color:"#059669", bg:"#f0fdf4", border:"#a7f3d0"},
+    watch:    {label:"주시",          color:"#d97706", bg:"#fffbeb", border:"#fde68a"},
+    degraded: {label:"성능 저하",     color:"#ea580c", bg:"#fff7ed", border:"#fdba74"},
+    failed:   {label:"시스템 장애",   color:"#dc2626", bg:"#fef2f2", border:"#fecaca"},
+  };
+  const healthTone = HEALTH_TONE[sysHealth] || HEALTH_TONE.healthy;
+
+  const rebootSwitch = id => {
+    setSwitches(list => list.map(sw =>
+      sw.id === id ? {...sw, status:"재부팅 중...", uptime:"0초"} : sw
+    ));
+    Toast.show("스마트 스위치 재부팅 명령을 전송했습니다.", "i");
+    setTimeout(() => {
+      setSwitches(list => list.map(sw =>
+        sw.id === id ? {...sw, status:"정상", lastReboot:"방금", uptime:"1분"} : sw
+      ));
+    }, 3000);
+  };
 
   const runGuideAction = action => {
     if(action.prefill){
@@ -261,6 +264,80 @@ function HomeAssistant({onBack, onOpenCommandCenter, initialStage = "stay", hand
       </div>
 
       <div className="ha-content">
+        {/* ── 시스템 건강도 + 모드 제어 + 스마트 스위치 ── */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px",marginBottom:"14px"}}>
+          {/* 시스템 건강도 */}
+          <div style={{background:healthTone.bg,border:`1.5px solid ${healthTone.border}`,borderRadius:"14px",padding:"14px 16px"}}>
+            <div style={{fontSize:"10px",fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase",color:healthTone.color,marginBottom:"8px"}}>자동화 건강도</div>
+            <div style={{fontSize:"18px",fontWeight:800,color:healthTone.color,marginBottom:"10px"}}>{healthTone.label}</div>
+            <div style={{display:"flex",flexDirection:"column",gap:"5px"}}>
+              {[
+                ["사전 점검", preflight === "passed" ? "통과" : preflight === "pending" ? "대기 중" : "실패",
+                  preflight === "passed" ? "#059669" : preflight === "pending" ? "#d97706" : "#dc2626"],
+                ["마지막 점검", lastTest, "#475569"],
+                ["마지막 재부팅", lastReboot, "#475569"],
+              ].map(([k,v,c]) => (
+                <div key={k} style={{display:"flex",justifyContent:"space-between",fontSize:"11px"}}>
+                  <span style={{color:"#94a3b8"}}>{k}</span>
+                  <span style={{fontWeight:700,color:c}}>{v}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:"6px",marginTop:"10px"}}>
+              <button onClick={()=>Toast.show("시스템 점검을 실행했습니다. 결과는 로그에서 확인하세요.","s")} style={{flex:1,padding:"6px",borderRadius:"8px",background:"#fff",border:`1.5px solid ${healthTone.border}`,color:healthTone.color,fontSize:"11px",fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>점검 실행</button>
+            </div>
+          </div>
+          {/* 모드 제어 */}
+          <div style={{background:"#fff",border:"1.5px solid #e2e8f0",borderRadius:"14px",padding:"14px 16px"}}>
+            <div style={{fontSize:"10px",fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase",color:"#94a3b8",marginBottom:"8px"}}>운영 모드</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px"}}>
+              {MODES.map(m => {
+                const isActive = currentMode === m.key;
+                return (
+                  <button key={m.key} onClick={()=>Toast.show(`${m.label}으로 전환했습니다.`,"s")} style={{padding:"7px 4px",borderRadius:"8px",border:`1.5px solid ${isActive ? m.border : "#e2e8f0"}`,background:isActive ? m.bg : "#f8fafc",color:isActive ? m.color : "#94a3b8",fontSize:"10px",fontWeight:isActive?800:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",transition:"all 0.15s"}}>
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* ── 스마트 스위치 재부팅 패널 ── */}
+        <div style={{background:"#fff",border:"1.5px solid #e2e8f0",borderRadius:"14px",padding:"14px 16px",marginBottom:"14px"}}>
+          <div style={{fontSize:"10px",fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase",color:"#94a3b8",marginBottom:"10px"}}>스마트 스위치 · 허브 재부팅</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
+            {switches.map(sw => (
+              <div key={sw.id} style={{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",borderRadius:"10px",background:sw.status==="정상"?"#f0fdf4":sw.status==="주의"?"#fffbeb":"#eff6ff",border:`1px solid ${sw.status==="정상"?"#a7f3d0":sw.status==="주의"?"#fde68a":"#bfdbfe"}`}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:"11px",fontWeight:700,color:"#1e293b"}}>{sw.label}</div>
+                  <div style={{fontSize:"10px",color:"#94a3b8",marginTop:"2px"}}>{sw.type} · 업타임 {sw.uptime}</div>
+                  <div style={{fontSize:"10px",color:"#64748b",marginTop:"1px"}}>재부팅 {sw.lastReboot}</div>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"4px",flexShrink:0}}>
+                  <span style={{fontSize:"9px",fontWeight:700,padding:"2px 6px",borderRadius:"10px",background:sw.status==="정상"?"#dcfce7":sw.status==="주의"?"#fef9c3":"#eff6ff",color:sw.status==="정상"?"#15803d":sw.status==="주의"?"#a16207":"#2563eb"}}>{sw.status}</span>
+                  <button onClick={()=>rebootSwitch(sw.id)} style={{fontSize:"10px",padding:"4px 8px",borderRadius:"6px",border:"1.5px solid #e2e8f0",background:"#fff",color:"#475569",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>재부팅</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── 자동화 이벤트 로그 ── */}
+        <div style={{background:"#fff",border:"1.5px solid #e2e8f0",borderRadius:"14px",padding:"14px 16px",marginBottom:"14px"}}>
+          <div style={{fontSize:"10px",fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase",color:"#94a3b8",marginBottom:"10px"}}>자동화 실행 로그</div>
+          <div style={{display:"flex",flexDirection:"column",gap:"0"}}>
+            {healthLog.map((entry, idx) => (
+              <div key={`${entry.time}-${idx}`} style={{display:"flex",gap:"10px",alignItems:"flex-start",padding:"7px 0",borderBottom:"1px solid #f1f5f9"}}>
+                <span style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#94a3b8",flexShrink:0,paddingTop:"1px",width:"36px"}}>{entry.time}</span>
+                <span style={{width:"6px",height:"6px",borderRadius:"50%",background:entry.status==="ok"?"#059669":"#dc2626",flexShrink:0,marginTop:"4px"}} />
+                <span style={{fontSize:"11px",color:entry.status==="ok"?"#374151":"#dc2626",fontWeight:entry.type==="test"||entry.type==="auto"?600:400,flex:1,lineHeight:"1.5"}}>{entry.msg}</span>
+                <span style={{fontSize:"9px",color:"#94a3b8",flexShrink:0,fontWeight:600}}>{entry.type}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* ── 트리아지 카드: 처리 필요(빨강) / 안정(녹색) ── */}
         {(() => {
           const issues = handoffProperty?.issues || [];
