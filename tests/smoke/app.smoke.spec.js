@@ -31,8 +31,8 @@ test.describe("PROPOS smoke", () => {
 
     // ── HomeAssistant 화면 ─────────────────────────────────
     await page.getByRole("button", { name: "대표 숙소 상세 보기" }).click();
-    await expect(page.getByText("해운대 오션뷰 펜트하우스")).toBeVisible();
-    await expect(page.getByText("빠른 제어")).toBeVisible();
+    await expect(page.getByText("해운대 오션뷰 펜트하우스").first()).toBeVisible();
+    await expect(page.getByText("빠른 제어").first()).toBeVisible();
     await expect(page.getByText("지금 처리해야 할 것").or(page.getByText("지금 안정")).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "← 커맨드 센터" }).first()).toBeVisible();
     await expect(page.getByText("처리 필요")).toBeVisible();
