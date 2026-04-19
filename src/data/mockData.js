@@ -33,11 +33,12 @@ const STAGE_ISSUES = {
 
 // 개입 이유 → UI 레이블 매핑
 export const INTERVENTION_LABELS = {
-  lock_unreachable:  "도어락 원격 불가",
-  offline:           "IoT 허브 오프라인",
-  battery:           "배터리 교체 필요",
-  sensor_unavailable:"센서 부분 오프라인",
-  scene_failed:      "자동화 씬 실행 실패",
+  lock_unreachable:    "도어락 원격 불가",
+  offline:             "IoT 허브 오프라인",
+  battery:             "배터리 교체 필요",
+  sensor_unavailable:  "센서 부분 오프라인",
+  scene_failed:        "자동화 씬 실행 실패",
+  schedule_conflict:   "청소·일정 전환 지연",
 };
 
 // 숙소 운영 모드 — status에서 파생
@@ -65,6 +66,8 @@ function deriveInterventionReason(doorLockStatus, sensorHealth, issues) {
   if (doorLockStatus === "배터리부족") return "battery";
   if (sensorHealth   === "일부불량")   return "sensor_unavailable";
   if (issues.some(i => i.includes("초기화") || i.includes("씬"))) return "scene_failed";
+  if (issues.some(i => i.includes("청소") || i.includes("일정") || i.includes("충돌"))) return "schedule_conflict";
+  if (issues.length > 0) return "scene_failed";
   return null;
 }
 
