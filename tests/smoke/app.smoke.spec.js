@@ -78,29 +78,30 @@ test.describe("PROPOS smoke", () => {
     await returnButton().click();
     await expect(page.getByText("에어비앤비 완전 관리 시스템")).toBeVisible();
 
-    // ── 랜딩 포털 카드 → CommandCenter 시점 필터 연동 ─────
+    // ── 랜딩 포털 카드 → CommandCenter 시점 필터 pill 활성 검증 ─
+    const stagePill = code => page.locator(`button[data-active="true"]`).filter({ hasText: code }).first();
+
     await landingPortalCard("내일 체크인 준비").click();
     await expect(page.getByText("자동운영 안정화 관제 센터")).toBeVisible();
-    // S01 시점 필터 pill 활성 확인
-    await expect(page.getByRole("button", { name: /S01/ })).toBeVisible();
+    await expect(stagePill("S01")).toBeVisible();
     await returnButton().click();
     await expect(page.getByText("에어비앤비 완전 관리 시스템")).toBeVisible();
 
     await landingPortalCard("당일 입실 확인").click();
     await expect(page.getByText("자동운영 안정화 관제 센터")).toBeVisible();
-    await expect(page.getByRole("button", { name: /S02/ })).toBeVisible();
+    await expect(stagePill("S02")).toBeVisible();
     await returnButton().click();
     await expect(page.getByText("에어비앤비 완전 관리 시스템")).toBeVisible();
 
     await landingPortalCard("체류 중 대응").click();
     await expect(page.getByText("자동운영 안정화 관제 센터")).toBeVisible();
-    await expect(page.getByRole("button", { name: /S03/ })).toBeVisible();
+    await expect(stagePill("S03")).toBeVisible();
     await returnButton().click();
     await expect(page.getByText("에어비앤비 완전 관리 시스템")).toBeVisible();
 
     await landingPortalCard("다음 예약 준비").click();
     await expect(page.getByText("자동운영 안정화 관제 센터")).toBeVisible();
-    await expect(page.getByRole("button", { name: /S04/ })).toBeVisible();
+    await expect(stagePill("S04")).toBeVisible();
     await returnButton().click();
     await expect(page.getByText("에어비앤비 완전 관리 시스템")).toBeVisible();
 

@@ -610,6 +610,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
                 return (
                   <button
                     key={s.id}
+                    data-active={active ? "true" : "false"}
                     onClick={() => setStage(stage === s.id ? null : s.id)}
                     style={{
                       display:"flex", alignItems:"center", gap:4,
