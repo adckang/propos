@@ -105,7 +105,7 @@ function getActionToneKey(prop) {
 
 // ── CommandCenter 컴포넌트 ────────────────────────────────────
 
-function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStage = "stay"}) {
+function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStage = null}) {
   // 1차: 건강도 필터 (primary axis)
   const [healthFilter, setHealthFilter] = useState("all");
   // 2차: 시점 필터 (secondary, toggleable)
@@ -149,7 +149,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
   }, [props]);
 
   useEffect(() => {
-    if (initialStage && initialStage !== "stay") setStage(initialStage);
+    if (initialStage) setStage(initialStage);
   }, [initialStage]);
 
   useEffect(() => { setSelProp(null); }, [healthFilter, stage]);
@@ -216,7 +216,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
       source: "command-center",
       stage: stage || "stay",
       property: prop,
-      headline: prop.automationHealth === "failed" ? "시스템 장애" : prop.automationHealth === "degraded" ? "성능 저하" : "상태 확인",
+      headline: INTERVENTION_LABELS[prop.interventionReason] || HEALTH_META[prop.automationHealth]?.label || "상태 확인",
       reason: getActionBrief(prop, stage || "stay"),
     });
     Toast.show(`${prop.name.split("#")[0].trim()} · 대표 숙소 보드로 넘깁니다.`, "i");

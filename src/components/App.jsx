@@ -25,7 +25,7 @@ function App() {
   const reservedCount = ALL_PROPS.filter((prop) => prop.status === "예약됨").length;
   const urgentCount = ALL_PROPS.filter((prop) => prop.priority === "HIGH").length;
   const checkoutRiskCount = ALL_PROPS.filter((prop) => prop.status === "청소중" || prop.issues.length > 0).length;
-  const openCC = (stage = "stay") => {
+  const openCC = (stage = null) => {
     setCcStage(stage);
     setScreen("cc");
   };
@@ -44,7 +44,7 @@ function App() {
 
   const closeHA = () => {
     if(haContext?.source === "command-center"){
-      openCC(haStage || "stay");
+      openCC(haStage || null);
       return;
     }
     setScreen("landing");
@@ -54,7 +54,7 @@ function App() {
     <div className="app" style={{fontFamily:"'DM Sans',sans-serif"}}>
       <HomeAssistant
         onBack={closeHA}
-        onOpenCommandCenter={(stage)=>openCC(stage || "stay")}
+        onOpenCommandCenter={(stage)=>openCC(stage || null)}
         initialStage={haStage}
         handoff={haContext}
       />
@@ -102,7 +102,7 @@ function App() {
               </div>
             </div>
             <div className="land-ops-cta">
-              <button className="land-primary-btn" onClick={()=>openCC("stay")}>커맨드 센터 열기</button>
+              <button className="land-primary-btn" onClick={()=>openCC()}>커맨드 센터 열기</button>
               <button className="land-secondary-btn" onClick={()=>openHA("stay")}>대표 숙소 상세 보기</button>
             </div>
           </div>
@@ -159,7 +159,7 @@ function App() {
               <div className="land-alert-prop">{leadAlert.prop}</div>
               <div className="land-alert-msg">{leadAlert.msg}</div>
               <div className="land-alert-meta">{leadAlert.time} · 확인이 필요한 최신 이벤트</div>
-              <button className="land-inline-link" onClick={()=>openCC("stay")}>알림에서 바로 확인</button>
+              <button className="land-inline-link" onClick={()=>openCC()}>알림에서 바로 확인</button>
             </div>
           </div>
         </div>
