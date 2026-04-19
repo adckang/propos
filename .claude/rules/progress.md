@@ -6,9 +6,9 @@
 ---
 
 ## 현재 상태
-- **버전**: v1.0 (구조 정리 완료 — 삼박자 싱크 확립)
+- **버전**: v1.1 (운영 콘솔 재설계 완료 — 자동화 상태 우선 레이아웃)
 - **배포**: Vite 빌드 + Vercel 설정 파일 완료, 실제 환경변수 주입만 남음
-- **업데이트**: 2026-04-13
+- **업데이트**: 2026-04-19
 
 ## 완료된 마일스톤
 
@@ -151,18 +151,58 @@
 
 ---
 
+## ✅ M11: 운영 콘솔 재설계 (2026-04-19)
+
+### 콘셉트 전환
+- PROPOS 철학 재정의: "PMS/태스크 보드" → "원격 숙소 자동운영 안정화 관제 시스템"
+- 핵심 원칙: 자동화가 기본 안정 상태, 사람 개입은 예외 처리
+
+### mockData.js 전면 개편
+- `SINGLE_PROP`: 모든 필수 필드 추가 (doorLockStatus, sensorHealth, recoveryAttempts 등)
+- `ALL_PROPS` 날짜: 하드코딩 → `deriveCheckDates(status)` 동적 상대 날짜
+- `autoRecovery` + `recoveryAttempts` 분리 (상태 문자열 + 시도 횟수)
+- `STAGE_ISSUES`: "소음 민원" 등 게스트 불만 언어 → 자동화 실패 언어로 전면 교체
+- `AUTO_RULES`: 6개 → 12개, `type` 필드(preventive/reactive/recovery) 추가
+- `INIT_ALERTS`: 5개 → 9개, audience(owner/admin/log) 3분류 추가
+- `INTERVENTION_LABELS` export 추가
+
+### CommandCenter 완전 재설계
+- **1차 축**: 건강도 보드 (전체/시스템장애/성능저하/주시/정상) — 인터랙티브 필터 버튼
+- **2차 축**: 운영 시점 필터 (S01~S04 토글 pill, 각 단계 개입 건수 배지)
+- 숙소 목록: 3섹션 (개입 필요 / 주시 / 자동 운영 정상)
+- 알림 패널: audience 3분류 (🚨 현장 조치 / 🔧 원격 처리 / 자동 기록 접힘)
+- `openPropertyWorkspace` headline: `HEALTH_META[health]?.label` 재사용
+
+### HomeAssistant 완전 재설계
+- **순서 재배치**: 자동화 상태 카드 최상단 → 빠른 제어 → 물리 상태 → 단계 상세 → 로그
+- `effectiveHealth`: handoffProperty.automationHealth 기반 (기존 SINGLE_PROP 고정 green 제거)
+- interventionReason, recoveryAttempts, doorLockStatus, sensorHealth 모두 상태 카드에 표시
+- `currentMode`: useState 기반 실제 전환 (기존 Toast만 표시하던 방식 교체)
+- 자동화 로그: 접기/펼치기 (기본 접힘, 하단 배치)
+
+### 버그 수정
+- S03 stage filter 미적용 (openCC 기본값 null, "stay" 예외 제거)
+- CC 실시간 알림 "소음 임계치" → audience "admin" 분류 누락
+- openPropertyWorkspace headline 중첩 삼항 제거
+
+### 테스트
+- 스모크: CC→HA handoff 검증 추가 (대표 숙소 보드 열기 → "지금 처리해야 할 것" 확인)
+- 유닛 375개 / 스모크 1개 / verify:scenarios — 전부 통과
+
+---
+
 ## 다음 작업 (우선순위 순)
 
-### 🔜 M10: 운영 프록시 연결
-- Vercel 프로젝트 생성 후 환경변수 주입
+### 🔜 Vercel 실배포 (사용자 액션 필요)
+- Vercel 프로젝트 생성 후 환경변수 주입 (`PROPOS_HA_BASE_URL`, `PROPOS_HA_WS_URL`, `PROPOS_HA_TOKEN`)
 - `/api/ha/*` 실배포 동작 확인
 
-### 🔜 M11: 프로덕션 전환
+### 🔜 프로덕션 전환 (사용자 액션 필요)
 - [ ] Vercel 배포 + 도메인 설정
 - [ ] HA 토큰 갱신 주기 관리 (현재 만료일: 2036년경)
 - [ ] 실제 숙소 iCal URL 연결 (현재 전부 목업)
 
-### 🔜 M12: AI 기능 (Claude API key 있을 때)
+### 🔜 AI 기능 (Claude API key 있을 때)
 - [ ] UC-003 게스트 메시지 AI 답장 (Claude API)
 - [ ] UC-005 AI 가격 최적화 실제 구현 (Claude API)
 
