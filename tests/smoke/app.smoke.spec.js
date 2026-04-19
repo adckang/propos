@@ -60,7 +60,7 @@ test.describe("PROPOS smoke", () => {
     // 시점 필터 pills 확인
     await expect(page.getByText("시점 필터")).toBeVisible();
 
-    // AttentionCard 있으면 카드 클릭 → 상세 패널
+    // AttentionCard 있으면 카드 클릭 → 상세 패널 → HA handoff 검증
     const attentionSection = page.locator(".cc-scroll-sections");
     const firstCardName = attentionSection.locator("div").filter({ hasText: /자동 모니터링|오프라인|복구 실패|임계치/ }).first();
     const hasAttention = await firstCardName.isVisible().catch(() => false);
@@ -68,6 +68,11 @@ test.describe("PROPOS smoke", () => {
       await firstCardName.click();
       await expect(page.getByText("자동화 상태").first()).toBeVisible();
       await expect(page.getByRole("button", { name: "대표 숙소 보드 열기" }).first()).toBeVisible();
+      // CC → HA handoff: 실제 건강도가 status 카드에 반영되는지 검증
+      await page.getByRole("button", { name: "대표 숙소 보드 열기" }).first().click();
+      await expect(page.getByText("지금 처리해야 할 것").or(page.getByText("지금 안정")).first()).toBeVisible();
+      await expect(page.getByRole("button", { name: "← 뒤로" }).first()).toBeVisible();
+      await returnButton().click(); // HA → CC (source: "command-center" 이므로 CC 복귀)
     }
 
     await returnButton().click();

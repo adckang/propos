@@ -130,7 +130,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
         ]);
         const liveAudience =
           liveMsg.includes("배터리") ? "owner" :
-          liveMsg.includes("센서") || liveMsg.includes("WiFi") || liveMsg.includes("허브") ? "admin" : "log";
+          liveMsg.includes("센서") || liveMsg.includes("WiFi") || liveMsg.includes("허브") || liveMsg.includes("소음") ? "admin" : "log";
         setAlerts(list => [
           {
             id: Date.now(),
