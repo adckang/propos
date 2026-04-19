@@ -629,6 +629,14 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
             </div>
 
             <div className="cc-scroll-sections">
+              {/* 필터 결과 0건 */}
+              {displayProps.length === 0 && (
+                <div style={{padding:"32px 20px",textAlign:"center",color:"#94a3b8"}}>
+                  <div style={{fontSize:24,marginBottom:10}}>✓</div>
+                  <div style={{fontSize:13,fontWeight:700,color:"#475569",marginBottom:4}}>해당 조건의 숙소 없음</div>
+                  <div style={{fontSize:11}}>필터를 변경하거나 전체 보기를 선택하세요.</div>
+                </div>
+              )}
               {/* 개입 필요 (failed + degraded) */}
               <div style={{padding:"10px 12px 4px",borderBottom: needsAttentionProps.length > 0 ? "1px solid #fed7aa" : "none", background: needsAttentionProps.length > 0 ? "#fff7ed" : "#fff"}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:needsAttentionProps.length > 0 ? 10 : 0}}>

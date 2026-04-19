@@ -22,9 +22,6 @@ function App() {
   const [haContext, setHaContext] = useState(null);
   const [now, setNow] = useState(new Date());
 
-  const reservedCount = ALL_PROPS.filter((prop) => prop.status === "예약됨").length;
-  const urgentCount = ALL_PROPS.filter((prop) => prop.priority === "HIGH").length;
-  const checkoutRiskCount = ALL_PROPS.filter((prop) => prop.status === "청소중" || prop.issues.length > 0).length;
   const openCC = (stage = null) => {
     setCcStage(stage);
     setScreen("cc");
@@ -98,7 +95,7 @@ function App() {
               <div className="land-ops-title">지금 막힌 곳만 보면 됩니다</div>
               <div className="land-ops-desc">
                 전체 숙소에서 사람이 봐야 할 단계만 먼저 고르고, 숙소 한 곳은 대표 숙소 상세 보기에서 끝까지 해결하면 됩니다.
-                지금은 체류 중 대응 {urgentCount}건, 내일 체크인 준비 {reservedCount}곳, 퇴실·청소 {checkoutRiskCount}곳을 먼저 보면 됩니다.
+                지금은 체류 중 대응 {portalStageCards.find(c=>c.id==="stay")?.count||0}건, 내일 체크인 준비 {portalStageCards.find(c=>c.id==="d1")?.count||0}곳, 퇴실·청소 {portalStageCards.find(c=>c.id==="checkout")?.count||0}곳을 먼저 보면 됩니다.
               </div>
             </div>
             <div className="land-ops-cta">
