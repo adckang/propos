@@ -177,13 +177,13 @@ function HomeAssistant({ onBack, onOpenCommandCenter, initialStage = "stay", han
             <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{displayPropertyMeta}</div>
           </div>
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-            <span style={{ background: ht.bg, color: ht.color, border: `1px solid ${ht.border}`, fontSize: 11, padding: "4px 12px", borderRadius: 20, fontWeight: 700, whiteSpace: "nowrap" }}>
+            <span className="ha-topbar-badges" style={{ background: ht.bg, color: ht.color, border: `1px solid ${ht.border}`, fontSize: 11, padding: "4px 12px", borderRadius: 20, fontWeight: 700, whiteSpace: "nowrap" }}>
               ● {ht.label}
             </span>
-            <span style={{ background: disconnectedDevices === 0 ? "#ecfdf5" : "#fffbeb", color: disconnectedDevices === 0 ? "#059669" : "#d97706", border: `1px solid ${disconnectedDevices === 0 ? "#a7f3d0" : "#fde68a"}`, fontSize: 11, padding: "4px 12px", borderRadius: 20, fontWeight: 700, whiteSpace: "nowrap" }}>
+            <span className="ha-topbar-badges" style={{ background: disconnectedDevices === 0 ? "#ecfdf5" : "#fffbeb", color: disconnectedDevices === 0 ? "#059669" : "#d97706", border: `1px solid ${disconnectedDevices === 0 ? "#a7f3d0" : "#fde68a"}`, fontSize: 11, padding: "4px 12px", borderRadius: 20, fontWeight: 700, whiteSpace: "nowrap" }}>
               ● 홈 어시스턴트 {disconnectedDevices === 0 ? "연결 정상" : "일부 확인 필요"}
             </span>
-            <div style={{ textAlign: "right" }}>
+            <div className="ha-topbar-clock" style={{ textAlign: "right" }}>
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 18, color: "#2563eb", fontWeight: 700 }}>
                 {now.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
               </div>
@@ -243,7 +243,7 @@ function HomeAssistant({ onBack, onOpenCommandCenter, initialStage = "stay", han
           overflow: "hidden",
         }}>
           {/* 헤더 */}
-          <div style={{ background: ht.headBg, padding: "14px 20px", borderBottom: `1px solid ${ht.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div className="ha-status-hdr" style={{ background: ht.headBg, padding: "14px 20px", borderBottom: `1px solid ${ht.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
               <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: ht.color, marginBottom: 4 }}>
                 {isNormal ? "지금 안정" : "지금 처리해야 할 것"}
@@ -260,7 +260,7 @@ function HomeAssistant({ onBack, onOpenCommandCenter, initialStage = "stay", han
                 </div>
               )}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, flexShrink: 0 }}>
+            <div className="ha-status-hdr-actions" style={{ display: "flex", flexDirection: "column", gap: 8, flexShrink: 0 }}>
               {!isNormal && (
                 <button
                   onClick={() => Toast.show("시스템 점검을 실행했습니다. 결과는 로그에서 확인하세요.", "s")}
@@ -297,7 +297,7 @@ function HomeAssistant({ onBack, onOpenCommandCenter, initialStage = "stay", han
         </div>
 
         {/* ── 처리 필요 / 완료 체크리스트 ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+        <div className="ha-checklist-grid">
           <div style={{ background: "#fef2f2", border: "1.5px solid #fecaca", borderRadius: 12, padding: 14 }}>
             <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", color: "#dc2626", marginBottom: 10, textTransform: "uppercase" }}>처리 필요</div>
             {(needItems.length > 0 ? needItems : ["처리 필요 항목 없음"]).map(item => (
@@ -329,7 +329,7 @@ function HomeAssistant({ onBack, onOpenCommandCenter, initialStage = "stay", han
         <div style={{ background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 14, padding: "14px 16px", marginBottom: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "#64748b" }}>빠른 제어</div>
-            <div style={{ display: "flex", gap: 6 }}>
+            <div className="ha-scenes-row" style={{ display: "flex", gap: 6 }}>
               {SCENES.map(scene => (
                 <button key={scene.action} onClick={() => Toast.show(`${scene.label} 씬을 실행했습니다.`, "s")} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 20, border: "1.5px solid #bfdbfe", background: "#eff6ff", color: "#2563eb", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 700 }}>
                   {scene.label}
@@ -357,7 +357,7 @@ function HomeAssistant({ onBack, onOpenCommandCenter, initialStage = "stay", han
         {/* ── 운영 모드 (useState 기반 실제 전환) ── */}
         <div style={{ background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 14, padding: "14px 16px", marginBottom: 14 }}>
           <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "#94a3b8", marginBottom: 10 }}>운영 모드</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 1fr", gap: 6 }}>
+          <div className="ha-mode-grid">
             {MODES.map(m => {
               const isActive = currentMode === m.key;
               return (

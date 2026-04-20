@@ -304,6 +304,10 @@ body{background:#f0f4f8}
   .ha-quick-strip{flex-wrap:wrap}
 }
 
+/* ── HA MODE / CHECKLIST GRIDS (base) ── */
+.ha-mode-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.ha-checklist-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+
 @media (max-width: 640px){
   html,body,#root,.app{overflow:auto}
   .land-title{font-size:38px}
@@ -314,4 +318,24 @@ body{background:#f0f4f8}
   .lrow{display:grid;grid-template-columns:16px 8px 1fr auto;align-items:center}
   .cc-inline-action{grid-column:1 / -1}
   .ha-step{min-width:68px}
+
+  /* CC 헤더 — 핵심 요소만 유지 */
+  .cc-hdr-title,.cc-hdr-clock,.cc-hdr-ha-btn,.cc-health-bar,.cc-stats-row{display:none}
+
+  /* HA 탑바 — 뱃지·시계 숨김 (상태 카드에 이미 표시) */
+  .ha-topbar-badges,.ha-topbar-clock{display:none}
+
+  /* HA 자동화 상태 카드 헤더 — 세로 스택 */
+  .ha-status-hdr{flex-direction:column!important;align-items:flex-start!important;gap:12px!important}
+  .ha-status-hdr-actions{flex-direction:row!important;width:100%}
+  .ha-status-hdr-actions button{flex:1}
+
+  /* HA 모드 그리드 — 6열 → 3열 */
+  .ha-mode-grid{grid-template-columns:repeat(3,1fr)}
+
+  /* HA 씬 버튼 — wrap */
+  .ha-scenes-row{flex-wrap:wrap!important}
+
+  /* HA 처리 필요 체크리스트 — 세로 */
+  .ha-checklist-grid{grid-template-columns:1fr}
 }

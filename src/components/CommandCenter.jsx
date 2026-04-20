@@ -523,11 +523,11 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
         <button onClick={onBack} style={{padding:"6px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",background:"#f8fafc",color:"#475569",fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0,fontFamily:"'DM Sans',sans-serif"}}>← 뒤로</button>
         <div style={{width:1,height:26,background:"#e2e8f0",flexShrink:0}} />
         <div style={{fontFamily:"'Nunito',sans-serif",fontSize:17,fontWeight:800,color:"#2563eb",whiteSpace:"nowrap",letterSpacing:"-0.5px"}}>PROP<span style={{color:"#dc2626"}}>OS</span></div>
-        <div style={{fontSize:11,color:"#94a3b8",fontWeight:500,whiteSpace:"nowrap",paddingTop:1}}>자동운영 안정화 관제 센터</div>
-        <div style={{width:1,height:26,background:"#e2e8f0",flexShrink:0}} />
-        <div style={{fontFamily:"'DM Mono',monospace",fontSize:13,color:"#475569",fontWeight:600,flexShrink:0}}>{now.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</div>
+        <div className="cc-hdr-title" style={{fontSize:11,color:"#94a3b8",fontWeight:500,whiteSpace:"nowrap",paddingTop:1}}>자동운영 안정화 관제 센터</div>
+        <div className="cc-hdr-title" style={{width:1,height:26,background:"#e2e8f0",flexShrink:0}} />
+        <div className="cc-hdr-clock" style={{fontFamily:"'DM Mono',monospace",fontSize:13,color:"#475569",fontWeight:600,flexShrink:0}}>{now.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</div>
         <div style={{display:"flex",gap:8,alignItems:"center",marginLeft:"auto",flexShrink:0}}>
-          <button onClick={() => onOpenHomeAssistant?.(stage || "stay")} style={{padding:"6px 13px",borderRadius:8,background:"#fff",border:"1.5px solid #e2e8f0",color:"#475569",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>🏠 대표 숙소</button>
+          <button className="cc-hdr-ha-btn" onClick={() => onOpenHomeAssistant?.(stage || "stay")} style={{padding:"6px 13px",borderRadius:8,background:"#fff",border:"1.5px solid #e2e8f0",color:"#475569",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>🏠 대표 숙소</button>
           <div style={{padding:"5px 12px",borderRadius:20,background:unack>0?"#fef2f2":"#f0fdf4",border:`1.5px solid ${unack>0?"#fecaca":"#a7f3d0"}`,display:"flex",alignItems:"center",gap:5,fontSize:11,color:unack>0?"#dc2626":"#059669",fontWeight:700,position:"relative"}}>
             🔔 {unack}
             {unack > 0 && <div style={{position:"absolute",top:-2,right:-2,width:7,height:7,background:"#dc2626",borderRadius:"50%",animation:"pulse 1.5s infinite"}} />}
@@ -567,7 +567,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
               </button>
             );
           })}
-          <div style={{flex:1,height:6,borderRadius:4,overflow:"hidden",background:"#f1f5f9",display:"flex",minWidth:60,marginLeft:6}}>
+          <div className="cc-health-bar" style={{flex:1,height:6,borderRadius:4,overflow:"hidden",background:"#f1f5f9",display:"flex",minWidth:60,marginLeft:6}}>
             {[
               {count:healthBuckets.failed.length,   color:"#dc2626"},
               {count:healthBuckets.degraded.length,  color:"#ea580c"},
@@ -579,7 +579,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
           </div>
         </div>
         {/* 요약 통계 */}
-        <div style={{display:"flex",gap:16,alignItems:"center"}}>
+        <div className="cc-stats-row" style={{display:"flex",gap:16,alignItems:"center"}}>
           {[
             {label:"현장 조치 필요", value:siteActionCount,      valueColor: siteActionCount > 0 ? "#dc2626" : "#059669"},
             {label:"자동복구 실패",  value:unrecoveredCount,     valueColor: unrecoveredCount > 0 ? "#dc2626" : "#059669"},
