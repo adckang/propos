@@ -15,7 +15,22 @@
       "Bash(node -e \"const m=require\\('./src/domain/checkinDomain.js'\\); console.log\\(Object.keys\\(m\\)\\);\")",
       "Bash(python3 -c ':*)",
       "Bash(git restore:*)",
-      "Bash(node --test tests/unit/s06.hawebsocket.test.js)"
+      "Bash(node --test tests/unit/s06.hawebsocket.test.js)",
+      "Bash(node -e \"const YAML = require\\('yaml'\\); console.log\\('yaml available via require'\\)\")",
+      "Bash(node --input-type=module)",
+      "Bash(sudo npm:*)",
+      "Read(//private/tmp/npm-cache-propos/_logs/**)",
+      "Bash(git checkout:*)",
+      "Read(//Users/kimjinsol/.npm/_logs/**)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(grep -rn \"^import \" src/components/*.jsx)",
+      "Bash(grep -rn \"window\\\\.\" src/components/*.jsx)",
+      "Bash(grep -rn \"^import\\\\|^const.*require\" src/components/*.jsx)",
+      "Bash(grep -rn \"mockData\\\\|BOOKING\\\\|ALL_PROPS\\\\|DEVICES_INIT\" src/components/*.jsx)",
+      "Bash(git rm:*)",
+      "Bash(grep -n \"^export\\\\|module\\\\.exports\" src/application/*.js src/domain/*.js)",
+      "Bash(git commit -m ' *)",
+      "Bash(node -e ' *)"
     ]
   }
 }

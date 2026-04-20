@@ -3,6 +3,8 @@ import React from "react";
 import checkoutService from "../application/checkoutService.js";
 import haBrowserClient from "../infrastructure/haBrowserClient.js";
 import { createStatePollingConnection } from "../infrastructure/haBrowserPolling.js";
+import { ALL_PROPS } from "../data/mockData.js";
+import { setOverride } from "../data/propStateStore.js";
 
 // ============================================================
 // S04CheckoutPanel.jsx — UC-004 체크아웃 & 청소 자동화 UI
@@ -92,11 +94,23 @@ function _mockCheckOut(offsetMin) {
   return d.toISOString().slice(0, 19);
 }
 
-const _S04_PROPS = [
-  { propId: 'P-001', propName: '해운대 오션뷰',    guestName: '김민준', guestId: 'g-001', checkIn: '2026-04-05T15:00:00', checkOut: _mockCheckOut(30),  status: 'occupied' },
-  { propId: 'P-002', propName: '광안리 스튜디오', guestName: '이지수', guestId: 'g-002', checkIn: '2026-04-04T16:00:00', checkOut: _mockCheckOut(60),  status: 'occupied' },
-  { propId: 'P-003', propName: '남포동 투룸',      guestName: '박서준', guestId: 'g-003', checkIn: '2026-04-03T14:00:00', checkOut: _mockCheckOut(120), status: 'occupied' },
-];
+// ALL_PROPS에서 체크아웃/청소 관련 숙소 추출 → S04 처리 대상
+// 스토어 오버라이드 시 CC 필터에도 즉시 반영됩니다
+const _checkoutCandidates = ALL_PROPS.filter(p =>
+  p.status === "입실중" || p.status === "청소중" || p.status === "점검중"
+).slice(0, 3);
+
+const _S04_PROPS = (_checkoutCandidates.length >= 3 ? _checkoutCandidates : ALL_PROPS.slice(0, 3))
+  .map((p, i) => ({
+    propId:     String(p.id),
+    allPropsId: p.id,
+    propName:   p.name,
+    guestName:  p.guest || `게스트 ${i + 1}`,
+    guestId:    `g-${p.id}`,
+    checkIn:    new Date(Date.now() - (2 + i) * 3600000).toISOString().slice(0, 19),
+    checkOut:   _mockCheckOut(30 + i * 30),
+    status:     p.status === "청소중" || p.status === "점검중" ? "cleaning" : "occupied",
+  }));
 
 const _S04_CLEANERS = [
   { id: 'C-01', name: '김청소', available: true,  activeJobs: 1, phone: '010-1111-0001' },
@@ -407,8 +421,19 @@ function S04CheckoutPanel({ onBack }) {
               prop: booking?.propName || alert.prop,
             });
           },
-          updateStatus: (propId, status) => {
-            setPropStatuses(prev => ({ ...prev, [propId]: status }));
+          updateStatus: (propId, newStatus) => {
+            setPropStatuses(prev => ({ ...prev, [propId]: newStatus }));
+            // CC 재진입 시 필터에 반영되도록 스토어에도 기록
+            const allPropsId = _S04_PROPS.find(p => p.propId === propId)?.allPropsId;
+            if (allPropsId !== undefined) {
+              const allPropsStatus =
+                newStatus === "cleaning" ? "청소중" :
+                newStatus === "vacant"   ? "공실"   : "입실중";
+              const newHealth =
+                newStatus === "vacant"   ? "healthy" :
+                newStatus === "cleaning" ? "watch"   : "degraded";
+              setOverride(allPropsId, { status: allPropsStatus, automationHealth: newHealth });
+            }
           },
           setAssignment: (propId, assignment) => {
             setAssignments(prev => ({ ...prev, [propId]: assignment }));

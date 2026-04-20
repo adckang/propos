@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { ALL_PROPS, INIT_ALERTS, INTERVENTION_LABELS, SC, rand, randN } from "../data/mockData";
 import { OPERATIONS_STAGES, getStageById } from "../config/operationsModel.js";
+import { augmentProps } from "../data/propStateStore.js";
 import Toast from "../utils/toast";
 
 // ============================================================
@@ -110,7 +111,7 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
   const [healthFilter, setHealthFilter] = useState("all");
   // 2차: 시점 필터 (secondary, toggleable)
   const [stage, setStage] = useState(null);
-  const [props] = useState(ALL_PROPS);
+  const [props] = useState(() => augmentProps(ALL_PROPS));
   const [alerts, setAlerts] = useState(INIT_ALERTS);
   const [selProp, setSelProp] = useState(null);
   const [now, setNow] = useState(new Date());
