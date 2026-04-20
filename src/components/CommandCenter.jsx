@@ -497,6 +497,10 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
       warn:  {border:"#ea580c", bg:"#fff7ed", nameColor:"#ea580c"},
       info:  {border:"#059669", bg:"#f0fdf4", nameColor:"#059669"},
     }[alert.type] || {border:"#cbd5e1", bg:"#f8fafc", nameColor:"#64748b"};
+
+    const matchedProp = props.find(p => p.name === alert.prop) || null;
+    const canAct = !alert.ack && !compact && alert.audience !== "log" && matchedProp;
+
     return (
       <div className={`aitem ${alert.ack ? "acked" : ""}`} style={{borderLeftColor:typeTone.border,background:compact?"#fafbfc":typeTone.bg}}>
         <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
@@ -506,9 +510,26 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
           {alert.audience === "log"   && <span style={{fontSize:8,fontWeight:600,background:"#f8fafc",color:"#94a3b8",border:"1px solid #e2e8f0",borderRadius:10,padding:"1px 5px",whiteSpace:"nowrap"}}>기록</span>}
         </div>
         <div style={{fontSize:11,color:compact?"#94a3b8":"#4a5568",fontWeight:500,lineHeight:"1.4"}}>{alert.msg}</div>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:3}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:5,gap:4}}>
           <span style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:"#a0aec0"}}>{alert.time}</span>
-          {!alert.ack && <button style={{fontSize:9,padding:"2px 8px",borderRadius:20,border:`1px solid ${typeTone.border}`,cursor:"pointer",background:"#fff",color:typeTone.nameColor,fontFamily:"'DM Sans',sans-serif",fontWeight:700}} onClick={() => ackAlert(alert.id)}>확인</button>}
+          <div style={{display:"flex",gap:4}}>
+            {canAct && (
+              <button
+                style={{fontSize:9,padding:"3px 9px",borderRadius:20,border:"1.5px solid #2563eb",cursor:"pointer",background:"#2563eb",color:"#fff",fontFamily:"'DM Sans',sans-serif",fontWeight:700,whiteSpace:"nowrap"}}
+                onClick={() => { ackAlert(alert.id); openPropertyWorkspace(matchedProp); }}
+              >
+                바로 처리 →
+              </button>
+            )}
+            {!alert.ack && (
+              <button
+                style={{fontSize:9,padding:"2px 8px",borderRadius:20,border:`1px solid ${typeTone.border}`,cursor:"pointer",background:"#fff",color:typeTone.nameColor,fontFamily:"'DM Sans',sans-serif",fontWeight:700}}
+                onClick={() => ackAlert(alert.id)}
+              >
+                확인
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
