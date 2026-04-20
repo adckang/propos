@@ -41,7 +41,7 @@ export function getCheckoutWindow(checkOut) {
   if (!checkOut) throw new Error('checkOut is required');
 
   const d = new Date(checkOut);
-  if (isNaN(d.getTime())) throw new Error('checkOut is invalid date');
+  if (Number.isNaN(d.getTime())) throw new Error('checkOut is invalid date');
 
   const from  = new Date(d.getTime() - 2 * 60 * 60 * 1000);
   const until = new Date(d.getTime() + 3 * 60 * 60 * 1000);
@@ -77,6 +77,7 @@ export function assignCleaner(cleaners, propId, checkoutTime) {
     propId,
     cleanerId:        selected.id,
     cleanerName:      selected.name,
+    cleanerPhone:     selected.phone,
     assignedAt:       checkoutTime,
     estimatedArrival,
     status:           'assigned',

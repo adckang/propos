@@ -357,6 +357,7 @@ function S04CheckoutPanel({ onBack }) {
   const [processing,    setProcessing]   = React.useState(false);
   const [pinCountdown,  setPinCountdown] = React.useState(false);
   const [pinDone,       setPinDone]      = React.useState({});
+  const [notifSent,     setNotifSent]    = React.useState({});
 
   const wsConnRef        = React.useRef(null);
   const handleCheckoutRef = React.useRef(null);   // 최신 handleCheckoutEvent 참조
@@ -701,6 +702,45 @@ function S04CheckoutPanel({ onBack }) {
             }
           </div>
         </div>
+
+        {/* ── 청소팀 배정 + 알림 발송 ── */}
+        {currentAssign && (
+          <div style={{ background:'#fff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'14px 16px' }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.06em', color:'#475569', textTransform:'uppercase', marginBottom:12 }}>청소팀 배정 완료</div>
+            <div style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 12px', background:'#f8fafc', borderRadius:10, marginBottom:12 }}>
+              <div style={{ width:36, height:36, borderRadius:'50%', background:'#dbeafe', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>🧹</div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:'#1e293b' }}>{currentAssign.cleanerName}</div>
+                <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>
+                  {currentAssign.cleanerPhone} · 도착 예정 {currentAssign.estimatedArrival}
+                </div>
+              </div>
+              <span style={{ fontSize:10, fontWeight:700, padding:'3px 9px', borderRadius:20, background:'#dcfce7', color:'#15803d', border:'1px solid #86efac', whiteSpace:'nowrap' }}>배정 완료</span>
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              <button
+                onClick={() => {
+                  setNotifSent(prev => ({ ...prev, [`${selectedProp}-kakao`]: true }));
+                  addAlert({ type:'info', prop: currentBooking?.propName || selectedProp, msg:`${currentAssign.cleanerName}님께 카카오 알림톡 발송 완료`, time: _s04.hhmm() });
+                }}
+                disabled={notifSent[`${selectedProp}-kakao`]}
+                style={{ flex:1, padding:'9px 0', borderRadius:8, border:'1.5px solid #fde047', background: notifSent[`${selectedProp}-kakao`] ? '#fefce8' : '#fefce8', color: notifSent[`${selectedProp}-kakao`] ? '#a16207' : '#ca8a04', fontSize:12, fontWeight:700, cursor: notifSent[`${selectedProp}-kakao`] ? 'default' : 'pointer', opacity: notifSent[`${selectedProp}-kakao`] ? 0.6 : 1 }}
+              >
+                {notifSent[`${selectedProp}-kakao`] ? '✓ 카카오 발송 완료' : '💬 카카오 알림톡 발송'}
+              </button>
+              <button
+                onClick={() => {
+                  setNotifSent(prev => ({ ...prev, [`${selectedProp}-sms`]: true }));
+                  addAlert({ type:'info', prop: currentBooking?.propName || selectedProp, msg:`${currentAssign.cleanerName}님께 문자(SMS) 발송 완료`, time: _s04.hhmm() });
+                }}
+                disabled={notifSent[`${selectedProp}-sms`]}
+                style={{ flex:1, padding:'9px 0', borderRadius:8, border:'1.5px solid #bfdbfe', background:'#eff6ff', color: notifSent[`${selectedProp}-sms`] ? '#64748b' : '#2563eb', fontSize:12, fontWeight:700, cursor: notifSent[`${selectedProp}-sms`] ? 'default' : 'pointer', opacity: notifSent[`${selectedProp}-sms`] ? 0.6 : 1 }}
+              >
+                {notifSent[`${selectedProp}-sms`] ? '✓ 문자 발송 완료' : '📱 문자(SMS) 발송'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── 선택 숙소 자동화 흐름 ── */}
         <div style={{ background:'#fff', border:'1.5px solid #e2e8f0', borderRadius:12, padding:'14px 16px' }}>

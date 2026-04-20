@@ -649,6 +649,29 @@ function CommandCenter({onBack, onOpenScenario, onOpenHomeAssistant, initialStag
               })}
             </div>
 
+            {/* checkout 단계 — 청소팀 일괄 알림 액션바 */}
+            {stage === "checkout" && needsAttentionProps.length > 0 && (
+              <div style={{padding:"9px 14px",background:"#fffbeb",borderBottom:"1px solid #fde68a",display:"flex",alignItems:"center",gap:10,flexShrink:0,flexWrap:"wrap"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <span style={{fontSize:11,fontWeight:700,color:"#92400e"}}>청소팀 배정 필요 </span>
+                  <span style={{fontFamily:"'DM Mono',monospace",fontSize:12,fontWeight:800,color:"#dc2626"}}>{needsAttentionProps.length}곳</span>
+                  <span style={{fontSize:11,color:"#a16207"}}> — 퇴실 확인 후 청소팀에게 알림을 보내세요</span>
+                </div>
+                <button
+                  style={{padding:"5px 14px",borderRadius:8,border:"1.5px solid #fde68a",background:"#fef9c3",color:"#92400e",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap"}}
+                  onClick={() => { Toast.show(`청소팀 ${needsAttentionProps.length}곳 카카오 알림톡 발송 완료`, "s"); }}
+                >
+                  💬 카카오 일괄 발송
+                </button>
+                <button
+                  style={{padding:"5px 14px",borderRadius:8,border:"1.5px solid #bfdbfe",background:"#eff6ff",color:"#1d4ed8",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap"}}
+                  onClick={() => { Toast.show(`청소팀 ${needsAttentionProps.length}곳 문자(SMS) 발송 완료`, "s"); }}
+                >
+                  📱 문자 일괄 발송
+                </button>
+              </div>
+            )}
+
             <div className="cc-scroll-sections">
               {/* 필터 결과 0건 */}
               {displayProps.length === 0 && (
