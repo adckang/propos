@@ -37,7 +37,34 @@ function HomeAssistant({ onBack, onOpenCommandCenter, initialStage = "stay", han
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [msgs]);
 
-  const toggleDev = id => setDevs(list => list.map(item => item.id === id ? { ...item, state: !item.state } : item));
+  // 메인 조명(light.rgbcct_8002) 초기 상태를 HA에서 가져옴
+  useEffect(() => {
+    fetch("/api/ha/state?entityId=light.rgbcct_8002")
+      .then(r => r.json())
+      .then(({ state }) => {
+        if (state) {
+          setDevs(list => list.map(d => d.id === "light" ? { ...d, state: state.state === "on" } : d));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const toggleDev = id => {
+    if (id === "light") {
+      setDevs(list => {
+        const current = list.find(d => d.id === "light");
+        const next = !current.state;
+        fetch("/api/ha/service", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ domain: "light", service: next ? "turn_on" : "turn_off", data: { entity_id: "light.rgbcct_8002" } }),
+        }).catch(() => {});
+        return list.map(d => d.id === "light" ? { ...d, state: next } : d);
+      });
+    } else {
+      setDevs(list => list.map(item => item.id === id ? { ...item, state: !item.state } : item));
+    }
+  };
 
   const checkOutDate = new Date(BOOKING.checkOut);
   const checkInDate  = new Date(BOOKING.checkIn);
