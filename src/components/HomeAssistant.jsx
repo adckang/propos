@@ -37,14 +37,20 @@ function HomeAssistant({ onBack, onOpenCommandCenter, initialStage = "stay", han
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [msgs]);
 
-  // 메인 조명(light.rgbcct_8002) 초기 상태를 HA에서 가져옴
+  // HA 실기기 초기 상태 동기화
   useEffect(() => {
+    // 메인 조명 (light.rgbcct_8002)
     fetch("/api/ha/state?entityId=light.rgbcct_8002")
       .then(r => r.json())
       .then(({ state }) => {
-        if (state) {
-          setDevs(list => list.map(d => d.id === "light" ? { ...d, state: state.state === "on" } : d));
-        }
+        if (state) setDevs(list => list.map(d => d.id === "light" ? { ...d, state: state.state === "on" } : d));
+      })
+      .catch(() => {});
+    // 작은 스탠드 (switch.3ch_wifi_usb_switch_module_cbu_switch_1)
+    fetch("/api/ha/state?entityId=switch.3ch_wifi_usb_switch_module_cbu_switch_1")
+      .then(r => r.json())
+      .then(({ state }) => {
+        if (state) setDevs(list => list.map(d => d.id === "mood" ? { ...d, state: state.state === "on" } : d));
       })
       .catch(() => {});
   }, []);
@@ -60,6 +66,17 @@ function HomeAssistant({ onBack, onOpenCommandCenter, initialStage = "stay", han
           body: JSON.stringify({ domain: "light", service: next ? "turn_on" : "turn_off", data: { entity_id: "light.rgbcct_8002" } }),
         }).catch(() => {});
         return list.map(d => d.id === "light" ? { ...d, state: next } : d);
+      });
+    } else if (id === "mood") {
+      setDevs(list => {
+        const current = list.find(d => d.id === "mood");
+        const next = !current.state;
+        fetch("/api/ha/service", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ domain: "switch", service: next ? "turn_on" : "turn_off", data: { entity_id: "switch.3ch_wifi_usb_switch_module_cbu_switch_1" } }),
+        }).catch(() => {});
+        return list.map(d => d.id === "mood" ? { ...d, state: next } : d);
       });
     } else {
       setDevs(list => list.map(item => item.id === id ? { ...item, state: !item.state } : item));

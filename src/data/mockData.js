@@ -286,7 +286,7 @@ export const DEVICES_INIT = [
   {id:"ac_l",    label:"거실 에어컨",     icon:"❄️", type:"ac",      state:true,  temp:22, category:"climate",  automationControlled:true},
   {id:"ac_b",    label:"침실 에어컨",     icon:"❄️", type:"ac",      state:false, temp:24, category:"climate",  automationControlled:false},
   {id:"light",   label:"메인 조명",       icon:"💡", type:"light",   state:true,  brightness:80, category:"lighting",  automationControlled:true},
-  {id:"mood",    label:"무드 조명",       icon:"🕯️", type:"light",   state:false, brightness:40, category:"lighting",  automationControlled:false},
+  {id:"mood",    label:"작은 스탠드",      icon:"🕯️", type:"switch",  state:false,              category:"lighting",  automationControlled:false},
   {id:"tv",      label:"스마트 TV",       icon:"📺", type:"toggle",  state:false, category:"entertainment",  automationControlled:false},
   {id:"curtain", label:"전동 커튼",       icon:"🪟", type:"curtain", state:true,  open:60, category:"comfort",   automationControlled:true},
 ];
