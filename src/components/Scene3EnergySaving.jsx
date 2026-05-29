@@ -134,13 +134,13 @@ function FeaturePill({ item, index, m, reduced, full }) {
           display: "flex",
           alignItems: "center",
           gap: m ? 10 : 12,
-          background: "rgba(8,18,37,0.34)",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-          border: "1px solid rgba(248,250,252,0.10)",
+          background: m ? "rgba(8,18,37,0.28)" : "rgba(8,18,37,0.24)",
+          backdropFilter: "blur(14px)",
+          WebkitBackdropFilter: "blur(14px)",
+          border: "1px solid rgba(248,250,252,0.09)",
           borderRadius: m ? 14 : 16,
           padding: m ? "10px 11px" : "13px 15px",
-          boxShadow: "0 16px 34px rgba(2,6,23,0.24)",
+          boxShadow: "0 14px 28px rgba(2,6,23,0.20)",
           minWidth: 0,
         }}
       >
@@ -233,49 +233,49 @@ function AirFlowLayer({ m, reduced }) {
       style={{
         position: "relative",
         width: "100%",
-        height: m ? 192 : 280,
+        height: m ? 168 : 228,
         borderRadius: m ? 22 : 28,
         overflow: "hidden",
-        background: "linear-gradient(160deg, rgba(8,18,37,0.34), rgba(8,18,37,0.10))",
-        border: "1px solid rgba(248,250,252,0.10)",
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
-        boxShadow: "0 22px 48px rgba(2,6,23,0.24)",
+        background: "linear-gradient(160deg, rgba(8,18,37,0.24), rgba(8,18,37,0.08))",
+        border: "1px solid rgba(248,250,252,0.08)",
+        backdropFilter: "blur(14px)",
+        WebkitBackdropFilter: "blur(14px)",
+        boxShadow: "0 16px 30px rgba(2,6,23,0.18)",
       }}
     >
       <div
         style={{
           position: "absolute",
           inset: m ? "16% 12% auto auto" : "12% 10% auto auto",
-          width: m ? 118 : 164,
-          height: m ? 74 : 98,
+          width: m ? 104 : 144,
+          height: m ? 64 : 82,
           borderRadius: 999,
-          background: "linear-gradient(135deg, rgba(37,99,235,0.28), rgba(34,211,238,0.12))",
-          filter: "blur(18px)",
+          background: "linear-gradient(135deg, rgba(37,99,235,0.22), rgba(34,211,238,0.10))",
+          filter: "blur(16px)",
         }}
       />
 
       <div
         style={{
           position: "absolute",
-          top: m ? 22 : 34,
-          right: m ? 24 : 34,
-          width: m ? 78 : 102,
-          height: m ? 78 : 102,
+          top: m ? 18 : 28,
+          right: m ? 22 : 30,
+          width: m ? 68 : 88,
+          height: m ? 68 : 88,
           borderRadius: "50%",
-          background: "linear-gradient(145deg, rgba(37,99,235,0.18), rgba(34,211,238,0.12))",
-          border: "1px solid rgba(248,250,252,0.10)",
+          background: "linear-gradient(145deg, rgba(37,99,235,0.15), rgba(34,211,238,0.10))",
+          border: "1px solid rgba(248,250,252,0.08)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          boxShadow: "0 16px 32px rgba(2,6,23,0.22)",
+          boxShadow: "0 12px 24px rgba(2,6,23,0.18)",
         }}
       >
         <img
           src="/icons/ac-auto-off.svg"
           alt=""
-          width={m ? 38 : 50}
-          height={m ? 38 : 50}
+          width={m ? 34 : 44}
+          height={m ? 34 : 44}
           style={{ display: "block" }}
         />
       </div>
@@ -288,11 +288,11 @@ function AirFlowLayer({ m, reduced }) {
               ? {}
               : {
                 x: [0, -(m ? 9 : 14), -(m ? 18 : 28)],
-                opacity: [wave.opacity * 0.64, wave.opacity, wave.opacity * 0.7],
-                scaleX: [0.94, 1.02, 0.98],
+                opacity: [wave.opacity * 0.56, wave.opacity * 0.88, wave.opacity * 0.62],
+                scaleX: [0.96, 1.01, 0.98],
                 filter: [
                   "blur(0.2px)",
-                  `drop-shadow(0 0 ${m ? 8 : 12}px rgba(34,211,238,0.28))`,
+                  `drop-shadow(0 0 ${m ? 7 : 10}px rgba(34,211,238,0.22))`,
                   "blur(0.2px)",
                 ],
               }
@@ -308,11 +308,11 @@ function AirFlowLayer({ m, reduced }) {
             top: wave.top,
             right: wave.right,
             width: wave.width,
-            height: m ? 16 : 18,
+            height: m ? 14 : 16,
             borderRadius: 999,
-            background: "linear-gradient(90deg, rgba(34,211,238,0.0) 0%, rgba(34,211,238,0.46) 26%, rgba(96,165,250,0.80) 58%, rgba(34,211,238,0.0) 100%)",
+            background: "linear-gradient(90deg, rgba(34,211,238,0.0) 0%, rgba(34,211,238,0.34) 26%, rgba(96,165,250,0.62) 58%, rgba(34,211,238,0.0) 100%)",
             filter: "blur(0.2px)",
-            opacity: wave.opacity,
+            opacity: wave.opacity * 0.9,
             transform: `rotate(${wave.rotate}deg)`,
             transformOrigin: "right center",
             willChange: "transform, opacity, filter",
@@ -326,9 +326,9 @@ function AirFlowLayer({ m, reduced }) {
           left: m ? 16 : 24,
           bottom: m ? 16 : 24,
           display: "flex",
-          gap: m ? 8 : 10,
+          gap: m ? 7 : 9,
           flexWrap: "wrap",
-          maxWidth: m ? 200 : 260,
+          maxWidth: m ? 184 : 228,
         }}
       >
         {[
@@ -348,8 +348,8 @@ function AirFlowLayer({ m, reduced }) {
               display: "inline-flex",
               alignItems: "center",
               gap: 7,
-              background: "rgba(8,18,37,0.42)",
-              border: "1px solid rgba(248,250,252,0.10)",
+              background: "rgba(8,18,37,0.34)",
+              border: "1px solid rgba(248,250,252,0.08)",
               borderRadius: 999,
               padding: m ? "6px 9px" : "8px 11px",
             }}
@@ -545,7 +545,7 @@ export default function Scene3EnergySaving() {
                   width: "100%",
                   height: "100%",
                   objectFit: "cover",
-                  objectPosition: m ? "center 36%" : "center",
+                  objectPosition: m ? "64% 38%" : "64% 50%",
                   display: "block",
                 }}
               />
@@ -561,8 +561,8 @@ export default function Scene3EnergySaving() {
             zIndex: 1,
             pointerEvents: "none",
             background: m
-              ? "linear-gradient(to bottom, rgba(5,10,21,0.90) 0%, rgba(5,10,21,0.46) 24%, rgba(5,10,21,0.08) 46%, rgba(5,10,21,0.48) 74%, rgba(5,10,21,0.82) 100%)"
-              : "linear-gradient(to bottom, rgba(5,10,21,0.56) 0%, rgba(5,10,21,0.08) 28%, rgba(5,10,21,0.10) 56%, rgba(5,10,21,0.74) 100%)",
+              ? "linear-gradient(to bottom, rgba(5,10,21,0.76) 0%, rgba(5,10,21,0.34) 18%, rgba(5,10,21,0.06) 38%, rgba(5,10,21,0.18) 72%, rgba(5,10,21,0.52) 100%)"
+              : "linear-gradient(to bottom, rgba(5,10,21,0.30) 0%, rgba(5,10,21,0.06) 24%, rgba(5,10,21,0.08) 56%, rgba(5,10,21,0.54) 100%)",
           }}
         />
         {!m && (
@@ -573,7 +573,7 @@ export default function Scene3EnergySaving() {
               inset: 0,
               zIndex: 1,
               pointerEvents: "none",
-              background: "linear-gradient(to right, rgba(5,10,21,0.94) 0%, rgba(5,10,21,0.74) 28%, rgba(5,10,21,0.20) 56%, transparent 74%)",
+              background: "linear-gradient(to right, rgba(5,10,21,0.82) 0%, rgba(5,10,21,0.56) 24%, rgba(5,10,21,0.16) 48%, transparent 66%)",
             }}
           />
         )}
@@ -584,8 +584,8 @@ export default function Scene3EnergySaving() {
             inset: 0,
             zIndex: 1,
             pointerEvents: "none",
-            background: `radial-gradient(circle at 72% 36%, rgba(37,99,235,0.18) 0%, rgba(34,211,238,0.10) 22%, transparent 50%),
-              linear-gradient(135deg, rgba(34,211,238,0.06) 0%, transparent 42%)`,
+            background: `radial-gradient(circle at 72% 36%, rgba(37,99,235,0.12) 0%, rgba(34,211,238,0.06) 20%, transparent 46%),
+              linear-gradient(135deg, rgba(34,211,238,0.04) 0%, transparent 38%)`,
           }}
         />
 
@@ -594,7 +594,7 @@ export default function Scene3EnergySaving() {
             position: "relative",
             zIndex: 2,
             minHeight: m ? "100svh" : "96vh",
-            padding: m ? "28px 20px 30px" : "52px 60px 48px",
+            padding: m ? "28px 20px 24px" : "48px 64px 40px",
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
@@ -606,13 +606,13 @@ export default function Scene3EnergySaving() {
               flexDirection: m ? "column" : "row",
               justifyContent: "space-between",
               alignItems: "flex-start",
-              gap: m ? 18 : 36,
+              gap: m ? 16 : 28,
             }}
           >
             <div
               style={{
-                width: m ? "100%" : "min(44%, 470px)",
-                paddingTop: m ? 0 : 8,
+                width: m ? "min(78%, 278px)" : "min(38%, 420px)",
+                paddingTop: m ? 0 : 10,
               }}
             >
               <motion.img
@@ -654,7 +654,7 @@ export default function Scene3EnergySaving() {
                       <motion.span
                         initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
                         whileInView={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
-                        viewport={{ once: true, amount: 0.65 }}
+                        viewport={{ once: true, amount: 0.45 }}
                         transition={{
                           delay: reduced ? (0.2 + index * 0.08) * 0.35 : 0.2 + index * 0.12,
                           duration: reduced ? 0.22 : 0.82,
@@ -671,7 +671,7 @@ export default function Scene3EnergySaving() {
                     <motion.span
                       initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
                       whileInView={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
-                      viewport={{ once: true, amount: 0.65 }}
+                      viewport={{ once: true, amount: 0.45 }}
                       transition={{
                         delay: reduced ? 0.34 * 0.35 : 0.44,
                         duration: reduced ? 0.22 : 0.82,
@@ -713,7 +713,7 @@ export default function Scene3EnergySaving() {
                     <motion.span
                       initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
                       whileInView={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
-                      viewport={{ once: true, amount: 0.65 }}
+                      viewport={{ once: true, amount: 0.45 }}
                       transition={{
                         delay: reduced ? 0.42 * 0.35 : 0.56,
                         duration: reduced ? 0.22 : 0.82,
@@ -746,7 +746,7 @@ export default function Scene3EnergySaving() {
                     <motion.span
                       initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
                       whileInView={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
-                      viewport={{ once: true, amount: 0.65 }}
+                      viewport={{ once: true, amount: 0.45 }}
                       transition={{
                         delay: reduced ? 0.5 * 0.35 : 0.68,
                         duration: reduced ? 0.22 : 0.82,
@@ -763,10 +763,11 @@ export default function Scene3EnergySaving() {
 
             <div
               style={{
-              width: m ? "100%" : "min(52%, 620px)",
+              width: m ? "min(88%, 332px)" : "min(46%, 540px)",
               display: "flex",
               flexDirection: "column",
-              gap: m ? 10 : 18,
+              gap: m ? 10 : 16,
+              alignSelf: m ? "flex-end" : "stretch",
             }}
           >
               <AirFlowLayer m={m} reduced={reduced} />
@@ -774,8 +775,8 @@ export default function Scene3EnergySaving() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: m ? "repeat(2, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))",
-                  gap: m ? 8 : 12,
+                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                  gap: m ? 8 : 10,
                 }}
               >
                 {FEATURES.map((item, index) => (
@@ -785,7 +786,7 @@ export default function Scene3EnergySaving() {
                     index={index}
                     m={m}
                     reduced={reduced}
-                    full={m && index === FEATURES.length - 1}
+                    full={index === FEATURES.length - 1}
                   />
                 ))}
               </div>
@@ -794,9 +795,9 @@ export default function Scene3EnergySaving() {
 
           <div
           style={{
-              marginTop: m ? 12 : 20,
-              width: m ? "100%" : "min(52%, 620px)",
-              alignSelf: m ? "stretch" : "flex-end",
+              marginTop: m ? 10 : 18,
+              width: m ? "min(88%, 332px)" : "min(46%, 540px)",
+              alignSelf: m ? "flex-end" : "flex-end",
             }}
           >
             <KpiCard m={m} reduced={reduced} />

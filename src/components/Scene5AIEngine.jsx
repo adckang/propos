@@ -95,60 +95,60 @@ const NODES = [
     iconSrc: "/icons/sensor-info.svg",
     title: "센서 정보",
     desc: "온도, 습도, 조도, 문열림 등",
-    desktop: { top: "17%", left: "18%" },
+    desktop: { top: "18%", left: "26%" },
   },
   {
     key: "reservation",
     iconSrc: "/icons/reservation-info.svg",
     title: "예약 정보",
     desc: "체크인/아웃, 예약 일정 등",
-    desktop: { top: "16%", left: "75%" },
+    desktop: { top: "16%", left: "79%" },
   },
   {
     key: "weather",
     iconSrc: "/icons/weather-info.svg",
     title: "날씨 정보",
     desc: "기온, 강수 확률, 미세먼지 등",
-    desktop: { top: "43%", left: "8%" },
+    desktop: { top: "44%", left: "16%" },
   },
   {
     key: "auto-control",
     iconSrc: "/icons/auto-control.svg",
     title: "자동 숙소 제어",
     desc: "조명, 에어컨, 전기 등 자동 제어",
-    desktop: { top: "42%", left: "84%" },
+    desktop: { top: "43%", left: "88%" },
   },
   {
     key: "mode-switch",
     iconSrc: "/icons/mode-switch.svg",
     title: "웰컴/공실모드 변경",
     desc: "입실·퇴실 감지하여 자동 전환",
-    desktop: { top: "74%", left: "18%" },
+    desktop: { top: "74%", left: "26%" },
   },
   {
     key: "emergency",
     iconSrc: "/icons/emergency-alert.svg",
     title: "실시간 긴급 알람",
     desc: "이상 상황 발생 시 즉시 알림",
-    desktop: { top: "73%", left: "77%" },
+    desktop: { top: "73%", left: "80%" },
   },
   {
     key: "weekly",
     iconSrc: "/icons/weekly-report.svg",
     title: "주간 리포트 생성",
     desc: "숙소 운영 현황 리포트",
-    desktop: { top: "88%", left: "50%" },
+    desktop: { top: "87%", left: "56%" },
   },
 ];
 
 const DESKTOP_LINES = [
-  { x1: 50, y1: 48, x2: 19, y2: 22 },
-  { x1: 50, y1: 48, x2: 77, y2: 21 },
-  { x1: 50, y1: 48, x2: 13, y2: 45 },
-  { x1: 50, y1: 48, x2: 84, y2: 44 },
-  { x1: 50, y1: 48, x2: 21, y2: 74 },
-  { x1: 50, y1: 48, x2: 78, y2: 73 },
-  { x1: 50, y1: 48, x2: 50, y2: 86 },
+  { x1: 56, y1: 47, x2: 27, y2: 22 },
+  { x1: 56, y1: 47, x2: 80, y2: 21 },
+  { x1: 56, y1: 47, x2: 19, y2: 45 },
+  { x1: 56, y1: 47, x2: 87, y2: 44 },
+  { x1: 56, y1: 47, x2: 27, y2: 74 },
+  { x1: 56, y1: 47, x2: 80, y2: 73 },
+  { x1: 56, y1: 47, x2: 56, y2: 84 },
 ];
 
 function NodeCard({ node, m, reduced, index }) {
@@ -180,13 +180,13 @@ function NodeCard({ node, m, reduced, index }) {
           display: "flex",
           alignItems: "flex-start",
           gap: m ? 10 : 12,
-          background: "rgba(255,255,255,0.56)",
-          backdropFilter: "blur(18px)",
-          WebkitBackdropFilter: "blur(18px)",
-          border: "1px solid rgba(11,31,77,0.10)",
+          background: m ? "rgba(255,255,255,0.48)" : "rgba(255,255,255,0.42)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          border: "1px solid rgba(11,31,77,0.09)",
           borderRadius: m ? 16 : 18,
           padding: m ? "12px 13px" : "14px 16px",
-          boxShadow: "0 18px 42px rgba(11,31,77,0.08)",
+          boxShadow: m ? "0 16px 34px rgba(11,31,77,0.08)" : "0 16px 36px rgba(11,31,77,0.07)",
           minWidth: 0,
         }}
       >
@@ -240,8 +240,8 @@ function NodeCard({ node, m, reduced, index }) {
 }
 
 function AIEngineCore({ m, reduced }) {
-  const size = m ? 212 : 252;
-  const inner = m ? 156 : 186;
+  const size = m ? 196 : 232;
+  const inner = m ? 146 : 174;
 
   return (
     <motion.div
@@ -265,9 +265,9 @@ function AIEngineCore({ m, reduced }) {
           position: "absolute",
           inset: 0,
           borderRadius: "50%",
-          background: "radial-gradient(circle at 50% 50%, rgba(37,99,235,0.12), rgba(37,99,235,0.02) 62%, transparent 72%)",
-          border: "1px solid rgba(37,99,235,0.12)",
-          boxShadow: "0 24px 60px rgba(11,31,77,0.10)",
+          background: "radial-gradient(circle at 50% 50%, rgba(37,99,235,0.10), rgba(37,99,235,0.02) 60%, transparent 72%)",
+          border: "1px solid rgba(37,99,235,0.10)",
+          boxShadow: "0 18px 42px rgba(11,31,77,0.08)",
         }}
       />
       <div
@@ -289,16 +289,16 @@ function AIEngineCore({ m, reduced }) {
           height: inner,
           transform: "translate(-50%, -50%)",
           borderRadius: "50%",
-          background: "linear-gradient(160deg, rgba(255,255,255,0.74), rgba(235,244,255,0.58))",
-          border: "1px solid rgba(11,31,77,0.10)",
-          backdropFilter: "blur(18px)",
-          WebkitBackdropFilter: "blur(18px)",
+          background: "linear-gradient(160deg, rgba(255,255,255,0.64), rgba(235,244,255,0.50))",
+          border: "1px solid rgba(11,31,77,0.09)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
           textAlign: "center",
-          boxShadow: "0 26px 56px rgba(11,31,77,0.12)",
+          boxShadow: "0 22px 46px rgba(11,31,77,0.10)",
           overflow: "hidden",
         }}
       >
@@ -319,11 +319,11 @@ function AIEngineCore({ m, reduced }) {
           style={{
             position: "relative",
             zIndex: 1,
-            width: m ? 56 : 64,
-            height: m ? 56 : 64,
+            width: m ? 52 : 60,
+            height: m ? 52 : 60,
             borderRadius: "50%",
-            background: "linear-gradient(135deg, rgba(37,99,235,0.18), rgba(34,211,238,0.14))",
-            border: "1px solid rgba(37,99,235,0.18)",
+            background: "linear-gradient(135deg, rgba(37,99,235,0.16), rgba(34,211,238,0.12))",
+            border: "1px solid rgba(37,99,235,0.16)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -388,8 +388,8 @@ function DesktopNetwork({ reduced }) {
     <div
       style={{
         position: "relative",
-        width: 640,
-        height: 640,
+        width: 592,
+        height: 596,
         maxWidth: "100%",
       }}
     >
@@ -399,8 +399,8 @@ function DesktopNetwork({ reduced }) {
         preserveAspectRatio="none"
         style={{
           position: "absolute",
-          inset: "8% 6% 6%",
-          width: "88%",
+          inset: "8% 5% 6%",
+          width: "90%",
           height: "86%",
           overflow: "visible",
         }}
@@ -460,8 +460,8 @@ function DesktopNetwork({ reduced }) {
       <div
         style={{
           position: "absolute",
-          top: "48%",
-          left: "50%",
+          top: "47%",
+          left: "56%",
           transform: "translate(-50%, -50%)",
           zIndex: 2,
         }}
@@ -477,7 +477,7 @@ function DesktopNetwork({ reduced }) {
             top: node.desktop.top,
             left: node.desktop.left,
             transform: "translate(-50%, -50%)",
-            width: node.key === "weekly" ? 220 : 184,
+            width: node.key === "weekly" ? 208 : 176,
           }}
         >
           <NodeCard node={node} m={false} reduced={reduced} index={index} />
@@ -489,12 +489,12 @@ function DesktopNetwork({ reduced }) {
 
 function MobileNetwork({ reduced }) {
   return (
-    <div style={{ width: "100%" }}>
+    <div style={{ width: "100%", maxWidth: 352, marginLeft: "auto" }}>
       <div
         style={{
           position: "relative",
-          height: 280,
-          marginBottom: 18,
+          height: 238,
+          marginBottom: 14,
         }}
       >
         <svg
@@ -571,8 +571,8 @@ function MobileNetwork({ reduced }) {
         <div
           style={{
             position: "absolute",
-            top: 0,
-            left: "50%",
+            top: 2,
+            left: "56%",
             transform: "translateX(-50%)",
           }}
         >
@@ -653,7 +653,7 @@ export default function Scene5AIEngine() {
                   width: "100%",
                   height: "100%",
                   objectFit: "cover",
-                  objectPosition: m ? "center 35%" : "center",
+                  objectPosition: m ? "58% 36%" : "60% 50%",
                   display: "block",
                 }}
               />
@@ -669,8 +669,8 @@ export default function Scene5AIEngine() {
             zIndex: 1,
             pointerEvents: "none",
             background: m
-              ? "linear-gradient(to bottom, rgba(255,248,236,0.96) 0%, rgba(255,248,236,0.82) 20%, rgba(255,248,236,0.16) 48%, rgba(255,248,236,0.58) 72%, rgba(255,248,236,0.88) 100%)"
-              : "linear-gradient(to bottom, rgba(255,248,236,0.50) 0%, rgba(255,248,236,0.12) 34%, rgba(255,248,236,0.0) 58%, rgba(255,248,236,0.34) 100%)",
+              ? "linear-gradient(to bottom, rgba(252,248,242,0.84) 0%, rgba(252,248,242,0.46) 16%, rgba(252,248,242,0.08) 34%, rgba(252,248,242,0.02) 56%, rgba(252,248,242,0.12) 76%, rgba(252,248,242,0.34) 100%)"
+              : "linear-gradient(to bottom, rgba(252,248,242,0.22) 0%, rgba(252,248,242,0.06) 26%, rgba(252,248,242,0.0) 56%, rgba(252,248,242,0.14) 100%)",
           }}
         />
         {!m && (
@@ -681,7 +681,7 @@ export default function Scene5AIEngine() {
               inset: 0,
               zIndex: 1,
               pointerEvents: "none",
-              background: "linear-gradient(to right, rgba(255,248,236,0.96) 0%, rgba(255,248,236,0.86) 28%, rgba(255,248,236,0.38) 52%, transparent 72%)",
+              background: "linear-gradient(to right, rgba(252,248,242,0.62) 0%, rgba(252,248,242,0.34) 24%, rgba(252,248,242,0.08) 42%, transparent 60%)",
             }}
           />
         )}
@@ -691,7 +691,7 @@ export default function Scene5AIEngine() {
             position: "relative",
             zIndex: 2,
             minHeight: m ? "100svh" : "96vh",
-            padding: m ? "28px 20px 28px" : "52px 60px 48px",
+            padding: m ? "28px 20px 24px" : "48px 64px 40px",
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
@@ -702,14 +702,14 @@ export default function Scene5AIEngine() {
               display: "flex",
               justifyContent: "space-between",
               alignItems: "flex-start",
-              gap: m ? 24 : 32,
+              gap: m ? 18 : 28,
               flexDirection: m ? "column" : "row",
             }}
           >
             <div
               style={{
-                width: m ? "100%" : "min(43%, 460px)",
-                paddingTop: m ? 0 : 8,
+                width: m ? "min(76%, 250px)" : "min(38%, 420px)",
+                paddingTop: m ? 0 : 10,
               }}
             >
               <motion.img
@@ -718,9 +718,9 @@ export default function Scene5AIEngine() {
                 alt="SPACE HOST"
                 style={{
                   height: m ? 26 : 30,
-                  display: "block",
-                  marginBottom: 10,
-                  filter: "drop-shadow(0 1px 0 rgba(255,255,255,0.32))",
+                display: "block",
+                marginBottom: 10,
+                  filter: "drop-shadow(0 1px 0 rgba(255,255,255,0.20))",
                 }}
               />
               <motion.p
@@ -728,7 +728,7 @@ export default function Scene5AIEngine() {
                 style={{
                   margin: 0,
                   fontSize: m ? 10 : 11,
-                  color: "rgba(11,31,77,0.60)",
+                  color: "rgba(11,31,77,0.68)",
                   letterSpacing: "0.16em",
                   textTransform: "uppercase",
                   fontFamily: "'DM Mono', monospace",
@@ -756,7 +756,7 @@ export default function Scene5AIEngine() {
                       <motion.span
                         initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
                         whileInView={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
-                        viewport={{ once: true, amount: 0.65 }}
+                        viewport={{ once: true, amount: 0.45 }}
                         transition={{
                           delay: reduced ? (0.2 + index * 0.08) * 0.35 : 0.2 + index * 0.12,
                           duration: reduced ? 0.22 : 0.82,
@@ -773,7 +773,7 @@ export default function Scene5AIEngine() {
                     <motion.span
                       initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
                       whileInView={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
-                      viewport={{ once: true, amount: 0.65 }}
+                      viewport={{ once: true, amount: 0.45 }}
                       transition={{
                         delay: reduced ? 0.34 * 0.35 : 0.46,
                         duration: reduced ? 0.22 : 0.82,
@@ -807,9 +807,9 @@ export default function Scene5AIEngine() {
                   {...entranceProps(reduced, { delay: 0.62, y: 16, duration: 0.62, amount: 0.6 })}
                   style={{
                     margin: m ? "18px 0 0" : "22px 0 0",
-                    maxWidth: 420,
+                    maxWidth: m ? 250 : 380,
                     fontSize: m ? 13 : 15,
-                    color: "rgba(11,31,77,0.64)",
+                    color: "rgba(11,31,77,0.70)",
                     lineHeight: 1.72,
                   }}
                 >
@@ -821,9 +821,10 @@ export default function Scene5AIEngine() {
 
             <div
               style={{
-                width: m ? "100%" : "min(57%, 660px)",
+                width: m ? "100%" : "min(52%, 620px)",
                 display: "flex",
-                justifyContent: "center",
+                justifyContent: m ? "flex-end" : "flex-end",
+                paddingTop: m ? 2 : 20,
               }}
             >
               {m ? <MobileNetwork reduced={reduced} /> : <DesktopNetwork reduced={reduced} />}
@@ -833,16 +834,16 @@ export default function Scene5AIEngine() {
           <motion.div
             {...entranceProps(reduced, { delay: 0.94, y: 32, duration: 0.64, amount: 0.55 })}
             style={{
-              marginTop: m ? 22 : 18,
-              width: m ? "100%" : "min(44%, 470px)",
-              alignSelf: m ? "stretch" : "flex-start",
-              background: "rgba(255,255,255,0.58)",
-              backdropFilter: "blur(20px)",
-              WebkitBackdropFilter: "blur(20px)",
-              border: "1px solid rgba(11,31,77,0.10)",
+              marginTop: m ? 18 : 12,
+              width: m ? "min(88%, 316px)" : "min(36%, 420px)",
+              alignSelf: m ? "flex-end" : "flex-start",
+              background: m ? "rgba(255,255,255,0.48)" : "rgba(255,255,255,0.54)",
+              backdropFilter: "blur(18px)",
+              WebkitBackdropFilter: "blur(18px)",
+              border: "1px solid rgba(11,31,77,0.09)",
               borderRadius: m ? 18 : 22,
-              padding: m ? "16px 16px 15px" : "18px 20px",
-              boxShadow: "0 18px 42px rgba(11,31,77,0.08)",
+              padding: m ? "15px 15px 14px" : "18px 20px",
+              boxShadow: "0 16px 34px rgba(11,31,77,0.08)",
             }}
           >
             <div

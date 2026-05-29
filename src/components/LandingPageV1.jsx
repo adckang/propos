@@ -224,8 +224,8 @@ function SceneCard({ id, icon: Icon, eyebrow, img, imgMobile, accent, points, i,
 /* ── PricingCard: 요금제 카드 1개 (m prop 수신 → 복잡도 분산) ── */
 function PricingCard({ pkg, i, m }) {
   const cardStyle = pkg.highlight
-    ? { background: "linear-gradient(135deg, #0891b2, #06b6d4)", boxShadow: "0 0 0 2px #22d3ee, 0 24px 48px rgba(6,182,212,0.3)" }
-    : { border: "1px solid rgba(255,255,255,0.09)", background: "rgba(255,255,255,0.03)" };
+    ? { background: "linear-gradient(160deg, #0d62e8 0%, #0891b2 52%, #06b6d4 100%)", boxShadow: "0 0 0 1px rgba(103,232,249,0.8), 0 26px 54px rgba(6,182,212,0.28)" }
+    : { border: "1px solid rgba(255,255,255,0.09)", background: "linear-gradient(180deg, rgba(15,23,42,0.84), rgba(8,15,30,0.74))", boxShadow: "0 18px 40px rgba(2,6,23,0.22)" };
   const btnStyle = pkg.highlight
     ? { background: "#fff", color: "#0891b2", border: "none" }
     : { background: "rgba(255,255,255,0.07)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)" };
@@ -237,16 +237,16 @@ function PricingCard({ pkg, i, m }) {
             {pkg.tag}
           </div>
         )}
-        {!pkg.highlight && <span style={{ fontSize: 11, color: "#475569", textTransform: "uppercase", letterSpacing: 1, fontWeight: 700 }}>{pkg.tag}</span>}
+        {!pkg.highlight && <span style={{ fontSize: 11, color: "rgba(148,163,184,0.82)", textTransform: "uppercase", letterSpacing: 1, fontWeight: 700 }}>{pkg.tag}</span>}
         <h3 style={{ fontSize: 24, fontWeight: 800, margin: "10px 0 6px" }}>{pkg.name}</h3>
         <div style={{ fontSize: 17, fontWeight: 700 }}>{pkg.price}</div>
-        {pkg.monthly && <div style={{ fontSize: 14, color: pkg.highlight ? "rgba(255,255,255,0.75)" : "#475569", marginTop: 2 }}>{pkg.monthly}</div>}
-        <p style={{ fontSize: 14, color: pkg.highlight ? "rgba(255,255,255,0.8)" : "#475569", margin: "14px 0 22px", lineHeight: 1.75 }}>{pkg.desc}</p>
+        {pkg.monthly && <div style={{ fontSize: 14, color: pkg.highlight ? "rgba(255,255,255,0.80)" : "rgba(226,232,240,0.66)", marginTop: 2 }}>{pkg.monthly}</div>}
+        <p style={{ fontSize: 14, color: pkg.highlight ? "rgba(255,255,255,0.86)" : "rgba(226,232,240,0.72)", margin: "14px 0 22px", lineHeight: 1.75 }}>{pkg.desc}</p>
         <ul style={{ listStyle: "none", padding: 0, margin: "0 0 26px", display: "flex", flexDirection: "column", gap: 10 }}>
           {pkg.includes.map((item) => (
             <li key={item} style={{ display: "flex", gap: 9, fontSize: 14, alignItems: "flex-start" }}>
               <CheckCircle2 size={15} color={pkg.highlight ? "#fff" : "#22d3ee"} style={{ flexShrink: 0, marginTop: 1 }} />
-              <span style={{ color: pkg.highlight ? "#fff" : "#94a3b8" }}>{item}</span>
+              <span style={{ color: pkg.highlight ? "#fff" : "#E2E8F0" }}>{item}</span>
             </li>
           ))}
         </ul>
@@ -261,7 +261,7 @@ function PricingCard({ pkg, i, m }) {
 function FAQItem({ q, a }) {
   const [open, setOpen] = useState(false);
   return (
-    <div style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+    <div style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", borderRadius: 18, padding: "0 18px", boxShadow: "0 14px 28px rgba(2,6,23,0.16)" }}>
       <button
         onClick={() => setOpen(!open)}
         style={{
@@ -273,11 +273,11 @@ function FAQItem({ q, a }) {
       >
         <span style={{ fontWeight: 600, fontSize: 16, lineHeight: 1.5, paddingRight: 24 }}>{q}</span>
         {open
-          ? <ChevronUp size={18} color="#475569" style={{ flexShrink: 0 }} />
-          : <ChevronDown size={18} color="#475569" style={{ flexShrink: 0 }} />}
+          ? <ChevronUp size={18} color="#94a3b8" style={{ flexShrink: 0 }} />
+          : <ChevronDown size={18} color="#94a3b8" style={{ flexShrink: 0 }} />}
       </button>
       {open && (
-        <div style={{ paddingBottom: 22, color: "#64748b", fontSize: 15, lineHeight: 1.85 }}>
+        <div style={{ paddingBottom: 22, color: "rgba(226,232,240,0.74)", fontSize: 15, lineHeight: 1.85 }}>
           {a}
         </div>
       )}
@@ -357,24 +357,24 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
       <Scene5AIEngine />
 
       {/* ════════════════ STATS STRIP ════════════════ */}
-      <section style={{ padding: m ? "48px 20px" : "72px 40px", background: "#060d1e", borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gridTemplateColumns: m ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: m ? 20 : 24, textAlign: "center" }}>
+      <section style={{ padding: m ? "48px 20px" : "72px 40px", background: "linear-gradient(180deg, #071120 0%, #050c19 100%)", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gridTemplateColumns: m ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: m ? 14 : 18, textAlign: "center" }}>
           {[
             { val: "5가지", label: "운영 리스크 완전 커버" },
             { val: "24/7", label: "AI 실시간 모니터링" },
             { val: "4,320원", label: "하루 평균 에너지 절감" },
             { val: "20%↑", label: "별점 1점 상승 시 예약률" },
           ].map(({ val, label }) => (
-            <motion.div key={label} {...up(0)}>
+            <motion.div key={label} {...up(0)} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: m ? "20px 14px" : "24px 18px", boxShadow: "0 16px 34px rgba(2,6,23,0.18)" }}>
               <div style={{ fontSize: "clamp(26px, 3vw, 38px)", fontWeight: 900, color: "#22d3ee", marginBottom: 8 }}>{val}</div>
-              <div style={{ fontSize: 14, color: "#334155", lineHeight: 1.6 }}>{label}</div>
+              <div style={{ fontSize: 14, color: "rgba(226,232,240,0.72)", lineHeight: 1.6 }}>{label}</div>
             </motion.div>
           ))}
         </div>
       </section>
 
       {/* ════════════════ PRICING ════════════════ */}
-      <section style={{ padding: m ? "64px 20px" : "96px 40px", background: "#020617" }}>
+      <section style={{ padding: m ? "64px 20px" : "96px 40px", background: "linear-gradient(180deg, #030913 0%, #020617 100%)" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
           <motion.div {...up()} style={{ textAlign: "center", marginBottom: m ? 36 : 56 }}>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, border: "1px solid rgba(34,211,238,0.25)", background: "rgba(34,211,238,0.07)", borderRadius: 999, padding: "7px 20px", marginBottom: 20, fontSize: 13, color: "#a5f3fc", fontWeight: 700 }}>
@@ -383,7 +383,7 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
             <h2 style={{ fontSize: "clamp(28px, 3.5vw, 42px)", fontWeight: 800, margin: "0 0 14px", letterSpacing: "-0.01em" }}>
               요금제
             </h2>
-            <p style={{ color: "#334155", fontSize: 16, maxWidth: 500, margin: "0 auto", lineHeight: 1.8 }}>
+            <p style={{ color: "rgba(226,232,240,0.72)", fontSize: 16, maxWidth: 500, margin: "0 auto", lineHeight: 1.8 }}>
               숙소 구조와 환경에 따라 최종 견적은 달라질 수 있습니다.
             </p>
           </motion.div>
@@ -394,10 +394,10 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
             ))}
           </div>
 
-          <motion.div {...up(0.1)} style={{ marginTop: 24, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", borderRadius: 18, padding: "20px 24px" }}>
+          <motion.div {...up(0.1)} style={{ marginTop: 24, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", borderRadius: 18, padding: "20px 24px", boxShadow: "0 16px 32px rgba(2,6,23,0.16)" }}>
             <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
               <FileCheck2 size={16} color="#67e8f9" style={{ flexShrink: 0, marginTop: 2 }} />
-              <p style={{ margin: 0, color: "#475569", fontSize: 13, lineHeight: 1.85 }}>
+              <p style={{ margin: 0, color: "rgba(226,232,240,0.68)", fontSize: 13, lineHeight: 1.85 }}>
                 월 1회 현장 방문 감소, 체크인 오류 1건 예방, 퇴실 후 에너지 낭비 감소 중 하나라도 반복되는 숙소라면 도입 검토 가치가 있습니다. 특수 도어락, 추가 센서, 네트워크 보강, 현장 출동은 별도 비용이 발생할 수 있습니다.
               </p>
             </div>
@@ -406,36 +406,36 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
       </section>
 
       {/* ════════════════ FAQ ════════════════ */}
-      <section style={{ padding: m ? "60px 20px" : "80px 40px", background: "#04081a", borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+      <section style={{ padding: m ? "60px 20px" : "80px 40px", background: "linear-gradient(180deg, #050c19 0%, #04081a 100%)", borderTop: "1px solid rgba(255,255,255,0.04)" }}>
         <div style={{ maxWidth: 720, margin: "0 auto" }}>
           <motion.div {...up()} style={{ textAlign: "center", marginBottom: 48 }}>
             <h2 style={{ fontSize: "clamp(26px, 3vw, 36px)", fontWeight: 800, margin: 0, letterSpacing: "-0.01em" }}>
               자주 묻는 질문
             </h2>
           </motion.div>
-          <motion.div {...up(0.08)}>
+          <motion.div {...up(0.08)} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {FAQS.map((faq) => <FAQItem key={faq.q} {...faq} />)}
           </motion.div>
         </div>
       </section>
 
       {/* ════════════════ CTA ════════════════ */}
-      <section style={{ padding: m ? "72px 20px" : "120px 40px", textAlign: "center", position: "relative", overflow: "hidden", background: "#020617" }}>
+      <section style={{ padding: m ? "72px 20px" : "120px 40px", textAlign: "center", position: "relative", overflow: "hidden", background: "linear-gradient(180deg, #030913 0%, #020617 100%)" }}>
         <div style={{
           position: "absolute", inset: 0, pointerEvents: "none",
-          background: "radial-gradient(ellipse 70% 60% at 50% 50%, rgba(34,211,238,0.12) 0%, transparent 70%)",
+          background: "radial-gradient(ellipse 70% 60% at 50% 50%, rgba(34,211,238,0.16) 0%, transparent 70%)",
         }} />
         <div style={{
           position: "absolute", inset: 0, pointerEvents: "none",
           backgroundImage: "linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)",
           backgroundSize: "60px 60px",
         }} />
-        <motion.div {...up()} style={{ position: "relative", zIndex: 1 }}>
+        <motion.div {...up()} style={{ position: "relative", zIndex: 1, maxWidth: 860, margin: "0 auto", padding: m ? "28px 18px" : "38px 40px", borderRadius: 28, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", boxShadow: "0 24px 56px rgba(2,6,23,0.20)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}>
           <h2 style={{ fontSize: "clamp(30px, 5vw, 56px)", fontWeight: 900, margin: "0 0 20px", lineHeight: 1.15, letterSpacing: "-0.02em" }}>
             숙소가 늘어나도<br />
             <span style={{ color: "#22d3ee" }}>관리 부담은 늘지 않습니다.</span>
           </h2>
-          <p style={{ color: "#334155", fontSize: 18, maxWidth: 520, margin: "0 auto 48px", lineHeight: 1.8 }}>
+          <p style={{ color: "rgba(226,232,240,0.76)", fontSize: 18, maxWidth: 520, margin: "0 auto 40px", lineHeight: 1.8 }}>
             30분 무료 운영진단으로 내 숙소에 적용 가능한<br />
             자동화 범위와 예상 비용을 먼저 확인하세요.
           </p>
@@ -458,7 +458,7 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
               전화 문의 · 010-0000-0000
             </button>
           </div>
-          <p style={{ marginTop: 22, fontSize: 13, color: "#1e293b" }}>
+          <p style={{ marginTop: 22, fontSize: 13, color: "rgba(148,163,184,0.74)" }}>
             평일 10:00 – 18:00 응대 · 주말은 카카오톡 문의 권장
           </p>
         </motion.div>
@@ -475,9 +475,9 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
           <div style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 16 }}>
             PROP<span style={{ color: "#22d3ee" }}>OS</span>
           </div>
-          <p style={{ fontSize: 12, color: "#1e293b", margin: "4px 0 0" }}>AI 기반 단기임대 자동 운영 시스템</p>
+          <p style={{ fontSize: 12, color: "rgba(148,163,184,0.74)", margin: "4px 0 0" }}>AI 기반 단기임대 자동 운영 시스템</p>
         </div>
-        <div style={{ fontSize: 12, color: "#1e293b", textAlign: m ? "left" : "right", lineHeight: 1.8 }}>
+        <div style={{ fontSize: 12, color: "rgba(148,163,184,0.74)", textAlign: m ? "left" : "right", lineHeight: 1.8 }}>
           <div>이메일: hello@propos.kr</div>
           <div>© 2026 PropOS. All rights reserved.</div>
         </div>
