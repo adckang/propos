@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Auto control</title>
+  <path d="M13 29L32 14L51 29" stroke="#0B1F4D" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M18 26V50H46V26" stroke="#0B1F4D" stroke-width="2.8" stroke-linejoin="round"/>
+  <path d="M28 50V38H36V50" stroke="#2563EB" stroke-width="2.8" stroke-linejoin="round"/>
+  <path d="M21 33C21.5 30 24 27.5 27 27.5C28.2 27.5 29.4 27.9 30.3 28.6" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M43 31C42.1 28.6 39.8 27 37.2 27C35.9 27 34.7 27.4 33.7 28.2" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M32 21V26" stroke="#2563EB" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M28.5 23L32 19L35.5 23" stroke="#2563EB" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

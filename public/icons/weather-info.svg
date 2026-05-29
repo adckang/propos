@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Weather info</title>
+  <circle cx="23" cy="23" r="8" stroke="#2563EB" stroke-width="2.8"/>
+  <path d="M23 9V13" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M23 33V37" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M9 23H13" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M33 23H37" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M14 14L17 17" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M29 29L32 32" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M14 32L17 29" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M29 17L32 14" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M23 44C23 38.4772 27.4772 34 33 34C37.2148 34 40.8194 36.6104 42.2926 40.3004C42.8401 40.1051 43.4297 40 44.0438 40C46.9287 40 49.2688 42.3401 49.2688 45.225C49.2688 48.1099 46.9287 50.45 44.0438 50.45H24.5C21.4624 50.45 19 47.9876 19 44.95C19 41.9124 21.4624 39.45 24.5 39.45C24.0007 40.8075 23.7393 42.2584 23.7393 43.75" stroke="#0B1F4D" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

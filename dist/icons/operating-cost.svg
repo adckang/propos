@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Operating cost</title>
+  <path d="M18 16H46" stroke="#2563EB" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M22 16V11" stroke="#F8FAFC" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M42 16V11" stroke="#F8FAFC" stroke-width="2.4" stroke-linecap="round"/>
+  <rect x="14" y="16" width="36" height="34" rx="7" stroke="#2563EB" stroke-width="2.8"/>
+  <path d="M23 38L28.5 32.5L33 35.5L41 27" stroke="#22D3EE" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M23 26H30" stroke="#F8FAFC" stroke-width="2.2" stroke-linecap="round" opacity=".92"/>
+  <path d="M41 27H37V23" stroke="#22D3EE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M22 44H42" stroke="#F8FAFC" stroke-width="2.2" stroke-linecap="round" opacity=".9"/>
+</svg>

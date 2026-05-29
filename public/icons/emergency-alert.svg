@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Emergency alert</title>
+  <path d="M22 44V30C22 24.4772 26.4772 20 32 20C37.5228 20 42 24.4772 42 30V44" stroke="#0B1F4D" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M18 44H46" stroke="#0B1F4D" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M28.5 49C29.5 51.5 31.1 53 32 53C32.9 53 34.5 51.5 35.5 49" stroke="#2563EB" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M32 14V8" stroke="#2563EB" stroke-width="2.8" stroke-linecap="round"/>
+  <circle cx="32" cy="15" r="4" stroke="#2563EB" stroke-width="2.4"/>
+  <path d="M49 20C52 23 53.5 26.5 54 30" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M15 20C12 23 10.5 26.5 10 30" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round"/>
+</svg>

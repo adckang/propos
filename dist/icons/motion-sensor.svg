@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Motion sensor</title>
+  <defs>
+    <linearGradient id="motionBlue" x1="16" y1="12" x2="48" y2="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#60A5FA"/>
+      <stop offset="55%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#22D3EE"/>
+    </linearGradient>
+  </defs>
+  <path d="M21 28C21 21.9249 25.9249 17 32 17C38.0751 17 43 21.9249 43 28V31H21V28Z" fill="rgba(59,130,246,0.12)"/>
+  <path d="M21 28C21 21.9249 25.9249 17 32 17C38.0751 17 43 21.9249 43 28V31H21V28Z" stroke="url(#motionBlue)" stroke-width="2.8" stroke-linejoin="round"/>
+  <path d="M24 36H40" stroke="url(#motionBlue)" stroke-width="2.6" stroke-linecap="round" opacity=".9"/>
+  <circle cx="32" cy="28" r="3.4" fill="url(#motionBlue)"/>
+  <path d="M16 27C14 23.4 14 18.6 16 15" stroke="#22D3EE" stroke-width="2.2" stroke-linecap="round" opacity=".72"/>
+  <path d="M10.5 31C6.8 24.6 6.8 15.4 10.5 9" stroke="#22D3EE" stroke-width="2" stroke-linecap="round" opacity=".4"/>
+  <path d="M48 27C50 23.4 50 18.6 48 15" stroke="#22D3EE" stroke-width="2.2" stroke-linecap="round" opacity=".72"/>
+  <path d="M53.5 31C57.2 24.6 57.2 15.4 53.5 9" stroke="#22D3EE" stroke-width="2" stroke-linecap="round" opacity=".4"/>
+  <path d="M26 42H38" stroke="url(#motionBlue)" stroke-width="2.4" stroke-linecap="round" opacity=".62"/>
+</svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Reservation info</title>
+  <rect x="10" y="14" width="44" height="40" rx="8" stroke="#0B1F4D" stroke-width="2.8"/>
+  <path d="M10 24H54" stroke="#0B1F4D" stroke-width="2.8"/>
+  <path d="M20 10V18" stroke="#2563EB" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M44 10V18" stroke="#2563EB" stroke-width="2.8" stroke-linecap="round"/>
+  <rect x="18" y="31" width="8" height="8" rx="2" stroke="#22D3EE" stroke-width="2.4"/>
+  <rect x="30" y="31" width="8" height="8" rx="2" stroke="#2563EB" stroke-width="2.4"/>
+  <path d="M43 35L46 38L51 32" stroke="#2563EB" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M18 45H38" stroke="#0B1F4D" stroke-width="2.4" stroke-linecap="round" opacity=".82"/>
+</svg>

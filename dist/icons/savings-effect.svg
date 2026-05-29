@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Savings effect</title>
+  <circle cx="32" cy="32" r="17" stroke="#2563EB" stroke-width="2.8"/>
+  <path d="M32 20V44" stroke="#F8FAFC" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M25.5 25.5C27.2 23.9 29.5 23 32 23C36.1 23 39 25.1 39 28.2C39 31.3 36.1 33.1 32 33.8C27.9 34.5 25 36.3 25 39.4C25 42.5 27.9 45 32 45C34.7 45 37.2 44.1 39 42.3" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M45 19L52 12" stroke="#22D3EE" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M46 12H52V18" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

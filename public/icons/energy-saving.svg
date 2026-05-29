@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Energy saving</title>
+  <path d="M36 10C26 14.5 18 26 18 36C18 45.4 24.8 52 34 52C43.2 52 50 45.2 50 36C50 28.5 45.9 20.1 36 10Z" stroke="#2563EB" stroke-width="2.8" stroke-linejoin="round"/>
+  <path d="M31 38C30.5 32 34 25.5 39 20" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M27 39C28.8 43 31.6 45 35 45C39.7 45 43 41.3 43 36.7C43 34.8 42.4 33 41.2 31.5" stroke="#F8FAFC" stroke-width="2.4" stroke-linecap="round" opacity=".9"/>
+  <path d="M20 22L16 18" stroke="#22D3EE" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M48 22L52 18" stroke="#22D3EE" stroke-width="2.2" stroke-linecap="round"/>
+</svg>

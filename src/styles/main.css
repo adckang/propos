@@ -1,3 +1,5 @@
+@tailwind utilities;
+
 /* ── TOKENS ── */
 :root{
   --bg:#f0f4f8;--surface:#ffffff;--surface2:#f7f9fc;--surface3:#edf2f7;
@@ -26,6 +28,8 @@ body{background:#f0f4f8}
 ::-webkit-scrollbar-thumb:hover{background:#a0b4c0}
 .app{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.6;transform:scale(1.3)}}
+/* HeroScene — 100svh 폴백 (Safari < 15.4: svh 미지원 → 0으로 처리됨) */
+.hero-scene{min-height:100vh;min-height:100svh;}
 @keyframes slideIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes tIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
 

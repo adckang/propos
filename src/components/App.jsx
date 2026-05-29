@@ -3,6 +3,9 @@ import { useEffect, useState } from "react";
 import CommandCenter from "./CommandCenter";
 import D1AutomationPanel from "./D1AutomationPanel";
 import HomeAssistant from "./HomeAssistant";
+import LandingPage from "./LandingPage";
+import LandingPageV1 from "./LandingPageV1";
+import LandingPageV2 from "./LandingPageV2";
 import S02CheckinPanel from "./S02CheckinPanel";
 import S03MonitoringPanel from "./S03MonitoringPanel";
 import S04CheckoutPanel from "./S04CheckoutPanel";
@@ -12,11 +15,11 @@ import { getPortalStageCards } from "../config/operationsModel.js";
 
 // ============================================================
 // App.jsx — 루트 라우터 + 랜딩 화면
-// 상태: screen ("landing" | "ha" | "cc" | "d1" | "s02" | "s03" | "s04" | "s05"), now
+// 상태: screen ("marketing" | "v1" | "v2" | "landing" | "ha" | "cc" | "d1" | "s02" | "s03" | "s04" | "s05"), now
 // ============================================================
 
 function App() {
-  const [screen, setScreen] = useState("landing");
+  const [screen, setScreen] = useState("v1");
   const [ccStage, setCcStage] = useState("stay");
   const [haStage, setHaStage] = useState("stay");
   const [haContext, setHaContext] = useState(null);
@@ -46,6 +49,27 @@ function App() {
     }
     setScreen("landing");
   };
+
+  if(screen==="marketing") return (
+    <LandingPageV2
+      onEnterApp={()=>setScreen("landing")}
+      onSwitchVersion={()=>setScreen("v1")}
+    />
+  );
+
+  if(screen==="v1") return (
+    <LandingPageV1
+      onEnterApp={()=>setScreen("landing")}
+      onSwitchVersion={()=>setScreen("v2")}
+    />
+  );
+
+  if(screen==="v2") return (
+    <LandingPage
+      onEnterApp={()=>setScreen("landing")}
+      onSwitchVersion={()=>setScreen("marketing")}
+    />
+  );
 
   if(screen==="ha") return (
     <div className="app" style={{fontFamily:"'DM Sans',sans-serif"}}>

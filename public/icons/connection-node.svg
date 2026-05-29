@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Connection node</title>
+  <circle cx="32" cy="32" r="9" stroke="#2563EB" stroke-width="2.8"/>
+  <circle cx="32" cy="32" r="3.5" fill="#22D3EE"/>
+  <circle cx="32" cy="12" r="3.2" stroke="#0B1F4D" stroke-width="2.4"/>
+  <circle cx="50" cy="22" r="3.2" stroke="#0B1F4D" stroke-width="2.4"/>
+  <circle cx="50" cy="42" r="3.2" stroke="#0B1F4D" stroke-width="2.4"/>
+  <circle cx="32" cy="52" r="3.2" stroke="#0B1F4D" stroke-width="2.4"/>
+  <circle cx="14" cy="42" r="3.2" stroke="#0B1F4D" stroke-width="2.4"/>
+  <circle cx="14" cy="22" r="3.2" stroke="#0B1F4D" stroke-width="2.4"/>
+  <path d="M32 23V16" stroke="#0B1F4D" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M40 27L46 23.8" stroke="#0B1F4D" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M40 37L46 40.2" stroke="#0B1F4D" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M32 41V48" stroke="#0B1F4D" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M24 37L18 40.2" stroke="#0B1F4D" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M24 27L18 23.8" stroke="#0B1F4D" stroke-width="2.4" stroke-linecap="round"/>
+</svg>

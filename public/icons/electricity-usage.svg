@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Electricity usage</title>
+  <path d="M16 46V38" stroke="#2563EB" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M24 46V30" stroke="#22D3EE" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M32 46V23" stroke="#F8FAFC" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M40 46V27" stroke="#22D3EE" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M48 46V17" stroke="#2563EB" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M12 50H52" stroke="#2563EB" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M21 17L28 10L34 15L43 8L51 12" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>AI brain</title>
+  <path d="M27 15C23.134 15 20 18.134 20 22C20 23.1805 20.2923 24.2928 20.8087 25.2686C17.9945 26.2412 16 28.9148 16 32C16 35.5899 18.7007 38.549 22.1738 38.9557C22.0615 39.4555 22 39.9754 22 40.5091C22 44.6455 25.3545 48 29.4909 48H35.2C41.717 48 47 42.717 47 36.2C47 33.1042 45.8086 30.2867 43.8586 28.1802C44.5782 27.0737 45 25.7523 45 24.3325C45 20.4565 41.8587 17.3152 37.9827 17.3152C36.7638 17.3152 35.6175 17.625 34.6189 18.1702C33.2706 16.1941 30.9943 15 28.5 15H27Z" stroke="#0B1F4D" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="26" cy="28" r="2.8" fill="#2563EB"/>
+  <circle cx="38" cy="26" r="2.8" fill="#22D3EE"/>
+  <circle cx="32" cy="38" r="2.8" fill="#2563EB"/>
+  <path d="M28.5 28H35.5" stroke="#0B1F4D" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M32 30.8V35.2" stroke="#0B1F4D" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M24.5 42L20 46" stroke="#22D3EE" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M39.5 20L44 16" stroke="#22D3EE" stroke-width="2.2" stroke-linecap="round"/>
+</svg>

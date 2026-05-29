@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Standby power block</title>
+  <rect x="14" y="20" width="22" height="28" rx="5" stroke="#2563EB" stroke-width="2.8"/>
+  <path d="M20 16V11" stroke="#F8FAFC" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M30 16V11" stroke="#F8FAFC" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M18 34H32" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M42 22L52 46" stroke="#22D3EE" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M52 22L42 46" stroke="#2563EB" stroke-width="2.8" stroke-linecap="round"/>
+  <circle cx="47" cy="34" r="11" stroke="#2563EB" stroke-width="2.4" opacity=".85"/>
+</svg>

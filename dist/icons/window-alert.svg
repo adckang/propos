@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Window alert</title>
+  <rect x="12" y="10" width="24" height="44" rx="3.5" stroke="#2563EB" stroke-width="2.8"/>
+  <path d="M24 10V54" stroke="#F8FAFC" stroke-width="2.2" opacity=".92"/>
+  <path d="M12 31H36" stroke="#F8FAFC" stroke-width="2.2" opacity=".92"/>
+  <path d="M40 18L49 14V50L40 46V18Z" stroke="#22D3EE" stroke-width="2.8" stroke-linejoin="round"/>
+  <path d="M44 29V36" stroke="#F8FAFC" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="44" cy="41" r="1.6" fill="#F8FAFC"/>
+</svg>

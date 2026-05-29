@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Sensor info</title>
+  <rect x="18" y="8" width="28" height="48" rx="8" stroke="#0B1F4D" stroke-width="2.8"/>
+  <path d="M27 14H37" stroke="#0B1F4D" stroke-width="2.8" stroke-linecap="round"/>
+  <circle cx="32" cy="48" r="2.5" stroke="#2563EB" stroke-width="2.4"/>
+  <circle cx="32" cy="28" r="4.5" stroke="#2563EB" stroke-width="2.8"/>
+  <path d="M24 28C22 25 22 21 24 18" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M20 32C16.5 27.5 16.5 20.5 20 16" stroke="#22D3EE" stroke-width="2.2" stroke-linecap="round" opacity=".85"/>
+  <path d="M40 28C42 25 42 21 40 18" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M44 32C47.5 27.5 47.5 20.5 44 16" stroke="#22D3EE" stroke-width="2.2" stroke-linecap="round" opacity=".85"/>
+</svg>

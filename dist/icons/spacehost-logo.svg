@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="72" viewBox="0 0 360 72" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">SPACE HOST Logo</title>
+  <desc id="desc">Blue line house icon with SPACE HOST wordmark</desc>
+  <path d="M16 44V24L36 8L56 24V56H16V44Z" stroke="#1E6BFF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M29 55V37H46V55" stroke="#1E6BFF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M27 31H46" stroke="#1E6BFF" stroke-width="5" stroke-linecap="round"/>
+  <text x="86" y="35" fill="#F8FAFC" font-family="Inter, Pretendard, Arial, sans-serif" font-size="24" font-weight="700" letter-spacing="5">SPACE HOST</text>
+  <text x="87" y="56" fill="#E2E8F0" font-family="Inter, Pretendard, Arial, sans-serif" font-size="14" font-weight="400" letter-spacing="0.4">Smart. Carefree. Anywhere.</text>
+</svg>

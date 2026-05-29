@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Weekly report</title>
+  <path d="M18 10H38L48 20V50C48 52.2091 46.2091 54 44 54H18C15.7909 54 14 52.2091 14 50V14C14 11.7909 15.7909 10 18 10Z" stroke="#0B1F4D" stroke-width="2.8" stroke-linejoin="round"/>
+  <path d="M38 10V20H48" stroke="#0B1F4D" stroke-width="2.8" stroke-linejoin="round"/>
+  <path d="M22 40L28 34L34 37L42 28" stroke="#2563EB" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M22 46H42" stroke="#0B1F4D" stroke-width="2.4" stroke-linecap="round" opacity=".8"/>
+  <rect x="22" y="22" width="4" height="8" rx="1.5" fill="#22D3EE"/>
+  <rect x="30" y="18" width="4" height="12" rx="1.5" fill="#2563EB"/>
+  <rect x="38" y="24" width="4" height="6" rx="1.5" fill="#22D3EE"/>
+</svg>
