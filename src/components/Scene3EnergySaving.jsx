@@ -196,27 +196,27 @@ function FeaturePill({ item, index, m, reduced, full }) {
 function AirFlowLayer({ m, reduced }) {
   const waves = [
     {
-      top: m ? 58 : 74,
-      right: m ? 74 : 98,
-      width: m ? 128 : 182,
+      top: m ? 46 : 74,
+      right: m ? 64 : 98,
+      width: m ? 102 : 182,
       rotate: -7,
-      opacity: 0.72,
+      opacity: m ? 0.58 : 0.72,
       duration: 9.2,
     },
     {
-      top: m ? 92 : 114,
-      right: m ? 96 : 124,
-      width: m ? 164 : 238,
+      top: m ? 72 : 114,
+      right: m ? 82 : 124,
+      width: m ? 128 : 238,
       rotate: -9,
-      opacity: 0.58,
+      opacity: m ? 0.46 : 0.58,
       duration: 10.6,
     },
     {
-      top: m ? 128 : 156,
-      right: m ? 82 : 110,
-      width: m ? 146 : 214,
+      top: m ? 96 : 156,
+      right: m ? 70 : 110,
+      width: m ? 118 : 214,
       rotate: -6,
-      opacity: 0.46,
+      opacity: m ? 0.36 : 0.46,
       duration: 11.4,
     },
   ];
@@ -233,7 +233,7 @@ function AirFlowLayer({ m, reduced }) {
       style={{
         position: "relative",
         width: "100%",
-        height: m ? 168 : 228,
+        height: m ? 138 : 228,
         borderRadius: m ? 22 : 28,
         overflow: "hidden",
         background: m
@@ -249,8 +249,8 @@ function AirFlowLayer({ m, reduced }) {
         style={{
           position: "absolute",
           inset: m ? "16% 12% auto auto" : "12% 10% auto auto",
-          width: m ? 104 : 144,
-          height: m ? 64 : 82,
+          width: m ? 86 : 144,
+          height: m ? 54 : 82,
           borderRadius: 999,
           background: "linear-gradient(135deg, rgba(37,99,235,0.22), rgba(34,211,238,0.10))",
           filter: "blur(16px)",
@@ -260,10 +260,10 @@ function AirFlowLayer({ m, reduced }) {
       <div
         style={{
           position: "absolute",
-          top: m ? 18 : 28,
-          right: m ? 22 : 30,
-          width: m ? 68 : 88,
-          height: m ? 68 : 88,
+          top: m ? 14 : 28,
+          right: m ? 16 : 30,
+          width: m ? 58 : 88,
+          height: m ? 58 : 88,
           borderRadius: "50%",
           background: "linear-gradient(145deg, rgba(37,99,235,0.15), rgba(34,211,238,0.10))",
           border: "1px solid rgba(248,250,252,0.08)",
@@ -276,8 +276,8 @@ function AirFlowLayer({ m, reduced }) {
         <img
           src="/icons/ac-auto-off.svg"
           alt=""
-          width={m ? 34 : 44}
-          height={m ? 34 : 44}
+          width={m ? 28 : 44}
+          height={m ? 28 : 44}
           style={{ display: "block" }}
         />
       </div>
@@ -310,7 +310,7 @@ function AirFlowLayer({ m, reduced }) {
             top: wave.top,
             right: wave.right,
             width: wave.width,
-            height: m ? 14 : 16,
+            height: m ? 12 : 16,
             borderRadius: 999,
             background: "linear-gradient(90deg, rgba(34,211,238,0.0) 0%, rgba(34,211,238,0.34) 26%, rgba(96,165,250,0.62) 58%, rgba(34,211,238,0.0) 100%)",
             filter: "blur(0.2px)",
@@ -384,6 +384,99 @@ function AirFlowLayer({ m, reduced }) {
 
 function KpiCard({ m, reduced }) {
   const [countsActive, setCountsActive] = useState(false);
+
+  if (m) {
+    return (
+      <motion.div
+        {...entranceProps(reduced, {
+          delay: 0.94,
+          y: 24,
+          duration: 0.64,
+          amount: 0.5,
+        })}
+        onViewportEnter={() => setCountsActive(true)}
+        style={{
+          background: "rgba(8,18,37,0.38)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          border: "1px solid rgba(248,250,252,0.08)",
+          borderRadius: 18,
+          padding: "12px 13px",
+          boxShadow: "0 18px 36px rgba(2,6,23,0.22)",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            color: "rgba(248,250,252,0.62)",
+            lineHeight: 1.3,
+            marginBottom: 8,
+          }}
+        >
+          예상 절감 효과 / 1일 기준
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: 8,
+            marginBottom: 10,
+          }}
+        >
+          {KPI_ITEMS.slice(1).map((item) => (
+            <div
+              key={item.label}
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(248,250,252,0.08)",
+                borderRadius: 14,
+                padding: "9px 10px",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 10,
+                  color: "rgba(248,250,252,0.68)",
+                  lineHeight: 1.25,
+                  marginBottom: 6,
+                }}
+              >
+                {item.label}
+              </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 800,
+                  color: "#F8FAFC",
+                  lineHeight: 1.4,
+                }}
+              >
+                <CountUpValue
+                  value={item.number}
+                  decimals={item.decimals}
+                  suffix={item.suffix}
+                  active={countsActive}
+                  reduced={reduced}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: "#F8FAFC",
+            lineHeight: 1.5,
+          }}
+        >
+          걱정은 덜고, 효율은 더하는 스마트한 운영
+        </div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
@@ -499,7 +592,7 @@ function KpiCard({ m, reduced }) {
 export default function Scene3EnergySaving() {
   const m = useIsMobile();
   const reduced = useReducedMotion();
-  const visibleFeatures = m ? FEATURES.slice(0, 2) : FEATURES.slice(0, 4);
+  const visibleFeatures = m ? [] : FEATURES.slice(0, 4);
   const sectionRef = useRef(null);
   const { scrollYProgress } = useScroll({
     target: sectionRef,
@@ -765,7 +858,7 @@ export default function Scene3EnergySaving() {
 
             <div
               style={{
-              width: m ? "min(56%, 214px)" : "min(40%, 460px)",
+              width: m ? "min(46%, 176px)" : "min(40%, 460px)",
               display: "flex",
               flexDirection: "column",
               gap: m ? 10 : 16,
@@ -775,31 +868,33 @@ export default function Scene3EnergySaving() {
           >
               <AirFlowLayer m={m} reduced={reduced} />
 
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: m ? "1fr" : "repeat(2, minmax(0, 1fr))",
-                  gap: m ? 8 : 10,
-                }}
-              >
-                {visibleFeatures.map((item, index) => (
-                  <FeaturePill
-                    key={item.title}
-                    item={item}
-                    index={index}
-                    m={m}
-                    reduced={reduced}
-                    full={m ? false : index === visibleFeatures.length - 1}
-                  />
-                ))}
-              </div>
+              {visibleFeatures.length > 0 && (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                    gap: 10,
+                  }}
+                >
+                  {visibleFeatures.map((item, index) => (
+                    <FeaturePill
+                      key={item.title}
+                      item={item}
+                      index={index}
+                      m={m}
+                      reduced={reduced}
+                      full={index === visibleFeatures.length - 1}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
           <div
           style={{
               marginTop: m ? 12 : 18,
-              width: m ? "min(78%, 286px)" : "min(40%, 460px)",
+              width: m ? "min(72%, 252px)" : "min(40%, 460px)",
               alignSelf: m ? "flex-start" : "flex-end",
             }}
           >
