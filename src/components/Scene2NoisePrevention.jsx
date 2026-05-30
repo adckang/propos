@@ -50,8 +50,8 @@ const FEATURES = [
    (2차에서 pulse 애니메이션 추가 예정)
 ───────────────────────────────────── */
 function NoiseRingUI({ m }) {
-  const size  = m ? 148 : 220;
-  const inner = m ? 132 : 200;
+  const size  = m ? 128 : 212;
+  const inner = m ? 114 : 192;
 
   return (
     <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
@@ -63,7 +63,9 @@ function NoiseRingUI({ m }) {
           position: "absolute",
           inset: -16,
           borderRadius: "50%",
-          boxShadow: `0 0 48px rgba(248,113,113,0.38), 0 0 96px rgba(248,113,113,0.16)`,
+          boxShadow: m
+            ? "0 0 34px rgba(248,113,113,0.28), 0 0 72px rgba(248,113,113,0.12)"
+            : "0 0 46px rgba(248,113,113,0.34), 0 0 90px rgba(248,113,113,0.15)",
           pointerEvents: "none",
         }}
       />
@@ -84,10 +86,10 @@ function NoiseRingUI({ m }) {
           position: "absolute",
           inset: (size - inner) / 2,
           borderRadius: "50%",
-          border: `3px solid rgba(248,113,113,0.85)`,
-          background: "rgba(4,4,14,0.78)",
-          backdropFilter: "blur(18px)",
-          WebkitBackdropFilter: "blur(18px)",
+          border: m ? "2.5px solid rgba(248,113,113,0.82)" : "3px solid rgba(248,113,113,0.85)",
+          background: m ? "rgba(4,4,14,0.72)" : "rgba(4,4,14,0.78)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
@@ -106,7 +108,7 @@ function NoiseRingUI({ m }) {
 
         {/* dB 수치 — Framer Motion 준비 래퍼 */}
         <motion.div style={{
-          fontSize: m ? 40 : 56,
+          fontSize: m ? 34 : 54,
           fontWeight: 900,
           color: RED,
           fontFamily: "'DM Mono', monospace",
@@ -118,7 +120,7 @@ function NoiseRingUI({ m }) {
 
         {/* 단위 */}
         <div style={{
-          fontSize: m ? 11 : 13,
+          fontSize: m ? 10 : 13,
           fontFamily: "'DM Mono', monospace",
           color: `rgba(248,113,113,0.65)`,
           letterSpacing: "0.12em",
@@ -130,8 +132,8 @@ function NoiseRingUI({ m }) {
           background: "rgba(248,113,113,0.15)",
           border: "1px solid rgba(248,113,113,0.45)",
           borderRadius: 999,
-          padding: m ? "2px 9px" : "3px 12px",
-          fontSize: m ? 9 : 10,
+          padding: m ? "2px 8px" : "3px 12px",
+          fontSize: m ? 8 : 10,
           color: RED,
           fontWeight: 700,
           letterSpacing: "0.04em",
@@ -147,10 +149,10 @@ function NoiseRingUI({ m }) {
       {/* 하단 레이블 */}
       <div style={{
         position: "absolute",
-        bottom: m ? -22 : -28,
+        bottom: m ? -18 : -28,
         left: "50%",
         transform: "translateX(-50%)",
-        fontSize: m ? 9 : 10,
+        fontSize: m ? 8 : 10,
         fontFamily: "'DM Mono', monospace",
         color: "rgba(255,255,255,0.32)",
         letterSpacing: "0.16em",
@@ -172,18 +174,18 @@ function FeaturePill({ iconSrc, line1, line2, m }) {
       display: "flex",
       alignItems: "center",
       gap: m ? 10 : 12,
-      background: "rgba(255,255,255,0.06)",
-      backdropFilter: "blur(12px)",
-      WebkitBackdropFilter: "blur(12px)",
-      border: "1px solid rgba(255,255,255,0.1)",
+      background: m ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.06)",
+      backdropFilter: "blur(11px)",
+      WebkitBackdropFilter: "blur(11px)",
+      border: "1px solid rgba(255,255,255,0.09)",
       borderRadius: m ? 12 : 14,
-      padding: m ? "10px 12px" : "14px 16px",
+      padding: m ? "9px 11px" : "14px 16px",
       flex: 1,
       minWidth: 0,
     }}>
       <div style={{
-        width: m ? 36 : 44,
-        height: m ? 36 : 44,
+        width: m ? 32 : 44,
+        height: m ? 32 : 44,
         flexShrink: 0,
         borderRadius: m ? 10 : 12,
         background: "rgba(248,113,113,0.1)",
@@ -202,7 +204,7 @@ function FeaturePill({ iconSrc, line1, line2, m }) {
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{
-          fontSize: m ? 10 : 11,
+          fontSize: m ? 9 : 11,
           color: "rgba(255,255,255,0.45)",
           marginBottom: 2,
           whiteSpace: "nowrap",
@@ -210,7 +212,7 @@ function FeaturePill({ iconSrc, line1, line2, m }) {
           textOverflow: "ellipsis",
         }}>{line1}</div>
         <div style={{
-          fontSize: m ? 12 : 13,
+          fontSize: m ? 11 : 13,
           fontWeight: 700,
           color: "#fff",
           lineHeight: 1.3,
@@ -229,11 +231,12 @@ function FeaturePill({ iconSrc, line1, line2, m }) {
 function HeadlineBlock({ m }) {
   return (
     <h2 style={{
-      fontSize: m ? "clamp(28px, 8vw, 44px)" : "clamp(42px, 4.4vw, 64px)",
+      fontSize: m ? "clamp(22px, 6.4vw, 34px)" : "clamp(42px, 4.4vw, 64px)",
       fontWeight: 900,
-      lineHeight: 1.15,
-      margin: m ? 0 : "0 0 28px",
+      lineHeight: m ? 1.04 : 1.15,
+      margin: m ? "6px 0 0" : "0 0 28px",
       letterSpacing: "-0.025em",
+      maxWidth: m ? "min(52%, 194px)" : 560,
     }}>
       {COPY_LINES.map((line) => (
         /* overflow:hidden + motion.span = 2차 마스크 리빌 준비 구조 */
@@ -255,6 +258,7 @@ function HeadlineBlock({ m }) {
 ───────────────────────────────────── */
 export default function Scene2NoisePrevention() {
   const m = useIsMobile();
+  const visibleFeatures = m ? FEATURES.slice(0, 2) : FEATURES;
 
   return (
     <section
@@ -339,9 +343,9 @@ export default function Scene2NoisePrevention() {
           zIndex: 2,
           display: "flex",
           flexDirection: "column",
-          justifyContent: "space-between",
+          justifyContent: m ? "flex-start" : "space-between",
           minHeight: m ? "100svh" : "100vh",
-          padding: m ? "28px 20px 48px" : "52px 60px 60px",
+          padding: m ? "18px 20px 28px" : "52px 60px 60px",
           ...(m ? {} : { maxWidth: 680 }),
         }}
       >
@@ -369,7 +373,7 @@ export default function Scene2NoisePrevention() {
         {m && <HeadlineBlock m={m} />}
 
         {/* ── 하단 콘텐츠 블록 ── */}
-        <div>
+        <div style={{ marginTop: m ? "auto" : 0 }}>
           {/* PC: 헤드라인은 하단 블록 상단 */}
           {!m && <HeadlineBlock m={m} />}
 
@@ -377,13 +381,13 @@ export default function Scene2NoisePrevention() {
           {m && (
             <div style={{
               display: "flex",
-              gap: 16,
-              alignItems: "center",
-              marginBottom: 28,
+              gap: 12,
+              alignItems: "flex-end",
+              marginBottom: 18,
             }}>
               <NoiseRingUI m={m} />
               <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-                {FEATURES.map((f) => (
+                {visibleFeatures.map((f) => (
                   <FeaturePill key={f.line2} {...f} m={m} />
                 ))}
               </div>
@@ -393,7 +397,7 @@ export default function Scene2NoisePrevention() {
           {/* PC: 기능 아이콘 가로 배열 */}
           {!m && (
             <div style={{ display: "flex", gap: 14 }}>
-              {FEATURES.map((f) => (
+              {visibleFeatures.map((f) => (
                 <FeaturePill key={f.line2} {...f} m={false} />
               ))}
             </div>

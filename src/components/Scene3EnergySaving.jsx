@@ -236,7 +236,9 @@ function AirFlowLayer({ m, reduced }) {
         height: m ? 168 : 228,
         borderRadius: m ? 22 : 28,
         overflow: "hidden",
-        background: "linear-gradient(160deg, rgba(8,18,37,0.24), rgba(8,18,37,0.08))",
+        background: m
+          ? "linear-gradient(160deg, rgba(8,18,37,0.16), rgba(8,18,37,0.04))"
+          : "linear-gradient(160deg, rgba(8,18,37,0.24), rgba(8,18,37,0.08))",
         border: "1px solid rgba(248,250,252,0.08)",
         backdropFilter: "blur(14px)",
         WebkitBackdropFilter: "blur(14px)",
@@ -320,60 +322,62 @@ function AirFlowLayer({ m, reduced }) {
         />
       ))}
 
-      <div
-        style={{
-          position: "absolute",
-          left: m ? 16 : 24,
-          bottom: m ? 16 : 24,
-          display: "flex",
-          gap: m ? 7 : 9,
-          flexWrap: "wrap",
-          maxWidth: m ? 184 : 228,
-        }}
-      >
-        {[
+      {!m && (
+        <div
+          style={{
+            position: "absolute",
+            left: 24,
+            bottom: 24,
+            display: "flex",
+            gap: 9,
+            flexWrap: "wrap",
+            maxWidth: 228,
+          }}
+        >
+          {[
           { src: "/icons/light-auto-off.svg", label: "조명 OFF" },
           { src: "/icons/window-alert.svg", label: "열림 감지" },
           { src: "/icons/standby-power-block.svg", label: "대기전력 차단" },
-        ].map((badge, index) => (
-          <motion.div
-            key={badge.label}
-            {...entranceProps(reduced, {
-              delay: 0.78 + index * 0.08,
-              y: m ? 12 : 16,
-              duration: 0.46,
-              amount: 0.42,
-            })}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 7,
-              background: "rgba(8,18,37,0.34)",
-              border: "1px solid rgba(248,250,252,0.08)",
-              borderRadius: 999,
-              padding: m ? "6px 9px" : "8px 11px",
-            }}
-          >
-            <img
-              src={badge.src}
-              alt=""
-              width={m ? 18 : 20}
-              height={m ? 18 : 20}
-              style={{ display: "block" }}
-            />
-            <span
+          ].map((badge, index) => (
+            <motion.div
+              key={badge.label}
+              {...entranceProps(reduced, {
+                delay: 0.78 + index * 0.08,
+                y: 16,
+                duration: 0.46,
+                amount: 0.42,
+              })}
               style={{
-                fontSize: m ? 10 : 11,
-                color: "rgba(248,250,252,0.82)",
-                lineHeight: 1,
-                whiteSpace: "nowrap",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 7,
+                background: "rgba(8,18,37,0.34)",
+                border: "1px solid rgba(248,250,252,0.08)",
+                borderRadius: 999,
+                padding: "8px 11px",
               }}
             >
-              {badge.label}
-            </span>
-          </motion.div>
-        ))}
-      </div>
+              <img
+                src={badge.src}
+                alt=""
+                width={20}
+                height={20}
+                style={{ display: "block" }}
+              />
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "rgba(248,250,252,0.82)",
+                  lineHeight: 1,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {badge.label}
+              </span>
+            </motion.div>
+          ))}
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -495,6 +499,7 @@ function KpiCard({ m, reduced }) {
 export default function Scene3EnergySaving() {
   const m = useIsMobile();
   const reduced = useReducedMotion();
+  const visibleFeatures = m ? FEATURES.slice(0, 2) : FEATURES.slice(0, 4);
   const sectionRef = useRef(null);
   const { scrollYProgress } = useScroll({
     target: sectionRef,
@@ -597,7 +602,7 @@ export default function Scene3EnergySaving() {
             padding: m ? "28px 20px 24px" : "48px 64px 40px",
             display: "flex",
             flexDirection: "column",
-            justifyContent: "space-between",
+            justifyContent: m ? "flex-start" : "space-between",
           }}
         >
           <div
@@ -607,11 +612,12 @@ export default function Scene3EnergySaving() {
               justifyContent: "space-between",
               alignItems: "flex-start",
               gap: m ? 16 : 28,
+              ...(m ? { flex: 1 } : {}),
             }}
           >
             <div
               style={{
-                width: m ? "min(78%, 278px)" : "min(38%, 420px)",
+                width: m ? "min(72%, 244px)" : "min(40%, 440px)",
                 paddingTop: m ? 0 : 10,
               }}
             >
@@ -635,7 +641,7 @@ export default function Scene3EnergySaving() {
                 Smart. Carefree. Anywhere.
               </motion.p>
 
-              <div style={{ marginTop: m ? 24 : 34 }}>
+              <div style={{ marginTop: m ? 22 : 34 }}>
                 <h2
                   style={{
                     margin: 0,
@@ -653,8 +659,7 @@ export default function Scene3EnergySaving() {
                     <div key={line} style={{ overflow: "hidden", paddingBottom: "0.08em" }}>
                       <motion.span
                         initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
-                        whileInView={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
-                        viewport={{ once: true, amount: 0.45 }}
+                        animate={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
                         transition={{
                           delay: reduced ? (0.2 + index * 0.08) * 0.35 : 0.2 + index * 0.12,
                           duration: reduced ? 0.22 : 0.82,
@@ -670,8 +675,7 @@ export default function Scene3EnergySaving() {
                   <div style={{ overflow: "hidden", paddingBottom: "0.08em" }}>
                     <motion.span
                       initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
-                      whileInView={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
-                      viewport={{ once: true, amount: 0.45 }}
+                      animate={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
                       transition={{
                         delay: reduced ? 0.34 * 0.35 : 0.44,
                         duration: reduced ? 0.22 : 0.82,
@@ -701,8 +705,8 @@ export default function Scene3EnergySaving() {
 
                 <div
                   style={{
-                    margin: m ? "18px 0 0" : "22px 0 0",
-                    fontSize: m ? "clamp(20px, 5.8vw, 28px)" : "clamp(28px, 2.4vw, 36px)",
+                    margin: m ? "16px 0 0" : "22px 0 0",
+                    fontSize: m ? "clamp(18px, 5vw, 24px)" : "clamp(28px, 2.4vw, 36px)",
                     fontWeight: 800,
                     lineHeight: 1.25,
                     letterSpacing: "-0.025em",
@@ -712,8 +716,7 @@ export default function Scene3EnergySaving() {
                   <div style={{ overflow: "hidden", paddingBottom: "0.08em" }}>
                     <motion.span
                       initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
-                      whileInView={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
-                      viewport={{ once: true, amount: 0.45 }}
+                      animate={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
                       transition={{
                         delay: reduced ? 0.42 * 0.35 : 0.56,
                         duration: reduced ? 0.22 : 0.82,
@@ -745,8 +748,7 @@ export default function Scene3EnergySaving() {
                   <div style={{ overflow: "hidden", paddingBottom: "0.08em" }}>
                     <motion.span
                       initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
-                      whileInView={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
-                      viewport={{ once: true, amount: 0.45 }}
+                      animate={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
                       transition={{
                         delay: reduced ? 0.5 * 0.35 : 0.68,
                         duration: reduced ? 0.22 : 0.82,
@@ -763,11 +765,12 @@ export default function Scene3EnergySaving() {
 
             <div
               style={{
-              width: m ? "min(88%, 332px)" : "min(46%, 540px)",
+              width: m ? "min(56%, 214px)" : "min(40%, 460px)",
               display: "flex",
               flexDirection: "column",
               gap: m ? 10 : 16,
-              alignSelf: m ? "flex-end" : "stretch",
+              alignSelf: m ? "flex-start" : "stretch",
+              marginTop: m ? "auto" : 0,
             }}
           >
               <AirFlowLayer m={m} reduced={reduced} />
@@ -775,18 +778,18 @@ export default function Scene3EnergySaving() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                  gridTemplateColumns: m ? "1fr" : "repeat(2, minmax(0, 1fr))",
                   gap: m ? 8 : 10,
                 }}
               >
-                {FEATURES.map((item, index) => (
+                {visibleFeatures.map((item, index) => (
                   <FeaturePill
                     key={item.title}
                     item={item}
                     index={index}
                     m={m}
                     reduced={reduced}
-                    full={index === FEATURES.length - 1}
+                    full={m ? false : index === visibleFeatures.length - 1}
                   />
                 ))}
               </div>
@@ -795,9 +798,9 @@ export default function Scene3EnergySaving() {
 
           <div
           style={{
-              marginTop: m ? 10 : 18,
-              width: m ? "min(88%, 332px)" : "min(46%, 540px)",
-              alignSelf: m ? "flex-end" : "flex-end",
+              marginTop: m ? 12 : 18,
+              width: m ? "min(78%, 286px)" : "min(40%, 460px)",
+              alignSelf: m ? "flex-start" : "flex-end",
             }}
           >
             <KpiCard m={m} reduced={reduced} />

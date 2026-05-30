@@ -180,20 +180,20 @@ function NodeCard({ node, m, reduced, index }) {
           display: "flex",
           alignItems: "flex-start",
           gap: m ? 10 : 12,
-          background: m ? "rgba(255,255,255,0.48)" : "rgba(255,255,255,0.42)",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
+          background: m ? "rgba(255,255,255,0.34)" : "rgba(255,255,255,0.42)",
+          backdropFilter: m ? "blur(12px)" : "blur(16px)",
+          WebkitBackdropFilter: m ? "blur(12px)" : "blur(16px)",
           border: "1px solid rgba(11,31,77,0.09)",
           borderRadius: m ? 16 : 18,
-          padding: m ? "12px 13px" : "14px 16px",
-          boxShadow: m ? "0 16px 34px rgba(11,31,77,0.08)" : "0 16px 36px rgba(11,31,77,0.07)",
+          padding: m ? "10px 11px" : "14px 16px",
+          boxShadow: m ? "0 12px 24px rgba(11,31,77,0.06)" : "0 16px 36px rgba(11,31,77,0.07)",
           minWidth: 0,
         }}
       >
         <div
           style={{
-            width: m ? 40 : 46,
-            height: m ? 40 : 46,
+            width: m ? 34 : 46,
+            height: m ? 34 : 46,
             borderRadius: m ? 12 : 14,
             background: "linear-gradient(135deg, rgba(37,99,235,0.14), rgba(34,211,238,0.12))",
             border: "1px solid rgba(37,99,235,0.12)",
@@ -206,8 +206,8 @@ function NodeCard({ node, m, reduced, index }) {
           <img
             src={node.iconSrc}
             alt={node.title}
-            width={m ? 24 : 28}
-            height={m ? 24 : 28}
+            width={m ? 20 : 28}
+            height={m ? 20 : 28}
             style={{ display: "block" }}
           />
         </div>
@@ -215,24 +215,26 @@ function NodeCard({ node, m, reduced, index }) {
         <div style={{ minWidth: 0 }}>
           <div
             style={{
-              fontSize: m ? 12 : 13,
+              fontSize: m ? 11 : 13,
               fontWeight: 800,
               color: NAVY,
-              lineHeight: 1.3,
-              marginBottom: 4,
+              lineHeight: 1.28,
+              marginBottom: m ? 0 : 4,
             }}
           >
             {node.title}
           </div>
-          <div
-            style={{
-              fontSize: m ? 11 : 12,
-              color: "rgba(11,31,77,0.68)",
-              lineHeight: 1.5,
-            }}
-          >
-            {node.desc}
-          </div>
+          {!m && (
+            <div
+              style={{
+                fontSize: 12,
+                color: "rgba(11,31,77,0.68)",
+                lineHeight: 1.5,
+              }}
+            >
+              {node.desc}
+            </div>
+          )}
         </div>
       </motion.div>
     </motion.div>
@@ -240,8 +242,8 @@ function NodeCard({ node, m, reduced, index }) {
 }
 
 function AIEngineCore({ m, reduced }) {
-  const size = m ? 196 : 232;
-  const inner = m ? 146 : 174;
+  const size = m ? 144 : 232;
+  const inner = m ? 104 : 174;
 
   return (
     <motion.div
@@ -319,22 +321,22 @@ function AIEngineCore({ m, reduced }) {
           style={{
             position: "relative",
             zIndex: 1,
-            width: m ? 52 : 60,
-            height: m ? 52 : 60,
+            width: m ? 46 : 60,
+            height: m ? 46 : 60,
             borderRadius: "50%",
             background: "linear-gradient(135deg, rgba(37,99,235,0.16), rgba(34,211,238,0.12))",
             border: "1px solid rgba(37,99,235,0.16)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            marginBottom: m ? 14 : 16,
+            marginBottom: m ? 10 : 16,
           }}
         >
           <img
             src="/icons/ai-brain.svg"
             alt="AI Brain"
-            width={m ? 32 : 38}
-            height={m ? 32 : 38}
+            width={m ? 26 : 38}
+            height={m ? 26 : 38}
             style={{ display: "block" }}
           />
         </motion.div>
@@ -346,7 +348,7 @@ function AIEngineCore({ m, reduced }) {
             color: "rgba(11,31,77,0.58)",
             letterSpacing: "0.14em",
             fontFamily: "'DM Mono', monospace",
-            marginBottom: 8,
+            marginBottom: m ? 6 : 8,
           }}
         >
           SPACE HOST
@@ -355,7 +357,7 @@ function AIEngineCore({ m, reduced }) {
           style={{
             position: "relative",
             zIndex: 1,
-            fontSize: m ? 24 : 28,
+            fontSize: m ? 20 : 28,
             fontWeight: 900,
             letterSpacing: "-0.03em",
             color: NAVY,
@@ -368,8 +370,8 @@ function AIEngineCore({ m, reduced }) {
           style={{
             position: "relative",
             zIndex: 1,
-            marginTop: m ? 10 : 12,
-            fontSize: m ? 11 : 12,
+            marginTop: m ? 8 : 12,
+            fontSize: m ? 10 : 12,
             color: "rgba(11,31,77,0.60)",
             lineHeight: 1.5,
           }}
@@ -488,13 +490,14 @@ function DesktopNetwork({ reduced }) {
 }
 
 function MobileNetwork({ reduced }) {
+  const mobileNodes = [NODES[0], NODES[3]];
   return (
-    <div style={{ width: "100%", maxWidth: 352, marginLeft: "auto" }}>
+    <div style={{ width: "100%", maxWidth: 176, marginLeft: "auto" }}>
       <div
         style={{
           position: "relative",
-          height: 238,
-          marginBottom: 14,
+          height: 146,
+          marginBottom: 10,
         }}
       >
         <svg
@@ -515,14 +518,13 @@ function MobileNetwork({ reduced }) {
             </linearGradient>
           </defs>
           {[
-            { x2: 20, y2: 50 },
-            { x2: 80, y2: 50 },
-            { x2: 50, y2: 84 },
+            { x2: 36, y2: 58 },
+            { x2: 84, y2: 58 },
           ].map((line, index) => (
             <motion.line
               key={`${line.x2}-${line.y2}`}
               x1="50"
-              y1="28"
+              y1="22"
               x2={line.x2}
               y2={line.y2}
               stroke="url(#scene5-mobile-line)"
@@ -541,9 +543,8 @@ function MobileNetwork({ reduced }) {
         </svg>
 
         {[
-          { left: "20%", top: "50%" },
-          { left: "80%", top: "50%" },
-          { left: "50%", top: "84%" },
+          { left: "36%", top: "58%" },
+          { left: "84%", top: "58%" },
         ].map((pos, index) => (
           <motion.img
             key={`${pos.left}-${pos.top}`}
@@ -572,7 +573,7 @@ function MobileNetwork({ reduced }) {
           style={{
             position: "absolute",
             top: 2,
-            left: "56%",
+            left: "78%",
             transform: "translateX(-50%)",
           }}
         >
@@ -583,14 +584,13 @@ function MobileNetwork({ reduced }) {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-          gap: 10,
+          gridTemplateColumns: "1fr",
+          gap: 6,
         }}
       >
-        {NODES.map((node, index) => (
+        {mobileNodes.map((node, index) => (
           <div
             key={node.key}
-            style={index === NODES.length - 1 ? { gridColumn: "1 / -1" } : undefined}
           >
             <NodeCard node={node} m reduced={reduced} index={index} />
           </div>
@@ -653,7 +653,7 @@ export default function Scene5AIEngine() {
                   width: "100%",
                   height: "100%",
                   objectFit: "cover",
-                  objectPosition: m ? "58% 36%" : "60% 50%",
+                  objectPosition: m ? "50% 50%" : "60% 50%",
                   display: "block",
                 }}
               />
@@ -669,22 +669,22 @@ export default function Scene5AIEngine() {
             zIndex: 1,
             pointerEvents: "none",
             background: m
-              ? "linear-gradient(to bottom, rgba(252,248,242,0.84) 0%, rgba(252,248,242,0.46) 16%, rgba(252,248,242,0.08) 34%, rgba(252,248,242,0.02) 56%, rgba(252,248,242,0.12) 76%, rgba(252,248,242,0.34) 100%)"
+              ? "linear-gradient(to bottom, rgba(252,248,242,0.16) 0%, rgba(252,248,242,0.04) 18%, rgba(252,248,242,0.0) 42%, rgba(252,248,242,0.02) 76%, rgba(252,248,242,0.12) 100%)"
               : "linear-gradient(to bottom, rgba(252,248,242,0.22) 0%, rgba(252,248,242,0.06) 26%, rgba(252,248,242,0.0) 56%, rgba(252,248,242,0.14) 100%)",
           }}
         />
-        {!m && (
-          <div
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              inset: 0,
-              zIndex: 1,
-              pointerEvents: "none",
-              background: "linear-gradient(to right, rgba(252,248,242,0.62) 0%, rgba(252,248,242,0.34) 24%, rgba(252,248,242,0.08) 42%, transparent 60%)",
-            }}
-          />
-        )}
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 1,
+            pointerEvents: "none",
+            background: m
+              ? "linear-gradient(to right, rgba(252,248,242,0.30) 0%, rgba(252,248,242,0.08) 24%, rgba(252,248,242,0.0) 40%, transparent 54%)"
+              : "linear-gradient(to right, rgba(252,248,242,0.62) 0%, rgba(252,248,242,0.34) 24%, rgba(252,248,242,0.08) 42%, transparent 60%)",
+          }}
+        />
 
         <div
           style={{
@@ -694,21 +694,23 @@ export default function Scene5AIEngine() {
             padding: m ? "28px 20px 24px" : "48px 64px 40px",
             display: "flex",
             flexDirection: "column",
-            justifyContent: "space-between",
+            justifyContent: m ? "flex-start" : "space-between",
           }}
         >
           <div
             style={{
-              display: "flex",
-              justifyContent: "space-between",
+              display: m ? "grid" : "flex",
+              justifyContent: m ? undefined : "space-between",
+              gridTemplateColumns: m ? "minmax(0, 1fr) minmax(0, 176px)" : undefined,
               alignItems: "flex-start",
-              gap: m ? 18 : 28,
+              gap: m ? 12 : 28,
               flexDirection: m ? "column" : "row",
+              ...(m ? {} : { }),
             }}
           >
             <div
               style={{
-                width: m ? "min(76%, 250px)" : "min(38%, 420px)",
+                width: m ? "100%" : "min(40%, 440px)",
                 paddingTop: m ? 0 : 10,
               }}
             >
@@ -755,8 +757,7 @@ export default function Scene5AIEngine() {
                     <div key={line} style={{ overflow: "hidden", paddingBottom: "0.08em" }}>
                       <motion.span
                         initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
-                        whileInView={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
-                        viewport={{ once: true, amount: 0.45 }}
+                        animate={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
                         transition={{
                           delay: reduced ? (0.2 + index * 0.08) * 0.35 : 0.2 + index * 0.12,
                           duration: reduced ? 0.22 : 0.82,
@@ -772,8 +773,7 @@ export default function Scene5AIEngine() {
                   <div style={{ overflow: "hidden", paddingBottom: "0.08em", marginTop: m ? 14 : 18 }}>
                     <motion.span
                       initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
-                      whileInView={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
-                      viewport={{ once: true, amount: 0.45 }}
+                      animate={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
                       transition={{
                         delay: reduced ? 0.34 * 0.35 : 0.46,
                         duration: reduced ? 0.22 : 0.82,
@@ -803,19 +803,21 @@ export default function Scene5AIEngine() {
                   </div>
                 </h2>
 
-                <motion.p
-                  {...entranceProps(reduced, { delay: 0.62, y: 16, duration: 0.62, amount: 0.6 })}
-                  style={{
-                    margin: m ? "18px 0 0" : "22px 0 0",
-                    maxWidth: m ? 250 : 380,
-                    fontSize: m ? 13 : 15,
-                    color: "rgba(11,31,77,0.70)",
-                    lineHeight: 1.72,
-                  }}
-                >
-                  센서, 예약, 날씨, 제어 이벤트가 따로 오는 것이 아니라
-                  하나의 엔진이 종합 판단해서 숙소를 움직입니다.
-                </motion.p>
+                {!m && (
+                  <motion.p
+                    {...entranceProps(reduced, { delay: 0.62, y: 16, duration: 0.62, amount: 0.6 })}
+                    style={{
+                      margin: "22px 0 0",
+                      maxWidth: 380,
+                      fontSize: 15,
+                      color: "rgba(11,31,77,0.70)",
+                      lineHeight: 1.72,
+                    }}
+                  >
+                    센서, 예약, 날씨, 제어 이벤트가 따로 오는 것이 아니라
+                    하나의 엔진이 종합 판단해서 숙소를 움직입니다.
+                  </motion.p>
+                )}
               </div>
             </div>
 
@@ -824,49 +826,52 @@ export default function Scene5AIEngine() {
                 width: m ? "100%" : "min(52%, 620px)",
                 display: "flex",
                 justifyContent: m ? "flex-end" : "flex-end",
-                paddingTop: m ? 2 : 20,
+                paddingTop: m ? 92 : 20,
+                marginTop: 0,
               }}
             >
               {m ? <MobileNetwork reduced={reduced} /> : <DesktopNetwork reduced={reduced} />}
             </div>
           </div>
 
-          <motion.div
-            {...entranceProps(reduced, { delay: 0.94, y: 32, duration: 0.64, amount: 0.55 })}
-            style={{
-              marginTop: m ? 18 : 12,
-              width: m ? "min(88%, 316px)" : "min(36%, 420px)",
-              alignSelf: m ? "flex-end" : "flex-start",
-              background: m ? "rgba(255,255,255,0.48)" : "rgba(255,255,255,0.54)",
-              backdropFilter: "blur(18px)",
-              WebkitBackdropFilter: "blur(18px)",
-              border: "1px solid rgba(11,31,77,0.09)",
-              borderRadius: m ? 18 : 22,
-              padding: m ? "15px 15px 14px" : "18px 20px",
-              boxShadow: "0 16px 34px rgba(11,31,77,0.08)",
-            }}
-          >
-            <div
+          {!m && (
+            <motion.div
+              {...entranceProps(reduced, { delay: 0.94, y: 32, duration: 0.64, amount: 0.55 })}
               style={{
-                fontSize: m ? 15 : 16,
-                fontWeight: 800,
-                color: NAVY,
-                lineHeight: 1.5,
-                marginBottom: 8,
+                marginTop: 12,
+                width: "min(36%, 420px)",
+                alignSelf: "flex-start",
+                background: "rgba(255,255,255,0.54)",
+                backdropFilter: "blur(18px)",
+                WebkitBackdropFilter: "blur(18px)",
+                border: "1px solid rgba(11,31,77,0.09)",
+                borderRadius: 22,
+                padding: "18px 20px",
+                boxShadow: "0 16px 34px rgba(11,31,77,0.08)",
               }}
             >
-              종합 판단하여 행동하는 지능형 시스템입니다.
-            </div>
-            <div
-              style={{
-                fontSize: m ? 13 : 14,
-                color: "rgba(11,31,77,0.66)",
-                lineHeight: 1.7,
-              }}
-            >
-              당신이 편안한 순간, SPACE HOST가 지능적으로 운영합니다.
-            </div>
-          </motion.div>
+              <div
+                style={{
+                  fontSize: 16,
+                  fontWeight: 800,
+                  color: NAVY,
+                  lineHeight: 1.5,
+                  marginBottom: 8,
+                }}
+              >
+                종합 판단하여 행동하는 지능형 시스템입니다.
+              </div>
+              <div
+                style={{
+                  fontSize: 14,
+                  color: "rgba(11,31,77,0.66)",
+                  lineHeight: 1.7,
+                }}
+              >
+                당신이 편안한 순간, SPACE HOST가 지능적으로 운영합니다.
+              </div>
+            </motion.div>
+          )}
         </div>
       </motion.div>
     </section>

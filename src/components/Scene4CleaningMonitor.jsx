@@ -240,35 +240,37 @@ function SensorBeacon({ sensor, m, reduced, index }) {
           </motion.div>
         </div>
 
-        <div style={{
-          background: "rgba(6,8,14,0.44)",
-          border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 999,
-          padding: m ? "6px 10px" : "7px 12px",
-          backdropFilter: "blur(14px)",
-          WebkitBackdropFilter: "blur(14px)",
-          boxShadow: "0 12px 24px rgba(0,0,0,0.18)",
-          textAlign: "center",
-        }}>
+        {!m && (
           <div style={{
-            fontSize: m ? 10 : 11,
-            fontWeight: 700,
-            color: "#fff",
-            lineHeight: 1.2,
-            whiteSpace: "nowrap",
+            background: "rgba(6,8,14,0.44)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 999,
+            padding: "7px 12px",
+            backdropFilter: "blur(14px)",
+            WebkitBackdropFilter: "blur(14px)",
+            boxShadow: "0 12px 24px rgba(0,0,0,0.18)",
+            textAlign: "center",
           }}>
-            {sensor.label}
+            <div style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: "#fff",
+              lineHeight: 1.2,
+              whiteSpace: "nowrap",
+            }}>
+              {sensor.label}
+            </div>
+            <div style={{
+              marginTop: 2,
+              fontSize: 9,
+              color: "rgba(255,255,255,0.55)",
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+            }}>
+              {sensor.hint}
+            </div>
           </div>
-          <div style={{
-            marginTop: 2,
-            fontSize: m ? 8 : 9,
-            color: "rgba(255,255,255,0.55)",
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-          }}>
-            {sensor.hint}
-          </div>
-        </div>
+        )}
       </motion.div>
     </div>
   );
@@ -306,7 +308,7 @@ function TimelineItem({ item, index, isLast, m, reduced }) {
   return (
     <motion.div
       variants={timelineItemVariants(reduced)}
-      style={{ display: "flex", gap: m ? 12 : 14 }}
+      style={{ display: "flex", gap: m ? 10 : 14 }}
     >
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
         <motion.div
@@ -375,7 +377,7 @@ function TimelineItem({ item, index, isLast, m, reduced }) {
             style={{
               width: 2,
               flex: 1,
-              minHeight: m ? 38 : 44,
+              minHeight: m ? 28 : 44,
               background: `linear-gradient(to bottom, ${palette.line}, rgba(255,255,255,0.06))`,
               margin: "6px 0",
               borderRadius: 1,
@@ -385,10 +387,10 @@ function TimelineItem({ item, index, isLast, m, reduced }) {
         )}
       </div>
 
-      <div style={{ paddingBottom: isLast ? 0 : (m ? 16 : 20), minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 5, flexWrap: "wrap" }}>
+      <div style={{ paddingBottom: isLast ? 0 : (m ? 10 : 20), minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: m ? 2 : 5, flexWrap: "wrap" }}>
           <span style={{
-            fontSize: m ? 10 : 11,
+            fontSize: m ? 9 : 11,
             fontFamily: "'DM Mono', monospace",
             color: palette.time,
             letterSpacing: "0.06em",
@@ -398,7 +400,7 @@ function TimelineItem({ item, index, isLast, m, reduced }) {
             {item.time}
           </span>
           <span style={{
-            fontSize: m ? 13 : 15,
+            fontSize: m ? 12 : 15,
             fontWeight: 700,
             color: "#fff",
             lineHeight: 1.35,
@@ -413,7 +415,7 @@ function TimelineItem({ item, index, isLast, m, reduced }) {
           lineHeight: 1.55,
           maxWidth: 280,
         }}>
-          {item.note}
+          {!m && item.note}
         </div>
       </div>
     </motion.div>
@@ -436,12 +438,12 @@ function ActivityTimeline({ m, reduced }) {
         backdropFilter: "blur(20px)",
         WebkitBackdropFilter: "blur(20px)",
         border: "1px solid rgba(255,255,255,0.12)",
-        borderRadius: m ? 22 : 28,
-        padding: m ? "18px 18px 16px" : "22px 24px 18px",
-        width: m ? "100%" : 420,
-        maxWidth: m ? "90vw" : 420,
+        borderRadius: m ? 20 : 28,
+        padding: m ? "10px 10px 8px" : "20px 22px 16px",
+        width: m ? "100%" : 368,
+        maxWidth: m ? "54vw" : 368,
         boxSizing: "border-box",
-        boxShadow: "0 20px 80px rgba(0,0,0,0.35)",
+        boxShadow: m ? "0 14px 36px rgba(0,0,0,0.22)" : "0 18px 54px rgba(0,0,0,0.26)",
       }}
     >
       <div style={{
@@ -449,15 +451,15 @@ function ActivityTimeline({ m, reduced }) {
         alignItems: "center",
         justifyContent: "space-between",
         gap: 14,
-        marginBottom: m ? 18 : 22,
-        paddingBottom: m ? 12 : 14,
+        marginBottom: m ? 14 : 22,
+        paddingBottom: m ? 10 : 14,
         borderBottom: "1px solid rgba(255,255,255,0.08)",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
           <div style={{
-            width: m ? 38 : 42,
-            height: m ? 38 : 42,
-            borderRadius: 14,
+            width: m ? 32 : 42,
+            height: m ? 32 : 42,
+            borderRadius: m ? 12 : 14,
             background: "rgba(96,165,250,0.12)",
             border: "1px solid rgba(96,165,250,0.24)",
             display: "flex",
@@ -468,24 +470,24 @@ function ActivityTimeline({ m, reduced }) {
             <img
               src="/icons/trusted-operation.svg"
               alt="Trusted operation"
-              width={m ? 22 : 24}
-              height={m ? 22 : 24}
+              width={m ? 18 : 24}
+              height={m ? 18 : 24}
               style={{ display: "block" }}
             />
           </div>
           <div style={{ minWidth: 0 }}>
             <div style={{
-              fontSize: m ? 11 : 12,
+              fontSize: m ? 10 : 12,
               color: BLUE_SOFT,
               fontFamily: "'DM Mono', monospace",
               letterSpacing: "0.08em",
               textTransform: "uppercase",
-              marginBottom: 5,
+              marginBottom: m ? 3 : 5,
             }}>
               Live Activity
             </div>
             <div style={{
-              fontSize: m ? 13 : 14,
+              fontSize: m ? 11 : 14,
               fontWeight: 800,
               color: "#fff",
               letterSpacing: "0.06em",
@@ -497,35 +499,37 @@ function ActivityTimeline({ m, reduced }) {
           </div>
         </div>
 
-        <div style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          borderRadius: 999,
-          padding: "5px 10px",
-          background: "rgba(52,211,153,0.12)",
-          border: "1px solid rgba(52,211,153,0.28)",
-          flexShrink: 0,
-        }}>
-          <motion.div
-            animate={reduced ? {} : { opacity: [0.55, 1, 0.55], scale: [1, 1.15, 1] }}
-            transition={{ duration: 1.8, repeat: reduced ? 0 : Infinity, ease: "easeInOut" }}
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: "50%",
-              background: GREEN,
-            }}
-          />
-          <span style={{
-            fontSize: 10,
-            color: GREEN,
-            fontWeight: 700,
-            letterSpacing: "0.06em",
+        {!m && (
+          <div style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            borderRadius: 999,
+            padding: "5px 10px",
+            background: "rgba(52,211,153,0.12)",
+            border: "1px solid rgba(52,211,153,0.28)",
+            flexShrink: 0,
           }}>
-            LIVE
-          </span>
-        </div>
+            <motion.div
+              animate={reduced ? {} : { opacity: [0.55, 1, 0.55], scale: [1, 1.15, 1] }}
+              transition={{ duration: 1.8, repeat: reduced ? 0 : Infinity, ease: "easeInOut" }}
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: GREEN,
+              }}
+            />
+            <span style={{
+              fontSize: 10,
+              color: GREEN,
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+            }}>
+              LIVE
+            </span>
+          </div>
+        )}
       </div>
 
       <motion.div
@@ -546,44 +550,46 @@ function ActivityTimeline({ m, reduced }) {
         ))}
       </motion.div>
 
-      <div style={{
-        marginTop: m ? 16 : 18,
-        paddingTop: m ? 12 : 14,
-        borderTop: "1px solid rgba(255,255,255,0.08)",
-        display: "flex",
-        flexWrap: "wrap",
-        gap: 10,
-      }}>
-        {["Sensor-Based Detection", "Privacy Friendly"].map((text) => (
-          <div
-            key={text}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 7,
-              borderRadius: 999,
-              padding: "6px 10px",
-              background: "rgba(255,255,255,0.05)",
-              border: "1px solid rgba(255,255,255,0.08)",
-            }}
-          >
-            <span style={{
-              width: 5,
-              height: 5,
-              borderRadius: "50%",
-              background: text === "Privacy Friendly" ? GREEN : BLUE,
-              flexShrink: 0,
-            }} />
-            <span style={{
-              fontSize: m ? 10 : 11,
-              color: "rgba(255,255,255,0.68)",
-              letterSpacing: "0.03em",
-            }}>
-              {text}
-            </span>
-          </div>
-        ))}
-      </div>
+      {!m && (
+        <div style={{
+          marginTop: 18,
+          paddingTop: 14,
+          borderTop: "1px solid rgba(255,255,255,0.08)",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 10,
+        }}>
+          {["Sensor-Based Detection", "Privacy Friendly"].map((text) => (
+            <div
+              key={text}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 7,
+                borderRadius: 999,
+                padding: "6px 10px",
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <span style={{
+                width: 5,
+                height: 5,
+                borderRadius: "50%",
+                background: text === "Privacy Friendly" ? GREEN : BLUE,
+                flexShrink: 0,
+              }} />
+              <span style={{
+                fontSize: 11,
+                color: "rgba(255,255,255,0.68)",
+                letterSpacing: "0.03em",
+              }}>
+                {text}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -605,23 +611,22 @@ function FeaturePill({ iconSrc, line1, line2, m, reduced, index }) {
         display: "flex",
         alignItems: "center",
         gap: m ? 10 : 12,
-        background: "rgba(255,255,255,0.06)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
-        border: "1px solid rgba(255,255,255,0.1)",
+        background: m ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.06)",
+        backdropFilter: "blur(11px)",
+        WebkitBackdropFilter: "blur(11px)",
+        border: "1px solid rgba(255,255,255,0.09)",
         borderRadius: m ? 12 : 14,
-        padding: m ? "10px 12px" : "13px 16px",
+        padding: m ? "9px 10px" : "13px 16px",
         minWidth: 0,
-        boxShadow: "0 12px 28px rgba(0,0,0,0.12)",
-        ...(m && index === 2 ? { gridColumn: "1 / -1" } : {}),
+        boxShadow: "0 12px 24px rgba(0,0,0,0.10)",
       }}
     >
       <motion.div
         animate={reduced ? {} : { boxShadow: ["0 0 0 rgba(96,165,250,0)", "0 0 22px rgba(96,165,250,0.18)", "0 0 0 rgba(96,165,250,0)"] }}
         transition={{ duration: 4.2, delay: index * 0.28, repeat: reduced ? 0 : Infinity, ease: "easeInOut" }}
         style={{
-          width: m ? 36 : 44,
-          height: m ? 36 : 44,
+          width: m ? 32 : 44,
+          height: m ? 32 : 44,
           flexShrink: 0,
           borderRadius: m ? 10 : 12,
           background: "rgba(96,165,250,0.1)",
@@ -641,14 +646,14 @@ function FeaturePill({ iconSrc, line1, line2, m, reduced, index }) {
       </motion.div>
       <div style={{ minWidth: 0 }}>
         <div style={{
-          fontSize: m ? 10 : 11,
+          fontSize: m ? 9 : 11,
           color: "rgba(255,255,255,0.42)",
           marginBottom: 2,
         }}>
           {line1}
         </div>
         <div style={{
-          fontSize: m ? 12 : 13,
+          fontSize: m ? 11 : 13,
           fontWeight: 700,
           color: "#fff",
           lineHeight: 1.3,
@@ -664,16 +669,15 @@ function FeaturePill({ iconSrc, line1, line2, m, reduced, index }) {
    카피 블록
 ───────────────────────────────────── */
 function CopyBlock({ m, reduced }) {
-  const headSize = m ? "clamp(26px, 7.5vw, 42px)" : "clamp(38px, 3.8vw, 58px)";
+  const headSize = m ? "clamp(24px, 6.9vw, 36px)" : "clamp(38px, 3.8vw, 58px)";
 
   return (
-    <div style={{ margin: m ? 0 : "0 0 30px" }}>
+    <div style={{ margin: m ? "12px 0 0" : "0 0 30px", maxWidth: m ? "min(64%, 236px)" : 560 }}>
       {COPY_LINES.map((line, index) => (
         <div key={line.key} style={{ overflow: "hidden", paddingBottom: "0.08em" }}>
           <motion.div
             initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
-            whileInView={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
-            viewport={{ once: true, amount: 0.7 }}
+            animate={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
             transition={{
               delay: reduced ? (0.12 + index * 0.08) * 0.35 : 0.12 + index * 0.11,
               duration: reduced ? 0.22 : 0.78,
@@ -713,6 +717,7 @@ function CopyBlock({ m, reduced }) {
           fontSize: m ? 13 : 15,
           color: "rgba(255,255,255,0.58)",
           lineHeight: 1.7,
+          display: m ? "none" : "block",
         }}
       >
         도어 센서와 활동 감지 이벤트를 조합해, 청소 시작부터 완료까지를
@@ -728,6 +733,7 @@ function CopyBlock({ m, reduced }) {
 export default function Scene4CleaningMonitor() {
   const m = useIsMobile();
   const reduced = useReducedMotion();
+  const visibleFeatures = m ? [] : FEATURES;
   const sectionRef = useRef(null);
   const { scrollYProgress } = useScroll({
     target: sectionRef,
@@ -846,9 +852,9 @@ export default function Scene4CleaningMonitor() {
             zIndex: 2,
             display: "flex",
             flexDirection: "column",
-            justifyContent: "space-between",
+            justifyContent: m ? "flex-start" : "space-between",
             minHeight: m ? "100svh" : "92vh",
-            padding: m ? "28px 20px 48px" : "52px 60px 60px",
+            padding: m ? "24px 20px 28px" : "52px 60px 60px",
             ...(m ? {} : { maxWidth: 640 }),
           }}
         >
@@ -872,31 +878,33 @@ export default function Scene4CleaningMonitor() {
 
           {m && <CopyBlock m={m} reduced={reduced} />}
 
-          <div>
+          <div style={{ marginTop: m ? "auto" : 0 }}>
             {!m && <CopyBlock m={m} reduced={reduced} />}
 
             {m && (
-              <div style={{ marginBottom: 18, display: "flex", justifyContent: "center" }}>
+              <div style={{ marginBottom: 14, display: "flex", justifyContent: "flex-start" }}>
                 <ActivityTimeline m={m} reduced={reduced} />
               </div>
             )}
 
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: m ? "repeat(2, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))",
-              gap: m ? 8 : 14,
-              alignItems: "stretch",
-            }}>
-              {FEATURES.map((feature, index) => (
-                <FeaturePill
-                  key={feature.line2}
-                  {...feature}
-                  m={m}
-                  reduced={reduced}
-                  index={index}
-                />
-              ))}
-            </div>
+            {visibleFeatures.length > 0 && (
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gap: 14,
+                alignItems: "stretch",
+              }}>
+                {visibleFeatures.map((feature, index) => (
+                  <FeaturePill
+                    key={feature.line2}
+                    {...feature}
+                    m={m}
+                    reduced={reduced}
+                    index={index}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -904,9 +912,8 @@ export default function Scene4CleaningMonitor() {
         {!m && (
           <div style={{
             position: "absolute",
-            right: 60,
-            top: "50%",
-            transform: "translateY(-50%)",
+            right: 46,
+            bottom: 58,
             zIndex: 4,
           }}>
             <ActivityTimeline m={false} reduced={reduced} />
