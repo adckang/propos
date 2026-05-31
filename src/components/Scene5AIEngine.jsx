@@ -95,61 +95,85 @@ const NODES = [
     iconSrc: "/icons/sensor-info.svg",
     title: "센서 정보",
     desc: "온도, 습도, 조도, 문열림 등",
-    desktop: { top: "18%", left: "26%" },
+    desktop: { top: "12%", left: "18%" },
   },
   {
     key: "reservation",
     iconSrc: "/icons/reservation-info.svg",
     title: "예약 정보",
     desc: "체크인/아웃, 예약 일정 등",
-    desktop: { top: "16%", left: "79%" },
+    desktop: { top: "6%", left: "50%" },
   },
   {
     key: "weather",
     iconSrc: "/icons/weather-info.svg",
     title: "날씨 정보",
     desc: "기온, 강수 확률, 미세먼지 등",
-    desktop: { top: "44%", left: "16%" },
+    desktop: { top: "12%", left: "82%" },
   },
   {
     key: "auto-control",
     iconSrc: "/icons/auto-control.svg",
     title: "자동 숙소 제어",
     desc: "조명, 에어컨, 전기 등 자동 제어",
-    desktop: { top: "43%", left: "88%" },
+    desktop: { top: "44%", left: "11%" },
   },
   {
     key: "mode-switch",
     iconSrc: "/icons/mode-switch.svg",
     title: "웰컴/공실모드 변경",
     desc: "입실·퇴실 감지하여 자동 전환",
-    desktop: { top: "74%", left: "26%" },
+    desktop: { top: "44%", left: "89%" },
   },
   {
     key: "emergency",
     iconSrc: "/icons/emergency-alert.svg",
     title: "실시간 긴급 알람",
     desc: "이상 상황 발생 시 즉시 알림",
-    desktop: { top: "73%", left: "80%" },
+    desktop: { top: "80%", left: "72%" },
   },
   {
     key: "weekly",
     iconSrc: "/icons/weekly-report.svg",
     title: "주간 리포트 생성",
     desc: "숙소 운영 현황 리포트",
-    desktop: { top: "87%", left: "56%" },
+    desktop: { top: "80%", left: "28%" },
   },
 ];
 
+/* 방사형 — 중앙(50,46)에서 7개 노드로. NODES 순서와 1:1 대응
+   [sensor, reservation, weather, auto-control, mode-switch, emergency, weekly] */
 const DESKTOP_LINES = [
-  { x1: 56, y1: 47, x2: 27, y2: 22 },
-  { x1: 56, y1: 47, x2: 80, y2: 21 },
-  { x1: 56, y1: 47, x2: 19, y2: 45 },
-  { x1: 56, y1: 47, x2: 87, y2: 44 },
-  { x1: 56, y1: 47, x2: 27, y2: 74 },
-  { x1: 56, y1: 47, x2: 80, y2: 73 },
-  { x1: 56, y1: 47, x2: 56, y2: 84 },
+  { x1: 50, y1: 46, x2: 18, y2: 16 },  // 센서 (상단-좌)
+  { x1: 50, y1: 46, x2: 50, y2: 11 },  // 예약 (상단-중)
+  { x1: 50, y1: 46, x2: 82, y2: 16 },  // 날씨 (상단-우)
+  { x1: 50, y1: 46, x2: 14, y2: 45 },  // 자동제어 (중단-좌)
+  { x1: 50, y1: 46, x2: 86, y2: 45 },  // 웰컴모드 (중단-우)
+  { x1: 50, y1: 46, x2: 71, y2: 76 },  // 긴급알람 (하단-우)
+  { x1: 50, y1: 46, x2: 29, y2: 76 },  // 주간리포트 (하단-좌)
 ];
+
+/* 모바일 방사형 — 중앙 엔진(50,50) 기준 7개 노드 위치 (사진 위에 떠 있는 형태) */
+const MOBILE_RADIAL = {
+  sensor:         { left: "20%", top: "6%" },
+  reservation:    { left: "52%", top: "2%" },
+  weather:        { left: "84%", top: "6%" },
+  "auto-control": { left: "8%",  top: "47%" },
+  "mode-switch":  { left: "92%", top: "47%" },
+  weekly:         { left: "22%", top: "90%" },
+  emergency:      { left: "80%", top: "90%" },
+};
+
+/* 모바일 압축 라벨 (좁은 폭에 맞춰 다이어트) */
+const SHORT_LABELS = {
+  sensor: "센서",
+  reservation: "예약",
+  weather: "날씨",
+  "auto-control": "자동제어",
+  "mode-switch": "모드전환",
+  weekly: "리포트",
+  emergency: "긴급알람",
+};
 
 function NodeCard({ node, m, reduced, index }) {
   return (
@@ -242,8 +266,8 @@ function NodeCard({ node, m, reduced, index }) {
 }
 
 function AIEngineCore({ m, reduced }) {
-  const size = m ? 144 : 232;
-  const inner = m ? 104 : 174;
+  const size = m ? 118 : 232;
+  const inner = m ? 88 : 174;
 
   return (
     <motion.div
@@ -291,7 +315,7 @@ function AIEngineCore({ m, reduced }) {
           height: inner,
           transform: "translate(-50%, -50%)",
           borderRadius: "50%",
-          background: "linear-gradient(160deg, rgba(255,255,255,0.64), rgba(235,244,255,0.50))",
+          background: "linear-gradient(160deg, rgba(255,255,255,0.92), rgba(232,242,255,0.86))",
           border: "1px solid rgba(11,31,77,0.09)",
           backdropFilter: "blur(16px)",
           WebkitBackdropFilter: "blur(16px)",
@@ -315,70 +339,33 @@ function AIEngineCore({ m, reduced }) {
             filter: "blur(10px)",
           }}
         />
-        <motion.div
-          animate={reduced ? {} : { scale: [1, 1.045, 1] }}
-          transition={{ duration: 3.2, repeat: reduced ? 0 : Infinity, ease: "easeInOut" }}
-          style={{
-            position: "relative",
-            zIndex: 1,
-            width: m ? 46 : 60,
-            height: m ? 46 : 60,
-            borderRadius: "50%",
-            background: "linear-gradient(135deg, rgba(37,99,235,0.16), rgba(34,211,238,0.12))",
-            border: "1px solid rgba(37,99,235,0.16)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            marginBottom: m ? 10 : 16,
-          }}
+        {/* 중앙 = 파란 하우스 마크 + 네이비 SPACE HOST (밝은 코어 위에서 또렷하게) */}
+        <svg
+          aria-hidden="true"
+          width={m ? 24 : 38}
+          height={m ? 24 : 38}
+          viewBox="10 4 52 56"
+          fill="none"
+          style={{ position: "relative", zIndex: 1, display: "block", marginBottom: m ? 5 : 9 }}
         >
-          <img
-            src="/icons/ai-brain.svg"
-            alt="AI Brain"
-            width={m ? 26 : 38}
-            height={m ? 26 : 38}
-            style={{ display: "block" }}
-          />
-        </motion.div>
+          <path d="M16 44V24L36 8L56 24V56H16V44Z" stroke="#1E6BFF" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M29 55V37H46V55" stroke="#1E6BFF" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M27 31H46" stroke="#1E6BFF" strokeWidth="5" strokeLinecap="round" />
+        </svg>
         <div
           style={{
             position: "relative",
             zIndex: 1,
-            fontSize: m ? 10 : 11,
-            color: "rgba(11,31,77,0.58)",
-            letterSpacing: "0.14em",
-            fontFamily: "'DM Mono', monospace",
-            marginBottom: m ? 6 : 8,
+            fontFamily: "'Nunito', sans-serif",
+            fontWeight: 800,
+            fontSize: m ? 12.5 : 20,
+            letterSpacing: m ? "0.02em" : "0.04em",
+            color: NAVY,
+            lineHeight: 1,
+            whiteSpace: "nowrap",
           }}
         >
           SPACE HOST
-        </div>
-        <div
-          style={{
-            position: "relative",
-            zIndex: 1,
-            fontSize: m ? 20 : 28,
-            fontWeight: 900,
-            letterSpacing: "-0.03em",
-            color: NAVY,
-            lineHeight: 1.05,
-          }}
-        >
-          AI ENGINE
-        </div>
-        <div
-          style={{
-            position: "relative",
-            zIndex: 1,
-            marginTop: m ? 8 : 12,
-            fontSize: m ? 10 : 12,
-            color: "rgba(11,31,77,0.60)",
-            lineHeight: 1.5,
-          }}
-        >
-          데이터를 종합 판단해
-          <br />
-          행동으로 연결합니다.
         </div>
       </motion.div>
     </motion.div>
@@ -462,8 +449,8 @@ function DesktopNetwork({ reduced }) {
       <div
         style={{
           position: "absolute",
-          top: "47%",
-          left: "56%",
+          top: "46%",
+          left: "50%",
           transform: "translate(-50%, -50%)",
           zIndex: 2,
         }}
@@ -489,113 +476,101 @@ function DesktopNetwork({ reduced }) {
   );
 }
 
-function MobileNetwork({ reduced }) {
-  const mobileNodes = [NODES[0], NODES[3]];
+/* 모바일 방사형 노드 칩 — 아이콘 + 압축 라벨 (사진 위에 떠 있음, 솔리드 패널 없음) */
+function MobileChip({ node }) {
   return (
-    <div style={{ width: "100%", maxWidth: 176, marginLeft: "auto" }}>
-      <div
-        style={{
-          position: "relative",
-          height: 146,
-          marginBottom: 10,
-        }}
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, width: 58 }}>
+      <div style={{
+        width: 40,
+        height: 40,
+        borderRadius: 13,
+        background: "rgba(255,255,255,0.9)",
+        border: "1px solid rgba(11,31,77,0.1)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        boxShadow: "0 6px 16px rgba(11,31,77,0.14)",
+      }}>
+        <img src={node.iconSrc} alt={node.title} width={23} height={23} style={{ display: "block" }} />
+      </div>
+      {/* 솔루션명 — Nunito 로 예쁘게 */}
+      <span style={{
+        fontFamily: "'Nunito', sans-serif",
+        fontSize: 11.5,
+        fontWeight: 800,
+        letterSpacing: "-0.01em",
+        color: NAVY,
+        whiteSpace: "nowrap",
+        textShadow: "0 1px 4px rgba(255,255,255,0.95), 0 0 2px rgba(255,255,255,0.9)",
+      }}>
+        {SHORT_LABELS[node.key]}
+      </span>
+    </div>
+  );
+}
+
+function MobileNetwork({ reduced }) {
+  return (
+    <div style={{ position: "relative", width: "66%", maxWidth: 248, aspectRatio: "1 / 1", marginLeft: "auto", marginTop: 10, marginBottom: 10 }}>
+      {/* 연결선 — 중앙(50,50)에서 각 노드로 */}
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible" }}
       >
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-          }}
-        >
-          <defs>
-            <linearGradient id="scene5-mobile-line" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="rgba(37,99,235,0.14)" />
-              <stop offset="100%" stopColor="rgba(34,211,238,0.28)" />
-            </linearGradient>
-          </defs>
-          {[
-            { x2: 36, y2: 58 },
-            { x2: 84, y2: 58 },
-          ].map((line, index) => (
+        <defs>
+          <linearGradient id="scene5-mobile-line" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="rgba(37,99,235,0.20)" />
+            <stop offset="100%" stopColor="rgba(34,211,238,0.32)" />
+          </linearGradient>
+        </defs>
+        {NODES.map((node, index) => {
+          const p = MOBILE_RADIAL[node.key];
+          return (
             <motion.line
-              key={`${line.x2}-${line.y2}`}
+              key={node.key}
               x1="50"
-              y1="22"
-              x2={line.x2}
-              y2={line.y2}
+              y1="50"
+              x2={Number.parseFloat(p.left)}
+              y2={Number.parseFloat(p.top)}
               stroke="url(#scene5-mobile-line)"
-              strokeWidth="0.9"
+              strokeWidth="0.8"
               strokeLinecap="round"
-              initial={reduced ? { opacity: 0 } : { pathLength: 0, opacity: 0.28 }}
+              initial={reduced ? { opacity: 0 } : { pathLength: 0, opacity: 0.3 }}
               whileInView={reduced ? { opacity: 1 } : { pathLength: 1, opacity: 1 }}
-              viewport={{ once: true, amount: 0.45 }}
+              viewport={{ once: true, amount: 0.4 }}
               transition={{
-                duration: reduced ? 0.22 : 0.48,
-                delay: reduced ? (0.34 + index * 0.06) * 0.35 : 0.38 + index * 0.08,
+                duration: reduced ? 0.22 : 0.5,
+                delay: reduced ? 0.1 : 0.3 + index * 0.06,
                 ease: [0.22, 1, 0.36, 1],
               }}
             />
-          ))}
-        </svg>
+          );
+        })}
+      </svg>
 
-        {[
-          { left: "36%", top: "58%" },
-          { left: "84%", top: "58%" },
-        ].map((pos, index) => (
-          <motion.img
-            key={`${pos.left}-${pos.top}`}
-            src="/icons/connection-node.svg"
-            alt=""
-            aria-hidden="true"
-            width={16}
-            height={16}
-            {...entranceProps(reduced, {
-              delay: 0.46 + index * 0.08,
-              scale: 0.9,
-              duration: 0.4,
-              amount: 0.45,
-            })}
-            style={{
-              position: "absolute",
-              left: `calc(${pos.left} - 8px)`,
-              top: `calc(${pos.top} - 8px)`,
-              display: "block",
-              opacity: 0.94,
-            }}
-          />
-        ))}
-
-        <div
-          style={{
-            position: "absolute",
-            top: 2,
-            left: "78%",
-            transform: "translateX(-50%)",
-          }}
-        >
-          <AIEngineCore m reduced={reduced} />
-        </div>
+      {/* 중앙 엔진 */}
+      <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 2 }}>
+        <AIEngineCore m reduced={reduced} />
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr",
-          gap: 6,
-        }}
-      >
-        {mobileNodes.map((node, index) => (
+      {/* 노드 칩 (방사형) */}
+      {NODES.map((node, index) => {
+        const p = MOBILE_RADIAL[node.key];
+        return (
           <div
             key={node.key}
+            style={{ position: "absolute", top: p.top, left: p.left, transform: "translate(-50%, -50%)", zIndex: 3 }}
           >
-            <NodeCard node={node} m reduced={reduced} index={index} />
+            <motion.div
+              {...entranceProps(reduced, { delay: 0.45 + index * 0.06, x: 0, y: 0, scale: 0.82, duration: 0.5, amount: 0.3 })}
+            >
+              <MobileChip node={node} />
+            </motion.div>
           </div>
-        ))}
-      </div>
+        );
+      })}
     </div>
   );
 }
@@ -680,9 +655,11 @@ export default function Scene5AIEngine() {
             inset: 0,
             zIndex: 1,
             pointerEvents: "none",
+            /* 좌측: 텍스트 가독용 옅은 라이트 / 중앙: 투명(인물 노출) / 우측: 흰 캔버스(도식 전용)
+               → scene-5.png 처럼 도식이 인물 위가 아닌 깨끗한 흰 배경 위에 뜨도록 */
             background: m
               ? "linear-gradient(to right, rgba(252,248,242,0.30) 0%, rgba(252,248,242,0.08) 24%, rgba(252,248,242,0.0) 40%, transparent 54%)"
-              : "linear-gradient(to right, rgba(252,248,242,0.62) 0%, rgba(252,248,242,0.34) 24%, rgba(252,248,242,0.08) 42%, transparent 60%)",
+              : "linear-gradient(to right, rgba(252,248,242,0.42) 0%, rgba(252,248,242,0.10) 20%, transparent 36%, rgba(255,255,255,0.45) 50%, rgba(255,255,255,0.68) 68%, rgba(255,255,255,0.80) 100%)",
           }}
         />
 
@@ -699,13 +676,11 @@ export default function Scene5AIEngine() {
         >
           <div
             style={{
-              display: m ? "grid" : "flex",
-              justifyContent: m ? undefined : "space-between",
-              gridTemplateColumns: m ? "minmax(0, 1fr) minmax(0, 176px)" : undefined,
-              alignItems: "flex-start",
-              gap: m ? 12 : 28,
+              display: "flex",
+              justifyContent: m ? "flex-start" : "space-between",
+              alignItems: m ? "stretch" : "flex-start",
+              gap: m ? 18 : 28,
               flexDirection: m ? "column" : "row",
-              ...(m ? {} : { }),
             }}
           >
             <div
@@ -751,8 +726,7 @@ export default function Scene5AIEngine() {
                   }}
                 >
                   {[
-                    "하루종일 알림으로",
-                    "괴로운",
+                    "하루종일 알림으로 괴롭히는",                    
                   ].map((line, index) => (
                     <div key={line} style={{ overflow: "hidden", paddingBottom: "0.08em" }}>
                       <motion.span
@@ -825,8 +799,8 @@ export default function Scene5AIEngine() {
               style={{
                 width: m ? "100%" : "min(52%, 620px)",
                 display: "flex",
-                justifyContent: m ? "flex-end" : "flex-end",
-                paddingTop: m ? 92 : 20,
+                justifyContent: "flex-end",
+                paddingTop: m ? 8 : 20,
                 marginTop: 0,
               }}
             >
@@ -838,36 +812,73 @@ export default function Scene5AIEngine() {
             <motion.div
               {...entranceProps(reduced, { delay: 0.94, y: 32, duration: 0.64, amount: 0.55 })}
               style={{
-                marginTop: 12,
-                width: "min(36%, 420px)",
-                alignSelf: "flex-start",
-                background: "rgba(255,255,255,0.54)",
+                marginTop: 18,
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                gap: 22,
+                background: "rgba(255,255,255,0.66)",
                 backdropFilter: "blur(18px)",
                 WebkitBackdropFilter: "blur(18px)",
                 border: "1px solid rgba(11,31,77,0.09)",
                 borderRadius: 22,
-                padding: "18px 20px",
+                padding: "18px 28px",
                 boxShadow: "0 16px 34px rgba(11,31,77,0.08)",
               }}
             >
-              <div
-                style={{
-                  fontSize: 16,
-                  fontWeight: 800,
-                  color: NAVY,
-                  lineHeight: 1.5,
-                  marginBottom: 8,
-                }}
-              >
-                종합 판단하여 행동하는 지능형 시스템입니다.
+              <img
+                src="/icons/spacehost-logo.svg"
+                alt="SPACE HOST"
+                style={{ height: 30, display: "block", flexShrink: 0 }}
+              />
+              <div style={{ width: 1, height: 42, background: "rgba(11,31,77,0.12)", flexShrink: 0 }} />
+              <div>
+                <div
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 800,
+                    color: NAVY,
+                    lineHeight: 1.5,
+                    marginBottom: 4,
+                  }}
+                >
+                  종합 판단하여 행동하는 <span style={{ color: BLUE }}>지능형 시스템</span>입니다.
+                </div>
+                <div
+                  style={{
+                    fontSize: 14,
+                    color: "rgba(11,31,77,0.66)",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  당신이 편안한 순간, SPACE HOST가 지능적으로 운영합니다.
+                </div>
               </div>
-              <div
-                style={{
-                  fontSize: 14,
-                  color: "rgba(11,31,77,0.66)",
-                  lineHeight: 1.7,
-                }}
-              >
+            </motion.div>
+          )}
+
+          {/* 모바일 값 카드 — 마무리 문구 (하단에 안정 배치: marginTop auto) */}
+          {m && (
+            <motion.div
+              {...entranceProps(reduced, { delay: 0.6, y: 18, duration: 0.6, amount: 0.4 })}
+              style={{
+                marginTop: "auto",
+                paddingTop: 0,
+                marginBottom: 4,
+                width: "100%",
+                background: "rgba(255,255,255,0.7)",
+                backdropFilter: "blur(16px)",
+                WebkitBackdropFilter: "blur(16px)",
+                border: "1px solid rgba(11,31,77,0.08)",
+                borderRadius: 18,
+                padding: "14px 16px",
+                boxShadow: "0 14px 28px rgba(11,31,77,0.07)",
+              }}
+            >
+              <div style={{ fontSize: 15, fontWeight: 800, color: NAVY, lineHeight: 1.45, marginBottom: 4 }}>
+                종합 판단하여 행동하는 <span style={{ color: BLUE }}>지능형 시스템</span>입니다.
+              </div>
+              <div style={{ fontSize: 12.5, color: "rgba(11,31,77,0.66)", lineHeight: 1.6 }}>
                 당신이 편안한 순간, SPACE HOST가 지능적으로 운영합니다.
               </div>
             </motion.div>

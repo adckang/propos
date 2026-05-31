@@ -39,128 +39,51 @@ const COPY_LINES = [
 ];
 
 const FEATURES = [
-  { iconSrc: "/icons/noise-alert.svg",        line1: "소음 감지 시",   line2: "즉시 경고"           },
-  { iconSrc: "/icons/manner-mode.svg",         line1: "스스로 조성하는", line2: "매너 문화"          },
+  { iconSrc: "/icons/noise-alert.svg",        line1: "매너시간",   line2: "소음 발생 센싱하여 손님에게 자동 안내"   },
+  { iconSrc: "/icons/manner-mode.svg",         line1: "적정소음", line2: "손님 스스로 파악 가능한 친절한 가이드"          },
   { iconSrc: "/icons/stress-reduction.svg",    line1: "민원 예방으로",  line2: "운영 스트레스 감소" },
 ];
 
 /* ─────────────────────────────────────
-   소음 감지 원형 UI — CSS/HTML 레이어
-   배경 이미지 위에 floating HUD 형태로 배치
-   (2차에서 pulse 애니메이션 추가 예정)
+   소음 경고 슬림 핀 (dB Pill)
+   기존 큰 원형 HUD → 배경의 실제 빨간 디바이스와 중복되어
+   Scene-1 "1줄 카드" 무게의 슬림 핀으로 축소.
+   소음 dB 수치는 Scene-2의 정체성이므로 유지.
 ───────────────────────────────────── */
-function NoiseRingUI({ m }) {
-  const size  = m ? 128 : 212;
-  const inner = m ? 114 : 192;
-
+function DbPill({ m }) {
   return (
-    <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
-
-      {/* 외부 글로우 링 */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          inset: -16,
-          borderRadius: "50%",
-          boxShadow: m
-            ? "0 0 34px rgba(248,113,113,0.28), 0 0 72px rgba(248,113,113,0.12)"
-            : "0 0 46px rgba(248,113,113,0.34), 0 0 90px rgba(248,113,113,0.15)",
-          pointerEvents: "none",
-        }}
-      />
-
-      {/* 중간 링 — pulse 준비 (motion.div, 현재 정적) */}
-      <motion.div
-        style={{
-          position: "absolute",
-          inset: 0,
-          borderRadius: "50%",
-          border: `1.5px solid rgba(248,113,113,0.28)`,
-        }}
-      />
-
-      {/* 메인 원 */}
-      <div
-        style={{
-          position: "absolute",
-          inset: (size - inner) / 2,
-          borderRadius: "50%",
-          border: m ? "2.5px solid rgba(248,113,113,0.82)" : "3px solid rgba(248,113,113,0.85)",
-          background: m ? "rgba(4,4,14,0.72)" : "rgba(4,4,14,0.78)",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: m ? 3 : 5,
-        }}
-      >
-        {/* 상태 레이블 */}
-        <div style={{
-          fontSize: m ? 9 : 10,
-          fontFamily: "'DM Mono', monospace",
-          color: "rgba(255,255,255,0.4)",
-          letterSpacing: "0.2em",
-          textTransform: "uppercase",
-        }}>소음 감지</div>
-
-        {/* dB 수치 — Framer Motion 준비 래퍼 */}
-        <motion.div style={{
-          fontSize: m ? 34 : 54,
-          fontWeight: 900,
-          color: RED,
-          fontFamily: "'DM Mono', monospace",
-          lineHeight: 1,
-          letterSpacing: "-0.03em",
-        }}>
-          72
-        </motion.div>
-
-        {/* 단위 */}
-        <div style={{
-          fontSize: m ? 10 : 13,
-          fontFamily: "'DM Mono', monospace",
-          color: `rgba(248,113,113,0.65)`,
-          letterSpacing: "0.12em",
-        }}>dB</div>
-
-        {/* 경고 뱃지 */}
-        <div style={{
-          marginTop: m ? 2 : 4,
-          background: "rgba(248,113,113,0.15)",
-          border: "1px solid rgba(248,113,113,0.45)",
-          borderRadius: 999,
-          padding: m ? "2px 8px" : "3px 12px",
-          fontSize: m ? 8 : 10,
-          color: RED,
-          fontWeight: 700,
-          letterSpacing: "0.04em",
-          display: "flex",
-          alignItems: "center",
-          gap: 4,
-        }}>
-          <span>⚠</span>
-          <span>경고 수준</span>
-        </div>
-      </div>
-
-      {/* 하단 레이블 */}
-      <div style={{
-        position: "absolute",
-        bottom: m ? -18 : -28,
-        left: "50%",
-        transform: "translateX(-50%)",
-        fontSize: m ? 8 : 10,
-        fontFamily: "'DM Mono', monospace",
-        color: "rgba(255,255,255,0.32)",
-        letterSpacing: "0.16em",
-        textTransform: "uppercase",
-        whiteSpace: "nowrap",
+    <div style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: m ? 9 : 11,
+      background: "rgba(4,4,14,0.42)",
+      backdropFilter: "blur(16px)",
+      WebkitBackdropFilter: "blur(16px)",
+      border: "1px solid rgba(248,113,113,0.4)",
+      borderRadius: 999,
+      padding: m ? "8px 14px" : "10px 18px",
+      boxShadow: "0 0 22px rgba(248,113,113,0.16)",
+      alignSelf: "flex-start",
+    }}>
+      {/* 경고 도트 (정적) */}
+      <span style={{
+        width: 8, height: 8, borderRadius: "50%",
+        background: RED, boxShadow: `0 0 8px ${RED}`, flexShrink: 0,
+      }} />
+      {/* dB 수치 — Scene-2 정체성 */}
+      <span style={{
+        fontFamily: "'DM Mono', monospace", fontWeight: 900,
+        fontSize: m ? 18 : 22, color: RED,
+        letterSpacing: "-0.02em", lineHeight: 1,
       }}>
-        거실 · 감지 중
-      </div>
+        72<span style={{ fontSize: m ? 11 : 13, marginLeft: 2, fontWeight: 700 }}>dB</span>
+      </span>
+      {/* 구분선 */}
+      <span style={{ width: 1, height: m ? 14 : 18, background: "rgba(255,255,255,0.2)", flexShrink: 0 }} />
+      {/* 라벨 */}
+      <span style={{ fontSize: m ? 12 : 13, fontWeight: 700, color: "#fff", whiteSpace: "nowrap" }}>
+        경고 수준 감지
+      </span>
     </div>
   );
 }
@@ -231,16 +154,16 @@ function FeaturePill({ iconSrc, line1, line2, m }) {
 function HeadlineBlock({ m }) {
   return (
     <h2 style={{
-      fontSize: m ? "clamp(22px, 6.4vw, 34px)" : "clamp(42px, 4.4vw, 64px)",
+      fontSize: m ? "clamp(30px, 8.5vw, 48px)" : "clamp(46px, 4.8vw, 70px)",
       fontWeight: 900,
       lineHeight: m ? 1.04 : 1.15,
-      margin: m ? "6px 0 0" : "0 0 28px",
+      margin: m ? "30px 0 0" : "-28px 0 24px",      
       letterSpacing: "-0.025em",
-      maxWidth: m ? "min(52%, 194px)" : 560,
+      maxWidth: m ? "min(100%, 394px)" : 560,
     }}>
       {COPY_LINES.map((line) => (
         /* overflow:hidden + motion.span = 2차 마스크 리빌 준비 구조 */
-        <div key={line.text} style={{ overflow: "hidden", paddingBottom: "0.08em" }}>
+        <div key={line.text} style={{ overflow: "hidden", paddingBottom: "0.1em" }}>
           <motion.span style={{
             display: "block",
             color: line.accent ? CYAN : "#fff",
@@ -258,7 +181,7 @@ function HeadlineBlock({ m }) {
 ───────────────────────────────────── */
 export default function Scene2NoisePrevention() {
   const m = useIsMobile();
-  const visibleFeatures = m ? FEATURES.slice(0, 2) : FEATURES;
+  const visibleFeatures = m ? FEATURES.slice(0, 3) : FEATURES;
 
   return (
     <section
@@ -377,16 +300,16 @@ export default function Scene2NoisePrevention() {
           {/* PC: 헤드라인은 하단 블록 상단 */}
           {!m && <HeadlineBlock m={m} />}
 
-          {/* 모바일: NoiseRing + 기능 아이콘 나란히 */}
+          {/* 모바일: dB 슬림핀(정체성) + 기능 아이콘 (Scene-1 구조: 카드 1개 + 아이콘) */}
           {m && (
             <div style={{
               display: "flex",
-              gap: 12,
-              alignItems: "flex-end",
-              marginBottom: 18,
+              flexDirection: "column",
+              gap: 14,
+              marginBottom: 30,
             }}>
-              <NoiseRingUI m={m} />
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+              <DbPill m={m} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {visibleFeatures.map((f) => (
                   <FeaturePill key={f.line2} {...f} m={m} />
                 ))}
@@ -394,29 +317,19 @@ export default function Scene2NoisePrevention() {
             </div>
           )}
 
-          {/* PC: 기능 아이콘 가로 배열 */}
+          {/* PC: dB 슬림핀 + 기능 아이콘 가로 배열 */}
           {!m && (
-            <div style={{ display: "flex", gap: 14 }}>
-              {visibleFeatures.map((f) => (
-                <FeaturePill key={f.line2} {...f} m={false} />
-              ))}
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              <DbPill m={false} />
+              <div style={{ display: "flex", gap: 14 }}>
+                {visibleFeatures.map((f) => (
+                  <FeaturePill key={f.line2} {...f} m={false} />
+                ))}
+              </div>
             </div>
           )}
         </div>
       </div>
-
-      {/* ════════════════ PC 전용: NoiseRing 우측 절대 배치 ════════════════ */}
-      {!m && (
-        <div style={{
-          position: "absolute",
-          right: 80,
-          top: "50%",
-          transform: "translateY(-50%)",
-          zIndex: 2,
-        }}>
-          <NoiseRingUI m={false} />
-        </div>
-      )}
 
     </section>
   );

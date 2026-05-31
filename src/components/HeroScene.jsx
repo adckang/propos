@@ -113,7 +113,9 @@ function FeaturePill({ iconSrc, label, sublabel }) {
       <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", textAlign: "center", lineHeight: 1.3 }}>
         {label}
       </span>
-      <span style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", textAlign: "center", lineHeight: 1.3 }}>
+      
+        <span style={{ fontSize: 12, color: "#22d3ee", textAlign: "center", lineHeight: 1.3 }}>
+        
         {sublabel}
       </span>
     </div>
@@ -225,7 +227,7 @@ function HeadlineBlock({ m, reduced }) {
         fontSize: m ? "clamp(30px, 8.5vw, 48px)" : "clamp(46px, 4.8vw, 70px)",
         fontWeight: 900,
         lineHeight: 1.15,
-        margin: m ? 0 : "0 0 24px",
+        margin: m ? "-300px 0 0" : "-28px 0 24px",
         letterSpacing: "-0.025em",
       }}
     >
@@ -331,10 +333,15 @@ const COPY_LINES = [
 ];
 
 const FEATURES = [
-  { iconSrc: "/icons/temp.svg",        label: "온도",  sublabel: "최적화"    },
+    { iconSrc: "/icons/temp.svg",        label: "쾌적한",  sublabel: "온습도"    },
+  { iconSrc: "/icons/ventilation.svg", label: "신선한",  sublabel: "공기"      },
+  { iconSrc: "/icons/music.svg",       label: "기분좋은",  sublabel: "음악"      },
+  { iconSrc: "/icons/light.svg",       label: "로맨틱한",  sublabel: "조명"  },
+/*  { iconSrc: "/icons/temp.svg",        label: "온도",  sublabel: "최적화"    },
   { iconSrc: "/icons/ventilation.svg", label: "환기",  sublabel: "완료"      },
   { iconSrc: "/icons/music.svg",       label: "음악",  sublabel: "재생"      },
   { iconSrc: "/icons/light.svg",       label: "조명",  sublabel: "은은하게"  },
+   */
 ];
 
 /* ─────────────────────────────────────
@@ -424,9 +431,9 @@ export default function HeroScene() {
             ≥769px → scene-1-desktop-bg.png (16:9 가로형)
           */}
           <picture style={{ display: "block", width: "100%", height: "100%" }}>
-            <source media="(max-width: 768px)" srcSet="/images/scene-1-mobile-bg.png" />
+            <source media="(max-width: 768px)" srcSet="/images/scene-1-mobile-bg-v3.png" />
             <img
-              src="/images/scene-1-desktop-bg.png"
+              src="/images/scene-1-desktop-bg-v3.png"
               alt=""
               role="presentation"
               style={{
@@ -484,7 +491,7 @@ export default function HeroScene() {
                 fontFamily: "'DM Mono', monospace",
               }}
             >
-              Smart. Carefree. Anywhere.
+              
             </p>
           </motion.header>
 
@@ -520,7 +527,9 @@ export default function HeroScene() {
             </div>
 
             {/* 파란 웨이브 구분선 — WaveLine 서브컴포넌트 */}
+            {/* 
             <WaveLine reduced={reduced} />
+            */}
 
             {/* 서브 카피
                 D1 fix: 1.18s — 피처 아이콘(0.82~1.12s) 이후로 이동
@@ -534,9 +543,7 @@ export default function HeroScene() {
               }}
               {...e(1.18, { yFrom: 16, duration: 0.65 })}
             >
-              {"스마트한 경험이"}
-              <br />
-              {"더 좋은 후기로 이어집니다."}
+              
             </motion.p>
 
             {/* 통계 카드 — delay 1.45s · y 28→0 (mobile 14→0) · opacity 0→1
@@ -567,7 +574,7 @@ export default function HeroScene() {
                 src="/icons/revenue-up.svg"
                 alt=""
                 role="presentation"
-                style={{ width: 36, height: 36, flexShrink: 0, marginTop: 2 }}
+                style={{ width: 15, height: 15, flexShrink: 0, marginTop: 2 }}
               />
               <div>
                 <p
@@ -579,9 +586,7 @@ export default function HeroScene() {
                     lineHeight: 1.35,
                   }}
                 >
-                  {"좋은 리뷰가"}
-                  <br />
-                  {"매출을 만듭니다"}
+                  {"숙소의 가치를 극대화 시키는 스마트 시스템"}                  
                 </p>
                 <p
                   style={{
@@ -592,24 +597,18 @@ export default function HeroScene() {
                     lineHeight: 1.4,
                   }}
                 >
-                  평점 1점 상승 시 예약률 최대 20% 증가*
+                  
                 </p>
-                {/* 임시 출처 문구 — 법적/광고 검증 전 교체 필요 */}
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: 10,
-                    color: "rgba(255,255,255,0.27)",
-                    lineHeight: 1.6,
-                  }}
-                >
-                  *출처: Airbnb Data Science Team, 2023 / STR Global, 2023
-                </p>
+               
               </div>
             </motion.div>
 
+
+            
             {/* CTA 버튼 — CTAButtons 서브컴포넌트 (복잡도 분산) */}
+            {/*
             <CTAButtons m={m} reduced={reduced} />
+            */}
 
           </div>
         </div>

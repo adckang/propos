@@ -472,7 +472,7 @@ function KpiCard({ m, reduced }) {
             lineHeight: 1.5,
           }}
         >
-          걱정은 덜고, 효율은 더하는 스마트한 운영
+          절전모드 자동 실행
         </div>
       </motion.div>
     );
@@ -592,7 +592,6 @@ function KpiCard({ m, reduced }) {
 export default function Scene3EnergySaving() {
   const m = useIsMobile();
   const reduced = useReducedMotion();
-  const visibleFeatures = m ? [] : FEATURES.slice(0, 4);
   const sectionRef = useRef(null);
   const { scrollYProgress } = useScroll({
     target: sectionRef,
@@ -731,7 +730,7 @@ export default function Scene3EnergySaving() {
                   fontFamily: "'DM Mono', monospace",
                 }}
               >
-                Smart. Carefree. Anywhere.
+                
               </motion.p>
 
               <div style={{ marginTop: m ? 22 : 34 }}>
@@ -746,8 +745,8 @@ export default function Scene3EnergySaving() {
                   }}
                 >
                   {[
-                    "다 켜놓고",
-                    "활짝 열고 나간 손님,",
+                    "다 켜놓고,열어놓고 가도",
+                    "괜찮습니다.",
                   ].map((line, index) => (
                     <div key={line} style={{ overflow: "hidden", paddingBottom: "0.08em" }}>
                       <motion.span
@@ -790,115 +789,54 @@ export default function Scene3EnergySaving() {
                         }
                         transition={{ duration: m ? 4.6 : 4, delay: 1.1, repeat: reduced ? 0 : Infinity, ease: "easeInOut" }}
                       >
-                        괜찮습니다.
+                        자동 절전모드.
                       </motion.span>
                     </motion.span>
                   </div>
                 </h2>
 
-                <div
-                  style={{
-                    margin: m ? "16px 0 0" : "22px 0 0",
-                    fontSize: m ? "clamp(18px, 5vw, 24px)" : "clamp(28px, 2.4vw, 36px)",
-                    fontWeight: 800,
-                    lineHeight: 1.25,
-                    letterSpacing: "-0.025em",
-                    color: "#F8FAFC",
-                  }}
-                >
-                  <div style={{ overflow: "hidden", paddingBottom: "0.08em" }}>
-                    <motion.span
-                      initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
-                      animate={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
-                      transition={{
-                        delay: reduced ? 0.42 * 0.35 : 0.56,
-                        duration: reduced ? 0.22 : 0.82,
-                        ease: [0.16, 1, 0.3, 1],
-                      }}
-                      style={{ display: "block" }}
-                    >
-                      <motion.span
-                        animate={
-                          reduced
-                            ? {}
-                            : {
-                              textShadow: [
-                                "0 0 0 rgba(37,99,235,0)",
-                                `0 0 ${m ? 12 : 18}px rgba(34,211,238,0.24)`,
-                                "0 0 0 rgba(37,99,235,0)",
-                              ],
-                            }
-                        }
-                        transition={{ duration: m ? 4.8 : 4.2, delay: 1.3, repeat: reduced ? 0 : Infinity, ease: "easeInOut" }}
-                        style={{ color: BLUE }}
-                      >
-                        자동 절전모드
-                      </motion.span>
-                      <span>로</span>
-                    </motion.span>
-                  </div>
-
-                  <div style={{ overflow: "hidden", paddingBottom: "0.08em" }}>
-                    <motion.span
-                      initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
-                      animate={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
-                      transition={{
-                        delay: reduced ? 0.5 * 0.35 : 0.68,
-                        duration: reduced ? 0.22 : 0.82,
-                        ease: [0.16, 1, 0.3, 1],
-                      }}
-                      style={{ display: "block" }}
-                    >
-                      지켜드립니다.
-                    </motion.span>
-                  </div>
-                </div>
+               
               </div>
             </div>
 
-            <div
-              style={{
-              width: m ? "min(46%, 176px)" : "min(40%, 460px)",
-              display: "flex",
-              flexDirection: "column",
-              gap: m ? 10 : 16,
-              alignSelf: m ? "flex-start" : "stretch",
-              marginTop: m ? "auto" : 0,
-            }}
-          >
-              <AirFlowLayer m={m} reduced={reduced} />
-
-              {visibleFeatures.length > 0 && (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                    gap: 10,
-                  }}
-                >
-                  {visibleFeatures.map((item, index) => (
-                    <FeaturePill
-                      key={item.title}
-                      item={item}
-                      index={index}
-                      m={m}
-                      reduced={reduced}
-                      full={index === visibleFeatures.length - 1}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* 우측은 배경의 실제 커튼·바람(절전/환기 핵심 메시지)이 보이도록 비움
+                — 합성 AirFlowLayer 제거 (배경 중복 방지) */}
           </div>
 
-          <div
-          style={{
-              marginTop: m ? 12 : 18,
-              width: m ? "min(72%, 252px)" : "min(40%, 460px)",
-              alignSelf: m ? "flex-start" : "flex-end",
-            }}
-          >
-            <KpiCard m={m} reduced={reduced} />
+          {/* 하단: 기능 칩 row (Nunito) + KPI 카드 — Scene-5 수준 정돈, 하단 안정 배치 */}
+          <div style={{ marginTop: m ? "auto" : 18, display: "flex", flexDirection: "column", gap: m ? 12 : 16 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: m ? 8 : 10 }}>
+              {FEATURES.map((item, index) => (
+                <motion.div
+                  key={item.title}
+                  {...entranceProps(reduced, { delay: 0.5 + index * 0.06, y: 12, duration: 0.5, amount: 0.4 })}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: m ? 7 : 9,
+                    background: "rgba(8,18,37,0.42)",
+                    backdropFilter: "blur(12px)",
+                    WebkitBackdropFilter: "blur(12px)",
+                    border: "1px solid rgba(248,250,252,0.12)",
+                    borderRadius: 999,
+                    padding: m ? "7px 11px" : "9px 14px",
+                    boxShadow: "0 10px 22px rgba(2,6,23,0.18)",
+                  }}
+                >
+                  <img src={item.iconSrc} alt="" width={m ? 18 : 20} height={m ? 18 : 20} style={{ display: "block" }} />
+                  <span style={{ fontFamily: "'Nunito', sans-serif", fontWeight: 800, fontSize: m ? 12 : 13, color: "#F8FAFC", whiteSpace: "nowrap", letterSpacing: "-0.01em" }}>
+                    {item.title}
+                  </span>
+                  <span style={{ fontSize: m ? 11 : 12, color: "rgba(248,250,252,0.66)", whiteSpace: "nowrap" }}>
+                    {item.desc}
+                  </span>
+                </motion.div>
+              ))}
+            </div>
+
+            <div style={{ width: m ? "100%" : "min(40%, 460px)", alignSelf: m ? "stretch" : "flex-end" }}>
+              <KpiCard m={m} reduced={reduced} />
+            </div>
           </div>
         </div>
       </motion.div>

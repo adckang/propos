@@ -356,20 +356,77 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
       {/* ════════════════ SCENE 05 — 레이어 분리형 AI 엔진 ════════════════ */}
       <Scene5AIEngine />
 
-      {/* ════════════════ STATS STRIP ════════════════ */}
-      <section style={{ padding: m ? "48px 20px" : "72px 40px", background: "linear-gradient(180deg, #071120 0%, #050c19 100%)", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gridTemplateColumns: m ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: m ? 14 : 18, textAlign: "center" }}>
-          {[
-            { val: "5가지", label: "운영 리스크 완전 커버" },
-            { val: "24/7", label: "AI 실시간 모니터링" },
-            { val: "4,320원", label: "하루 평균 에너지 절감" },
-            { val: "20%↑", label: "별점 1점 상승 시 예약률" },
-          ].map(({ val, label }) => (
-            <motion.div key={label} {...up(0)} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: m ? "20px 14px" : "24px 18px", boxShadow: "0 16px 34px rgba(2,6,23,0.18)" }}>
-              <div style={{ fontSize: "clamp(26px, 3vw, 38px)", fontWeight: 900, color: "#22d3ee", marginBottom: 8 }}>{val}</div>
-              <div style={{ fontSize: 14, color: "rgba(226,232,240,0.72)", lineHeight: 1.6 }}>{label}</div>
-            </motion.div>
-          ))}
+      {/* ════════════════ VALUE BRIDGE — 4 모드 요약 + 가격 충격 ════════════════ */}
+      <section style={{ padding: m ? "60px 20px" : "96px 40px", background: "linear-gradient(180deg, #071120 0%, #050c19 100%)", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+
+          {/* 헤드라인 */}
+          <motion.div {...up()} style={{ textAlign: "center", marginBottom: m ? 32 : 48 }}>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, border: "1px solid rgba(34,211,238,0.25)", background: "rgba(34,211,238,0.07)", borderRadius: 999, padding: "7px 18px", marginBottom: 18, fontSize: 12, color: "#a5f3fc", fontWeight: 700, letterSpacing: "0.08em" }}>
+              ALL-IN-ONE · 4 MODES
+            </div>
+            <h2 style={{ fontSize: "clamp(26px, 3.6vw, 44px)", fontWeight: 900, margin: 0, lineHeight: 1.25, letterSpacing: "-0.02em", color: "#fff" }}>
+              필요한 기능은 다 넣었습니다.<br />
+              남은 건, <span style={{ color: "#22d3ee" }}>믿기 힘든 가격</span>뿐.
+            </h2>
+          </motion.div>
+
+          {/* 4 모드 카드 */}
+          <div style={{ display: "grid", gridTemplateColumns: m ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: m ? 12 : 18, marginBottom: m ? 28 : 40 }}>
+            {[
+              { icon: Home, mode: "자동 웰컴 모드", benefit: "고객 만족 극대화", accent: "#67e8f9" },
+              { icon: Volume2, mode: "소음 감지 모드", benefit: "민원 리스크 예방", accent: "#f87171" },
+              { icon: Zap, mode: "자동 절전 모드", benefit: "불필요한 낭비 감소", accent: "#fcd34d" },
+              { icon: ClipboardCheck, mode: "청소 기록 모드", benefit: "실시간 청소 상황 관리", accent: "#86efac" },
+            ].map(({ icon: Icon, mode, benefit, accent }, i) => (
+              <motion.div key={mode} {...up(i * 0.08)} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: m ? "18px 16px" : "24px 22px", boxShadow: "0 16px 34px rgba(2,6,23,0.18)" }}>
+                <div style={{ width: m ? 40 : 46, height: m ? 40 : 46, borderRadius: 13, background: `${accent}1a`, border: `1px solid ${accent}40`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: m ? 12 : 16 }}>
+                  <Icon size={m ? 20 : 24} color={accent} />
+                </div>
+                <div style={{ fontFamily: "'Nunito', sans-serif", fontSize: m ? 15 : 18, fontWeight: 800, color: "#fff", marginBottom: 4, letterSpacing: "-0.01em" }}>{mode}</div>
+                <div style={{ fontSize: m ? 12.5 : 14, color: "rgba(226,232,240,0.7)", lineHeight: 1.5 }}>{benefit}</div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* 가격 충격 밴드 — ⚠ 법적/광고 검증 필요: 'OO%' / '~OOO만원' / 'No마진' 은 임시 문구. 실제 시중 견적 근거 확보 후 교체 필수 */}
+          <motion.div {...reveal(0.1)} style={{
+            position: "relative",
+            borderRadius: 24,
+            padding: m ? "26px 22px" : "36px 44px",
+            background: "linear-gradient(135deg, rgba(8,145,178,0.16), rgba(6,182,212,0.08))",
+            border: "1px solid rgba(34,211,238,0.3)",
+            boxShadow: "0 0 0 1px rgba(34,211,238,0.08), 0 24px 60px rgba(6,182,212,0.18)",
+            display: "flex",
+            flexDirection: m ? "column" : "row",
+            alignItems: m ? "flex-start" : "center",
+            justifyContent: "space-between",
+            gap: m ? 20 : 36,
+          }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: m ? 13 : 14, color: "rgba(226,232,240,0.66)", lineHeight: 1.7, marginBottom: 8 }}>
+                보통 이 정도 IoT 통합은 설치비만{" "}
+                <span style={{ color: "rgba(248,113,113,0.9)", textDecoration: "line-through", fontWeight: 700 }}>약 OOO만원</span>
+              </div>
+              <div style={{ fontSize: m ? 22 : 30, fontWeight: 900, color: "#fff", lineHeight: 1.3, letterSpacing: "-0.02em" }}>
+                PROPOS는 <span style={{ color: "#22d3ee" }}>No마진 정책</span>으로<br />
+                시중 대비 약 <span style={{ color: "#22d3ee" }}>OO%</span> 낮은 가격.
+              </div>
+              <div style={{ fontSize: 11, color: "rgba(226,232,240,0.4)", marginTop: 10 }}>
+                * 시중 견적·절감률은 숙소 구성에 따라 달라질 수 있습니다.
+              </div>
+            </div>
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 8,
+              background: "#06b6d4", color: "#fff", borderRadius: 14,
+              padding: m ? "13px 22px" : "16px 30px", fontSize: m ? 15 : 16, fontWeight: 800,
+              boxShadow: "0 0 28px rgba(6,182,212,0.45)", whiteSpace: "nowrap",
+              alignSelf: m ? "stretch" : "auto", justifyContent: "center",
+            }}>
+              지금 가격 보기 ↓
+            </div>
+          </motion.div>
+
         </div>
       </section>
 

@@ -75,10 +75,9 @@ const FEATURES = [
 ];
 
 const COPY_LINES = [
-  { key: "line-1", text: "청소 누락, 지각" },
-  { key: "line-2", text: "걱정하지 마세요." },
-  { key: "line-3", accent: "실시간 현황", suffix: "을" },
-  { key: "line-4", text: "알려드립니다." },
+  { key: "line-1", text: "청소 누락, 지각 걱정없이" },
+  { key: "line-2", accent: "실시간 현황", suffix: "을" },
+  { key: "line-3", text: "확인 하세요" },
 ];
 
 const TIMELINE = [
