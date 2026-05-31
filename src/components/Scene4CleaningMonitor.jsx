@@ -652,8 +652,10 @@ function FeaturePill({ iconSrc, line1, line2, m, reduced, index }) {
           {line1}
         </div>
         <div style={{
-          fontSize: m ? 11 : 13,
-          fontWeight: 700,
+          fontFamily: "'Nunito', sans-serif",
+          fontSize: m ? 11.5 : 13,
+          fontWeight: 800,
+          letterSpacing: "-0.01em",
           color: "#fff",
           lineHeight: 1.3,
         }}>
@@ -668,7 +670,7 @@ function FeaturePill({ iconSrc, line1, line2, m, reduced, index }) {
    카피 블록
 ───────────────────────────────────── */
 function CopyBlock({ m, reduced }) {
-  const headSize = m ? "clamp(24px, 6.9vw, 36px)" : "clamp(38px, 3.8vw, 58px)";
+  const headSize = m ? "clamp(28px, 7.6vw, 42px)" : "clamp(42px, 4.4vw, 64px)";
 
   return (
     <div style={{ margin: m ? "12px 0 0" : "0 0 30px", maxWidth: m ? "min(64%, 236px)" : 560 }}>
@@ -693,9 +695,9 @@ function CopyBlock({ m, reduced }) {
             {line.accent ? (
               <span style={{ display: "block" }}>
                 <motion.span
-                  animate={reduced ? {} : { textShadow: ["0 0 0 rgba(96,165,250,0)", "0 0 22px rgba(96,165,250,0.25)", "0 0 0 rgba(96,165,250,0)"] }}
+                  animate={reduced ? {} : { textShadow: ["0 0 0 rgba(34,211,238,0)", "0 0 22px rgba(34,211,238,0.28)", "0 0 0 rgba(34,211,238,0)"] }}
                   transition={{ duration: 4.4, delay: 1, repeat: reduced ? 0 : Infinity, ease: "easeInOut" }}
-                  style={{ color: BLUE }}
+                  style={{ color: "#22d3ee" }}
                 >
                   {line.accent}
                 </motion.span>

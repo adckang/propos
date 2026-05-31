@@ -135,8 +135,10 @@ function FeaturePill({ iconSrc, line1, line2, m }) {
           textOverflow: "ellipsis",
         }}>{line1}</div>
         <div style={{
-          fontSize: m ? 11 : 13,
-          fontWeight: 700,
+          fontFamily: "'Nunito', sans-serif",
+          fontSize: m ? 11.5 : 13,
+          fontWeight: 800,
+          letterSpacing: "-0.01em",
           color: "#fff",
           lineHeight: 1.3,
         }}>{line2}</div>
@@ -156,8 +158,8 @@ function HeadlineBlock({ m }) {
     <h2 style={{
       fontSize: m ? "clamp(30px, 8.5vw, 48px)" : "clamp(46px, 4.8vw, 70px)",
       fontWeight: 900,
-      lineHeight: m ? 1.04 : 1.15,
-      margin: m ? "30px 0 0" : "-28px 0 24px",      
+      lineHeight: 1.15,
+      margin: m ? "30px 0 0" : "-28px 0 24px",
       letterSpacing: "-0.025em",
       maxWidth: m ? "min(100%, 394px)" : 560,
     }}>

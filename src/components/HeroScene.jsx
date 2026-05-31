@@ -110,7 +110,7 @@ function FeaturePill({ iconSrc, label, sublabel }) {
         {/* SVG/img 태그로 분리 — 이미지 안에 그래픽 포함 금지 */}
         <img src={iconSrc} alt={label} width={22} height={22} style={{ display: "block" }} />
       </div>
-      <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", textAlign: "center", lineHeight: 1.3 }}>
+      <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 12.5, fontWeight: 800, letterSpacing: "-0.01em", color: "#fff", textAlign: "center", lineHeight: 1.3 }}>
         {label}
       </span>
       

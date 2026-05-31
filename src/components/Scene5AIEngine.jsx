@@ -718,10 +718,10 @@ export default function Scene5AIEngine() {
                 <h2
                   style={{
                     margin: 0,
-                    fontSize: m ? "clamp(30px, 8.8vw, 46px)" : "clamp(46px, 4.8vw, 68px)",
+                    fontSize: m ? "clamp(30px, 8.5vw, 48px)" : "clamp(46px, 4.8vw, 70px)",
                     fontWeight: 900,
-                    lineHeight: 1.08,
-                    letterSpacing: "-0.035em",
+                    lineHeight: 1.15,
+                    letterSpacing: "-0.025em",
                     color: NAVY,
                   }}
                 >

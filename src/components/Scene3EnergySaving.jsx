@@ -737,10 +737,10 @@ export default function Scene3EnergySaving() {
                 <h2
                   style={{
                     margin: 0,
-                    fontSize: m ? "clamp(30px, 8.4vw, 44px)" : "clamp(44px, 4.7vw, 66px)",
+                    fontSize: m ? "clamp(30px, 8.5vw, 48px)" : "clamp(46px, 4.8vw, 70px)",
                     fontWeight: 900,
-                    lineHeight: 1.08,
-                    letterSpacing: "-0.035em",
+                    lineHeight: 1.15,
+                    letterSpacing: "-0.025em",
                     color: "#F8FAFC",
                   }}
                 >
@@ -773,7 +773,7 @@ export default function Scene3EnergySaving() {
                         duration: reduced ? 0.22 : 0.82,
                         ease: [0.16, 1, 0.3, 1],
                       }}
-                      style={{ display: "block", color: BLUE }}
+                      style={{ display: "block", color: CYAN }}
                     >
                       <motion.span
                         animate={
@@ -781,9 +781,9 @@ export default function Scene3EnergySaving() {
                             ? {}
                             : {
                               textShadow: [
-                                "0 0 0 rgba(37,99,235,0)",
-                                `0 0 ${m ? 14 : 20}px rgba(37,99,235,0.28)`,
-                                "0 0 0 rgba(37,99,235,0)",
+                                "0 0 0 rgba(34,211,238,0)",
+                                `0 0 ${m ? 14 : 20}px rgba(34,211,238,0.30)`,
+                                "0 0 0 rgba(34,211,238,0)",
                               ],
                             }
                         }
