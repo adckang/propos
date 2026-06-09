@@ -85,7 +85,7 @@ const PROMISE_GAP = 0.5;     // 타이핑 종료 후 첫 프로미스까지(초)
 const PROMISE_STEP = 0.85;   // 프로미스 줄 간격(초)
 const PROMISE_START = TITLE_TOTAL_MS / 1000 + PROMISE_GAP;
 
-const BRAND_DELAY = PROMISE_START + (PROMISE_LINES.length - 1) * PROMISE_STEP + 1.3;
+const BRAND_DELAY = PROMISE_START + (PROMISE_LINES.length - 1) * PROMISE_STEP + 0.5;
 
 /* 깜빡이는 커서 */
 function Caret({ reduced }) {

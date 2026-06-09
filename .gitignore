@@ -9,3 +9,4 @@ src/config/propos.config.json
 src/config/propos.config.local.json
 .env.local
 .env.*.local
+.vercel
