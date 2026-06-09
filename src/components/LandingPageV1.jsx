@@ -3,8 +3,9 @@ import { motion } from "framer-motion";
 import {
   Home, Volume2, Zap, ClipboardCheck, Settings,
   CheckCircle2, ChevronDown, ChevronUp,
-  MessageCircle, FileCheck2,
+  MessageCircle, FileCheck2, Package, Wrench, BellRing,
 } from "lucide-react";
+import IntroScene from "./IntroScene";
 import HeroScene from "./HeroScene";
 import Scene2NoisePrevention from "./Scene2NoisePrevention";
 import Scene3EnergySaving from "./Scene3EnergySaving";
@@ -102,62 +103,116 @@ const SCENES = [
 /* ── pricing ── */
 const PACKAGES = [
   {
-    name: "파일럿",
-    tag: "1개 숙소 검증",
-    price: "설치비 49만원부터",
-    monthly: "+ 월 9.9만원부터",
-    desc: "1개 숙소에서 체크인·청소·에너지·소음 루틴을 먼저 검증",
-    includes: ["체크인/퇴실 자동 알림", "에너지 자동 절전", "청소 타임라인", "월간 운영 리포트"],
-    cta: "파일럿 신청",
+    name: "시작형",
+    tag: "1개 숙소 시작",
+    price: "기기 구매 50만원 전후",
+    monthly: "월 운영비 없이 시작 가능",
+    desc: "해외 직구와 셀프 설치를 기준으로, 1개 숙소에서 자동화의 핵심 기능을 가장 가볍게 시작하는 방식입니다.",
+    includes: ["직구 구매 가이드", "셀프 설치 체크리스트", "체크인/퇴실 자동 알림", "에너지 자동 절전", "청소 타임라인"],
+    cta: "시작 비용 문의",
     highlight: false,
   },
   {
-    name: "운영형",
+    name: "운영 지원형",
     tag: "추천",
-    price: "설치비 79만원부터",
-    monthly: "+ 월 14.9만원부터",
-    desc: "5가지 기능 전부 + AI 통합 판단 엔진 풀 연동",
-    includes: ["파일럿 전체 포함", "소음 실시간 예방", "AI 이상 감지", "청소 사진 증거화", "운영 이슈 우선 대응"],
-    cta: "상담 신청",
+    price: "기기 구매 + 월 3만원",
+    monthly: "설정 · 장애 · 알림 · 리포트 지원",
+    desc: "복잡한 설정과 운영 관리를 직접 붙잡고 있지 않도록, 필요한 순간만 확인하면 되는 운영 지원형 구성입니다.",
+    includes: ["시작형 전체 포함", "시스템 설정 지원", "장애 대응 및 알림 설정", "주간 운영 리포트", "문제 발생 시 우선 안내"],
+    cta: "운영 지원 상담",
     highlight: true,
   },
   {
-    name: "다호점",
-    tag: "3개 이상",
+    name: "확장형",
+    tag: "2개 이상 / 다호점",
     price: "별도 견적",
     monthly: "",
-    desc: "3개 이상 숙소 또는 건물 단위 운영 구조 설계",
-    includes: ["운영형 전체 포함", "숙소별 대시보드", "다호점 통합 리포트", "표준 운영 매뉴얼"],
-    cta: "견적 문의",
+    desc: "숙소 수가 늘어나거나 건물 단위로 관리해야 할 때, 동선과 운영 구조에 맞춰 센서 구성과 지원 범위를 다시 설계합니다.",
+    includes: ["운영 지원형 전체 포함", "숙소별 운영 구조 설계", "다호점 통합 리포트", "현장 조건별 맞춤 구성"],
+    cta: "확장 견적 문의",
     highlight: false,
+  },
+];
+
+const VALUE_EXPLAINERS = [
+  {
+    icon: Package,
+    eyebrow: "왜 이런 가격이 가능한가",
+    title: "해외 직구 지원으로 거품을 뺐습니다",
+    body: "필요한 기기를 해외 직구로 안내하고, 셀프 설치가 가능하도록 도와드려 불필요한 시공 마진을 줄였습니다.",
+    points: ["직구 구매 가이드 제공", "숙소 구조별 추천 구성 안내"],
+    accent: "#22d3ee",
+  },
+  {
+    icon: Wrench,
+    eyebrow: "설치가 어렵지 않은가",
+    title: "배터리 넣고, 양면테이프로 붙이면 끝",
+    body: "센서 대부분은 공구 없이 부착할 수 있어 처음 설치하는 분도 부담이 적습니다. 어렵게 느껴지는 부분만 체크리스트로 따라가면 됩니다.",
+    points: ["설치 순서 안내", "누구나 따라 하는 셀프 설치"],
+    accent: "#67e8f9",
+  },
+  {
+    icon: BellRing,
+    eyebrow: "설정과 관리도 맡길 수 있나",
+    title: "월 3만원이면 설정·장애·알림·리포트를 지원합니다",
+    body: "복잡한 시스템을 직접 운영하실 필요 없습니다. 문제 있을 때만 알림을 받고, 주간 리포트로 운영 상태만 확인하시면 됩니다.",
+    points: ["시스템 설정 지원", "장애 대응·알림 설정·주간 리포트"],
+    accent: "#38bdf8",
+  },
+];
+
+const PROOF_CARDS = [
+  {
+    icon: Wrench,
+    title: "설치는 대부분 공구 없이 시작됩니다",
+    body: "배터리와 양면테이프 중심의 센서 구성이라, 복잡한 시공 없이도 첫 도입이 가능합니다.",
+    accent: "#67e8f9",
+  },
+  {
+    icon: Volume2,
+    title: "소음은 녹음 없이 기준만 감지합니다",
+    body: "대화 내용을 저장하지 않고 dB 수준과 기준 초과 여부만 확인해 프라이버시 불안을 줄입니다.",
+    accent: "#f87171",
+  },
+  {
+    icon: ClipboardCheck,
+    title: "청소 흐름은 센서 기준으로 바로 확인합니다",
+    body: "퇴실 이후 청소 시작과 완료 흐름을 기록으로 확인해, CCTV 없이도 운영 상황을 빠르게 파악할 수 있습니다.",
+    accent: "#86efac",
+  },
+  {
+    icon: FileCheck2,
+    title: "주간 리포트와 알림만 보면 됩니다",
+    body: "매번 앱을 열어보지 않아도 필요한 순간의 알림과 요약 리포트로 운영 상태를 확인할 수 있습니다.",
+    accent: "#38bdf8",
   },
 ];
 
 /* ── faq ── */
 const FAQS = [
   {
-    q: "IoT 기기를 직접 구매해야 하나요?",
-    a: "기본 패키지에는 필수 기기 구성이 포함됩니다. 숙소 구조, 도어락 종류, 센서 수량에 따라 추가 기기나 별도 비용이 발생할 수 있습니다.",
+    q: "왜 이렇게 낮은 비용으로 시작할 수 있나요?",
+    a: "SPACE HOST는 해외 직구와 셀프 설치를 기준으로 안내해 불필요한 시공 마진을 줄입니다. 그래서 기기 구매를 50만원 전후에서 시작하고, 필요할 때만 운영 지원을 추가하는 방식이 가능합니다.",
+  },
+  {
+    q: "설치가 정말 어렵지 않나요?",
+    a: "대부분의 센서는 배터리를 넣고 양면테이프로 부착하는 방식이라 공구 없이도 설치할 수 있습니다. 숙소 구조에 맞는 설치 순서와 체크리스트를 함께 안내해드리므로 처음 해보는 분도 따라가기 어렵지 않습니다.",
+  },
+  {
+    q: "월 3만원 운영 지원에는 무엇이 포함되나요?",
+    a: "기본 설정 지원, 장애 대응, 알림 세팅, 주간 리포트 안내가 포함됩니다. 복잡한 시스템을 직접 계속 들여다보지 않아도, 필요한 순간의 알림과 운영 상태만 확인하실 수 있도록 돕는 서비스입니다.",
   },
   {
     q: "소음 감지는 녹음인가요?",
-    a: "아닙니다. 대화 내용을 녹음하지 않고 dB 수준과 기준 초과 여부만 감지합니다. 게스트 프라이버시를 완전히 보호합니다.",
+    a: "아닙니다. 대화 내용을 녹음하지 않고 dB 수준과 기준 초과 여부만 감지합니다. 게스트 프라이버시를 해치지 않으면서도 민원 가능성을 미리 파악하도록 설계되어 있습니다.",
   },
   {
-    q: "기존 스마트 도어락이 없어도 되나요?",
-    a: "가능합니다. 모든 도어락이 동일하게 지원되는 것은 아니므로 방문 진단을 통해 교체 필요 여부와 호환성을 먼저 확인합니다.",
+    q: "청소 완료를 자동으로 보장해주나요?",
+    a: "자동 보장은 아닙니다. 대신 퇴실 이후 청소 시작부터 완료까지의 흐름을 센서와 출입 기록 기준으로 추적해, 호스트가 현재 상태를 훨씬 더 빠르게 파악할 수 있도록 도와드립니다.",
   },
   {
-    q: "청소 완료를 자동으로 보장하나요?",
-    a: "자동 보장은 아닙니다. 청소 담당자의 출입과 활동 기록을 실시간으로 알려드리는 시스템입니다. 확인과 증거화를 통해 운영 품질을 높입니다.",
-  },
-  {
-    q: "현장 출동도 포함되나요?",
-    a: "원격 확인과 원격 제어 가능한 범위를 먼저 지원합니다. 현장 출동이 필요한 경우 지역과 시간에 따라 별도 비용이 적용됩니다.",
-  },
-  {
-    q: "계약 최소 기간이 있나요?",
-    a: "기본 6개월 약정입니다. 1개 숙소 파일럿으로 운영 안정성을 확인한 뒤 확장하는 방식을 권장합니다.",
+    q: "숙소가 여러 개여도 적용할 수 있나요?",
+    a: "가능합니다. 1개 숙소에서 먼저 시작한 뒤, 2개 이상이나 다호점 구조에서는 숙소별 동선과 운영 방식에 맞춰 센서 구성, 알림 기준, 리포트 구조를 확장형으로 다시 설계해드립니다.",
   },
 ];
 
@@ -222,7 +277,7 @@ function SceneCard({ id, icon: Icon, eyebrow, img, imgMobile, accent, points, i,
 }
 
 /* ── PricingCard: 요금제 카드 1개 (m prop 수신 → 복잡도 분산) ── */
-function PricingCard({ pkg, i, m }) {
+function PricingCard({ pkg, i, m, onCtaClick }) {
   const cardStyle = pkg.highlight
     ? { background: "linear-gradient(160deg, #0d62e8 0%, #0891b2 52%, #06b6d4 100%)", boxShadow: "0 0 0 1px rgba(103,232,249,0.8), 0 26px 54px rgba(6,182,212,0.28)" }
     : { border: "1px solid rgba(255,255,255,0.09)", background: "linear-gradient(180deg, rgba(15,23,42,0.84), rgba(8,15,30,0.74))", boxShadow: "0 18px 40px rgba(2,6,23,0.22)" };
@@ -250,7 +305,10 @@ function PricingCard({ pkg, i, m }) {
             </li>
           ))}
         </ul>
-        <button style={{ width: "100%", borderRadius: 14, padding: "13px", fontSize: 15, fontWeight: 800, cursor: "pointer", ...btnStyle }}>
+        <button
+          onClick={onCtaClick}
+          style={{ width: "100%", borderRadius: 14, padding: "13px", fontSize: 15, fontWeight: 800, cursor: "pointer", ...btnStyle }}
+        >
           {pkg.cta}
         </button>
       </div>
@@ -297,6 +355,17 @@ function useIsMobile() {
 
 export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
   const m = useIsMobile();
+  const inquiryMailHref = "mailto:hello@propos.kr?subject=SPACE%20HOST%20운영진단%20문의&body=숙소%20수:%0A숙소%20지역:%0A현재%20가장%20불편한%20운영%20문제:%0A연락%20가능한%20방법:";
+
+  const scrollToSection = (id) => {
+    if (typeof window === "undefined") return;
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const openInquiryMail = () => {
+    if (typeof window === "undefined") return;
+    window.location.href = inquiryMailHref;
+  };
 
   useEffect(() => {
     const root = document.getElementById("root");
@@ -322,7 +391,7 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
         display: "flex", alignItems: "center", justifyContent: "space-between",
       }}>
         <div style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: m ? 16 : 18, letterSpacing: "0.02em" }}>
-          PROP<span style={{ color: "#22d3ee" }}>OS</span>
+          SPACE <span style={{ color: "#22d3ee" }}>HOST</span>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           {!m && onSwitchVersion && (
@@ -335,14 +404,23 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
               운영 콘솔 →
             </button>
           )}
-          <button style={{ background: "#06b6d4", color: "#fff", border: "none", borderRadius: 10, padding: m ? "7px 14px" : "8px 20px", fontSize: m ? 12 : 13, fontWeight: 700, cursor: "pointer" }}>
+          <button
+            onClick={() => scrollToSection("consultation")}
+            style={{ background: "#06b6d4", color: "#fff", border: "none", borderRadius: 10, padding: m ? "7px 14px" : "8px 20px", fontSize: m ? 12 : 13, fontWeight: 700, cursor: "pointer" }}
+          >
             {m ? "무료 진단" : "무료 운영진단 신청"}
           </button>
         </div>
       </nav>
 
-      {/* ════════════════ HERO — 레이어 분리형 HeroScene (첫 화면) ════════════════ */}
-      <HeroScene />
+      {/* ════════════════ INTRO — 서비스 정의/가격 인트로 ════════════════ */}
+      <IntroScene />
+
+      {/* ════════════════ HERO — 기존 Scene 01 유지 ════════════════ */}
+      <HeroScene
+        onPrimaryClick={() => scrollToSection("consultation")}
+        onSecondaryClick={() => scrollToSection("pricing")}
+      />
 
       {/* ════════════════ SCENE 02 — 레이어 분리형 소음 방어 ════════════════ */}
       <Scene2NoisePrevention />
@@ -363,21 +441,21 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
           {/* 헤드라인 */}
           <motion.div {...up()} style={{ textAlign: "center", marginBottom: m ? 32 : 48 }}>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, border: "1px solid rgba(34,211,238,0.25)", background: "rgba(34,211,238,0.07)", borderRadius: 999, padding: "7px 18px", marginBottom: 18, fontSize: 12, color: "#a5f3fc", fontWeight: 700, letterSpacing: "0.08em" }}>
-              ALL-IN-ONE · 4 MODES
+              운영 문제 4가지
             </div>
             <h2 style={{ fontSize: "clamp(26px, 3.6vw, 44px)", fontWeight: 900, margin: 0, lineHeight: 1.25, letterSpacing: "-0.02em", color: "#fff" }}>
-              필요한 기능은 다 넣었습니다.<br />
-              남은 건, <span style={{ color: "#22d3ee" }}>믿기 힘든 가격</span>뿐.
+              숙소 운영의 반복 문제를<br />
+              4가지 자동화로 줄입니다.
             </h2>
           </motion.div>
 
           {/* 4 모드 카드 */}
           <div style={{ display: "grid", gridTemplateColumns: m ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: m ? 12 : 18, marginBottom: m ? 28 : 40 }}>
             {[
-              { icon: Home, mode: "자동 웰컴 모드", benefit: "고객 만족 극대화", accent: "#67e8f9" },
-              { icon: Volume2, mode: "소음 감지 모드", benefit: "민원 리스크 예방", accent: "#f87171" },
-              { icon: Zap, mode: "자동 절전 모드", benefit: "불필요한 낭비 감소", accent: "#fcd34d" },
-              { icon: ClipboardCheck, mode: "청소 기록 모드", benefit: "실시간 청소 상황 관리", accent: "#86efac" },
+              { icon: Home, mode: "자동 웰컴 모드", benefit: "첫인상과 리뷰 경험 관리", accent: "#67e8f9" },
+              { icon: Volume2, mode: "소음 감지 모드", benefit: "민원 발생 전 대응", accent: "#f87171" },
+              { icon: Zap, mode: "자동 절전 모드", benefit: "퇴실 후 낭비 자동 차단", accent: "#fcd34d" },
+              { icon: ClipboardCheck, mode: "청소 기록 모드", benefit: "청소 누락 확인 속도 향상", accent: "#86efac" },
             ].map(({ icon: Icon, mode, benefit, accent }, i) => (
               <motion.div key={mode} {...up(i * 0.08)} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: m ? "18px 16px" : "24px 22px", boxShadow: "0 16px 34px rgba(2,6,23,0.18)" }}>
                 <div style={{ width: m ? 40 : 46, height: m ? 40 : 46, borderRadius: 13, background: `${accent}1a`, border: `1px solid ${accent}40`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: m ? 12 : 16 }}>
@@ -404,50 +482,218 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
             gap: m ? 20 : 36,
           }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: m ? 13 : 14, color: "rgba(226,232,240,0.66)", lineHeight: 1.7, marginBottom: 8 }}>
-                보통 이 정도 IoT 통합은 설치비만{" "}
-                <span style={{ color: "rgba(248,113,113,0.9)", textDecoration: "line-through", fontWeight: 700 }}>약 OOO만원</span>
-              </div>
               <div style={{ fontSize: m ? 22 : 30, fontWeight: 900, color: "#fff", lineHeight: 1.3, letterSpacing: "-0.02em" }}>
-                PROPOS는 <span style={{ color: "#22d3ee" }}>No마진 정책</span>으로<br />
-                시중 대비 약 <span style={{ color: "#22d3ee" }}>OO%</span> 낮은 가격.
+                처음부터 큰 구축비를 들이지 마세요.<br />
+                <span style={{ color: "#22d3ee" }}>기기 구매 50만원 전후</span>로 시작하고,<br />
+                필요할 때만 <span style={{ color: "#22d3ee" }}>월 3만원 운영 지원</span>을 더하면 됩니다.
               </div>
-              <div style={{ fontSize: 11, color: "rgba(226,232,240,0.4)", marginTop: 10 }}>
-                * 시중 견적·절감률은 숙소 구성에 따라 달라질 수 있습니다.
+              <div style={{ fontSize: 11, color: "rgba(226,232,240,0.46)", marginTop: 10, lineHeight: 1.7 }}>
+                * 해외 직구와 셀프 설치 기준입니다. 숙소 구조, 센서 수량, 호환 조건에 따라 실제 비용은 달라질 수 있습니다.
               </div>
             </div>
-            <div style={{
+            <button
+              onClick={() => scrollToSection("pricing")}
+              style={{
               display: "inline-flex", alignItems: "center", gap: 8,
-              background: "#06b6d4", color: "#fff", borderRadius: 14,
+              background: "rgba(255,255,255,0.05)", color: "#E2E8F0", borderRadius: 14,
               padding: m ? "13px 22px" : "16px 30px", fontSize: m ? 15 : 16, fontWeight: 800,
-              boxShadow: "0 0 28px rgba(6,182,212,0.45)", whiteSpace: "nowrap",
+              boxShadow: "0 12px 28px rgba(2,6,23,0.18)", whiteSpace: "nowrap",
               alignSelf: m ? "stretch" : "auto", justifyContent: "center",
-            }}>
-              지금 가격 보기 ↓
-            </div>
+              border: "1px solid rgba(165,243,252,0.18)", cursor: "pointer",
+            }}
+            >
+              요금 구조 보기 ↓
+            </button>
           </motion.div>
+
+          <div style={{ display: "grid", gridTemplateColumns: m ? "1fr" : "repeat(3, 1fr)", gap: m ? 14 : 18, marginTop: m ? 18 : 22 }}>
+            {VALUE_EXPLAINERS.map(({ icon: Icon, eyebrow, title, body, points, accent }, i) => (
+              <motion.div
+                key={title}
+                {...up(0.08 + i * 0.08)}
+                style={{
+                  borderRadius: 20,
+                  padding: m ? "18px 16px" : "22px 20px",
+                  background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03))",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  boxShadow: "0 16px 32px rgba(2,6,23,0.16)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                  <div
+                    style={{
+                      width: m ? 42 : 46,
+                      height: m ? 42 : 46,
+                      borderRadius: 14,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: `${accent}18`,
+                      border: `1px solid ${accent}40`,
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Icon size={m ? 20 : 22} color={accent} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: accent, marginBottom: 4 }}>
+                      {eyebrow}
+                    </div>
+                    <div style={{ fontSize: m ? 17 : 19, fontWeight: 800, lineHeight: 1.35, letterSpacing: "-0.01em", color: "#fff" }}>
+                      {title}
+                    </div>
+                  </div>
+                </div>
+
+                <p style={{ margin: "0 0 16px", fontSize: m ? 13.5 : 14.5, color: "rgba(226,232,240,0.76)", lineHeight: 1.75 }}>
+                  {body}
+                </p>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {points.map((point) => (
+                    <div key={point} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                      <CheckCircle2 size={15} color={accent} style={{ flexShrink: 0, marginTop: 2 }} />
+                      <span style={{ fontSize: m ? 13 : 14, color: "#E2E8F0", lineHeight: 1.6 }}>
+                        {point}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            ))}
+          </div>
 
         </div>
       </section>
 
+      <section style={{ padding: m ? "44px 20px 18px" : "64px 40px 28px", background: "linear-gradient(180deg, #050d1a 0%, #030913 100%)" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <motion.div
+            {...reveal(0.04)}
+            style={{
+              position: "relative",
+              overflow: "hidden",
+              borderRadius: m ? 24 : 32,
+              padding: m ? "26px 22px 24px" : "42px 46px 40px",
+              border: "1px solid rgba(56,189,248,0.16)",
+              background: "linear-gradient(145deg, rgba(8,15,30,0.88), rgba(4,10,22,0.96))",
+              boxShadow: "0 24px 60px rgba(2,6,23,0.28), inset 0 1px 0 rgba(255,255,255,0.04)",
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                pointerEvents: "none",
+                background: "radial-gradient(circle at 18% 24%, rgba(34,211,238,0.12), transparent 34%), radial-gradient(circle at 82% 74%, rgba(14,165,233,0.12), transparent 30%)",
+              }}
+            />
+
+            <div style={{ position: "relative", zIndex: 1 }}>
+              <div
+                style={{
+                  marginBottom: m ? 14 : 18,
+                  fontSize: m ? 11 : 12,
+                  fontWeight: 800,
+                  letterSpacing: "0.1em",
+                  color: "#7dd3fc",
+                  textTransform: "uppercase",
+                }}
+              >
+                운영 지원
+              </div>
+
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: m ? "clamp(28px, 8vw, 40px)" : "clamp(40px, 4.6vw, 62px)",
+                  fontWeight: 900,
+                  lineHeight: 1.16,
+                  letterSpacing: "-0.03em",
+                  color: "#fff",
+                  maxWidth: m ? "100%" : 860,
+                }}
+              >
+                <span style={{ color: "#38bdf8" }}>월 3만원</span>으로,<br />
+                스스로 작동하고 상태를 먼저 알려주는 운영 시스템을 누리세요.
+              </h2>
+
+              <p
+                style={{
+                  margin: m ? "16px 0 0" : "18px 0 0",
+                  maxWidth: 720,
+                  fontSize: m ? 14 : 17,
+                  lineHeight: 1.8,
+                  color: "rgba(226,232,240,0.74)",
+                }}
+              >
+                복잡한 설정과 장애 대응은 맡기고, 필요한 순간의 알림과 주간 리포트만 받아보세요.
+                숙소가 늘어나도 운영 스트레스는 늘지 않도록 설계해드립니다.
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      <section style={{ padding: m ? "26px 20px 8px" : "34px 40px 18px", background: "linear-gradient(180deg, #030913 0%, #020617 100%)" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <motion.div {...up()} style={{ textAlign: m ? "center" : "left", marginBottom: m ? 22 : 30 }}>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, border: "1px solid rgba(34,211,238,0.22)", background: "rgba(34,211,238,0.07)", borderRadius: 999, padding: "7px 16px", marginBottom: 16, fontSize: 12, color: "#a5f3fc", fontWeight: 700, letterSpacing: "0.08em" }}>
+              작동 증거
+            </div>
+            <h2 style={{ fontSize: "clamp(26px, 3.2vw, 40px)", fontWeight: 900, margin: "0 0 12px", lineHeight: 1.25, letterSpacing: "-0.02em" }}>
+              실제 운영에서 바로 체감되는 변화만 남겼습니다.
+            </h2>
+            <p style={{ margin: m ? "0 auto" : "0", maxWidth: 620, color: "rgba(226,232,240,0.72)", fontSize: 15, lineHeight: 1.8 }}>
+              설치 방식, 프라이버시 보호, 청소 확인, 주간 리포트까지 지금 페이지에서 약속한 내용이 실제로 어떤 운영 변화로 이어지는지 먼저 보여드립니다.
+            </p>
+          </motion.div>
+
+          <div style={{ display: "grid", gridTemplateColumns: m ? "1fr" : "repeat(2, 1fr)", gap: m ? 14 : 18 }}>
+            {PROOF_CARDS.map(({ icon: Icon, title, body, accent }, i) => (
+              <motion.div
+                key={title}
+                {...up(0.06 + i * 0.08)}
+                style={{
+                  borderRadius: 20,
+                  padding: m ? "18px 16px" : "22px 20px",
+                  background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.025))",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  boxShadow: "0 16px 32px rgba(2,6,23,0.16)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", background: `${accent}18`, border: `1px solid ${accent}40`, flexShrink: 0 }}>
+                    <Icon size={20} color={accent} />
+                  </div>
+                  <div style={{ fontSize: m ? 17 : 19, fontWeight: 800, color: "#fff", lineHeight: 1.35, letterSpacing: "-0.01em" }}>
+                    {title}
+                  </div>
+                </div>
+                <p style={{ margin: 0, fontSize: m ? 13.5 : 14.5, color: "rgba(226,232,240,0.74)", lineHeight: 1.75 }}>
+                  {body}
+                </p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ════════════════ PRICING ════════════════ */}
-      <section style={{ padding: m ? "64px 20px" : "96px 40px", background: "linear-gradient(180deg, #030913 0%, #020617 100%)" }}>
+      <section id="pricing" style={{ padding: m ? "64px 20px" : "96px 40px", background: "linear-gradient(180deg, #030913 0%, #020617 100%)" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
           <motion.div {...up()} style={{ textAlign: "center", marginBottom: m ? 36 : 56 }}>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, border: "1px solid rgba(34,211,238,0.25)", background: "rgba(34,211,238,0.07)", borderRadius: 999, padding: "7px 20px", marginBottom: 20, fontSize: 13, color: "#a5f3fc", fontWeight: 700 }}>
-              PRICING
-            </div>
             <h2 style={{ fontSize: "clamp(28px, 3.5vw, 42px)", fontWeight: 800, margin: "0 0 14px", letterSpacing: "-0.01em" }}>
               요금제
             </h2>
             <p style={{ color: "rgba(226,232,240,0.72)", fontSize: 16, maxWidth: 500, margin: "0 auto", lineHeight: 1.8 }}>
-              숙소 구조와 환경에 따라 최종 견적은 달라질 수 있습니다.
+              기기 구매만으로 가볍게 시작할 수도 있고, 월 3만원 운영 지원으로 더 편하게 맡길 수도 있습니다.
             </p>
           </motion.div>
 
           <div style={{ display: "grid", gridTemplateColumns: m ? "1fr" : "repeat(3, 1fr)", gap: m ? 16 : 20 }}>
             {PACKAGES.map((pkg, i) => (
-              <PricingCard key={pkg.name} pkg={pkg} i={i} m={m} />
+              <PricingCard key={pkg.name} pkg={pkg} i={i} m={m} onCtaClick={() => scrollToSection("consultation")} />
             ))}
           </div>
 
@@ -455,7 +701,9 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
             <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
               <FileCheck2 size={16} color="#67e8f9" style={{ flexShrink: 0, marginTop: 2 }} />
               <p style={{ margin: 0, color: "rgba(226,232,240,0.68)", fontSize: 13, lineHeight: 1.85 }}>
-                월 1회 현장 방문 감소, 체크인 오류 1건 예방, 퇴실 후 에너지 낭비 감소 중 하나라도 반복되는 숙소라면 도입 검토 가치가 있습니다. 특수 도어락, 추가 센서, 네트워크 보강, 현장 출동은 별도 비용이 발생할 수 있습니다.
+                실제 비용은 숙소 구조, 도어락 호환, 센서 수량에 따라 달라질 수 있습니다.
+                기본 방향은 "기기는 50만원 전후로 직접 구매하고, 필요하면 월 3만원 운영 지원을 붙이는 방식"입니다.
+                특수 도어락, 추가 센서, 네트워크 보강, 현장 출동은 별도 비용이 발생할 수 있습니다.
               </p>
             </div>
           </motion.div>
@@ -477,7 +725,7 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
       </section>
 
       {/* ════════════════ CTA ════════════════ */}
-      <section style={{ padding: m ? "72px 20px" : "120px 40px", textAlign: "center", position: "relative", overflow: "hidden", background: "linear-gradient(180deg, #030913 0%, #020617 100%)" }}>
+      <section id="consultation" style={{ padding: m ? "72px 20px" : "120px 40px", textAlign: "center", position: "relative", overflow: "hidden", background: "linear-gradient(180deg, #030913 0%, #020617 100%)" }}>
         <div style={{
           position: "absolute", inset: 0, pointerEvents: "none",
           background: "radial-gradient(ellipse 70% 60% at 50% 50%, rgba(34,211,238,0.16) 0%, transparent 70%)",
@@ -497,26 +745,32 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
             자동화 범위와 예상 비용을 먼저 확인하세요.
           </p>
           <div style={{ display: "flex", flexDirection: m ? "column" : "row", gap: m ? 12 : 14, justifyContent: "center", alignItems: "center", width: m ? "100%" : "auto" }}>
-            <button style={{
+            <button
+              onClick={openInquiryMail}
+              style={{
               background: "#06b6d4", color: "#fff", border: "none",
               borderRadius: 16, padding: m ? "15px 24px" : "18px 40px", fontSize: m ? 15 : 17, fontWeight: 800,
               cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 9,
               boxShadow: "0 0 40px rgba(6,182,212,0.4)",
               width: m ? "100%" : "auto", justifyContent: "center",
-            }}>
-              <MessageCircle size={19} /> 카카오톡으로 문의하기
+            }}
+            >
+              <MessageCircle size={19} /> 운영진단 요청 메일 보내기
             </button>
-            <button style={{
+            <button
+              onClick={() => scrollToSection("pricing")}
+              style={{
               background: "rgba(255,255,255,0.05)", color: "#fff",
               border: "1px solid rgba(255,255,255,0.12)",
               borderRadius: 16, padding: m ? "14px 24px" : "18px 40px", fontSize: m ? 15 : 17, cursor: "pointer",
               width: m ? "100%" : "auto",
-            }}>
-              전화 문의 · 010-0000-0000
+            }}
+            >
+              요금제 다시 보기
             </button>
           </div>
           <p style={{ marginTop: 22, fontSize: 13, color: "rgba(148,163,184,0.74)" }}>
-            평일 10:00 – 18:00 응대 · 주말은 카카오톡 문의 권장
+            이메일 한 통만 보내주시면, 적용 가능한 자동화 범위와 예상 비용을 먼저 정리해드립니다.
           </p>
         </motion.div>
       </section>
@@ -530,13 +784,13 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
       }}>
         <div>
           <div style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 16 }}>
-            PROP<span style={{ color: "#22d3ee" }}>OS</span>
+            SPACE <span style={{ color: "#22d3ee" }}>HOST</span>
           </div>
           <p style={{ fontSize: 12, color: "rgba(148,163,184,0.74)", margin: "4px 0 0" }}>AI 기반 단기임대 자동 운영 시스템</p>
         </div>
         <div style={{ fontSize: 12, color: "rgba(148,163,184,0.74)", textAlign: m ? "left" : "right", lineHeight: 1.8 }}>
           <div>이메일: hello@propos.kr</div>
-          <div>© 2026 PropOS. All rights reserved.</div>
+          <div>© 2026 Space Host. All rights reserved.</div>
         </div>
       </footer>
     </div>

@@ -4,6 +4,7 @@ import {
   useReducedMotion,
   useScroll,
   useTransform,
+  useInView,
 } from "framer-motion";
 
 function useIsMobile() {
@@ -22,6 +23,9 @@ function useIsMobile() {
 
 const NAVY = "#0B1F4D";
 const BLUE = "#2563EB";
+
+/* 공통 진입 속도 — 모든 씬/요소 동일 (상단 문장·중간 그래픽·결론 일관성) */
+const STD_DUR = 0.6;
 
 function entranceProps(reduced, {
   delay = 0,
@@ -48,44 +52,15 @@ function entranceProps(reduced, {
   };
 }
 
-function nodeEntrance(index, reduced, m) {
-  if (m) {
-    const mobileOrigins = [
-      { x: -24, y: -18 },
-      { x: 24, y: -18 },
-      { x: -20, y: 6 },
-      { x: 20, y: 6 },
-      { x: -18, y: 22 },
-      { x: 18, y: 22 },
-      { x: 0, y: 28 },
-    ];
-    return entranceProps(reduced, {
-      delay: 0.52 + index * 0.08,
-      x: mobileOrigins[index]?.x || 0,
-      y: mobileOrigins[index]?.y || 18,
-      scale: 0.94,
-      duration: 0.6,
-      amount: 0.45,
-    });
-  }
-
-  const desktopOrigins = [
-    { x: -40, y: -34 },
-    { x: 40, y: -34 },
-    { x: -52, y: -8 },
-    { x: 52, y: -8 },
-    { x: -40, y: 28 },
-    { x: 40, y: 28 },
-    { x: 0, y: 42 },
-  ];
-
+/* 모든 노드를 같은 방식(균일 팝)으로 — 거리차로 인한 속도 불일치 제거.
+   각 노드는 제자리에서 scale 0.7→1 로 동일 속도(0.6s)로 등장, 순서만 delay 로 제어 */
+function nodeEntrance(key, reduced, m) {
   return entranceProps(reduced, {
-    delay: 0.52 + index * 0.08,
-    x: desktopOrigins[index]?.x || 0,
-    y: desktopOrigins[index]?.y || 18,
-    scale: 0.94,
-    duration: 0.64,
-    amount: 0.35,
+    delay: nodeOrderDelay(key),
+    y: m ? 8 : 10,
+    scale: 0.7,
+    duration: STD_DUR,
+    amount: m ? 0.4 : 0.3,
   });
 }
 
@@ -175,14 +150,26 @@ const SHORT_LABELS = {
   emergency: "긴급알람",
 };
 
+/* 노드 등장 순서 — 사람이 눈으로 따라갈 수 있게 하나씩 (시계방향 스윕)
+   센서 → 예약 → 날씨 → 모드전환 → 긴급알람 → 리포트 → 자동제어 */
+const NODE_ORDER = ["sensor", "reservation", "weather", "mode-switch", "emergency", "weekly", "auto-control"];
+const NODE_START = 0.3;    // 중심(SPACE HOST)은 항상 표시 / 첫 노드 시작
+const NODE_STEP = 0.3;     // 노드 간격(또렷하지만 너무 느리지 않게)
+function nodeOrderDelay(key) {
+  const i = NODE_ORDER.indexOf(key);
+  return NODE_START + (i < 0 ? 0 : i) * NODE_STEP;
+}
+/* 모든 노드 등장 직후 하단 결론 문구 (너무 늦지 않게) */
+const NODES_DONE_DELAY = NODE_START + (NODE_ORDER.length - 1) * NODE_STEP + 0.4;
+
 function NodeCard({ node, m, reduced, index }) {
   return (
     <motion.div
-      {...nodeEntrance(index, reduced, m)}
+      {...nodeEntrance(node.key, reduced, m)}
       style={{ minWidth: 0 }}
     >
       <motion.div
-        animate={
+        whileInView={
           reduced
             ? {}
             : {
@@ -197,7 +184,7 @@ function NodeCard({ node, m, reduced, index }) {
         transition={{
           duration: 3.4 + (index % 3) * 0.7,
           delay: 1 + index * 0.18,
-          repeat: reduced ? 0 : Infinity,
+          repeat: 0,
           ease: "easeInOut",
         }}
         style={{
@@ -271,13 +258,8 @@ function AIEngineCore({ m, reduced }) {
 
   return (
     <motion.div
-      {...entranceProps(reduced, {
-        delay: 0.38,
-        y: 22,
-        scale: 0.92,
-        duration: 0.72,
-        amount: 0.35,
-      })}
+      /* 중심 SPACE HOST = 처음부터 항상 표시(애니메이션 없음) */
+      initial={false}
       style={{
         position: "relative",
         width: size,
@@ -414,8 +396,8 @@ function DesktopNetwork({ reduced }) {
             whileInView={reduced ? { opacity: 1 } : { pathLength: 1, opacity: 1 }}
             viewport={{ once: true, amount: 0.4 }}
             transition={{
-              duration: reduced ? 0.24 : 0.52,
-              delay: reduced ? (0.2 + index * 0.05) * 0.35 : 0.36 + index * 0.08,
+              duration: reduced ? 0.24 : STD_DUR,
+              delay: reduced ? nodeOrderDelay(NODES[index].key) * 0.35 : nodeOrderDelay(NODES[index].key),
               ease: [0.22, 1, 0.36, 1],
             }}
           />
@@ -431,9 +413,9 @@ function DesktopNetwork({ reduced }) {
           width={18}
           height={18}
           {...entranceProps(reduced, {
-            delay: 0.5 + index * 0.08,
+            delay: nodeOrderDelay(NODES[index].key),
             scale: 0.9,
-            duration: 0.42,
+            duration: STD_DUR,
             amount: 0.4,
           })}
           style={{
@@ -541,8 +523,8 @@ function MobileNetwork({ reduced }) {
               whileInView={reduced ? { opacity: 1 } : { pathLength: 1, opacity: 1 }}
               viewport={{ once: true, amount: 0.4 }}
               transition={{
-                duration: reduced ? 0.22 : 0.5,
-                delay: reduced ? 0.1 : 0.3 + index * 0.06,
+                duration: reduced ? 0.22 : STD_DUR,
+                delay: reduced ? nodeOrderDelay(node.key) * 0.35 : nodeOrderDelay(node.key),
                 ease: [0.22, 1, 0.36, 1],
               }}
             />
@@ -564,7 +546,7 @@ function MobileNetwork({ reduced }) {
             style={{ position: "absolute", top: p.top, left: p.left, transform: "translate(-50%, -50%)", zIndex: 3 }}
           >
             <motion.div
-              {...entranceProps(reduced, { delay: 0.45 + index * 0.06, x: 0, y: 0, scale: 0.82, duration: 0.5, amount: 0.3 })}
+              {...entranceProps(reduced, { delay: nodeOrderDelay(node.key), x: 0, y: 0, scale: 0.82, duration: STD_DUR, amount: 0.3 })}
             >
               <MobileChip node={node} />
             </motion.div>
@@ -579,6 +561,7 @@ export default function Scene5AIEngine() {
   const m = useIsMobile();
   const reduced = useReducedMotion();
   const sectionRef = useRef(null);
+  const inView = useInView(sectionRef, { amount: 0.2, once: true });
   const { scrollYProgress } = useScroll({
     target: sectionRef,
     offset: ["start start", "end start"],
@@ -685,12 +668,12 @@ export default function Scene5AIEngine() {
           >
             <div
               style={{
-                width: m ? "100%" : "min(40%, 440px)",
+                width: m ? "100%" : "min(46%, 520px)",
                 paddingTop: m ? 0 : 10,
               }}
             >
               <motion.img
-                {...entranceProps(reduced, { delay: 0.06, y: 12, duration: 0.56, amount: 0.5 })}
+                initial={false}
                 src="/icons/spacehost-logo.svg"
                 alt="SPACE HOST"
                 style={{
@@ -700,20 +683,6 @@ export default function Scene5AIEngine() {
                   filter: "drop-shadow(0 1px 0 rgba(255,255,255,0.20))",
                 }}
               />
-              <motion.p
-                {...entranceProps(reduced, { delay: 0.12, y: 12, duration: 0.56, amount: 0.5 })}
-                style={{
-                  margin: 0,
-                  fontSize: m ? 10 : 11,
-                  color: "rgba(11,31,77,0.68)",
-                  letterSpacing: "0.16em",
-                  textTransform: "uppercase",
-                  fontFamily: "'DM Mono', monospace",
-                }}
-              >
-                Smart. Carefree. Anywhere.
-              </motion.p>
-
               <div style={{ marginTop: m ? 26 : 34 }}>
                 <h2
                   style={{
@@ -726,18 +695,18 @@ export default function Scene5AIEngine() {
                   }}
                 >
                   {[
-                    "하루종일 알림으로 괴롭히는",                    
+                    "많은 알림으로 괴롭히는",                    
                   ].map((line, index) => (
                     <div key={line} style={{ overflow: "hidden", paddingBottom: "0.08em" }}>
                       <motion.span
                         initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
-                        animate={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
+                        animate={inView ? (reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }) : (reduced ? { opacity: 0 } : { opacity: 1, y: "110%" })}
                         transition={{
                           delay: reduced ? (0.2 + index * 0.08) * 0.35 : 0.2 + index * 0.12,
-                          duration: reduced ? 0.22 : 0.82,
+                          duration: reduced ? 0.22 : STD_DUR,
                           ease: [0.16, 1, 0.3, 1],
                         }}
-                        style={{ display: "block" }}
+                        style={{ display: "block", whiteSpace: m ? "normal" : "nowrap" }}
                       >
                         {line}
                       </motion.span>
@@ -747,16 +716,16 @@ export default function Scene5AIEngine() {
                   <div style={{ overflow: "hidden", paddingBottom: "0.08em", marginTop: m ? 14 : 18 }}>
                     <motion.span
                       initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
-                      animate={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
+                      animate={inView ? (reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }) : (reduced ? { opacity: 0 } : { opacity: 1, y: "110%" })}
                       transition={{
                         delay: reduced ? 0.34 * 0.35 : 0.46,
-                        duration: reduced ? 0.22 : 0.82,
+                        duration: reduced ? 0.22 : STD_DUR,
                         ease: [0.16, 1, 0.3, 1],
                       }}
                       style={{ display: "block" }}
                     >
                       <motion.span
-                        animate={
+                        whileInView={
                           reduced
                             ? {}
                             : {
@@ -767,31 +736,17 @@ export default function Scene5AIEngine() {
                               ],
                             }
                         }
-                        transition={{ duration: 4.2, delay: 1.2, repeat: reduced ? 0 : Infinity, ease: "easeInOut" }}
+                        transition={{ duration: 4.2, delay: 1.2, repeat: 0, ease: "easeInOut" }}
                         style={{ color: BLUE }}
                       >
-                        단순 원격제어
+                        단순제어 시스템
                       </motion.span>
-                      <span>가 아닙니다.</span>
+                      <span>이 <br/>아닙니다.</span>
                     </motion.span>
                   </div>
                 </h2>
 
-                {!m && (
-                  <motion.p
-                    {...entranceProps(reduced, { delay: 0.62, y: 16, duration: 0.62, amount: 0.6 })}
-                    style={{
-                      margin: "22px 0 0",
-                      maxWidth: 380,
-                      fontSize: 15,
-                      color: "rgba(11,31,77,0.70)",
-                      lineHeight: 1.72,
-                    }}
-                  >
-                    센서, 예약, 날씨, 제어 이벤트가 따로 오는 것이 아니라
-                    하나의 엔진이 종합 판단해서 숙소를 움직입니다.
-                  </motion.p>
-                )}
+                
               </div>
             </div>
 
@@ -810,49 +765,62 @@ export default function Scene5AIEngine() {
 
           {!m && (
             <motion.div
-              {...entranceProps(reduced, { delay: 0.94, y: 32, duration: 0.64, amount: 0.55 })}
+              {...entranceProps(reduced, { delay: NODES_DONE_DELAY, y: 32, duration: STD_DUR, amount: 0.55 })}
               style={{
                 marginTop: 18,
                 width: "100%",
                 display: "flex",
+                flexDirection: "column",
                 alignItems: "center",
-                gap: 22,
-                background: "rgba(255,255,255,0.66)",
-                backdropFilter: "blur(18px)",
-                WebkitBackdropFilter: "blur(18px)",
+                justifyContent: "center",
+                gap: 12,
+                background: "rgba(255,255,255,0.58)",
+                backdropFilter: "blur(16px)",
+                WebkitBackdropFilter: "blur(16px)",
                 border: "1px solid rgba(11,31,77,0.09)",
-                borderRadius: 22,
-                padding: "18px 28px",
-                boxShadow: "0 16px 34px rgba(11,31,77,0.08)",
+                borderRadius: 20,
+                padding: "16px 28px 18px",
+                boxShadow: "0 12px 28px rgba(11,31,77,0.06)",
               }}
             >
               <img
-                src="/icons/spacehost-logo.svg"
+                src="/icons/spacehost-logo-on-light.svg"
                 alt="SPACE HOST"
-                style={{ height: 30, display: "block", flexShrink: 0 }}
+                style={{ height: 28, display: "block", flexShrink: 0 }}
               />
-              <div style={{ width: 1, height: 42, background: "rgba(11,31,77,0.12)", flexShrink: 0 }} />
-              <div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 16,
+                  width: "100%",
+                  textAlign: "center",
+                }}
+              >
+                <img
+                  src="/icons/laurel-gold.svg"
+                  alt=""
+                  aria-hidden="true"
+                  style={{ width: 36, height: 56, display: "block", flexShrink: 0, transform: "scaleX(-1)" }}
+                />
                 <div
                   style={{
                     fontSize: 18,
                     fontWeight: 800,
                     color: NAVY,
                     lineHeight: 1.5,
-                    marginBottom: 4,
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  종합 판단하여 행동하는 <span style={{ color: BLUE }}>지능형 시스템</span>입니다.
+                  상황을 종합 판단하여 스스로 행동하는 <span style={{ color: BLUE }}>지능형 시스템</span>입니다.
                 </div>
-                <div
-                  style={{
-                    fontSize: 14,
-                    color: "rgba(11,31,77,0.66)",
-                    lineHeight: 1.6,
-                  }}
-                >
-                  당신이 편안한 순간, SPACE HOST가 지능적으로 운영합니다.
-                </div>
+                <img
+                  src="/icons/laurel-gold.svg"
+                  alt=""
+                  aria-hidden="true"
+                  style={{ width: 36, height: 56, display: "block", flexShrink: 0 }}
+                />
               </div>
             </motion.div>
           )}
@@ -860,26 +828,26 @@ export default function Scene5AIEngine() {
           {/* 모바일 값 카드 — 마무리 문구 (하단에 안정 배치: marginTop auto) */}
           {m && (
             <motion.div
-              {...entranceProps(reduced, { delay: 0.6, y: 18, duration: 0.6, amount: 0.4 })}
+              {...entranceProps(reduced, { delay: NODES_DONE_DELAY, y: 18, duration: STD_DUR, amount: 0.4 })}
               style={{
                 marginTop: "auto",
                 paddingTop: 0,
                 marginBottom: 4,
                 width: "100%",
-                background: "rgba(255,255,255,0.7)",
-                backdropFilter: "blur(16px)",
-                WebkitBackdropFilter: "blur(16px)",
+                background: "rgba(255,255,255,0.62)",
+                backdropFilter: "blur(14px)",
+                WebkitBackdropFilter: "blur(14px)",
                 border: "1px solid rgba(11,31,77,0.08)",
-                borderRadius: 18,
-                padding: "14px 16px",
-                boxShadow: "0 14px 28px rgba(11,31,77,0.07)",
+                borderRadius: 16,
+                padding: "12px 14px",
+                boxShadow: "0 10px 22px rgba(11,31,77,0.05)",
               }}
             >
-              <div style={{ fontSize: 15, fontWeight: 800, color: NAVY, lineHeight: 1.45, marginBottom: 4 }}>
-                종합 판단하여 행동하는 <span style={{ color: BLUE }}>지능형 시스템</span>입니다.
+              <div style={{ fontSize: m ? 17 : 22, fontWeight: 800, color: NAVY, lineHeight: 1.45, marginBottom: 4 }}>
+                "종합 판단"하여 "행동"하는 <span style={{ color: BLUE }}>지능형 시스템</span>
               </div>
               <div style={{ fontSize: 12.5, color: "rgba(11,31,77,0.66)", lineHeight: 1.6 }}>
-                당신이 편안한 순간, SPACE HOST가 지능적으로 운영합니다.
+                당신의 일상을 되돌려 드립니다
               </div>
             </motion.div>
           )}

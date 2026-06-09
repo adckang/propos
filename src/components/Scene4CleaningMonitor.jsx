@@ -22,6 +22,7 @@ import {
   useReducedMotion,
   useScroll,
   useTransform,
+  useInView,
 } from "framer-motion";
 
 /* ── 모바일 감지 ── */
@@ -76,7 +77,7 @@ const FEATURES = [
 
 const COPY_LINES = [
   { key: "line-1", text: "청소 누락, 지각 걱정없이" },
-  { key: "line-2", accent: "실시간 현황", suffix: "을" },
+  { key: "line-2", accent: "실시간 현황을", suffix: "" },
   { key: "line-3", text: "확인 하세요" },
 ];
 
@@ -84,19 +85,16 @@ const TIMELINE = [
   {
     time: "10:30 AM",
     label: "Guest Checked Out",
-    note: "Door sensor recorded the final guest exit.",
     status: "blue",
   },
   {
     time: "11:30 AM",
     label: "Cleaning Started",
-    note: "Entry event confirmed cleaning staff arrival.",
     status: "green",
   },
   {
     time: "2:30 PM",
     label: "Cleaning Completed",
-    note: "Activity settled and the room returned to standby.",
     status: "check",
   },
 ];
@@ -161,7 +159,7 @@ const timelineItemVariants = (reduced) => (
       visible: {
         opacity: 1,
         y: 0,
-        transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] },
+        transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] },
       },
     }
 );
@@ -191,7 +189,7 @@ function SensorBeacon({ sensor, m, reduced, index }) {
           {[0, 1].map((ripple) => (
             <motion.div
               key={ripple}
-              animate={
+              whileInView={
                 reduced
                   ? {}
                   : { scale: [0.88, 1.75], opacity: [0.28, 0] }
@@ -199,7 +197,7 @@ function SensorBeacon({ sensor, m, reduced, index }) {
               transition={{
                 duration: 2.6,
                 delay: ripple * 1.15,
-                repeat: reduced ? 0 : Infinity,
+                repeat: 0,
                 ease: "easeOut",
               }}
               style={{
@@ -213,8 +211,8 @@ function SensorBeacon({ sensor, m, reduced, index }) {
           ))}
 
           <motion.div
-            animate={reduced ? {} : { scale: [1, 1.06, 1] }}
-            transition={{ duration: 2.8, repeat: reduced ? 0 : Infinity, ease: "easeInOut" }}
+            whileInView={reduced ? {} : { scale: [1, 1.06, 1] }}
+            transition={{ duration: 2.8, repeat: 0, ease: "easeInOut" }}
             style={{
               position: "absolute",
               inset: m ? 8 : 10,
@@ -311,7 +309,7 @@ function TimelineItem({ item, index, isLast, m, reduced }) {
     >
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
         <motion.div
-          animate={
+          whileInView={
             reduced
               ? {}
               : {
@@ -322,7 +320,7 @@ function TimelineItem({ item, index, isLast, m, reduced }) {
           transition={{
             duration: 2,
             delay: reduced ? 0 : index * 0.12,
-            repeat: reduced ? 0 : Infinity,
+            repeat: 0,
             ease: "easeInOut",
           }}
           style={{
@@ -372,7 +370,7 @@ function TimelineItem({ item, index, isLast, m, reduced }) {
             initial={reduced ? { opacity: 1 } : { opacity: 0.3, scaleY: 0 }}
             whileInView={reduced ? { opacity: 1 } : { opacity: 1, scaleY: 1 }}
             viewport={{ once: true, amount: 0.65 }}
-            transition={{ duration: reduced ? 0.2 : 0.5, delay: reduced ? 0 : 0.18 + index * 0.18 }}
+            transition={{ duration: reduced ? 0.2 : 0.6, delay: reduced ? 0 : 0.18 + index * 0.18 }}
             style={{
               width: 2,
               flex: 1,
@@ -387,32 +385,32 @@ function TimelineItem({ item, index, isLast, m, reduced }) {
       </div>
 
       <div style={{ paddingBottom: isLast ? 0 : (m ? 10 : 20), minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: m ? 2 : 5, flexWrap: "wrap" }}>
-          <span style={{
+        <div style={{ marginBottom: m ? 4 : 8 }}>
+          <div style={{
             fontSize: m ? 9 : 11,
             fontFamily: "'DM Mono', monospace",
             color: palette.time,
             letterSpacing: "0.06em",
             textTransform: "uppercase",
-            flexShrink: 0,
+            marginBottom: m ? 2 : 4,
           }}>
             {item.time}
-          </span>
-          <span style={{
+          </div>
+          <div style={{
             fontSize: m ? 12 : 15,
             fontWeight: 700,
             color: "#fff",
             lineHeight: 1.35,
           }}>
             {item.label}
-          </span>
+          </div>
         </div>
 
         <div style={{
           fontSize: m ? 11 : 12,
           color: "rgba(255,255,255,0.52)",
           lineHeight: 1.55,
-          maxWidth: 280,
+          maxWidth: m ? 220 : 232,
         }}>
           {!m && item.note}
         </div>
@@ -429,7 +427,7 @@ function ActivityTimeline({ m, reduced }) {
         x: m ? 0 : 18,
         y: 24,
         scale: 0.98,
-        duration: 0.75,
+        duration: 0.6,
       })}
       whileHover={reduced ? undefined : { y: -4, scale: 1.01 }}
       style={{
@@ -438,9 +436,10 @@ function ActivityTimeline({ m, reduced }) {
         WebkitBackdropFilter: "blur(20px)",
         border: "1px solid rgba(255,255,255,0.12)",
         borderRadius: m ? 20 : 28,
-        padding: m ? "10px 10px 8px" : "20px 22px 16px",
-        width: m ? "100%" : 368,
-        maxWidth: m ? "54vw" : 368,
+        padding: m ? "10px 10px 8px" : "16px 15px 12px",
+        width: m ? "fit-content" : "fit-content",
+        minWidth: m ? 0 : 150,
+        maxWidth: m ? "min(58vw, 214px)" : 268,
         boxSizing: "border-box",
         boxShadow: m ? "0 14px 36px rgba(0,0,0,0.22)" : "0 18px 54px rgba(0,0,0,0.26)",
       }}
@@ -449,15 +448,15 @@ function ActivityTimeline({ m, reduced }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        gap: 14,
-        marginBottom: m ? 14 : 22,
-        paddingBottom: m ? 10 : 14,
+        gap: 10,
+        marginBottom: m ? 14 : 16,
+        paddingBottom: m ? 10 : 12,
         borderBottom: "1px solid rgba(255,255,255,0.08)",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
           <div style={{
-            width: m ? 32 : 42,
-            height: m ? 32 : 42,
+            width: m ? 22 : 24,
+            height: m ? 32 : 34,
             borderRadius: m ? 12 : 14,
             background: "rgba(96,165,250,0.12)",
             border: "1px solid rgba(96,165,250,0.24)",
@@ -469,31 +468,31 @@ function ActivityTimeline({ m, reduced }) {
             <img
               src="/icons/trusted-operation.svg"
               alt="Trusted operation"
-              width={m ? 18 : 24}
-              height={m ? 18 : 24}
+              width={m ? 18 : 18}
+              height={m ? 18 : 18}
               style={{ display: "block" }}
             />
           </div>
           <div style={{ minWidth: 0 }}>
             <div style={{
-              fontSize: m ? 10 : 12,
+              fontSize: m ? 10 : 11,
               color: BLUE_SOFT,
               fontFamily: "'DM Mono', monospace",
               letterSpacing: "0.08em",
               textTransform: "uppercase",
               marginBottom: m ? 3 : 5,
             }}>
-              Live Activity
+              In/Out Log
             </div>
             <div style={{
-              fontSize: m ? 11 : 14,
+              fontSize: m ? 11 : 12,
               fontWeight: 800,
               color: "#fff",
               letterSpacing: "0.06em",
               textTransform: "uppercase",
               lineHeight: 1.35,
             }}>
-              Cleaning Staff Activity Log
+              
             </div>
           </div>
         </div>
@@ -510,8 +509,8 @@ function ActivityTimeline({ m, reduced }) {
             flexShrink: 0,
           }}>
             <motion.div
-              animate={reduced ? {} : { opacity: [0.55, 1, 0.55], scale: [1, 1.15, 1] }}
-              transition={{ duration: 1.8, repeat: reduced ? 0 : Infinity, ease: "easeInOut" }}
+              whileInView={reduced ? {} : { opacity: [0.55, 1, 0.55], scale: [1, 1.15, 1] }}
+              transition={{ duration: 1.8, repeat: 0, ease: "easeInOut" }}
               style={{
                 width: 6,
                 height: 6,
@@ -621,8 +620,8 @@ function FeaturePill({ iconSrc, line1, line2, m, reduced, index }) {
       }}
     >
       <motion.div
-        animate={reduced ? {} : { boxShadow: ["0 0 0 rgba(96,165,250,0)", "0 0 22px rgba(96,165,250,0.18)", "0 0 0 rgba(96,165,250,0)"] }}
-        transition={{ duration: 4.2, delay: index * 0.28, repeat: reduced ? 0 : Infinity, ease: "easeInOut" }}
+        whileInView={reduced ? {} : { boxShadow: ["0 0 0 rgba(96,165,250,0)", "0 0 22px rgba(96,165,250,0.18)", "0 0 0 rgba(96,165,250,0)"] }}
+        transition={{ duration: 4.2, delay: index * 0.28, repeat: 0, ease: "easeInOut" }}
         style={{
           width: m ? 32 : 44,
           height: m ? 32 : 44,
@@ -669,19 +668,19 @@ function FeaturePill({ iconSrc, line1, line2, m, reduced, index }) {
 /* ─────────────────────────────────────
    카피 블록
 ───────────────────────────────────── */
-function CopyBlock({ m, reduced }) {
+function CopyBlock({ m, reduced, inView }) {
   const headSize = m ? "clamp(28px, 7.6vw, 42px)" : "clamp(42px, 4.4vw, 64px)";
 
   return (
-    <div style={{ margin: m ? "12px 0 0" : "0 0 30px", maxWidth: m ? "min(64%, 236px)" : 560 }}>
+    <div style={{ margin: m ? "12px 0 0" : "0 0 30px", maxWidth: m ? "min(100%, 350px)" : 560 }}>
       {COPY_LINES.map((line, index) => (
         <div key={line.key} style={{ overflow: "hidden", paddingBottom: "0.08em" }}>
           <motion.div
             initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
-            animate={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
+            animate={inView ? (reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }) : (reduced ? { opacity: 0 } : { opacity: 1, y: "110%" })}
             transition={{
               delay: reduced ? (0.12 + index * 0.08) * 0.35 : 0.12 + index * 0.11,
-              duration: reduced ? 0.22 : 0.78,
+              duration: reduced ? 0.22 : 0.6,
               ease: [0.16, 1, 0.3, 1],
             }}
             style={{
@@ -690,13 +689,14 @@ function CopyBlock({ m, reduced }) {
               lineHeight: 1.15,
               letterSpacing: "-0.025em",
               color: "#fff",
+              whiteSpace: m ? "nowrap" : "normal",
             }}
           >
             {line.accent ? (
               <span style={{ display: "block" }}>
                 <motion.span
-                  animate={reduced ? {} : { textShadow: ["0 0 0 rgba(34,211,238,0)", "0 0 22px rgba(34,211,238,0.28)", "0 0 0 rgba(34,211,238,0)"] }}
-                  transition={{ duration: 4.4, delay: 1, repeat: reduced ? 0 : Infinity, ease: "easeInOut" }}
+                  whileInView={reduced ? {} : { textShadow: ["0 0 0 rgba(34,211,238,0)", "0 0 22px rgba(34,211,238,0.28)", "0 0 0 rgba(34,211,238,0)"] }}
+                  transition={{ duration: 4.4, delay: 1, repeat: 0, ease: "easeInOut" }}
                   style={{ color: "#22d3ee" }}
                 >
                   {line.accent}
@@ -709,22 +709,50 @@ function CopyBlock({ m, reduced }) {
           </motion.div>
         </div>
       ))}
-
-      <motion.p
-        {...revealInView(reduced, { delay: 0.54, y: 14, duration: 0.6, amount: 0.7 })}
-        style={{
-          margin: m ? "16px 0 0" : "18px 0 0",
-          maxWidth: 420,
-          fontSize: m ? 13 : 15,
-          color: "rgba(255,255,255,0.58)",
-          lineHeight: 1.7,
-          display: m ? "none" : "block",
-        }}
-      >
-        도어 센서와 활동 감지 이벤트를 조합해, 청소 시작부터 완료까지를
-        자동으로 추적합니다.
-      </motion.p>
     </div>
+  );
+}
+
+function EffectCard({ m, reduced }) {
+  return (
+    <motion.div
+      {...revealInView(reduced, { delay: 0.54, y: 14, duration: 0.6, amount: 0.7 })}
+      style={{
+        marginTop: m ? 12 : 16,
+        width: m ? "100%" : "min(100%, 560px)",
+        background: "rgba(8,18,37,0.44)",
+        backdropFilter: "blur(18px)",
+        WebkitBackdropFilter: "blur(18px)",
+        border: "1px solid rgba(248,250,252,0.10)",
+        borderRadius: m ? 16 : 18,
+        padding: m ? "12px 14px" : "14px 16px",
+        boxShadow: "0 18px 36px rgba(2,6,23,0.22)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 4 }}>
+        <img
+          src="/icons/value-badge-gold.svg"
+          alt=""
+          role="presentation"
+          style={{ width: m ? 30 : 36, height: m ? 30 : 36, flexShrink: 0 }}
+        />
+        <div
+          style={{
+                    margin: 0,
+                    fontSize: m ? 17 : 22,
+                    color: "#fff",
+                    fontWeight: 900,
+                    lineHeight: 1.3,
+                    letterSpacing: "-0.02em",
+                    textShadow: "0 8px 24px rgba(6,182,212,0.16)",
+                    whiteSpace: "nowrap",
+                  }}
+        >
+          상태를 추적하는 청소 기록 모드
+        </div>
+      </div>
+      
+    </motion.div>
   );
 }
 
@@ -736,6 +764,7 @@ export default function Scene4CleaningMonitor() {
   const reduced = useReducedMotion();
   const visibleFeatures = m ? [] : FEATURES;
   const sectionRef = useRef(null);
+  const inView = useInView(sectionRef, { amount: 0.2, once: true });
   const { scrollYProgress } = useScroll({
     target: sectionRef,
     offset: ["start start", "end start"],
@@ -859,34 +888,26 @@ export default function Scene4CleaningMonitor() {
             ...(m ? {} : { maxWidth: 640 }),
           }}
         >
-          <motion.header {...revealInView(reduced, { delay: 0.02, y: 12, duration: 0.55 })}>
+          <motion.header initial={false}>
             <img
               src="/icons/spacehost-logo.svg"
               alt="SPACE HOST"
               style={{ height: m ? 26 : 30, display: "block", marginBottom: 8 }}
             />
-            <p style={{
-              margin: 0,
-              fontSize: m ? 10 : 11,
-              color: "rgba(255,255,255,0.36)",
-              letterSpacing: "0.16em",
-              textTransform: "uppercase",
-              fontFamily: "'DM Mono', monospace",
-            }}>
-              Smart. Carefree. Anywhere.
-            </p>
           </motion.header>
 
-          {m && <CopyBlock m={m} reduced={reduced} />}
+          {m && <CopyBlock m={m} reduced={reduced} inView={inView} />}
 
           <div style={{ marginTop: m ? "auto" : 0 }}>
-            {!m && <CopyBlock m={m} reduced={reduced} />}
+            {!m && <CopyBlock m={m} reduced={reduced} inView={inView} />}
 
-            {m && (
-              <div style={{ marginBottom: 14, display: "flex", justifyContent: "flex-start" }}>
+          {m && (
+            <>
+              <div style={{ marginBottom: 12, display: "flex", justifyContent: "flex-start" }}>
                 <ActivityTimeline m={m} reduced={reduced} />
               </div>
-            )}
+            </>
+          )}
 
             {visibleFeatures.length > 0 && (
               <div style={{
@@ -906,6 +927,7 @@ export default function Scene4CleaningMonitor() {
                 ))}
               </div>
             )}
+            <EffectCard m={m} reduced={reduced} />
           </div>
         </div>
 
@@ -913,7 +935,7 @@ export default function Scene4CleaningMonitor() {
         {!m && (
           <div style={{
             position: "absolute",
-            right: 46,
+            right: 570,
             bottom: 58,
             zIndex: 4,
           }}>

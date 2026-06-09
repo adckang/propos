@@ -10,8 +10,8 @@
  * 2차: Framer Motion 애니메이션 추가 예정
  */
 
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { motion, useReducedMotion, useInView } from "framer-motion";
 
 /* ── 모바일 감지 (768px 기준) ── */
 function useIsMobile() {
@@ -39,9 +39,9 @@ const COPY_LINES = [
 ];
 
 const FEATURES = [
-  { iconSrc: "/icons/noise-alert.svg",        line1: "매너시간",   line2: "소음 발생 센싱하여 손님에게 자동 안내"   },
-  { iconSrc: "/icons/manner-mode.svg",         line1: "적정소음", line2: "손님 스스로 파악 가능한 친절한 가이드"          },
-  { iconSrc: "/icons/stress-reduction.svg",    line1: "민원 예방으로",  line2: "운영 스트레스 감소" },
+  { iconSrc: "/icons/noise-alert.svg",        line1: "매너시간",   line2: "매너 시간 안내"   },
+  { iconSrc: "/icons/manner-mode.svg",         line1: "적정소음", line2: "소음 자동 센싱" },
+  { iconSrc: "/icons/stress-reduction.svg",    line1: "민원 예방",  line2: "소음 발생 안내" },
 ];
 
 /* ─────────────────────────────────────
@@ -53,37 +53,36 @@ const FEATURES = [
 function DbPill({ m }) {
   return (
     <div style={{
-      display: "inline-flex",
-      alignItems: "center",
-      gap: m ? 9 : 11,
-      background: "rgba(4,4,14,0.42)",
-      backdropFilter: "blur(16px)",
-      WebkitBackdropFilter: "blur(16px)",
-      border: "1px solid rgba(248,113,113,0.4)",
-      borderRadius: 999,
-      padding: m ? "8px 14px" : "10px 18px",
-      boxShadow: "0 0 22px rgba(248,113,113,0.16)",
+      width: m ? "100%" : "min(100%, 560px)",
+      background: "rgba(8,18,37,0.44)",
+      backdropFilter: "blur(18px)",
+      WebkitBackdropFilter: "blur(18px)",
+      border: "1px solid rgba(248,250,252,0.10)",
+      borderRadius: m ? 16 : 18,
+      padding: m ? "12px 14px" : "14px 16px",
+      boxShadow: "0 18px 36px rgba(2,6,23,0.22)",
       alignSelf: "flex-start",
     }}>
-      {/* 경고 도트 (정적) */}
-      <span style={{
-        width: 8, height: 8, borderRadius: "50%",
-        background: RED, boxShadow: `0 0 8px ${RED}`, flexShrink: 0,
-      }} />
-      {/* dB 수치 — Scene-2 정체성 */}
-      <span style={{
-        fontFamily: "'DM Mono', monospace", fontWeight: 900,
-        fontSize: m ? 18 : 22, color: RED,
-        letterSpacing: "-0.02em", lineHeight: 1,
-      }}>
-        72<span style={{ fontSize: m ? 11 : 13, marginLeft: 2, fontWeight: 700 }}>dB</span>
-      </span>
-      {/* 구분선 */}
-      <span style={{ width: 1, height: m ? 14 : 18, background: "rgba(255,255,255,0.2)", flexShrink: 0 }} />
-      {/* 라벨 */}
-      <span style={{ fontSize: m ? 12 : 13, fontWeight: 700, color: "#fff", whiteSpace: "nowrap" }}>
-        경고 수준 감지
-      </span>
+      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 4 }}>
+        <img
+          src="/icons/value-badge-gold.svg"
+          alt=""
+          role="presentation"
+          style={{ width: m ? 30 : 36, height: m ? 30 : 36, flexShrink: 0 }}
+        />
+        <div style={{
+          fontSize: m ? 17 : 22,
+          fontWeight: 900,
+          color: "#fff",
+          lineHeight: 1.3,
+          letterSpacing: "-0.02em",
+          textShadow: "0 8px 24px rgba(6,182,212,0.16)",
+          whiteSpace: "nowrap",
+        }}>
+          민원을 예방하는 소음감지 모드
+        </div>
+      </div>
+      
     </div>
   );
 }
@@ -92,25 +91,95 @@ function DbPill({ m }) {
    기능 아이콘 필 (3개 항목)
 ───────────────────────────────────── */
 function FeaturePill({ iconSrc, line1, line2, m }) {
+  if (m) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 5,
+          background: "rgba(255,255,255,0.045)",
+          backdropFilter: "blur(11px)",
+          WebkitBackdropFilter: "blur(11px)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 11,
+          padding: "8px 6px 9px",
+          minWidth: 0,
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{
+            width: 30,
+            height: 30,
+            flexShrink: 0,
+            borderRadius: 9,
+            background: "rgba(248,113,113,0.1)",
+            border: "1px solid rgba(248,113,113,0.2)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <img
+            src={iconSrc}
+            alt={line2}
+            width={20}
+            height={20}
+            style={{ display: "block" }}
+          />
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 8.5,
+              color: "rgba(248,250,252,0.66)",
+              marginBottom: 2,
+              lineHeight: 1.2,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {line1}
+          </div>
+          <div
+            style={{
+              fontFamily: "'Nunito', sans-serif",
+              fontSize: 11,
+              fontWeight: 800,
+              letterSpacing: "-0.01em",
+              color: "#F8FAFC",
+              lineHeight: 1.25,
+            }}
+          >
+            {line2}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{
       display: "flex",
       alignItems: "center",
-      gap: m ? 10 : 12,
-      background: m ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.06)",
+      gap: 12,
+      background: "rgba(255,255,255,0.06)",
       backdropFilter: "blur(11px)",
       WebkitBackdropFilter: "blur(11px)",
       border: "1px solid rgba(255,255,255,0.09)",
-      borderRadius: m ? 12 : 14,
-      padding: m ? "9px 11px" : "14px 16px",
+      borderRadius: 14,
+      padding: "14px 16px",
       flex: 1,
       minWidth: 0,
     }}>
       <div style={{
-        width: m ? 32 : 44,
-        height: m ? 32 : 44,
+        width: 44,
+        height: 44,
         flexShrink: 0,
-        borderRadius: m ? 10 : 12,
+        borderRadius: 12,
         background: "rgba(248,113,113,0.1)",
         border: "1px solid rgba(248,113,113,0.2)",
         display: "flex",
@@ -120,14 +189,14 @@ function FeaturePill({ iconSrc, line1, line2, m }) {
         <img
           src={iconSrc}
           alt={line2}
-          width={m ? 26 : 32}
-          height={m ? 26 : 32}
+          width={32}
+          height={32}
           style={{ display: "block" }}
         />
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{
-          fontSize: m ? 9 : 11,
+          fontSize: 11,
           color: "rgba(255,255,255,0.45)",
           marginBottom: 2,
           whiteSpace: "nowrap",
@@ -136,7 +205,7 @@ function FeaturePill({ iconSrc, line1, line2, m }) {
         }}>{line1}</div>
         <div style={{
           fontFamily: "'Nunito', sans-serif",
-          fontSize: m ? 11.5 : 13,
+          fontSize: 13,
           fontWeight: 800,
           letterSpacing: "-0.01em",
           color: "#fff",
@@ -153,7 +222,7 @@ function FeaturePill({ iconSrc, line1, line2, m }) {
    desktop: 하단 콘텐츠 블록 내부
    (2차: 마스크 리빌 애니메이션 추가 예정)
 ───────────────────────────────────── */
-function HeadlineBlock({ m }) {
+function HeadlineBlock({ m, reduced, inView }) {
   return (
     <h2 style={{
       fontSize: m ? "clamp(30px, 8.5vw, 48px)" : "clamp(46px, 4.8vw, 70px)",
@@ -163,13 +232,21 @@ function HeadlineBlock({ m }) {
       letterSpacing: "-0.025em",
       maxWidth: m ? "min(100%, 394px)" : 560,
     }}>
-      {COPY_LINES.map((line) => (
-        /* overflow:hidden + motion.span = 2차 마스크 리빌 준비 구조 */
+      {COPY_LINES.map((line, i) => (
+        /* 마스크 리빌 — 섹션 inView 로 구동 (재진입 시 재생) */
         <div key={line.text} style={{ overflow: "hidden", paddingBottom: "0.1em" }}>
-          <motion.span style={{
-            display: "block",
-            color: line.accent ? CYAN : "#fff",
-          }}>
+          <motion.span
+            style={{ display: "block", color: line.accent ? CYAN : "#fff" }}
+            initial={{ y: reduced ? "0%" : "110%", opacity: reduced ? 0 : 1 }}
+            animate={inView
+              ? { y: "0%", opacity: 1 }
+              : { y: reduced ? "0%" : "110%", opacity: reduced ? 0 : 1 }}
+            transition={{
+              delay: reduced ? (0.18 + i * 0.12) * 0.35 : 0.18 + i * 0.12,
+              duration: reduced ? 0.22 : 0.6,
+              ease: [0.16, 1, 0.3, 1],
+            }}
+          >
             {line.text}
           </motion.span>
         </div>
@@ -183,10 +260,23 @@ function HeadlineBlock({ m }) {
 ───────────────────────────────────── */
 export default function Scene2NoisePrevention() {
   const m = useIsMobile();
+  const reduced = useReducedMotion();
+  const sectionRef = useRef(null);
+  const inView = useInView(sectionRef, { amount: 0.2, once: true });
   const visibleFeatures = m ? FEATURES.slice(0, 3) : FEATURES;
+
+  /* 진입 헬퍼 — 위→아래·좌→우 순서로 delay 부여, 재진입 시 재생 */
+  const fadeUp = (delay, y = 18) => ({
+    initial: reduced ? { opacity: 0 } : { opacity: 0, y },
+    animate: inView
+      ? (reduced ? { opacity: 1 } : { opacity: 1, y: 0 })
+      : (reduced ? { opacity: 0 } : { opacity: 0, y }),
+    transition: { duration: reduced ? 0.22 : 0.6, delay: reduced ? delay * 0.35 : delay, ease: [0.22, 1, 0.36, 1] },
+  });
 
   return (
     <section
+      ref={sectionRef}
       style={{
         position: "relative",
         minHeight: m ? "100svh" : "100vh",
@@ -275,59 +365,57 @@ export default function Scene2NoisePrevention() {
         }}
       >
 
-        {/* ── 브랜드 헤더 (motion.header = 2차 entrance 준비) ── */}
-        <motion.header>
+        {/* ── 브랜드 헤더 — 애니메이션 없이 항상 고정 ── */}
+        <motion.header initial={false}>
           <img
             src="/icons/spacehost-logo.svg"
             alt="SPACE HOST"
             style={{ height: m ? 26 : 30, display: "block", marginBottom: 8 }}
           />
-          <p style={{
-            margin: 0,
-            fontSize: m ? 10 : 11,
-            color: "rgba(255,255,255,0.38)",
-            letterSpacing: "0.16em",
-            textTransform: "uppercase",
-            fontFamily: "'DM Mono', monospace",
-          }}>
-            Smart. Carefree. Anywhere.
-          </p>
         </motion.header>
 
         {/* ── 모바일: 헤드라인 독립 flex item (3-way space-between) ── */}
-        {m && <HeadlineBlock m={m} />}
+        {m && <HeadlineBlock m={m} reduced={reduced} inView={inView} />}
 
         {/* ── 하단 콘텐츠 블록 ── */}
         <div style={{ marginTop: m ? "auto" : 0 }}>
           {/* PC: 헤드라인은 하단 블록 상단 */}
-          {!m && <HeadlineBlock m={m} />}
+          {!m && <HeadlineBlock m={m} reduced={reduced} inView={inView} />}
 
           {/* 모바일: dB 슬림핀(정체성) + 기능 아이콘 (Scene-1 구조: 카드 1개 + 아이콘) */}
           {m && (
             <div style={{
               display: "flex",
               flexDirection: "column",
-              gap: 14,
-              marginBottom: 30,
+              gap: 10,
+              marginBottom: 20,
             }}>
-              <DbPill m={m} />
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {visibleFeatures.map((f) => (
-                  <FeaturePill key={f.line2} {...f} m={m} />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6 }}>
+                {visibleFeatures.map((f, i) => (
+                  <motion.div key={f.line2} {...fadeUp(0.62 + i * 0.08)}>
+                    <FeaturePill {...f} m={m} />
+                  </motion.div>
                 ))}
               </div>
+              <motion.div {...fadeUp(0.62 + visibleFeatures.length * 0.08)}>
+                <DbPill m={m} />
+              </motion.div>
             </div>
           )}
 
           {/* PC: dB 슬림핀 + 기능 아이콘 가로 배열 */}
           {!m && (
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              <DbPill m={false} />
               <div style={{ display: "flex", gap: 14 }}>
-                {visibleFeatures.map((f) => (
-                  <FeaturePill key={f.line2} {...f} m={false} />
+                {visibleFeatures.map((f, i) => (
+                  <motion.div key={f.line2} style={{ flex: 1, minWidth: 0, display: "flex" }} {...fadeUp(0.62 + i * 0.08)}>
+                    <FeaturePill {...f} m={false} />
+                  </motion.div>
                 ))}
               </div>
+              <motion.div {...fadeUp(0.62 + visibleFeatures.length * 0.08)}>
+                <DbPill m={false} />
+              </motion.div>
             </div>
           )}
         </div>

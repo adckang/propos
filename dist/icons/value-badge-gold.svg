@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 64 64" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Faceted Gold Star</title>
+  <desc id="desc">Premium faceted gold star icon with a clean dimensional finish</desc>
+  <defs>
+    <path
+      id="starShape"
+      d="M32 4.5L39.3 21.8L58.7 23.6L43.8 36.4L48.5 56.8L32 47.2L15.5 56.8L20.2 36.4L5.3 23.6L24.7 21.8L32 4.5Z"
+    />
+    <clipPath id="starClip">
+      <use href="#starShape" />
+    </clipPath>
+    <filter id="starShadow" x="1.8" y="2.2" width="60.4" height="58.8" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix" />
+      <feOffset dy="1.2" />
+      <feGaussianBlur stdDeviation="1.2" />
+      <feColorMatrix type="matrix" values="0 0 0 0 0.77 0 0 0 0 0.58 0 0 0 0 0.04 0 0 0 0.34 0" />
+      <feBlend in2="BackgroundImageFix" result="effect1_dropShadow" />
+      <feBlend in="SourceGraphic" in2="effect1_dropShadow" result="shape" />
+    </filter>
+    <linearGradient id="baseGlow" x1="12" y1="10" x2="52" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE76C" />
+      <stop offset="1" stop-color="#F4B90F" />
+    </linearGradient>
+  </defs>
+
+  <g filter="url(#starShadow)">
+    <use href="#starShape" fill="url(#baseGlow)" />
+    <g clip-path="url(#starClip)">
+      <rect width="64" height="64" fill="#F8C71A" />
+
+      <polygon points="32,31.6 32,4.5 24.7,21.8" fill="#FFE66E" />
+      <polygon points="32,31.6 32,4.5 39.3,21.8" fill="#F8C615" />
+
+      <polygon points="32,31.6 39.3,21.8 58.7,23.6" fill="#FFE15C" />
+      <polygon points="32,31.6 58.7,23.6 43.8,36.4" fill="#FFD63D" />
+
+      <polygon points="32,31.6 43.8,36.4 48.5,56.8" fill="#EFB011" />
+      <polygon points="32,31.6 48.5,56.8 32,47.2" fill="#F8C31A" />
+
+      <polygon points="32,31.6 32,47.2 15.5,56.8" fill="#FFD94C" />
+      <polygon points="32,31.6 15.5,56.8 20.2,36.4" fill="#E8AA0D" />
+
+      <polygon points="32,31.6 20.2,36.4 5.3,23.6" fill="#F4C016" />
+      <polygon points="32,31.6 5.3,23.6 24.7,21.8" fill="#FFE265" />
+
+      <polygon
+        points="24.7,21.8 39.3,21.8 43.8,36.4 32,47.2 20.2,36.4"
+        fill="#F3BF16"
+        opacity=".72"
+      />
+      <polygon
+        points="26.6,22.8 32,10.6 37.4,22.8 50.2,24.3 40.4,32.6 43.2,44.6 32,38.6 20.8,44.6 23.6,32.6 13.8,24.3"
+        fill="#FFF2A0"
+        opacity=".14"
+      />
+    </g>
+    <use
+      href="#starShape"
+      fill="none"
+      stroke="#FFF3A6"
+      stroke-opacity=".36"
+      stroke-width="1.1"
+      stroke-linejoin="round"
+    />
+  </g>
+</svg>

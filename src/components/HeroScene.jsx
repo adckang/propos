@@ -22,6 +22,7 @@ import {
   useReducedMotion,
   useScroll,
   useTransform,
+  useInView,
 } from "framer-motion";
 
 /* ─────────────────────────────────────
@@ -57,7 +58,8 @@ function entrance(delay, {
   if (reduced) {
     return {
       initial: { opacity: 0 },
-      animate: { opacity: 1 },
+      whileInView: { opacity: 1 },
+      viewport: { once: true, amount: 0.25 },
       transition: { duration: 0.22, delay: delay * 0.35 },
     };
   }
@@ -69,11 +71,13 @@ function entrance(delay, {
       ...(yFrom !== 0 && { y: yFrom * yAmp }),
       ...(xFrom !== 0 && { x: xFrom * xAmp }),
     },
-    animate: {
+    /* whileInView: 화면에 들어올 때 실행 + 재진입 시 재생(once:false) + 화면 밖이면 정지 */
+    whileInView: {
       opacity: 1,
       ...(yFrom !== 0 && { y: 0 }),
       ...(xFrom !== 0 && { x: 0 }),
     },
+    viewport: { once: true, amount: 0.25 },
     transition: { duration, delay, ease: [0.22, 1, 0.36, 1] },
   };
 }
@@ -156,7 +160,7 @@ function WaveLine({ reduced }) {
             ? {}
             : { opacity: [0.18, 0.52, 0.18], scaleX: [0.82, 1, 0.82] }
         }
-        transition={{ duration: 2.8, delay: 0.65, repeat: Infinity, ease: "easeInOut" }}
+        transition={{ duration: 2.8, delay: 0.65, repeat: 0, ease: "easeInOut" }}
         style={{
           position: "absolute",
           top: 1,
@@ -220,14 +224,14 @@ function GradientOverlays({ m }) {
    mobile: 외부 flex child (3-way layout) → 인물이 보이는 중단 공간 확보
    desktop: 하단 콘텐츠 블록 내부
 ───────────────────────────────────── */
-function HeadlineBlock({ m, reduced }) {
+function HeadlineBlock({ m, reduced, inView }) {
   return (
     <h2
       style={{
         fontSize: m ? "clamp(30px, 8.5vw, 48px)" : "clamp(46px, 4.8vw, 70px)",
         fontWeight: 900,
         lineHeight: 1.15,
-        margin: m ? "-300px 0 0" : "-28px 0 24px",
+        margin: m ? "-220px 0 0" : "-28px 0 24px",
         letterSpacing: "-0.025em",
       }}
     >
@@ -236,10 +240,14 @@ function HeadlineBlock({ m, reduced }) {
           <motion.span
             style={{ display: "block", color: line.cyan ? "#22d3ee" : "#fff" }}
             initial={{ y: reduced ? "0%" : "110%", opacity: reduced ? 0 : 1 }}
-            animate={{ y: "0%", opacity: 1 }}
+            /* 섹션 inView 로 구동 — 마스크리빌(y:110%)이 자기 IntersectionObserver를
+               밖으로 밀어내 트리거 실패하는 문제 회피. 재진입 시 재생 */
+            animate={inView
+              ? { y: "0%", opacity: 1 }
+              : { y: reduced ? "0%" : "110%", opacity: reduced ? 0 : 1 }}
             transition={{
-              delay: reduced ? (0.25 + i * 0.22) * 0.35 : 0.25 + i * 0.22,
-              duration: reduced ? 0.22 : 0.8,
+              delay: reduced ? (0.25 + i * 0.12) * 0.35 : 0.25 + i * 0.12,
+              duration: reduced ? 0.22 : 0.6,
               ease: [0.16, 1, 0.3, 1],
             }}
           >
@@ -255,31 +263,46 @@ function HeadlineBlock({ m, reduced }) {
    CTA 버튼 서브컴포넌트 (HeroScene에서 분리 → cognitive complexity 절감)
    entrance 헬퍼는 모듈 레벨 함수라 직접 호출 가능
 ───────────────────────────────────── */
-function CTAButtons({ m, reduced }) {
+function CTAButtons({
+  m,
+  reduced,
+  onPrimaryClick,
+  onSecondaryClick,
+  primaryLabel = "무료 운영진단 신청",
+  secondaryLabel = "도입 비용 먼저 보기",
+}) {
   const entryProps = entrance(1.75, { yFrom: 14, duration: 0.6, reduced, mobile: m });
   return (
     <motion.div
       {...entryProps}
-      style={{ display: "flex", gap: m ? 10 : 14, marginTop: 28, flexWrap: "wrap" }}
+      style={{ display: "flex", gap: m ? 8 : 14, marginTop: 28, flexWrap: "wrap" }}
     >
-      <button style={{
-        background: "#06b6d4", color: "#fff", border: "none",
-        borderRadius: 12, padding: m ? "13px 22px" : "14px 28px",
-        fontSize: m ? 14 : 15, fontWeight: 800, cursor: "pointer",
+      <button
+        onClick={onPrimaryClick}
+        style={{
+        background: "rgba(6,182,212,0.88)", color: "#fff", border: "1px solid rgba(103,232,249,0.34)",
+        borderRadius: 12, padding: m ? "13px 12px" : "14px 28px",
+        fontSize: m ? 13 : 15, fontWeight: 800, cursor: "pointer",
         display: "inline-flex", alignItems: "center", gap: 8,
-        boxShadow: "0 0 24px rgba(6,182,212,0.45)",
-        width: m ? "100%" : "auto", justifyContent: "center",
-      }}>
-        무료 운영진단 신청 →
+        boxShadow: "0 14px 24px rgba(6,182,212,0.28)",
+        width: m ? "calc(50% - 4px)" : "auto", justifyContent: "center",
+      }}
+      >
+        {primaryLabel} →
       </button>
-      <button style={{
-        background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.85)",
-        border: "1px solid rgba(255,255,255,0.15)",
-        borderRadius: 12, padding: m ? "13px 22px" : "14px 28px",
-        fontSize: m ? 14 : 15, fontWeight: 600, cursor: "pointer",
-        width: m ? "100%" : "auto", justifyContent: "center",
-      }}>
-        기능 살펴보기
+      <button
+        onClick={onSecondaryClick}
+        style={{
+        background: "rgba(6,182,212,0.18)", color: "rgba(248,250,252,0.94)",
+        border: "1px solid rgba(103,232,249,0.24)",
+        borderRadius: 12, padding: m ? "13px 12px" : "14px 28px",
+        fontSize: m ? 13 : 15, fontWeight: 700, cursor: "pointer",
+        width: m ? "calc(50% - 4px)" : "auto", justifyContent: "center",
+        display: "inline-flex", alignItems: "center",
+        boxShadow: "0 10px 18px rgba(2,6,23,0.14)",
+      }}
+      >
+        {secondaryLabel}
       </button>
     </motion.div>
   );
@@ -293,7 +316,8 @@ function ScrollHint({ reduced }) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
+      whileInView={{ opacity: 1 }}
+      viewport={{ once: true, amount: 0.3 }}
       transition={{ delay: 2.2, duration: 0.8 }}
       style={{
         position: "absolute", bottom: 28, left: "50%",
@@ -310,8 +334,9 @@ function ScrollHint({ reduced }) {
         scroll
       </span>
       <motion.div
-        animate={reduced ? {} : { y: [0, 6, 0] }}
-        transition={{ repeat: Infinity, duration: 1.4, ease: "easeInOut" }}
+        whileInView={reduced ? {} : { y: [0, 6, 0] }}
+        viewport={{ once: true, amount: 0.3 }}
+        transition={{ repeat: 0, duration: 1.4, ease: "easeInOut" }}
         style={{
           width: 10, height: 10,
           borderRight: "2px solid rgba(255,255,255,0.28)",
@@ -347,10 +372,12 @@ const FEATURES = [
 /* ─────────────────────────────────────
    HeroScene 메인 컴포넌트
 ───────────────────────────────────── */
-export default function HeroScene() {
+export default function HeroScene({ onPrimaryClick, onSecondaryClick }) {
   const m       = useIsMobile();
   const reduced = useReducedMotion() ?? false;
   const sectionRef = useRef(null);
+  /* 섹션이 화면에 들어왔는지 — 헤드라인 마스크리빌 구동(재진입 시 재생) */
+  const headInView = useInView(sectionRef, { amount: 0.2, once: true });
 
   /* ── 스크롤 exit 변환 ──
      섹션이 viewport 상단을 통과하기 시작하면 전체 히어로가
@@ -415,7 +442,8 @@ export default function HeroScene() {
         <motion.div
           aria-hidden="true"
           initial={{ scale: reduced ? 1 : 1.06 }}
-          animate={{ scale: 1 }}
+          whileInView={{ scale: 1 }}
+          viewport={{ once: true, amount: 0.3 }}
           transition={{ duration: 2.4, ease: [0.22, 1, 0.36, 1] }}
           style={{
             position: "absolute",
@@ -473,37 +501,24 @@ export default function HeroScene() {
           }}
         >
 
-          {/* ── 브랜드 헤더 ──
-              delay: 0.2s · y 12→0 · opacity 0→1 */}
-          <motion.header {...e(0.2, { yFrom: 12, duration: 0.6 })}>
+          {/* ── 브랜드 헤더 — 애니메이션 없이 항상 고정 ── */}
+          <motion.header initial={false}>
             <img
               src="/icons/spacehost-logo.svg"
               alt="SPACE HOST"
               style={{ height: m ? 26 : 30, display: "block", marginBottom: 8 }}
             />
-            <p
-              style={{
-                margin: 0,
-                fontSize: m ? 10 : 11,
-                color: "rgba(255,255,255,0.4)",
-                letterSpacing: "0.16em",
-                textTransform: "uppercase",
-                fontFamily: "'DM Mono', monospace",
-              }}
-            >
-              
-            </p>
           </motion.header>
 
           {/* ── 모바일: 헤드라인을 독립 flex item 으로 → 3-way space-between
                 로고(상) / 헤드라인(중) / 기능+통계+CTA(하)
                 인물이 중단 공간에 드러남 ── */}
-          {m && <HeadlineBlock m={m} reduced={reduced} />}
+          {m && <HeadlineBlock m={m} reduced={reduced} inView={headInView} />}
 
           {/* ── 하단 콘텐츠 블록 ── */}
           <div>
             {/* PC 전용: 헤드라인이 하단 블록 상단에 위치 */}
-            {!m && <HeadlineBlock m={m} reduced={reduced} />}
+            {!m && <HeadlineBlock m={m} reduced={reduced} inView={headInView} />}
 
             {/* 기능 아이콘 4개 — stagger start 1.0s, +0.1s per icon
                 각 아이콘: y 20→0 (mobile 10→0) + opacity 0→1
@@ -519,7 +534,7 @@ export default function HeroScene() {
               {FEATURES.map((f, i) => (
                 <motion.div
                   key={f.label}
-                  {...e(0.82 + i * 0.1, { yFrom: 20, duration: 0.5 })}
+                  {...e(0.82 + i * 0.1, { yFrom: 20, duration: 0.6 })}
                 >
                   <FeaturePill {...f} />
                 </motion.div>
@@ -531,20 +546,7 @@ export default function HeroScene() {
             <WaveLine reduced={reduced} />
             */}
 
-            {/* 서브 카피
-                D1 fix: 1.18s — 피처 아이콘(0.82~1.12s) 이후로 이동
-                D5 fix: xFrom:-16 → yFrom:16 — 모든 요소 동일 방향(아래→위)으로 통일 */}
-            <motion.p
-              style={{
-                margin: "0 0 20px",
-                fontSize: m ? 14 : 16,
-                color: "rgba(255,255,255,0.65)",
-                lineHeight: 1.8,
-              }}
-              {...e(1.18, { yFrom: 16, duration: 0.65 })}
-            >
-              
-            </motion.p>
+            
 
             {/* 통계 카드 — delay 1.45s · y 28→0 (mobile 14→0) · opacity 0→1
                 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -555,7 +557,7 @@ export default function HeroScene() {
                 검토가 반드시 필요합니다.
                 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
             <motion.div
-              {...e(1.5, { yFrom: 22, duration: 0.7 })}
+              {...e(1.5, { yFrom: 22, duration: 0.6 })}
               style={{
                 /* 모바일: 0.35 → 인물이 카드 뒤로 비침 / 데스크톱: 0.58 */
                 background: m ? "rgba(2,6,23,0.35)" : "rgba(2,6,23,0.58)",
@@ -566,49 +568,51 @@ export default function HeroScene() {
                 padding: m ? "16px 18px" : "18px 24px",
                 display: "flex",
                 gap: 14,
-                alignItems: "flex-start",
-                maxWidth: m ? "100%" : 460,
+                alignItems: "center",
+                maxWidth: m ? "100%" : 560,
               }}
             >
-              <img
-                src="/icons/revenue-up.svg"
-                alt=""
-                role="presentation"
-                style={{ width: 15, height: 15, flexShrink: 0, marginTop: 2 }}
-              />
+                <img
+                  src="/icons/value-badge-gold.svg"
+                  alt=""
+                  role="presentation"
+                  style={{
+                    width: m ? 30 : 36,
+                    height: m ? 30 : 36,
+                    flexShrink: 0,
+                    display: "block",
+                    transform: "translateY(1px)",
+                  }}
+                />
               <div>
                 <p
                   style={{
-                    margin: "0 0 5px",
-                    fontSize: m ? 14 : 15,
-                    fontWeight: 800,
+                    margin: 0,
+                    fontSize: m ? 17 : 22,
                     color: "#fff",
-                    lineHeight: 1.35,
+                    fontWeight: 900,
+                    lineHeight: 1.3,
+                    letterSpacing: "-0.02em",
+                    textShadow: "0 8px 24px rgba(6,182,212,0.16)",
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  {"숙소의 가치를 극대화 시키는 스마트 시스템"}                  
+                  손님을 맞이하는 자동 웰컴모드
                 </p>
-                <p
-                  style={{
-                    margin: "0 0 8px",
-                    fontSize: m ? 13 : 14,
-                    color: "#22d3ee",
-                    fontWeight: 700,
-                    lineHeight: 1.4,
-                  }}
-                >
-                  
-                </p>
-               
               </div>
             </motion.div>
 
 
             
             {/* CTA 버튼 — CTAButtons 서브컴포넌트 (복잡도 분산) */}
-            {/*
-            <CTAButtons m={m} reduced={reduced} />
-            */}
+            <CTAButtons
+              m={m}
+              reduced={reduced}
+              onPrimaryClick={onPrimaryClick}
+              onSecondaryClick={onSecondaryClick}
+              primaryLabel="무료 운영진단 신청"
+              secondaryLabel="도입 비용 먼저 보기"
+            />
 
           </div>
         </div>

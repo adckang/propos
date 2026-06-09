@@ -5,6 +5,7 @@ import {
   useReducedMotion,
   useScroll,
   useTransform,
+  useInView,
 } from "framer-motion";
 
 function useIsMobile() {
@@ -121,7 +122,7 @@ function FeaturePill({ item, index, m, reduced, full }) {
       {...entranceProps(reduced, {
         delay: 0.62 + index * 0.08,
         y: m ? 16 : 20,
-        duration: 0.56,
+        duration: 0.6,
         amount: 0.48,
       })}
       style={{
@@ -302,7 +303,7 @@ function AirFlowLayer({ m, reduced }) {
           transition={{
             duration: wave.duration,
             delay: index * 0.55,
-            repeat: reduced ? 0 : Infinity,
+            repeat: 0,
             ease: "easeInOut",
           }}
           style={{
@@ -344,7 +345,7 @@ function AirFlowLayer({ m, reduced }) {
               {...entranceProps(reduced, {
                 delay: 0.78 + index * 0.08,
                 y: 16,
-                duration: 0.46,
+                duration: 0.6,
                 amount: 0.42,
               })}
               style={{
@@ -391,89 +392,44 @@ function KpiCard({ m, reduced }) {
         {...entranceProps(reduced, {
           delay: 0.94,
           y: 24,
-          duration: 0.64,
+          duration: 0.6,
           amount: 0.5,
         })}
         onViewportEnter={() => setCountsActive(true)}
         style={{
-          background: "rgba(8,18,37,0.38)",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-          border: "1px solid rgba(248,250,252,0.08)",
+          background: "rgba(8,18,37,0.44)",
+          backdropFilter: "blur(18px)",
+          WebkitBackdropFilter: "blur(18px)",
+          border: "1px solid rgba(248,250,252,0.10)",
           borderRadius: 18,
-          padding: "12px 13px",
-          boxShadow: "0 18px 36px rgba(2,6,23,0.22)",
+          padding: "14px 14px 13px",
+          boxShadow: "0 22px 50px rgba(2,6,23,0.26)",
+          width: "100%",
         }}
       >
-        <div
-          style={{
-            fontSize: 11,
-            color: "rgba(248,250,252,0.62)",
-            lineHeight: 1.3,
-            marginBottom: 8,
-          }}
-        >
-          예상 절감 효과 / 1일 기준
+        <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 6 }}>
+          <img
+            src="/icons/value-badge-gold.svg"
+            alt=""
+            role="presentation"
+            style={{ width: 30, height: 30, flexShrink: 0 }}
+          />
+          <div
+            style={{
+                    margin: 0,
+                    fontSize: m ? 17 : 22,
+                    color: "#fff",
+                    fontWeight: 900,
+                    lineHeight: 1.3,
+                    letterSpacing: "-0.02em",
+                    textShadow: "0 8px 24px rgba(6,182,212,0.16)",
+                    whiteSpace: "nowrap",
+                  }}
+          >
+            퇴실 감지하여 자동 절전모드
+          </div>
         </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-            gap: 8,
-            marginBottom: 10,
-          }}
-        >
-          {KPI_ITEMS.slice(1).map((item) => (
-            <div
-              key={item.label}
-              style={{
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(248,250,252,0.08)",
-                borderRadius: 14,
-                padding: "9px 10px",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 10,
-                  color: "rgba(248,250,252,0.68)",
-                  lineHeight: 1.25,
-                  marginBottom: 6,
-                }}
-              >
-                {item.label}
-              </div>
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 800,
-                  color: "#F8FAFC",
-                  lineHeight: 1.4,
-                }}
-              >
-                <CountUpValue
-                  value={item.number}
-                  decimals={item.decimals}
-                  suffix={item.suffix}
-                  active={countsActive}
-                  reduced={reduced}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div
-          style={{
-            fontSize: 12,
-            fontWeight: 700,
-            color: "#F8FAFC",
-            lineHeight: 1.5,
-          }}
-        >
-          절전모드 자동 실행
-        </div>
+        
       </motion.div>
     );
   }
@@ -483,7 +439,7 @@ function KpiCard({ m, reduced }) {
       {...entranceProps(reduced, {
         delay: 0.94,
         y: m ? 24 : 32,
-        duration: 0.64,
+        duration: 0.6,
         amount: 0.5,
       })}
       onViewportEnter={() => setCountsActive(true)}
@@ -495,95 +451,45 @@ function KpiCard({ m, reduced }) {
         borderRadius: m ? 18 : 22,
         padding: m ? "14px 14px 13px" : "20px 22px",
         boxShadow: "0 22px 50px rgba(2,6,23,0.26)",
+        width: "100%",
       }}
     >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: m ? "repeat(2, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))",
-          gap: m ? 8 : 12,
-          marginBottom: m ? 12 : 16,
-        }}
-      >
-        {KPI_ITEMS.map((item, index) => (
-          <div
-            key={item.label}
-            style={{
-              background: "rgba(255,255,255,0.06)",
-              border: "1px solid rgba(248,250,252,0.08)",
-              borderRadius: 16,
-              padding: m ? "10px 11px" : "12px 13px",
-              ...(m && index === KPI_ITEMS.length - 1 ? { gridColumn: "1 / -1" } : {}),
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                marginBottom: 8,
-              }}
-            >
-              <img
-                src={item.iconSrc}
-                alt={item.label}
-                width={m ? 20 : 22}
-                height={m ? 20 : 22}
-                style={{ display: "block" }}
-              />
-              <span
-                style={{
-                  fontSize: m ? 11 : 12,
-                  color: "rgba(248,250,252,0.72)",
-                  lineHeight: 1.2,
-                }}
-              >
-                {item.label}
-              </span>
-            </div>
-            <div
-              style={{
-                fontSize: m ? 15 : 16,
-                fontWeight: 800,
-                color: "#F8FAFC",
-                lineHeight: 1.35,
-              }}
-            >
-              {item.number !== undefined ? (
-                <CountUpValue
-                  value={item.number}
-                  decimals={item.decimals}
-                  suffix={item.suffix}
-                  active={countsActive}
-                  reduced={reduced}
-                />
-              ) : (
-                item.value
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
 
-      <div
-        style={{
-          fontSize: m ? 14 : 15,
-          fontWeight: 800,
-          color: "#F8FAFC",
-          lineHeight: 1.55,
-          marginBottom: 6,
-        }}
-      >
-        걱정은 덜고, 효율은 더하는 스마트한 운영
+           
+      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 6 }}>
+        <img
+          src="/icons/value-badge-gold.svg"
+          alt=""
+          role="presentation"
+          style={{ width: m ? 30 : 36, height: m ? 30 : 36, flexShrink: 0 }}
+        />
+        <div
+          style={{
+            fontSize: m ? 14 : 20,
+            fontWeight: 900,
+            color: "#F8FAFC",
+            lineHeight: m ? 1.45 : 1.4,
+            textAlign: "left",
+            width: "100%",
+            maxWidth: m ? "100%" : 520,
+            letterSpacing: "-0.02em",
+            whiteSpace: "nowrap",
+          }}
+        >
+          스스로 감지하여 절전모드 자동 실행
+        </div>
       </div>
       <div
         style={{
           fontSize: m ? 12 : 13,
           color: "rgba(248,250,252,0.72)",
           lineHeight: 1.65,
+          textAlign: "left",
+          width: "100%",
+          maxWidth: m ? "100%" : 420,
         }}
       >
-        Space host가 함께합니다.
+        걱정은 덜고, 효율은 더하는 스마트한 운영
       </div>
     </motion.div>
   );
@@ -593,6 +499,7 @@ export default function Scene3EnergySaving() {
   const m = useIsMobile();
   const reduced = useReducedMotion();
   const sectionRef = useRef(null);
+  const inView = useInView(sectionRef, { amount: 0.2, once: true });
   const { scrollYProgress } = useScroll({
     target: sectionRef,
     offset: ["start start", "end start"],
@@ -705,34 +612,21 @@ export default function Scene3EnergySaving() {
               alignItems: "flex-start",
               gap: m ? 16 : 28,
               ...(m ? { flex: 1 } : {}),
+              
             }}
           >
             <div
               style={{
-                width: m ? "min(72%, 244px)" : "min(40%, 440px)",
+                width: m ? "min(72%, 944px)" : "min(40%, 940px)",
                 paddingTop: m ? 0 : 10,
               }}
             >
               <motion.img
-                {...entranceProps(reduced, { delay: 0.06, y: 12, duration: 0.56, amount: 0.5 })}
+                initial={false}
                 src="/icons/spacehost-logo.svg"
                 alt="SPACE HOST"
                 style={{ height: m ? 26 : 30, display: "block", marginBottom: 10 }}
               />
-              <motion.p
-                {...entranceProps(reduced, { delay: 0.12, y: 12, duration: 0.56, amount: 0.5 })}
-                style={{
-                  margin: 0,
-                  fontSize: m ? 10 : 11,
-                  color: "rgba(248,250,252,0.46)",
-                  letterSpacing: "0.16em",
-                  textTransform: "uppercase",
-                  fontFamily: "'DM Mono', monospace",
-                }}
-              >
-                
-              </motion.p>
-
               <div style={{ marginTop: m ? 22 : 34 }}>
                 <h2
                   style={{
@@ -745,16 +639,17 @@ export default function Scene3EnergySaving() {
                   }}
                 >
                   {[
-                    "다 켜놓고,열어놓고 가도",
-                    "괜찮습니다.",
+                    "다 켜놓고,",
+                    "다 열어놓고 가도",
+                    
                   ].map((line, index) => (
                     <div key={line} style={{ overflow: "hidden", paddingBottom: "0.08em" }}>
                       <motion.span
                         initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
-                        animate={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
+                        animate={inView ? (reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }) : (reduced ? { opacity: 0 } : { opacity: 1, y: "110%" })}
                         transition={{
                           delay: reduced ? (0.2 + index * 0.08) * 0.35 : 0.2 + index * 0.12,
-                          duration: reduced ? 0.22 : 0.82,
+                          duration: reduced ? 0.22 : 0.6,
                           ease: [0.16, 1, 0.3, 1],
                         }}
                         style={{ display: "block" }}
@@ -767,16 +662,16 @@ export default function Scene3EnergySaving() {
                   <div style={{ overflow: "hidden", paddingBottom: "0.08em" }}>
                     <motion.span
                       initial={reduced ? { opacity: 0 } : { opacity: 1, y: "110%" }}
-                      animate={reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }}
+                      animate={inView ? (reduced ? { opacity: 1 } : { opacity: 1, y: "0%" }) : (reduced ? { opacity: 0 } : { opacity: 1, y: "110%" })}
                       transition={{
                         delay: reduced ? 0.34 * 0.35 : 0.44,
-                        duration: reduced ? 0.22 : 0.82,
+                        duration: reduced ? 0.22 : 0.6,
                         ease: [0.16, 1, 0.3, 1],
                       }}
                       style={{ display: "block", color: CYAN }}
                     >
                       <motion.span
-                        animate={
+                        whileInView={
                           reduced
                             ? {}
                             : {
@@ -787,15 +682,14 @@ export default function Scene3EnergySaving() {
                               ],
                             }
                         }
-                        transition={{ duration: m ? 4.6 : 4, delay: 1.1, repeat: reduced ? 0 : Infinity, ease: "easeInOut" }}
+                        transition={{ duration: m ? 4.6 : 4, delay: 1.1, repeat: 0, ease: "easeInOut" }}
                       >
-                        자동 절전모드.
+                        괜찮습니다.
                       </motion.span>
                     </motion.span>
                   </div>
                 </h2>
 
-               
               </div>
             </div>
 
@@ -809,7 +703,7 @@ export default function Scene3EnergySaving() {
               {FEATURES.map((item, index) => (
                 <motion.div
                   key={item.title}
-                  {...entranceProps(reduced, { delay: 0.5 + index * 0.06, y: 12, duration: 0.5, amount: 0.4 })}
+                  {...entranceProps(reduced, { delay: 0.5 + index * 0.06, y: 12, duration: 0.6, amount: 0.4 })}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -834,7 +728,7 @@ export default function Scene3EnergySaving() {
               ))}
             </div>
 
-            <div style={{ width: m ? "100%" : "min(40%, 460px)", alignSelf: m ? "stretch" : "flex-end" }}>
+            <div style={{ width: m ? "100%" : "min(56%, 620px)", alignSelf: m ? "stretch" : "flex-start" }}>
               <KpiCard m={m} reduced={reduced} />
             </div>
           </div>
