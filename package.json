@@ -16,6 +16,7 @@
     "prepare": "node scripts/setup-git-hooks.mjs"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "autoprefixer": "^10.5.0",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.16.0",

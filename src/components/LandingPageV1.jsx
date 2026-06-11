@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Home, Volume2, Zap, ClipboardCheck, Settings,
   CheckCircle2, ChevronDown, ChevronUp,
   MessageCircle, FileCheck2, Package, Wrench, BellRing,
 } from "lucide-react";
+import { trackEvent } from "../lib/analytics.js";
 import IntroScene from "./IntroScene";
 import HeroScene from "./HeroScene";
 import Scene2NoisePrevention from "./Scene2NoisePrevention";
@@ -104,6 +105,7 @@ const SCENES = [
 const PACKAGES = [
   {
     name: "시작형",
+    eventPlan: "pilot",
     tag: "1개 숙소 시작",
     price: "기기 구매 50만원 전후",
     monthly: "월 운영비 없이 시작 가능",
@@ -114,6 +116,7 @@ const PACKAGES = [
   },
   {
     name: "운영 지원형",
+    eventPlan: "operation",
     tag: "추천",
     price: "기기 구매 + 월 3만원",
     monthly: "설정 · 장애 · 알림 · 리포트 지원",
@@ -124,6 +127,7 @@ const PACKAGES = [
   },
   {
     name: "확장형",
+    eventPlan: "multi",
     tag: "2개 이상 / 다호점",
     price: "별도 견적",
     monthly: "",
@@ -191,26 +195,32 @@ const PROOF_CARDS = [
 /* ── faq ── */
 const FAQS = [
   {
+    id: "faq_1",
     q: "왜 이렇게 낮은 비용으로 시작할 수 있나요?",
     a: "SPACE HOST는 해외 직구와 셀프 설치를 기준으로 안내해 불필요한 시공 마진을 줄입니다. 그래서 기기 구매를 50만원 전후에서 시작하고, 필요할 때만 운영 지원을 추가하는 방식이 가능합니다.",
   },
   {
+    id: "faq_2",
     q: "설치가 정말 어렵지 않나요?",
     a: "대부분의 센서는 배터리를 넣고 양면테이프로 부착하는 방식이라 공구 없이도 설치할 수 있습니다. 숙소 구조에 맞는 설치 순서와 체크리스트를 함께 안내해드리므로 처음 해보는 분도 따라가기 어렵지 않습니다.",
   },
   {
+    id: "faq_3",
     q: "월 3만원 운영 지원에는 무엇이 포함되나요?",
     a: "기본 설정 지원, 장애 대응, 알림 세팅, 주간 리포트 안내가 포함됩니다. 복잡한 시스템을 직접 계속 들여다보지 않아도, 필요한 순간의 알림과 운영 상태만 확인하실 수 있도록 돕는 서비스입니다.",
   },
   {
+    id: "faq_4",
     q: "소음 감지는 녹음인가요?",
     a: "아닙니다. 대화 내용을 녹음하지 않고 dB 수준과 기준 초과 여부만 감지합니다. 게스트 프라이버시를 해치지 않으면서도 민원 가능성을 미리 파악하도록 설계되어 있습니다.",
   },
   {
+    id: "faq_5",
     q: "청소 완료를 자동으로 보장해주나요?",
     a: "자동 보장은 아닙니다. 대신 퇴실 이후 청소 시작부터 완료까지의 흐름을 센서와 출입 기록 기준으로 추적해, 호스트가 현재 상태를 훨씬 더 빠르게 파악할 수 있도록 도와드립니다.",
   },
   {
+    id: "faq_6",
     q: "숙소가 여러 개여도 적용할 수 있나요?",
     a: "가능합니다. 1개 숙소에서 먼저 시작한 뒤, 2개 이상이나 다호점 구조에서는 숙소별 동선과 운영 방식에 맞춰 센서 구성, 알림 기준, 리포트 구조를 확장형으로 다시 설계해드립니다.",
   },
@@ -306,7 +316,7 @@ function PricingCard({ pkg, i, m, onCtaClick }) {
           ))}
         </ul>
         <button
-          onClick={onCtaClick}
+          onClick={() => onCtaClick(pkg.eventPlan)}
           style={{ width: "100%", borderRadius: 14, padding: "13px", fontSize: 15, fontWeight: 800, cursor: "pointer", ...btnStyle }}
         >
           {pkg.cta}
@@ -316,12 +326,24 @@ function PricingCard({ pkg, i, m, onCtaClick }) {
   );
 }
 
-function FAQItem({ q, a }) {
+function FAQItem({ q, a, faqId, onOpen }) {
   const [open, setOpen] = useState(false);
+  const trackedOpenRef = useRef(false);
+
+  const handleToggle = () => {
+    const nextOpen = !open;
+    setOpen(nextOpen);
+
+    if (nextOpen && !trackedOpenRef.current) {
+      trackedOpenRef.current = true;
+      onOpen?.(faqId);
+    }
+  };
+
   return (
     <div style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", borderRadius: 18, padding: "0 18px", boxShadow: "0 14px 28px rgba(2,6,23,0.16)" }}>
       <button
-        onClick={() => setOpen(!open)}
+        onClick={handleToggle}
         style={{
           width: "100%", display: "flex", alignItems: "center",
           justifyContent: "space-between", padding: "22px 0",
@@ -356,10 +378,30 @@ function useIsMobile() {
 export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
   const m = useIsMobile();
   const inquiryMailHref = "mailto:hello@propos.kr?subject=SPACE%20HOST%20운영진단%20문의&body=숙소%20수:%0A숙소%20지역:%0A현재%20가장%20불편한%20운영%20문제:%0A연락%20가능한%20방법:";
+  const pricingSectionRef = useRef(null);
+  const priceViewTrackedRef = useRef(false);
 
   const scrollToSection = (id) => {
     if (typeof window === "undefined") return;
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const handleHeroPrimaryClick = () => {
+    trackEvent("hero_cta_click", { location: "hero" });
+    scrollToSection("consultation");
+  };
+
+  const handleHeroSecondaryClick = () => {
+    scrollToSection("pricing");
+  };
+
+  const handlePriceCtaClick = (plan) => {
+    trackEvent("price_cta_click", { plan });
+    scrollToSection("consultation");
+  };
+
+  const handleFaqOpen = (faqId) => {
+    trackEvent("faq_open", { question: faqId });
   };
 
   const openInquiryMail = () => {
@@ -377,6 +419,27 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
       document.documentElement.style.overflow = "";
       if (root) { root.style.overflow = ""; root.style.height = ""; }
     };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !pricingSectionRef.current || priceViewTrackedRef.current) {
+      return undefined;
+    }
+
+    const observer = new window.IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (!entry?.isIntersecting || priceViewTrackedRef.current) return;
+
+        priceViewTrackedRef.current = true;
+        trackEvent("price_view", { section: "pricing" });
+        observer.disconnect();
+      },
+      { threshold: 0.35 },
+    );
+
+    observer.observe(pricingSectionRef.current);
+    return () => observer.disconnect();
   }, []);
 
   return (
@@ -418,8 +481,8 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
 
       {/* ════════════════ HERO — 기존 Scene 01 유지 ════════════════ */}
       <HeroScene
-        onPrimaryClick={() => scrollToSection("consultation")}
-        onSecondaryClick={() => scrollToSection("pricing")}
+        onPrimaryClick={handleHeroPrimaryClick}
+        onSecondaryClick={handleHeroSecondaryClick}
       />
 
       {/* ════════════════ SCENE 02 — 레이어 분리형 소음 방어 ════════════════ */}
@@ -680,7 +743,7 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
       </section>
 
       {/* ════════════════ PRICING ════════════════ */}
-      <section id="pricing" style={{ padding: m ? "64px 20px" : "96px 40px", background: "linear-gradient(180deg, #030913 0%, #020617 100%)" }}>
+      <section ref={pricingSectionRef} id="pricing" style={{ padding: m ? "64px 20px" : "96px 40px", background: "linear-gradient(180deg, #030913 0%, #020617 100%)" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
           <motion.div {...up()} style={{ textAlign: "center", marginBottom: m ? 36 : 56 }}>
             <h2 style={{ fontSize: "clamp(28px, 3.5vw, 42px)", fontWeight: 800, margin: "0 0 14px", letterSpacing: "-0.01em" }}>
@@ -693,7 +756,7 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
 
           <div style={{ display: "grid", gridTemplateColumns: m ? "1fr" : "repeat(3, 1fr)", gap: m ? 16 : 20 }}>
             {PACKAGES.map((pkg, i) => (
-              <PricingCard key={pkg.name} pkg={pkg} i={i} m={m} onCtaClick={() => scrollToSection("consultation")} />
+              <PricingCard key={pkg.name} pkg={pkg} i={i} m={m} onCtaClick={handlePriceCtaClick} />
             ))}
           </div>
 
@@ -719,13 +782,14 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
             </h2>
           </motion.div>
           <motion.div {...up(0.08)} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {FAQS.map((faq) => <FAQItem key={faq.q} {...faq} />)}
+            {FAQS.map((faq) => <FAQItem key={faq.id} q={faq.q} a={faq.a} faqId={faq.id} onOpen={handleFaqOpen} />)}
           </motion.div>
         </div>
       </section>
 
       {/* ════════════════ CTA ════════════════ */}
       <section id="consultation" style={{ padding: m ? "72px 20px" : "120px 40px", textAlign: "center", position: "relative", overflow: "hidden", background: "linear-gradient(180deg, #030913 0%, #020617 100%)" }}>
+        {/* If an actual input form is added here later, add data-clarity-mask to the input wrapper. */}
         <div style={{
           position: "absolute", inset: 0, pointerEvents: "none",
           background: "radial-gradient(ellipse 70% 60% at 50% 50%, rgba(34,211,238,0.16) 0%, transparent 70%)",
@@ -735,8 +799,8 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
           backgroundImage: "linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)",
           backgroundSize: "60px 60px",
         }} />
-        <motion.div {...up()} style={{ position: "relative", zIndex: 1, maxWidth: 860, margin: "0 auto", padding: m ? "28px 18px" : "38px 40px", borderRadius: 28, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", boxShadow: "0 24px 56px rgba(2,6,23,0.20)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}>
-          <h2 style={{ fontSize: "clamp(30px, 5vw, 56px)", fontWeight: 900, margin: "0 0 20px", lineHeight: 1.15, letterSpacing: "-0.02em" }}>
+          <motion.div {...up()} style={{ position: "relative", zIndex: 1, maxWidth: 860, margin: "0 auto", padding: m ? "28px 18px" : "38px 40px", borderRadius: 28, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", boxShadow: "0 24px 56px rgba(2,6,23,0.20)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}>
+            <h2 style={{ fontSize: "clamp(30px, 5vw, 56px)", fontWeight: 900, margin: "0 0 20px", lineHeight: 1.15, letterSpacing: "-0.02em" }}>
             숙소가 늘어나도<br />
             <span style={{ color: "#22d3ee" }}>관리 부담은 늘지 않습니다.</span>
           </h2>
@@ -771,8 +835,8 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
           </div>
           <p style={{ marginTop: 22, fontSize: 13, color: "rgba(148,163,184,0.74)" }}>
             이메일 한 통만 보내주시면, 적용 가능한 자동화 범위와 예상 비용을 먼저 정리해드립니다.
-          </p>
-        </motion.div>
+            </p>
+          </motion.div>
       </section>
 
       {/* ════════════════ FOOTER ════════════════ */}
