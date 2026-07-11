@@ -17,13 +17,15 @@ import S05RevenuePanelV1 from "./v1/S05RevenuePanel";
 // v2 앱 페이지
 import HomeAssistantV2 from "./v2/HomeAssistant";
 import CommandCenterV2 from "./v2/CommandCenter";
+import OperationsPortalV2 from "./v2/OperationsPortal";
+import RoomStateApp from "./v2/RoomStateApp";
 
 import { ALL_PROPS, INIT_ALERTS } from "../data/mockData";
 import { getPortalStageCards } from "../config/operationsModel.js";
 
 // ============================================================
 // App.jsx — 루트 라우터 + 랜딩 화면
-// screen: "marketing" | "v1" | "v2" | "landing" | "ha" | "cc" | "d1" | "s02" | "s03" | "s04" | "s05"
+// screen: "marketing" | "v1" | "v2" | "landing" | "ha" | "cc" | "d1" | "s02" | "s03" | "s04" | "s05" | "rsm"
 // uiVersion: "v1" | "v2"  — 앱 페이지 UI 버전 전환
 // ============================================================
 
@@ -75,7 +77,7 @@ function VersionToggle({ uiVersion, onChange }) {
 }
 
 function App() {
-  const [screen, setScreen] = useState("v1");
+  const [screen, setScreen] = useState("rsm");
   const [uiVersion, setUiVersion] = useState("v1");
   const [ccStage, setCcStage] = useState("stay");
   const [haStage, setHaStage] = useState("stay");
@@ -164,11 +166,25 @@ function App() {
     </>
   );
 
+  if (screen === "rsm") return <RoomStateApp onBack={() => setScreen("landing")} />;
+
   if (screen === "d1") return <D1AutomationPanel onBack={() => openCC("d1")} />;
   if (screen === "s02") return <S02CheckinPanel onBack={() => openCC("checkin")} />;
   if (screen === "s03") return <S03MonitoringPanel onBack={() => openCC("stay")} />;
   if (screen === "s04") return <S04CheckoutPanel onBack={() => openCC("checkout")} />;
   if (screen === "s05") return <S05RevenuePanel onBack={() => openCC("settlement")} />;
+
+  // v2 운영 포털
+  if (uiVersion === "v2") return (
+    <>
+      <VersionToggle uiVersion={uiVersion} onChange={setUiVersion} />
+      <OperationsPortalV2
+        onOpenCC={openCC}
+        onOpenHA={openHA}
+        now={now}
+      />
+    </>
+  );
 
   return (
     <div className="app">
@@ -193,6 +209,9 @@ function App() {
             <div className="land-ops-cta">
               <button className="land-primary-btn" onClick={() => openCC()}>커맨드 센터 열기</button>
               <button className="land-secondary-btn" onClick={() => openHA("stay")}>대표 숙소 상세 보기</button>
+              <button className="land-secondary-btn" onClick={() => setScreen("rsm")} style={{ borderColor: '#059669', color: '#059669' }}>
+                Room State 뷰 (신규)
+              </button>
             </div>
           </div>
 

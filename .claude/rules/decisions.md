@@ -74,6 +74,12 @@
 - **당시 결정**: `src/` 편집 후 `dist/index.html`에 수동 인라인 반영
 - **폐기 이유**: Vite 도입으로 빌드가 자동화됨
 
+## [D-013] 뷰 페르소나 구분 (2026-07-11 확정)
+- **결정**: Admin 뷰(구 v1)와 PropertyManager 뷰(구 v2/rsm)를 별도 페르소나로 분리
+- **Admin 뷰**: 시스템 장애 모니터링. CommandCenter, HomeAssistant, OperationsPortal. **유지 여부 미결정.**
+- **PropertyManager 뷰**: 개별 숙소 상태 파악. RoomStateApp → Dashboard/List/Detail. **현재 활성 개발.**
+- **버린 대안**: v1/v2 UI 버전 토글로 같은 앱에서 전환 → 페르소나가 다른 것이라 구분이 맞음
+
 ---
 
 ## 새 결정 추가 템플릿

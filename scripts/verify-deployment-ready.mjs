@@ -41,7 +41,23 @@ const hasNoStoreHeader = Array.isArray(vercelConfig.headers) && vercelConfig.hea
 ));
 assert(hasNoStoreHeader, "[verify:deploy] vercel.json must set Cache-Control: no-store for /api/ha/*.", errors);
 
-for (const file of ["api/ha/service.js", "api/ha/state.js", "api/ha/states.js", "server/haProxy.js", "server/haApiHandlers.js"]) {
+const hasIcalNoStoreHeader = Array.isArray(vercelConfig.headers) && vercelConfig.headers.some(entry => (
+  entry?.source === "/api/ical" &&
+  Array.isArray(entry.headers) &&
+  entry.headers.some(header => header.key === "Cache-Control" && header.value === "no-store")
+));
+assert(hasIcalNoStoreHeader, "[verify:deploy] vercel.json must set Cache-Control: no-store for /api/ical.", errors);
+
+for (const file of [
+  "api/ha/service.js",
+  "api/ha/state.js",
+  "api/ha/states.js",
+  "api/ical.js",
+  "server/haProxy.js",
+  "server/haApiHandlers.js",
+  "server/icalProxy.js",
+  "server/icalApiHandlers.js",
+]) {
   assert(repoFileExists(file), `[verify:deploy] Missing deployment file: ${file}`, errors);
 }
 
