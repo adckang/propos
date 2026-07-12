@@ -1,0 +1,880 @@
+<title>Room State Machine — PROPOS</title>
+<style>
+:root {
+  --bg: #EEF2F7;
+  --surface: #FFFFFF;
+  --surface-2: #F5F7FA;
+  --border: #DDE3EC;
+  --text: #0D1B2A;
+  --text-2: #4A5568;
+  --text-3: #8A99AC;
+
+  --c-vacant: #2E7D52;
+  --c-vacant-bg: #F0FAF4;
+  --c-vacant-border: #A7D9B8;
+  --c-pre: #B06A1A;
+  --c-pre-bg: #FFF8EE;
+  --c-pre-border: #EDCA94;
+  --c-occ: #1A56A8;
+  --c-occ-bg: #EFF6FF;
+  --c-occ-border: #BFDBFE;
+  --c-clean: #0B7A8A;
+  --c-clean-bg: #F0FAFB;
+  --c-clean-border: #97D4DB;
+  --c-global: #5B3FA6;
+  --c-global-bg: #F5F0FF;
+  --c-global-border: #C4B0F0;
+
+  --ok: #16A34A;
+  --err: #DC2626;
+
+  --t-iot: #2563EB;   --t-iot-bg: #EFF6FF;
+  --t-cal: #059669;   --t-cal-bg: #ECFDF5;
+  --t-manual: #C05E10; --t-manual-bg: #FFF7ED;
+  --t-dialog: #7C3AED; --t-dialog-bg: #F5F0FF;
+
+  --mono: 'SF Mono', 'Fira Code', Consolas, monospace;
+  --sans: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --r: 8px; --r-sm: 4px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #09131F; --surface: #111D2E; --surface-2: #172437; --border: #1E3050;
+    --text: #E0EAF6; --text-2: #7B9ABE; --text-3: #4A6480;
+    --c-vacant: #3DB870; --c-vacant-bg: #0A2016; --c-vacant-border: #164A2A;
+    --c-pre: #E09540; --c-pre-bg: #221508; --c-pre-border: #4C2E0A;
+    --c-occ: #5B8FD4; --c-occ-bg: #0C1D38; --c-occ-border: #163A70;
+    --c-clean: #28BDD4; --c-clean-bg: #081C24; --c-clean-border: #0E3844;
+    --c-global: #A78BFA; --c-global-bg: #1A0F38; --c-global-border: #3D2870;
+    --ok: #22C55E; --err: #F87171;
+    --t-iot: #60A5FA; --t-iot-bg: #0C1D38;
+    --t-cal: #34D399; --t-cal-bg: #0A2016;
+    --t-manual: #FCA452; --t-manual-bg: #221508;
+    --t-dialog: #C4B5FD; --t-dialog-bg: #1A0F38;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #09131F; --surface: #111D2E; --surface-2: #172437; --border: #1E3050;
+  --text: #E0EAF6; --text-2: #7B9ABE; --text-3: #4A6480;
+  --c-vacant: #3DB870; --c-vacant-bg: #0A2016; --c-vacant-border: #164A2A;
+  --c-pre: #E09540; --c-pre-bg: #221508; --c-pre-border: #4C2E0A;
+  --c-occ: #5B8FD4; --c-occ-bg: #0C1D38; --c-occ-border: #163A70;
+  --c-clean: #28BDD4; --c-clean-bg: #081C24; --c-clean-border: #0E3844;
+  --c-global: #A78BFA; --c-global-bg: #1A0F38; --c-global-border: #3D2870;
+  --ok: #22C55E; --err: #F87171;
+  --t-iot: #60A5FA; --t-iot-bg: #0C1D38;
+  --t-cal: #34D399; --t-cal-bg: #0A2016;
+  --t-manual: #FCA452; --t-manual-bg: #221508;
+  --t-dialog: #C4B5FD; --t-dialog-bg: #1A0F38;
+}
+:root[data-theme="light"] {
+  --bg: #EEF2F7; --surface: #FFFFFF; --surface-2: #F5F7FA; --border: #DDE3EC;
+  --text: #0D1B2A; --text-2: #4A5568; --text-3: #8A99AC;
+  --c-vacant: #2E7D52; --c-vacant-bg: #F0FAF4; --c-vacant-border: #A7D9B8;
+  --c-pre: #B06A1A; --c-pre-bg: #FFF8EE; --c-pre-border: #EDCA94;
+  --c-occ: #1A56A8; --c-occ-bg: #EFF6FF; --c-occ-border: #BFDBFE;
+  --c-clean: #0B7A8A; --c-clean-bg: #F0FAFB; --c-clean-border: #97D4DB;
+  --c-global: #5B3FA6; --c-global-bg: #F5F0FF; --c-global-border: #C4B0F0;
+  --ok: #16A34A; --err: #DC2626;
+  --t-iot: #2563EB; --t-iot-bg: #EFF6FF;
+  --t-cal: #059669; --t-cal-bg: #ECFDF5;
+  --t-manual: #C05E10; --t-manual-bg: #FFF7ED;
+  --t-dialog: #7C3AED; --t-dialog-bg: #F5F0FF;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  padding: 2rem 1.5rem 3rem;
+  min-height: 100vh;
+}
+
+header { margin-bottom: 1.5rem; }
+
+.header-top {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.025em; }
+
+.version {
+  font-size: 0.6875rem;
+  font-family: var(--mono);
+  color: var(--text-3);
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.stats { display: flex; gap: 1.25rem; flex-wrap: wrap; }
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--text-2);
+}
+
+.stat-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── Global Events Card ── */
+.global-card {
+  background: var(--c-global-bg);
+  border: 1px solid var(--c-global-border);
+  border-top: 3px solid var(--c-global);
+  border-radius: var(--r);
+  padding: 0.875rem 1rem;
+  margin-bottom: 0.875rem;
+}
+
+.global-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.global-title {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--c-global);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.global-subtitle {
+  font-size: 0.5875rem;
+  color: var(--text-3);
+  margin-left: auto;
+}
+
+.global-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.global-ev {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 0.3125rem;
+  padding: 0.375rem 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--c-global-border);
+  border-radius: var(--r-sm);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.global-arrow {
+  font-size: 0.75rem;
+  color: var(--text-3);
+  align-self: center;
+  flex-shrink: 0;
+  padding: 0 0.125rem;
+}
+
+.global-note {
+  margin-top: 0.625rem;
+  font-size: 0.5875rem;
+  color: var(--text-3);
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.global-note b { color: var(--text-2); font-style: normal; }
+
+/* ── Grid ── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.875rem;
+  align-items: start;
+}
+
+@media (max-width: 1080px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px)  { .grid { grid-template-columns: 1fr; } }
+
+/* ── Column ── */
+.col {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+.col-header {
+  padding: 0.875rem 1rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.col-header.vacant   { border-top: 3px solid var(--c-vacant); }
+.col-header.pre      { border-top: 3px solid var(--c-pre); }
+.col-header.occupied { border-top: 3px solid var(--c-occ); }
+.col-header.cleaning { border-top: 3px solid var(--c-clean); }
+
+.col-index {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-3);
+  margin-bottom: 0.2rem;
+}
+
+.col-name {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  font-family: var(--mono);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.col-name.vacant   { color: var(--c-vacant); }
+.col-name.pre      { color: var(--c-pre); }
+.col-name.occupied { color: var(--c-occ); }
+.col-name.cleaning { color: var(--c-clean); }
+
+.col-kr { font-size: 0.6875rem; color: var(--text-3); margin-top: 0.2rem; }
+
+/* ── Sub section ── */
+.sub {
+  padding: 0.75rem 0.875rem;
+  border-bottom: 1px solid var(--border);
+}
+.sub:last-child { border-bottom: none; }
+
+/* OCCUPIED 공통 섹션 */
+.sub.common {
+  background: var(--c-occ-bg);
+  border-bottom: 2px solid var(--c-occ-border);
+}
+
+/* VACANT/MAINTENANCE — 글로벌로 관리됨 */
+.sub.managed {
+  background: var(--c-global-bg);
+  border-bottom: 1px solid var(--c-global-border);
+}
+
+.sub-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.625rem;
+}
+
+.sub-name {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  font-family: var(--mono);
+  color: var(--text);
+  line-height: 1.35;
+}
+
+.sub-kr { font-size: 0.625rem; color: var(--text-3); margin-top: 0.15rem; }
+
+.init-badge {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  white-space: nowrap;
+  color: var(--c-vacant);
+  background: var(--c-vacant-bg);
+  border: 1px solid var(--c-vacant-border);
+  border-radius: 3px;
+  padding: 0.125rem 0.375rem;
+  flex-shrink: 0;
+}
+
+.common-badge {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  white-space: nowrap;
+  color: var(--c-occ);
+  background: var(--c-occ-bg);
+  border: 1px solid var(--c-occ-border);
+  border-radius: 3px;
+  padding: 0.125rem 0.375rem;
+  flex-shrink: 0;
+}
+
+.managed-badge {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  white-space: nowrap;
+  color: var(--c-global);
+  background: var(--c-global-bg);
+  border: 1px solid var(--c-global-border);
+  border-radius: 3px;
+  padding: 0.125rem 0.375rem;
+  flex-shrink: 0;
+}
+
+/* ── Events ── */
+.events { display: flex; flex-direction: column; gap: 0.3125rem; }
+
+.ev {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+
+.sub.common .ev { background: var(--surface); }
+.sub.managed .ev { background: var(--surface); border-color: var(--c-global-border); }
+
+.tpill {
+  font-size: 0.575rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.1875rem 0.3125rem;
+  border-radius: 3px;
+  white-space: nowrap;
+  line-height: 1;
+  margin-top: 0.125rem;
+  flex-shrink: 0;
+}
+.tpill.iot    { background: var(--t-iot-bg); color: var(--t-iot); }
+.tpill.cal    { background: var(--t-cal-bg); color: var(--t-cal); }
+.tpill.manual { background: var(--t-manual-bg); color: var(--t-manual); }
+.tpill.dialog { background: var(--t-dialog-bg); color: var(--t-dialog); }
+
+.ev-body { min-width: 0; }
+
+.ev-name {
+  font-size: 0.6375rem;
+  font-family: var(--mono);
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.ev-logic {
+  font-size: 0.5625rem;
+  color: var(--text-3);
+  margin-top: 0.1875rem;
+  line-height: 1.45;
+  font-style: italic;
+}
+
+details.ev-detail { margin-top: 0.1875rem; }
+
+details.ev-detail summary {
+  font-size: 0.5625rem;
+  color: var(--t-iot);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-style: italic;
+}
+
+details.ev-detail summary::before {
+  content: '▶';
+  font-size: 0.4rem;
+  transition: transform 0.15s;
+  display: inline-block;
+}
+
+details.ev-detail[open] summary::before { transform: rotate(90deg); }
+
+.ev-detail-body {
+  margin-top: 0.3125rem;
+  padding: 0.375rem 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+}
+
+.ev-detail-row {
+  font-size: 0.5625rem;
+  color: var(--text-2);
+  line-height: 1.5;
+  font-family: var(--mono);
+}
+
+.ev-detail-row b { color: var(--text); font-weight: 600; }
+
+.ev-to {
+  font-size: 0.5875rem;
+  color: var(--text-3);
+  margin-top: 0.25rem;
+  line-height: 1.4;
+}
+
+.ev-to span { font-family: var(--mono); color: var(--text-2); }
+
+.ev-note {
+  font-size: 0.5875rem;
+  color: var(--err);
+  margin-top: 0.125rem;
+  line-height: 1.35;
+}
+
+.sdot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 0.25rem;
+}
+.sdot.ok  { background: var(--ok); }
+.sdot.err { background: var(--err); }
+
+/* ── Legend ── */
+.legend {
+  margin-top: 1.25rem;
+  padding: 0.875rem 1.125rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2.5rem;
+  align-items: flex-start;
+}
+
+.lg-group { display: flex; flex-direction: column; gap: 0.3125rem; }
+
+.lg-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-3);
+  margin-bottom: 0.125rem;
+}
+
+.lg-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.6875rem;
+  color: var(--text-2);
+}
+
+.lg-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+</style>
+
+<header>
+  <div class="header-top">
+    <h1>Room State Machine</h1>
+    <span class="version">v2.2</span>
+  </div>
+  <div class="stats">
+    <span class="stat"><span class="stat-dot" style="background:var(--ok)"></span>구현 완료 18개</span>
+    <span class="stat"><span class="stat-dot" style="background:var(--err)"></span>미구현 3개 (maintenance 감지)</span>
+    <span class="stat" style="color:var(--text-3)">글로벌 이벤트 3개 별도</span>
+  </div>
+</header>
+
+<!-- ── 글로벌 이벤트 ── -->
+<div class="global-card">
+  <div class="global-header">
+    <span class="global-title">글로벌 이벤트 — 모든 Main Status에서 발생 가능</span>
+    <span class="global-subtitle">중복 방지를 위해 공통 분리</span>
+  </div>
+  <div class="global-flow">
+    <div class="global-ev">
+      <span class="tpill cal">캘린더</span>
+      <div class="ev-body">
+        <div class="ev-name">maintenance_required</div>
+        <div class="ev-logic">Google Calendar 정비 일정 도래 · 모든 상태에서 모니터링 시작</div>
+        <div class="ev-note" style="color:var(--err)">자동 감지 미구현</div>
+      </div>
+    </div>
+    <span class="global-arrow">→</span>
+    <div class="global-ev">
+      <span class="tpill dialog">확인</span>
+      <div class="ev-body">
+        <div class="ev-name">maintenance_started</div>
+        <div class="ev-logic">모션/도어 감지 → 점검자 확인 다이얼로그 "방문하셨습니까?"</div>
+        <div class="ev-to">→ <span>VACANT / MAINTENANCE</span></div>
+      </div>
+    </div>
+    <span class="global-arrow">→</span>
+    <div class="global-ev">
+      <span class="tpill dialog">확인</span>
+      <div class="ev-body">
+        <div class="ev-name">maintenance_finished</div>
+        <div class="ev-logic">모션/도어 부재 감지 → 점검자 확인 다이얼로그 "완료하셨습니까?"</div>
+        <div class="ev-to">→ <span>VACANT / CLEANING_FINISHED</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="global-note">
+    <b>설계 원칙:</b> 청소와 동일한 구조 — 캘린더 기반 예약 → 방문/퇴장 이벤트 감지 → 운영자 확인 다이얼로그 → 상태 전환.
+    실제 정비는 항상 <b>VACANT/MAINTENANCE</b> 진입 후 진행. OCCUPIED 중 정비 일정이 잡혀도 체크아웃 후 자동 처리.
+  </div>
+</div>
+
+<div class="grid">
+
+  <!-- ── VACANT ── -->
+  <div class="col">
+    <div class="col-header vacant">
+      <div class="col-index">Main Status 01</div>
+      <div class="col-name vacant">VACANT</div>
+      <div class="col-kr">공실</div>
+    </div>
+
+    <div class="sub">
+      <div class="sub-top">
+        <div>
+          <div class="sub-name">CLEANING_FINISHED</div>
+          <div class="sub-kr">청소완료</div>
+        </div>
+        <span class="init-badge">초기 상태</span>
+      </div>
+      <div class="events">
+        <div class="ev">
+          <span class="tpill cal">캘린더</span>
+          <div class="ev-body">
+            <div class="ev-name">checkin_prep_time_reached</div>
+            <div class="ev-logic">체크인 1시간 전 · getPrepStart(checkIn)</div>
+            <div class="ev-to">→ <span>PRE_STAY_READY / OPTIMIZING</span></div>
+          </div>
+          <span class="sdot ok"></span>
+        </div>
+        <div class="ev">
+          <span class="tpill cal">캘린더</span>
+          <div class="ev-body">
+            <div class="ev-name">reservation_cancelled</div>
+            <div class="ev-logic">iCal 재싱크: 예정 예약 소멸 감지 · 체크인 당일 이전만 해당</div>
+            <div class="ev-to">→ <span>VACANT / CLEANING_FINISHED</span> (상태 유지)</div>
+          </div>
+          <span class="sdot ok"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub managed">
+      <div class="sub-top">
+        <div>
+          <div class="sub-name" style="color:var(--c-global)">MAINTENANCE</div>
+          <div class="sub-kr">정비중</div>
+        </div>
+        <span class="managed-badge">글로벌 관리</span>
+      </div>
+      <div class="events">
+        <div class="ev">
+          <span class="tpill dialog">확인</span>
+          <div class="ev-body">
+            <div class="ev-name">maintenance_finished</div>
+            <div class="ev-logic">퇴장 감지 → 운영자 확인 후 종료</div>
+            <div class="ev-to">→ <span>VACANT / CLEANING_FINISHED</span></div>
+          </div>
+          <span class="sdot err"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PRE_STAY_READY ── -->
+  <div class="col">
+    <div class="col-header pre">
+      <div class="col-index">Main Status 02</div>
+      <div class="col-name pre">PRE_STAY_READY</div>
+      <div class="col-kr">입실전</div>
+    </div>
+
+    <div class="sub">
+      <div class="sub-top">
+        <div>
+          <div class="sub-name">OPTIMIZING</div>
+          <div class="sub-kr">최적화중 (체크인 60~30분 전)</div>
+        </div>
+      </div>
+      <div class="events">
+        <div class="ev">
+          <span class="tpill cal">캘린더</span>
+          <div class="ev-body">
+            <div class="ev-name">optimization_finished</div>
+            <div class="ev-logic">체크인 30분 전 도달 · getPreStaySubStatus()</div>
+            <div class="ev-to">→ <span>PRE_STAY_READY / OPTIMIZED</span></div>
+          </div>
+          <span class="sdot ok"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub">
+      <div class="sub-top">
+        <div>
+          <div class="sub-name">OPTIMIZED</div>
+          <div class="sub-kr">최적화완료 (체크인 30분 전~)</div>
+        </div>
+      </div>
+      <div class="events">
+        <div class="ev">
+          <span class="tpill iot">IoT</span>
+          <div class="ev-body">
+            <div class="ev-name">check_in_detected</div>
+            <div class="ev-logic">모션 OR 도어 센서 ON · snap.motionDetected || snap.doorOpen</div>
+            <div class="ev-to">→ <span>OCCUPIED / GOOD_CONDITION</span></div>
+          </div>
+          <span class="sdot ok"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── OCCUPIED ── -->
+  <div class="col">
+    <div class="col-header occupied">
+      <div class="col-index">Main Status 03</div>
+      <div class="col-name occupied">OCCUPIED</div>
+      <div class="col-kr">체류중</div>
+    </div>
+
+    <!-- 공통 이벤트 -->
+    <div class="sub common">
+      <div class="sub-top">
+        <div>
+          <div class="sub-name" style="color:var(--c-occ)">모든 Sub-Status 공통</div>
+        </div>
+        <span class="common-badge">공통</span>
+      </div>
+      <div class="events">
+        <div class="ev">
+          <span class="tpill iot">IoT</span>
+          <div class="ev-body">
+            <div class="ev-name">check_out_detected</div>
+            <div class="ev-logic">체크아웃 시각 경과 + 모션/도어 부재 확인</div>
+            <div class="ev-to">→ <span>CLEANING / CLEANING_PENDING</span></div>
+          </div>
+          <span class="sdot ok"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub">
+      <div class="sub-top">
+        <div>
+          <div class="sub-name">GOOD_CONDITION</div>
+          <div class="sub-kr">상태좋음</div>
+        </div>
+      </div>
+      <div class="events">
+        <div class="ev">
+          <span class="tpill iot">IoT</span>
+          <div class="ev-body">
+            <div class="ev-name">energy_waste_detected</div>
+            <details class="ev-detail">
+              <summary>전력 임계값 초과 5분 연속</summary>
+              <div class="ev-detail-body">
+                <div class="ev-detail-row"><b>감지:</b> SUSTAIN_DETECT = 5분 연속</div>
+                <div class="ev-detail-row"><b>센서:</b> device_class: power</div>
+                <div class="ev-detail-row"><b>로직:</b> occupancyMonitor._energy()</div>
+              </div>
+            </details>
+            <div class="ev-to">→ <span>OCCUPIED / ENERGY_WASTE</span></div>
+          </div>
+          <span class="sdot ok"></span>
+        </div>
+        <div class="ev">
+          <span class="tpill iot">IoT</span>
+          <div class="ev-body">
+            <div class="ev-name">complaint_detected</div>
+            <details class="ev-detail">
+              <summary>소음 슬라이딩 윈도우 score ≥ 8</summary>
+              <div class="ev-detail-body">
+                <div class="ev-detail-row"><b>윈도우:</b> 10분 슬라이딩</div>
+                <div class="ev-detail-row"><b>CRITICAL</b> &gt;85dB × 8점</div>
+                <div class="ev-detail-row"><b>HIGH</b> &gt;75dB × 3점</div>
+                <div class="ev-detail-row"><b>WARN</b> &gt;65dB × 1점</div>
+                <div class="ev-detail-row"><b>로직:</b> occupancyMonitor._noise()</div>
+              </div>
+            </details>
+            <div class="ev-to">→ <span>OCCUPIED / ISSUE_COMPLAINT</span></div>
+          </div>
+          <span class="sdot ok"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub">
+      <div class="sub-top">
+        <div>
+          <div class="sub-name">ENERGY_WASTE</div>
+          <div class="sub-kr">에너지낭비</div>
+        </div>
+      </div>
+      <div class="events">
+        <div class="ev">
+          <span class="tpill iot">IoT</span>
+          <div class="ev-body">
+            <div class="ev-name">energy_waste_resolved</div>
+            <div class="ev-logic">정상전력 SUSTAIN_RESOLVE=10분 연속</div>
+            <div class="ev-to">→ <span>OCCUPIED / GOOD_CONDITION</span></div>
+          </div>
+          <span class="sdot ok"></span>
+        </div>
+        <div class="ev">
+          <span class="tpill iot">IoT</span>
+          <div class="ev-body">
+            <div class="ev-name">complaint_detected</div>
+            <div class="ev-logic">소음 score ≥ 8 (동일 로직)</div>
+            <div class="ev-to">→ <span>OCCUPIED / ISSUE_AND_ENERGY</span></div>
+          </div>
+          <span class="sdot ok"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub">
+      <div class="sub-top">
+        <div>
+          <div class="sub-name">ISSUE_COMPLAINT</div>
+          <div class="sub-kr">민원발생</div>
+        </div>
+      </div>
+      <div class="events">
+        <div class="ev">
+          <span class="tpill iot">IoT</span>
+          <div class="ev-body">
+            <div class="ev-name">complaint_resolved</div>
+            <div class="ev-logic">score=0 (65dB 미만) 10분 유지</div>
+            <div class="ev-to">→ <span>OCCUPIED / GOOD_CONDITION</span></div>
+          </div>
+          <span class="sdot ok"></span>
+        </div>
+        <div class="ev">
+          <span class="tpill iot">IoT</span>
+          <div class="ev-body">
+            <div class="ev-name">energy_waste_detected</div>
+            <div class="ev-logic">고전력 5분 연속 (동일 로직)</div>
+            <div class="ev-to">→ <span>OCCUPIED / ISSUE_AND_ENERGY</span></div>
+          </div>
+          <span class="sdot ok"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub">
+      <div class="sub-top">
+        <div>
+          <div class="sub-name">ISSUE_AND_ENERGY</div>
+          <div class="sub-kr">민원 + 에너지낭비</div>
+        </div>
+      </div>
+      <div class="events">
+        <div class="ev">
+          <span class="tpill iot">IoT</span>
+          <div class="ev-body">
+            <div class="ev-name">complaint_resolved</div>
+            <div class="ev-logic">score=0 10분 유지 (에너지낭비 잔존)</div>
+            <div class="ev-to">→ <span>OCCUPIED / ENERGY_WASTE</span></div>
+          </div>
+          <span class="sdot ok"></span>
+        </div>
+        <div class="ev">
+          <span class="tpill iot">IoT</span>
+          <div class="ev-body">
+            <div class="ev-name">energy_waste_resolved</div>
+            <div class="ev-logic">정상전력 10분 연속 (민원 잔존)</div>
+            <div class="ev-to">→ <span>OCCUPIED / ISSUE_COMPLAINT</span></div>
+          </div>
+          <span class="sdot ok"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CLEANING ── -->
+  <div class="col">
+    <div class="col-header cleaning">
+      <div class="col-index">Main Status 04</div>
+      <div class="col-name cleaning">CLEANING</div>
+      <div class="col-kr">청소중</div>
+    </div>
+
+    <div class="sub">
+      <div class="sub-top">
+        <div>
+          <div class="sub-name">CLEANING_PENDING</div>
+          <div class="sub-kr">청소대기</div>
+        </div>
+      </div>
+      <div class="events">
+        <div class="ev">
+          <span class="tpill manual">수동</span>
+          <div class="ev-body">
+            <div class="ev-name">cleaning_started</div>
+            <div class="ev-logic">운영자 UI 버튼</div>
+            <div class="ev-to">→ <span>CLEANING / CLEANING_IN_PROGRESS</span></div>
+          </div>
+          <span class="sdot ok"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub">
+      <div class="sub-top">
+        <div>
+          <div class="sub-name">CLEANING_IN_PROGRESS</div>
+          <div class="sub-kr">청소진행중</div>
+        </div>
+      </div>
+      <div class="events">
+        <div class="ev">
+          <span class="tpill manual">수동</span>
+          <div class="ev-body">
+            <div class="ev-name">cleaning_finished</div>
+            <div class="ev-logic">운영자 버튼 → 즉시 캘린더 재계산</div>
+            <div class="ev-to">→ <span>VACANT / CLEANING_FINISHED</span></div>
+          </div>
+          <span class="sdot ok"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="legend">
+  <div class="lg-group">
+    <div class="lg-label">트리거 유형</div>
+    <div class="lg-row"><span class="tpill cal" style="font-size:0.6rem">캘린더</span>iCal / Google Calendar</div>
+    <div class="lg-row"><span class="tpill iot" style="font-size:0.6rem">IoT</span>센서 자동 감지</div>
+    <div class="lg-row"><span class="tpill manual" style="font-size:0.6rem">수동</span>운영자 UI 버튼</div>
+    <div class="lg-row"><span class="tpill dialog" style="font-size:0.6rem">확인</span>방문/퇴장 감지 + 운영자 확인</div>
+  </div>
+  <div class="lg-group">
+    <div class="lg-label">구현 상태</div>
+    <div class="lg-row"><span class="lg-dot" style="background:var(--ok)"></span>구현 완료</div>
+    <div class="lg-row"><span class="lg-dot" style="background:var(--err)"></span>미구현</div>
+  </div>
+  <div class="lg-group">
+    <div class="lg-label">설계 원칙</div>
+    <div class="lg-row" style="color:var(--text-3)">글로벌 이벤트 — 중복 없이 공통 관리</div>
+    <div class="lg-row" style="color:var(--text-3)">OCCUPIED 공통 — check_out 중복 제거</div>
+    <div class="lg-row" style="color:var(--text-3)">reservation_cancelled — VACANT 기간만 해당</div>
+  </div>
+</div>

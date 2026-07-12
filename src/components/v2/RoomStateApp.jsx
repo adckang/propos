@@ -191,9 +191,10 @@ function deriveNextMonitorState(calMain, calSub, monitorState) {
   if (calMain === 'VACANT' && monMain === 'OCCUPIED')
     return INITIAL_STATE;
 
-  // 예약 취소: iCal이 VACANT로 돌아왔는데 monitorState가 PRE_STAY_READY인 경우 (#6, #9)
+  // iCal이 VACANT로 돌아왔는데 monitorState가 PRE_STAY_READY인 경우
+  // reservation_cancelled는 VACANT 기간에만 유효 → 비즈니스 레이어에서 INITIAL_STATE 직접 복귀
   if (calMain === 'VACANT' && monMain === 'PRE_STAY_READY')
-    return tryCalEvent(monitorState, 'reservation_cancelled');
+    return INITIAL_STATE;
 
   return null;
 }

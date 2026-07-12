@@ -39,88 +39,125 @@ describe('INITIAL_STATE', () => {
 });
 
 // ============================================================
-// getNextRoomState — 전환 24개 전체
+// getNextRoomState — 상태별 전환
 // ============================================================
-describe('getNextRoomState — 정상 전환 24개', () => {
+describe('getNextRoomState — 상태별 전환', () => {
 
   // VACANT
   test('T01 VACANT/CLEANING_FINISHED + checkin_prep_time_reached → PRE_STAY_READY/OPTIMIZING', () => {
     assert.deepEqual(getNextRoomState(VACANT_CF, 'checkin_prep_time_reached'), PRE_OPTG);
   });
-  test('T02 VACANT/CLEANING_FINISHED + maintenance_started → VACANT/MAINTENANCE', () => {
-    assert.deepEqual(getNextRoomState(VACANT_CF, 'maintenance_started'), VACANT_MN);
+  test('T02 VACANT/CLEANING_FINISHED + reservation_cancelled → VACANT/CLEANING_FINISHED (자기전환)', () => {
+    assert.deepEqual(getNextRoomState(VACANT_CF, 'reservation_cancelled'), VACANT_CF);
   });
-  test('T03 VACANT/MAINTENANCE + maintenance_finished → VACANT/CLEANING_FINISHED', () => {
-    assert.deepEqual(getNextRoomState(VACANT_MN, 'maintenance_finished'), VACANT_CF);
-  });
-  test('T04 VACANT/MAINTENANCE + checkin_prep_time_reached → PRE_STAY_READY/OPTIMIZING', () => {
+  test('T03 VACANT/MAINTENANCE + checkin_prep_time_reached → PRE_STAY_READY/OPTIMIZING', () => {
     assert.deepEqual(getNextRoomState(VACANT_MN, 'checkin_prep_time_reached'), PRE_OPTG);
   });
 
   // PRE_STAY_READY
-  test('T05 PRE_STAY_READY/OPTIMIZING + optimization_finished → PRE_STAY_READY/OPTIMIZED', () => {
+  test('T04 PRE_STAY_READY/OPTIMIZING + optimization_finished → PRE_STAY_READY/OPTIMIZED', () => {
     assert.deepEqual(getNextRoomState(PRE_OPTG, 'optimization_finished'), PRE_OPTD);
   });
-  test('T06 PRE_STAY_READY/OPTIMIZING + reservation_cancelled → VACANT/CLEANING_FINISHED', () => {
-    assert.deepEqual(getNextRoomState(PRE_OPTG, 'reservation_cancelled'), VACANT_CF);
-  });
-  test('T07 PRE_STAY_READY/OPTIMIZING + maintenance_required → VACANT/MAINTENANCE', () => {
-    assert.deepEqual(getNextRoomState(PRE_OPTG, 'maintenance_required'), VACANT_MN);
-  });
-  test('T08 PRE_STAY_READY/OPTIMIZED + check_in_detected → OCCUPIED/GOOD_CONDITION', () => {
+  test('T05 PRE_STAY_READY/OPTIMIZED + check_in_detected → OCCUPIED/GOOD_CONDITION', () => {
     assert.deepEqual(getNextRoomState(PRE_OPTD, 'check_in_detected'), OCC_GOOD);
   });
-  test('T09 PRE_STAY_READY/OPTIMIZED + reservation_cancelled → VACANT/CLEANING_FINISHED', () => {
-    assert.deepEqual(getNextRoomState(PRE_OPTD, 'reservation_cancelled'), VACANT_CF);
-  });
-  test('T10 PRE_STAY_READY/OPTIMIZED + maintenance_required → VACANT/MAINTENANCE', () => {
-    assert.deepEqual(getNextRoomState(PRE_OPTD, 'maintenance_required'), VACANT_MN);
-  });
 
-  // OCCUPIED
-  test('T11 OCCUPIED/GOOD_CONDITION + energy_waste_detected → OCCUPIED/ENERGY_WASTE', () => {
+  // OCCUPIED (상태별)
+  test('T06 OCCUPIED/GOOD_CONDITION + energy_waste_detected → OCCUPIED/ENERGY_WASTE', () => {
     assert.deepEqual(getNextRoomState(OCC_GOOD, 'energy_waste_detected'), OCC_EW);
   });
-  test('T12 OCCUPIED/GOOD_CONDITION + complaint_detected → OCCUPIED/ISSUE_COMPLAINT', () => {
+  test('T07 OCCUPIED/GOOD_CONDITION + complaint_detected → OCCUPIED/ISSUE_COMPLAINT', () => {
     assert.deepEqual(getNextRoomState(OCC_GOOD, 'complaint_detected'), OCC_IC);
   });
-  test('T13 OCCUPIED/GOOD_CONDITION + check_out_detected → CLEANING/CLEANING_PENDING', () => {
-    assert.deepEqual(getNextRoomState(OCC_GOOD, 'check_out_detected'), CLN_PEND);
-  });
-  test('T14 OCCUPIED/ENERGY_WASTE + energy_waste_resolved → OCCUPIED/GOOD_CONDITION', () => {
+  test('T08 OCCUPIED/ENERGY_WASTE + energy_waste_resolved → OCCUPIED/GOOD_CONDITION', () => {
     assert.deepEqual(getNextRoomState(OCC_EW, 'energy_waste_resolved'), OCC_GOOD);
   });
-  test('T15 OCCUPIED/ENERGY_WASTE + complaint_detected → OCCUPIED/ISSUE_AND_ENERGY', () => {
+  test('T09 OCCUPIED/ENERGY_WASTE + complaint_detected → OCCUPIED/ISSUE_AND_ENERGY', () => {
     assert.deepEqual(getNextRoomState(OCC_EW, 'complaint_detected'), OCC_IAE);
   });
-  test('T16 OCCUPIED/ENERGY_WASTE + check_out_detected → CLEANING/CLEANING_PENDING', () => {
-    assert.deepEqual(getNextRoomState(OCC_EW, 'check_out_detected'), CLN_PEND);
-  });
-  test('T17 OCCUPIED/ISSUE_COMPLAINT + complaint_resolved → OCCUPIED/GOOD_CONDITION', () => {
+  test('T10 OCCUPIED/ISSUE_COMPLAINT + complaint_resolved → OCCUPIED/GOOD_CONDITION', () => {
     assert.deepEqual(getNextRoomState(OCC_IC, 'complaint_resolved'), OCC_GOOD);
   });
-  test('T18 OCCUPIED/ISSUE_COMPLAINT + energy_waste_detected → OCCUPIED/ISSUE_AND_ENERGY', () => {
+  test('T11 OCCUPIED/ISSUE_COMPLAINT + energy_waste_detected → OCCUPIED/ISSUE_AND_ENERGY', () => {
     assert.deepEqual(getNextRoomState(OCC_IC, 'energy_waste_detected'), OCC_IAE);
   });
-  test('T19 OCCUPIED/ISSUE_COMPLAINT + check_out_detected → CLEANING/CLEANING_PENDING', () => {
-    assert.deepEqual(getNextRoomState(OCC_IC, 'check_out_detected'), CLN_PEND);
-  });
-  test('T20 OCCUPIED/ISSUE_AND_ENERGY + complaint_resolved → OCCUPIED/ENERGY_WASTE', () => {
+  test('T12 OCCUPIED/ISSUE_AND_ENERGY + complaint_resolved → OCCUPIED/ENERGY_WASTE', () => {
     assert.deepEqual(getNextRoomState(OCC_IAE, 'complaint_resolved'), OCC_EW);
   });
-  test('T21 OCCUPIED/ISSUE_AND_ENERGY + energy_waste_resolved → OCCUPIED/ISSUE_COMPLAINT', () => {
+  test('T13 OCCUPIED/ISSUE_AND_ENERGY + energy_waste_resolved → OCCUPIED/ISSUE_COMPLAINT', () => {
     assert.deepEqual(getNextRoomState(OCC_IAE, 'energy_waste_resolved'), OCC_IC);
-  });
-  test('T22 OCCUPIED/ISSUE_AND_ENERGY + check_out_detected → CLEANING/CLEANING_PENDING', () => {
-    assert.deepEqual(getNextRoomState(OCC_IAE, 'check_out_detected'), CLN_PEND);
   });
 
   // CLEANING
-  test('T23 CLEANING/CLEANING_PENDING + cleaning_started → CLEANING/CLEANING_IN_PROGRESS', () => {
+  test('T14 CLEANING/CLEANING_PENDING + cleaning_started → CLEANING/CLEANING_IN_PROGRESS', () => {
     assert.deepEqual(getNextRoomState(CLN_PEND, 'cleaning_started'), CLN_PROG);
   });
-  test('T24 CLEANING/CLEANING_IN_PROGRESS + cleaning_finished → VACANT/CLEANING_FINISHED', () => {
+  test('T15 CLEANING/CLEANING_IN_PROGRESS + cleaning_finished → VACANT/CLEANING_FINISHED', () => {
     assert.deepEqual(getNextRoomState(CLN_PROG, 'cleaning_finished'), VACANT_CF);
+  });
+});
+
+// ============================================================
+// OCCUPIED_COMMON — check_out_detected (4개 Sub-Status 공통)
+// ============================================================
+describe('OCCUPIED_COMMON — check_out_detected', () => {
+
+  test('OC1 OCCUPIED/GOOD_CONDITION + check_out_detected → CLEANING/CLEANING_PENDING', () => {
+    assert.deepEqual(getNextRoomState(OCC_GOOD, 'check_out_detected'), CLN_PEND);
+  });
+  test('OC2 OCCUPIED/ENERGY_WASTE + check_out_detected → CLEANING/CLEANING_PENDING', () => {
+    assert.deepEqual(getNextRoomState(OCC_EW, 'check_out_detected'), CLN_PEND);
+  });
+  test('OC3 OCCUPIED/ISSUE_COMPLAINT + check_out_detected → CLEANING/CLEANING_PENDING', () => {
+    assert.deepEqual(getNextRoomState(OCC_IC, 'check_out_detected'), CLN_PEND);
+  });
+  test('OC4 OCCUPIED/ISSUE_AND_ENERGY + check_out_detected → CLEANING/CLEANING_PENDING', () => {
+    assert.deepEqual(getNextRoomState(OCC_IAE, 'check_out_detected'), CLN_PEND);
+  });
+});
+
+// ============================================================
+// GLOBAL_TRANSITIONS — maintenance 이벤트 (모든 상태에서 유효)
+// ============================================================
+describe('GLOBAL_TRANSITIONS — maintenance 이벤트', () => {
+
+  // maintenance_required → VACANT/MAINTENANCE (모든 상태에서)
+  test('G1 VACANT/CLEANING_FINISHED + maintenance_required → VACANT/MAINTENANCE', () => {
+    assert.deepEqual(getNextRoomState(VACANT_CF, 'maintenance_required'), VACANT_MN);
+  });
+  test('G1 PRE_STAY_READY/OPTIMIZING + maintenance_required → VACANT/MAINTENANCE', () => {
+    assert.deepEqual(getNextRoomState(PRE_OPTG, 'maintenance_required'), VACANT_MN);
+  });
+  test('G1 PRE_STAY_READY/OPTIMIZED + maintenance_required → VACANT/MAINTENANCE', () => {
+    assert.deepEqual(getNextRoomState(PRE_OPTD, 'maintenance_required'), VACANT_MN);
+  });
+  test('G1 OCCUPIED/GOOD_CONDITION + maintenance_required → VACANT/MAINTENANCE', () => {
+    assert.deepEqual(getNextRoomState(OCC_GOOD, 'maintenance_required'), VACANT_MN);
+  });
+  test('G1 CLEANING/CLEANING_IN_PROGRESS + maintenance_required → VACANT/MAINTENANCE', () => {
+    assert.deepEqual(getNextRoomState(CLN_PROG, 'maintenance_required'), VACANT_MN);
+  });
+
+  // maintenance_started → VACANT/MAINTENANCE (모든 상태에서)
+  test('G2 VACANT/CLEANING_FINISHED + maintenance_started → VACANT/MAINTENANCE', () => {
+    assert.deepEqual(getNextRoomState(VACANT_CF, 'maintenance_started'), VACANT_MN);
+  });
+  test('G2 PRE_STAY_READY/OPTIMIZING + maintenance_started → VACANT/MAINTENANCE', () => {
+    assert.deepEqual(getNextRoomState(PRE_OPTG, 'maintenance_started'), VACANT_MN);
+  });
+  test('G2 CLEANING/CLEANING_PENDING + maintenance_started → VACANT/MAINTENANCE', () => {
+    assert.deepEqual(getNextRoomState(CLN_PEND, 'maintenance_started'), VACANT_MN);
+  });
+
+  // maintenance_finished → VACANT/CLEANING_FINISHED (모든 상태에서)
+  test('G3 VACANT/MAINTENANCE + maintenance_finished → VACANT/CLEANING_FINISHED', () => {
+    assert.deepEqual(getNextRoomState(VACANT_MN, 'maintenance_finished'), VACANT_CF);
+  });
+  test('G3 PRE_STAY_READY/OPTIMIZED + maintenance_finished → VACANT/CLEANING_FINISHED', () => {
+    assert.deepEqual(getNextRoomState(PRE_OPTD, 'maintenance_finished'), VACANT_CF);
+  });
+  test('G3 CLEANING/CLEANING_IN_PROGRESS + maintenance_finished → VACANT/CLEANING_FINISHED', () => {
+    assert.deepEqual(getNextRoomState(CLN_PROG, 'maintenance_finished'), VACANT_CF);
   });
 });
 
@@ -146,6 +183,16 @@ describe('getNextRoomState — invalid transition은 throw', () => {
   });
   test('OCCUPIED/ISSUE_AND_ENERGY에서 complaint_detected (이미 복합 상태)', () => {
     assert.throws(() => getNextRoomState(OCC_IAE, 'complaint_detected'), /invalid transition/);
+  });
+  // reservation_cancelled는 VACANT 기간에만 유효 — PRE_STAY_READY에서 throw
+  test('PRE_STAY_READY/OPTIMIZING + reservation_cancelled → throw (VACANT 기간에만 유효)', () => {
+    assert.throws(() => getNextRoomState(PRE_OPTG, 'reservation_cancelled'), /invalid transition/);
+  });
+  test('PRE_STAY_READY/OPTIMIZED + reservation_cancelled → throw (VACANT 기간에만 유효)', () => {
+    assert.throws(() => getNextRoomState(PRE_OPTD, 'reservation_cancelled'), /invalid transition/);
+  });
+  test('OCCUPIED 상태에서 reservation_cancelled → throw', () => {
+    assert.throws(() => getNextRoomState(OCC_GOOD, 'reservation_cancelled'), /invalid transition/);
   });
 });
 
@@ -224,22 +271,32 @@ describe('정상 운영 흐름 — 전체 순환', () => {
     assert.deepEqual(state, OCC_GOOD);
   });
 
-  test('예약 취소 — OPTIMIZING 단계에서', () => {
-    let state = PRE_OPTG;
-    state = getNextRoomState(state, 'reservation_cancelled');
-    assert.deepEqual(state, VACANT_CF);
-  });
-
-  test('예약 취소 — OPTIMIZED 단계에서', () => {
-    let state = PRE_OPTD;
-    state = getNextRoomState(state, 'reservation_cancelled');
-    assert.deepEqual(state, VACANT_CF);
-  });
-
   test('정비 중 체크인 준비시간 도래', () => {
     let state = VACANT_MN;
     state = getNextRoomState(state, 'checkin_prep_time_reached');
     assert.deepEqual(state, PRE_OPTG);
+  });
+
+  test('정비 전체 흐름 — VACANT에서 시작 (글로벌 이벤트)', () => {
+    let state = VACANT_CF;
+
+    state = getNextRoomState(state, 'maintenance_started');
+    assert.deepEqual(state, VACANT_MN);
+
+    state = getNextRoomState(state, 'maintenance_finished');
+    assert.deepEqual(state, VACANT_CF);
+  });
+
+  test('정비 — PRE_STAY_READY에서 maintenance_required (글로벌 이벤트)', () => {
+    let state = PRE_OPTG;
+    state = getNextRoomState(state, 'maintenance_required');
+    assert.deepEqual(state, VACANT_MN);
+  });
+
+  test('reservation_cancelled — VACANT에서 자기전환', () => {
+    let state = VACANT_CF;
+    state = getNextRoomState(state, 'reservation_cancelled');
+    assert.deepEqual(state, VACANT_CF);  // 상태 유지, 비즈니스 레이어 처리
   });
 });
 
@@ -257,6 +314,17 @@ describe('isValidTransition', () => {
   test('잘못된 상태는 false', () => {
     assert.equal(isValidTransition(null, 'cleaning_started'), false);
   });
+  test('글로벌 이벤트는 어느 상태에서도 true', () => {
+    assert.equal(isValidTransition(OCC_GOOD,   'maintenance_started'), true);
+    assert.equal(isValidTransition(CLN_PROG,   'maintenance_required'), true);
+    assert.equal(isValidTransition(PRE_OPTD,   'maintenance_finished'), true);
+  });
+  test('reservation_cancelled는 VACANT에서만 true', () => {
+    assert.equal(isValidTransition(VACANT_CF, 'reservation_cancelled'), true);
+    assert.equal(isValidTransition(PRE_OPTG,  'reservation_cancelled'), false);
+    assert.equal(isValidTransition(PRE_OPTD,  'reservation_cancelled'), false);
+    assert.equal(isValidTransition(OCC_GOOD,  'reservation_cancelled'), false);
+  });
 });
 
 // ============================================================
@@ -264,13 +332,24 @@ describe('isValidTransition', () => {
 // ============================================================
 describe('getAvailableEvents', () => {
 
-  test('VACANT/CLEANING_FINISHED 가능 이벤트 2개', () => {
+  test('VACANT/CLEANING_FINISHED — 상태별 + 글로벌 포함', () => {
     const events = getAvailableEvents(VACANT_CF);
-    assert.deepEqual(events.sort(), ['checkin_prep_time_reached', 'maintenance_started'].sort());
+    // 상태별: checkin_prep_time_reached, reservation_cancelled
+    // 글로벌: maintenance_required, maintenance_started, maintenance_finished
+    assert.ok(events.includes('checkin_prep_time_reached'));
+    assert.ok(events.includes('reservation_cancelled'));
+    assert.ok(events.includes('maintenance_required'));
+    assert.ok(events.includes('maintenance_started'));
+    assert.ok(events.includes('maintenance_finished'));
   });
-  test('OCCUPIED/ISSUE_AND_ENERGY 가능 이벤트 3개', () => {
+  test('OCCUPIED/ISSUE_AND_ENERGY — 상태별 3개 + 글로벌 3개', () => {
     const events = getAvailableEvents(OCC_IAE);
-    assert.deepEqual(events.sort(), ['check_out_detected', 'complaint_resolved', 'energy_waste_resolved'].sort());
+    assert.ok(events.includes('check_out_detected'));       // OCCUPIED_COMMON
+    assert.ok(events.includes('complaint_resolved'));
+    assert.ok(events.includes('energy_waste_resolved'));
+    assert.ok(events.includes('maintenance_required'));     // 글로벌
+    assert.ok(events.includes('maintenance_started'));      // 글로벌
+    assert.ok(events.includes('maintenance_finished'));     // 글로벌
   });
   test('잘못된 상태는 빈 배열', () => {
     assert.deepEqual(getAvailableEvents(null), []);
