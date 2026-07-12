@@ -1,9 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import DashboardView from './DashboardView';
 import PropertyListView from './PropertyListView';
 import PropertyDetailView from './PropertyDetailView';
 import { PROPERTIES } from '../../data/roomStateMockData';
-import { syncAirbnbReservations, syncGoogleCalendarSlots, buildLiveProperty } from '../../application/calendarSyncService';
+import { syncAirbnbReservations, syncGoogleCalendarSlots, buildLiveProperty, deriveCurrentState } from '../../application/calendarSyncService';
+import { getAreaData, callService } from '../../infrastructure/haBrowserClient';
+import { getWeatherByDistrict } from '../../infrastructure/weatherClient';
+import { OccupancyMonitor } from '../../application/occupancyMonitor';
+import { getNextRoomState, isValidTransition, INITIAL_STATE } from '../../domain/room-state/roomStateDomain';
 import Toast from '../../utils/toast';
 
 const LS_KEY = 'propos_calendar_sync';
@@ -46,7 +50,7 @@ function SettingsModal({ config, onSave, onClose }) {
 
         {[
           { label: '숙소 이름', key: 'name', type: 'text', placeholder: '파주 게스트하우스' },
-          { label: '지역 (선택)', key: 'district', type: 'text', placeholder: '파주시' },
+          { label: '지역 (선택)', key: 'district', type: 'text', placeholder: '파주 (시·군·구 제외)' },
           { label: 'Airbnb iCal URL', key: 'airbnbIcalUrl', type: 'url', placeholder: 'https://www.airbnb.com/calendar/ical/...' },
           { label: 'Google 캘린더 iCal URL (선택)', key: 'googleCalIcalUrl', type: 'url', placeholder: 'https://calendar.google.com/calendar/ical/...' },
         ].map(({ label, key, type, placeholder }) => (
@@ -141,16 +145,96 @@ function SyncBadge({ status, lastSynced, onSync, onSettings }) {
   );
 }
 
+function buildReservation(property) {
+  const r = property.reservation;
+  if (!r) return null;
+  const hour = String(property.checkOutHour ?? 11).padStart(2, '0');
+  return { checkOut: new Date(`${r.checkOutDate}T${hour}:00`) };
+}
+
+// ── 서버 모니터링 API ─────────────────────────────────────────────────────────
+async function postMonitoringConfig(cfg) {
+  try {
+    await fetch('/api/monitoring/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cfg),
+    });
+  } catch { /* 서버 미연결 시 무시 */ }
+}
+
+// isValidTransition 통과 시 next state, 아니면 null
+function tryCalEvent(monitorState, event) {
+  return isValidTransition(monitorState, event) ? getNextRoomState(monitorState, event) : null;
+}
+
+/**
+ * 캘린더 상태(calMain/calSub)와 현재 monitorState를 비교해
+ * 다음 monitorState를 반환. 변경 불필요 시 null.
+ */
+function deriveNextMonitorState(calMain, calSub, monitorState) {
+  const { mainStatus: monMain, subStatus: monSub } = monitorState;
+
+  if (calMain === 'PRE_STAY_READY' && monMain === 'VACANT')
+    return tryCalEvent(monitorState, 'checkin_prep_time_reached');
+
+  const optimizationDone = calSub === 'OPTIMIZED' && monMain === 'PRE_STAY_READY' && monSub === 'OPTIMIZING';
+  if (calMain === 'PRE_STAY_READY' && optimizationDone)
+    return tryCalEvent(monitorState, 'optimization_finished');
+
+  if (calMain === 'OCCUPIED' && monMain === 'PRE_STAY_READY')
+    return tryCalEvent(monitorState, 'check_in_detected');
+
+  if (calMain === 'OCCUPIED' && monMain !== 'OCCUPIED')
+    return { mainStatus: 'OCCUPIED', subStatus: 'GOOD_CONDITION' };
+
+  if (calMain === 'VACANT' && monMain === 'OCCUPIED')
+    return INITIAL_STATE;
+
+  // 예약 취소: iCal이 VACANT로 돌아왔는데 monitorState가 PRE_STAY_READY인 경우 (#6, #9)
+  if (calMain === 'VACANT' && monMain === 'PRE_STAY_READY')
+    return tryCalEvent(monitorState, 'reservation_cancelled');
+
+  return null;
+}
+
+async function fetchMonitoringState() {
+  const res = await fetch('/api/monitoring/state');
+  if (!res.ok) return null;
+  return res.json();
+}
+
+async function putMonitoringRoomState(roomState) {
+  try {
+    await fetch('/api/monitoring/state', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomState }),
+    });
+  } catch { /* 서버 미연결 시 무시 */ }
+}
+
 // ── 메인 앱 ────────────────────────────────────────────────────────────────────
 export default function RoomStateApp({ onBack }) {
   const [view, setView]                   = useState('dashboard');
   const [listFilter, setListFilter]       = useState(null);
-  const [selectedProperty, setSelectedProperty] = useState(null);
+  const [selectedPropertyId, setSelectedPropertyId] = useState(null);
   const [showSettings, setShowSettings]   = useState(false);
   const [syncConfig, setSyncConfig]       = useState(() => loadConfig());
-  const [liveProperty, setLiveProperty]   = useState(null);
+  const [liveProperty, setLiveProperty]     = useState(null);
+  const [liveSensorReadings, setLiveSensorReadings] = useState(null);
+  const [liveDevices, setLiveDevices]       = useState([]);
+  const [liveWeather, setLiveWeather]       = useState(null);
   const [syncStatus, setSyncStatus]       = useState('idle');   // idle | syncing | ok | error
   const [lastSynced, setLastSynced]       = useState(null);
+
+  // 모니터링 상태 — 서버(Pi watcher)에서 폴링, fallback으로 브라우저 로컬 실행
+  const [monitorState, setMonitorState]         = useState(INITIAL_STATE);
+  const [serverWatcherActive, setServerWatcherActive] = useState(false);
+  const [lastMonitorEvent, setLastMonitorEvent] = useState(null);
+  const localMonitorRef = useRef(new OccupancyMonitor());
+  // 날씨를 HA 폴링 클로저 안에서 읽기 위한 ref (stale closure 방지)
+  const liveWeatherRef = useRef(null);
 
   // 싱크 실행
   const runSync = useCallback(async (cfg) => {
@@ -182,6 +266,14 @@ export default function RoomStateApp({ onBack }) {
       setLiveProperty(live);
       setLastSynced(new Date());
       setSyncStatus('ok');
+
+      // Pi 워처에 현재 예약 정보 전달 (퇴실 감지용)
+      const currentRes = live.reservation;
+      postMonitoringConfig({
+        areaName: cfg.name,
+        district: cfg.district,
+        reservation: currentRes ? { checkOut: currentRes.checkOut?.toISOString?.() ?? null } : null,
+      });
     } catch (error) {
       setSyncStatus('error');
       Toast.show(`캘린더 동기화 실패: ${error.message || '설정과 URL을 확인하세요.'}`, 'e');
@@ -196,30 +288,225 @@ export default function RoomStateApp({ onBack }) {
     return () => clearInterval(interval);
   }, [syncConfig, runSync]);
 
+  // ── HA 폴링 헬퍼 ──────────────────────────────────────────────────────────
+  function buildSnap(haSnap) {
+    const w = liveWeatherRef.current;
+    let outdoorTempSource;
+    if (haSnap.outdoorTemp)   outdoorTempSource = 'ha';
+    else if (w?.temp)         outdoorTempSource = 'weather-api';
+    else                      outdoorTempSource = null;
+
+    return {
+      ...haSnap,
+      outdoorTemp:      haSnap.outdoorTemp     ?? w?.temp     ?? null,
+      outdoorHumidity:  haSnap.outdoorHumidity ?? w?.humidity ?? null,
+      outdoorTempSource,
+    };
+  }
+
+  function applyMonitorEvents(events, snap) {
+    for (const event of events) {
+      if (!isValidTransition(monitorState, event.type)) continue;
+      const next = getNextRoomState(monitorState, event.type);
+      setMonitorState(next);
+      putMonitoringRoomState(next);
+      setLastMonitorEvent({ ...event, snap });
+      Toast.show(`🏠 ${event.reason}`, event.severity === 'CRITICAL' ? 'e' : 'w');
+
+      // check_out_detected: HA Area 전체 기기 종료
+      if (event.type === 'check_out_detected' && syncConfig?.name) {
+        callService('homeassistant', 'turn_off', { area_id: syncConfig.name }).catch(() => {});
+        Toast.show('퇴실 확인 — 모든 기기 종료 중', 'i');
+      }
+    }
+  }
+
+  function handleCleaningStarted() {
+    if (!isValidTransition(monitorState, 'cleaning_started')) return;
+    const next = getNextRoomState(monitorState, 'cleaning_started');
+    setMonitorState(next);
+    putMonitoringRoomState(next);
+    Toast.show('청소 시작됨', 'i');
+  }
+
+  function handleCleaningFinished() {
+    if (!isValidTransition(monitorState, 'cleaning_finished')) return;
+    const next = getNextRoomState(monitorState, 'cleaning_finished');
+    setMonitorState(next);
+    putMonitoringRoomState(next);
+    setLastMonitorEvent(null);
+    Toast.show('청소 완료 — 숙소 준비됨', 's');
+
+    // 스펙: "청소 완료 시점에 체크인까지 1시간 미만이면 즉시 PRE_STAY_READY 전환"
+    // 15분 iCal 싱크 주기를 기다리지 않고 현재 시각 기준으로 즉시 재계산
+    if (liveProperty?.reservations) {
+      const freshCal = deriveCurrentState(
+        liveProperty.reservations, new Date(),
+        liveProperty.cleaningDurationHours ?? 2.5,
+      );
+      const immediate = deriveNextMonitorState(freshCal.mainStatus, freshCal.subStatus, next);
+      if (immediate) {
+        setMonitorState(immediate);
+        putMonitoringRoomState(immediate);
+      }
+    }
+  }
+
+  function handleMaintenanceStarted() {
+    if (!isValidTransition(monitorState, 'maintenance_started')) return;
+    const next = getNextRoomState(monitorState, 'maintenance_started');
+    setMonitorState(next);
+    putMonitoringRoomState(next);
+    Toast.show('정비 시작됨', 'i');
+  }
+
+  function handleMaintenanceFinished() {
+    if (!isValidTransition(monitorState, 'maintenance_finished')) return;
+    const next = getNextRoomState(monitorState, 'maintenance_finished');
+    setMonitorState(next);
+    putMonitoringRoomState(next);
+    Toast.show('정비 완료', 's');
+  }
+
+  // HA 폴링 — 숙소 이름을 Area ID로 사용, 30초 주기
+  useEffect(() => {
+    const areaName = syncConfig?.name;
+    if (!areaName) return;
+    let cancelled = false;
+
+    async function poll() {
+      try {
+        const data = await getAreaData(areaName);
+        if (cancelled || !data) return;
+        if (data.sensorReadings) setLiveSensorReadings(data.sensorReadings);
+        setLiveDevices(data.devices ?? []);
+
+        if (serverWatcherActive || !data.monitoringSnapshot || liveProperty?.currentState?.mainStatus !== 'OCCUPIED') return;
+
+        const snap   = buildSnap(data.monitoringSnapshot);
+        const res    = buildReservation(liveProperty);
+        const events = localMonitorRef.current.process({ snap, roomState: monitorState, reservation: res, now: Date.now() });
+        applyMonitorEvents(events, snap);
+      } catch {
+        // HA 미연결 시 무시
+      }
+    }
+
+    poll();
+    const interval = setInterval(poll, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [syncConfig?.name, serverWatcherActive, liveProperty, monitorState]);
+
+  // 서버 워처 폴링 — 30초 주기
+  useEffect(() => {
+    if (!syncConfig?.name) return;
+    let cancelled = false;
+
+    async function pollServer() {
+      try {
+        const state = await fetchMonitoringState();
+        if (cancelled || !state) return;
+        if (state.roomState) {
+          setMonitorState(state.roomState);
+          setServerWatcherActive(true);
+          const log = state.eventLog;
+          if (log?.length) setLastMonitorEvent(log[log.length - 1]);
+        }
+      } catch {
+        setServerWatcherActive(false);
+      }
+    }
+
+    pollServer();
+    const interval = setInterval(pollServer, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [syncConfig?.name]);
+
+  // 날씨 폴링 — district 기준, 15분 주기
+  useEffect(() => {
+    const district = syncConfig?.district;
+    if (!district) return;
+    let cancelled = false;
+    async function fetchWeather() {
+      try {
+        const data = await getWeatherByDistrict(district);
+        if (!cancelled && data) setLiveWeather(data);
+      } catch { /* 네트워크 실패 시 이전 값 유지 */ }
+    }
+    fetchWeather();
+    const interval = setInterval(fetchWeather, 15 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [syncConfig?.district]);
+
+  // liveWeather 변경 시 ref 동기화
+  useEffect(() => { liveWeatherRef.current = liveWeather; }, [liveWeather]);
+
+  // iCal 캘린더 상태 → monitorState 동기화
+  useEffect(() => {
+    if (!liveProperty) return;
+    const next = deriveNextMonitorState(
+      liveProperty.currentState?.mainStatus,
+      liveProperty.currentState?.subStatus,
+      monitorState,
+    );
+    if (next) {
+      setMonitorState(next);
+      putMonitoringRoomState(next);
+    }
+  }, [liveProperty?.currentState?.mainStatus, liveProperty?.currentState?.subStatus]);
+
+  // PRE_STAY_READY 진입 시 HA 입실 준비 씬 실행
+  useEffect(() => {
+    if (monitorState.mainStatus !== 'PRE_STAY_READY' || !syncConfig?.name) return;
+    callService('homeassistant', 'turn_on', { area_id: syncConfig.name }).catch(() => {});
+    Toast.show('입실 준비 시작 — HA 씬 실행 중', 'i');
+  }, [monitorState.mainStatus]);
+
   const handleSaveSettings = (form) => {
     saveConfig(form);
     setSyncConfig(form);
     setShowSettings(false);
+    // Pi 워처에도 설정 전달 (areaName + district)
+    postMonitoringConfig({ areaName: form.name, district: form.district });
   };
 
-  // 실 데이터 + 목업 데이터 병합 (실 데이터 맨 앞)
+  // 실 데이터 + 목업 데이터 병합 (실 데이터 맨 앞, HA 센서·기기·모니터링 상태 주입)
   const mergedProperties = liveProperty
-    ? [liveProperty, ...PROPERTIES]
+    ? [{
+        ...liveProperty,
+        sensorReadings: liveSensorReadings ?? liveProperty.sensorReadings,
+        haDevices: liveDevices,
+        // OCCUPIED 상태일 때 서버 워처(또는 로컬 모니터) subStatus로 덮어쓰기
+        subStatus: liveProperty.currentStatus === 'OCCUPIED'
+          ? monitorState.subStatus
+          : liveProperty.subStatus,
+        monitorState,
+        lastMonitorEvent,
+        serverWatcherActive,
+      }, ...PROPERTIES]
     : PROPERTIES;
+
+  // ID로 항상 최신 mergedProperties에서 lookup → 폴링 업데이트가 즉시 반영됨
+  const selectedProperty = mergedProperties.find(p => p.id === selectedPropertyId) ?? null;
 
   let currentView;
   if (view === 'detail' && selectedProperty) {
     currentView = (
       <PropertyDetailView
         property={selectedProperty}
+        weather={liveWeather}
         onBack={() => setView('list')}
+        onCleaningStarted={handleCleaningStarted}
+        onCleaningFinished={handleCleaningFinished}
+        onMaintenanceStarted={handleMaintenanceStarted}
+        onMaintenanceFinished={handleMaintenanceFinished}
       />
     );
   } else if (view === 'list') {
     currentView = (
       <PropertyListView
         initialFilter={listFilter}
-        onSelectProperty={(p) => { setSelectedProperty(p); setView('detail'); }}
+        onSelectProperty={(p) => { setSelectedPropertyId(p.id); setView('detail'); }}
         onBack={() => setView('dashboard')}
         properties={mergedProperties}
       />

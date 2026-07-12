@@ -2,10 +2,26 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { handleNodeHaRequest } from "./server/haApiHandlers.js";
 import { handleNodeIcalRequest } from "./server/icalApiHandlers.js";
+import { startWatcher, getMonitoringState, setMonitoringConfig, setRoomState } from "./server/occupancyWatcher.js";
+
+function sendJson(res, status, body) {
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.end(JSON.stringify(body));
+}
+
+async function readBody(req) {
+  if (req.body && typeof req.body === "object") return req.body;
+  const chunks = [];
+  for await (const c of req) chunks.push(c);
+  if (!chunks.length) return {};
+  try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
+  catch { return {}; }
+}
 
 function apiProxyPlugin() {
   const attachMiddleware = server => {
-    server.middlewares.use((req, res, next) => {
+    server.middlewares.use(async (req, res, next) => {
       if (req.url?.startsWith("/api/ha/")) {
         handleNodeHaRequest(req, res);
         return;
@@ -14,14 +30,35 @@ function apiProxyPlugin() {
         handleNodeIcalRequest(req, res);
         return;
       }
+      if (req.url === "/api/monitoring/state" && req.method === "GET") {
+        sendJson(res, 200, getMonitoringState());
+        return;
+      }
+      if (req.url === "/api/monitoring/config" && req.method === "POST") {
+        setMonitoringConfig(await readBody(req));
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+      if (req.url === "/api/monitoring/state" && req.method === "PUT") {
+        const body = await readBody(req);
+        if (body.roomState) setRoomState(body.roomState);
+        sendJson(res, 200, { ok: true });
+        return;
+      }
       next();
     });
   };
 
   return {
     name: "api-proxy-middleware",
-    configureServer: attachMiddleware,
-    configurePreviewServer: attachMiddleware,
+    configureServer(server) {
+      startWatcher();
+      attachMiddleware(server);
+    },
+    configurePreviewServer(server) {
+      startWatcher();
+      attachMiddleware(server);
+    },
   };
 }
 

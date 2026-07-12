@@ -10,3 +10,8 @@ src/config/propos.config.local.json
 .env.local
 .env.*.local
 .vercel
+data/monitoring-state.json
+data/monitoring-config.json
+Claude-Code-Usage-Monitor/
+src/components/backup/
+"src/components/IntroScene copy.jsx"

@@ -68,19 +68,14 @@ function getCleaningEndFromReservation(reservation, cleanDurationHours) {
   return new Date(reservation.checkOut.getTime() + cleanDurationHours * 3600000);
 }
 
+// 스펙: 체크인 정확히 1시간 전에 checkin_prep_time_reached 발생
 function getPrepStart(checkIn) {
-  const prepStart = new Date(checkIn);
-  prepStart.setHours(11, 0, 0, 0);
-  return prepStart;
+  return new Date(checkIn.getTime() - 3600000);
 }
 
 function getPreStaySubStatus(checkIn, now) {
-  const optStart = new Date(checkIn.getTime() - 2 * 3600000);
-  const optEnd   = new Date(checkIn.getTime() - 0.5 * 3600000);
-
-  if (now < optStart) return 'CHECKIN_INQUIRY';
-  if (now < optEnd) return 'OPTIMIZING';
-  return 'OPTIMIZED';
+  const optEnd = new Date(checkIn.getTime() - 0.5 * 3600000); // 체크인 30분 전
+  return now < optEnd ? 'OPTIMIZING' : 'OPTIMIZED';
 }
 
 /**

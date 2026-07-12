@@ -52,6 +52,28 @@ export async function getHaState(entityId) {
   return await parseJsonSafe(response);
 }
 
+export async function renderHaTemplate(template) {
+  if (!template) throw new Error("template is required");
+  const response = await fetch(`${HA_BASE}/api/template`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ template }),
+  });
+  if (!response.ok) {
+    const text = await parseTextSafe(response);
+    throw new Error(`HA template ${response.status}: ${text}`);
+  }
+  return response.text();
+}
+
+export async function getHaHistory(entityId, startIso) {
+  const path = `/api/history/period/${encodeURIComponent(startIso)}?filter_entity_id=${encodeURIComponent(entityId)}&minimal_response=true&no_attributes=true`;
+  const response = await fetch(`${HA_BASE}${path}`, { headers: getHeaders() });
+  if (!response.ok) return [];
+  const data = await parseJsonSafe(response);
+  return Array.isArray(data) && Array.isArray(data[0]) ? data[0] : [];
+}
+
 export async function getHaStates(entityIds) {
   if (!Array.isArray(entityIds)) {
     throw new Error("entityIds must be an array");

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { weatherMeta } from '../../infrastructure/weatherClient';
 import { STATE_META, SEGMENT_COLORS, getWindowSegments } from '../../data/roomStateMockData';
 
 const PAST_HOURS    = 24;          // 현재 시각 이전 24h
@@ -9,14 +10,315 @@ const TIMELINE_WIDTH = 60;
 const LABEL_WIDTH    = 46;
 const SUB_BAR_W      = 28;         // 서브 상태 바 폭 (px)
 
-const SENSOR_ICONS   = { temp: '🌡', humidity: '💧', noise: '🔊', power: '⚡', co2: '💨' };
-const SENSOR_UNITS   = { temp: '°C', humidity: '%', noise: 'dB', power: 'W', co2: 'ppm' };
-const SENSOR_LABELS  = { temp: '온도', humidity: '습도', noise: '소음', power: '전력', co2: 'CO₂' };
+const SENSOR_ICONS   = { temp: '🌡', humidity: '💧', noise: '🔊', power: '⚡', co2: '💨', energy: '🔋' };
+const SENSOR_UNITS   = { temp: '°C', humidity: '%', noise: 'dB', power: 'W', co2: 'ppm', energy: 'kWh' };
+const SENSOR_LABELS  = { temp: '온도', humidity: '습도', noise: '소음', power: '전력', co2: 'CO₂', energy: '오늘 전력' };
 const SENSOR_WARN    = { temp: [27, 99], humidity: [70, 99], noise: [75, 99], power: [2000, 99999], co2: [1000, 9999] };
 
 function isWarn(key, val) {
   const [lo] = SENSOR_WARN[key] || [Infinity];
   return val >= lo;
+}
+
+function formatSensorVal(key, val) {
+  if (key === 'energy') return val.toFixed(3);
+  if (key === 'temp')   return val.toFixed(1);
+  return String(Math.round(val));
+}
+
+function hourLabelColor(m) {
+  if (m.isMajor) return '#475569';
+  if (m.isMid)   return '#94a3b8';
+  return '#b0bec5';
+}
+
+function hourLineBorder(m) {
+  if (m.isNewDay) return '2px solid rgba(30,58,138,0.45)';
+  if (m.isMajor)  return '1px solid rgba(100,116,139,0.18)';
+  if (m.isMid)    return '1px solid rgba(100,116,139,0.10)';
+  return '1px solid rgba(100,116,139,0.05)';
+}
+
+const MONITOR_SUB_META = {
+  GOOD_CONDITION:   { label: '정상',      color: '#059669', bg: '#f0fdf4', border: '#bbf7d0', icon: '✓' },
+  ENERGY_WASTE:     { label: '에너지 낭비', color: '#d97706', bg: '#fffbeb', border: '#fde68a', icon: '⚡' },
+  ISSUE_COMPLAINT:  { label: '민원 이슈',  color: '#dc2626', bg: '#fef2f2', border: '#fecaca', icon: '⚠' },
+  ISSUE_AND_ENERGY: { label: '복합 이슈',  color: '#7c3aed', bg: '#faf5ff', border: '#ddd6fe', icon: '🚨' },
+};
+
+function MonitoringStatusCard({ monitorState, lastEvent, weather }) {
+  if (!monitorState) return null;
+  const sub  = monitorState.subStatus ?? 'GOOD_CONDITION';
+  const meta = MONITOR_SUB_META[sub] ?? MONITOR_SUB_META.GOOD_CONDITION;
+
+  const isGood      = sub === 'GOOD_CONDITION';
+  const isEstimated = lastEvent?.reason?.startsWith('⚠');
+
+  return (
+    <div style={{ background: meta.bg, border: `1.5px solid ${meta.border}`, borderRadius: 10, padding: '12px 14px' }}>
+      {/* 헤더 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: isGood ? 0 : 8 }}>
+        <span style={{ fontSize: 13 }}>{meta.icon}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: meta.color }}>감시 중 — {meta.label}</span>
+        {isGood && (
+          <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 'auto' }}>30초 주기</span>
+        )}
+      </div>
+
+      {/* 감지 사유 */}
+      {!isGood && lastEvent?.reason && (
+        <div style={{
+          fontSize: 11, color: '#374151', lineHeight: 1.65,
+          borderTop: `1px solid ${meta.border}`, paddingTop: 8,
+        }}>
+          {lastEvent.reason}
+        </div>
+      )}
+
+      {/* 추정 모드 설명 */}
+      {isEstimated && (
+        <div style={{
+          marginTop: 8, background: 'rgba(0,0,0,0.04)', borderRadius: 6,
+          padding: '7px 10px', fontSize: 10, color: '#6b7280', lineHeight: 1.65,
+        }}>
+          <div style={{ fontWeight: 700, color: '#78716c', marginBottom: 3 }}>📊 추정 근거</div>
+          <div>전력 센서 미설치 → 지역 기상 데이터(Open-Meteo)로 대체</div>
+          {weather && (
+            <div style={{ marginTop: 2 }}>
+              실외 기온 {weather.temp.toFixed(1)}°C · 습도 {weather.humidity}%
+              {lastEvent.snap?.indoorTemps?.length > 0 && (
+                <span> · 실내 평균 {(lastEvent.snap.indoorTemps.reduce((s, r) => s + r.val, 0) / lastEvent.snap.indoorTemps.length).toFixed(1)}°C</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const CLEANING_CHECKLIST = [
+  { id: 'bedding',   label: '침구 교체 / 정리' },
+  { id: 'bathroom',  label: '욕실 청소 (변기·세면대·욕조)' },
+  { id: 'kitchen',   label: '주방 청소 (설거지·가스레인지)' },
+  { id: 'floor',     label: '바닥 청소 (청소기·걸레)' },
+  { id: 'trash',     label: '쓰레기 수거 및 분리배출' },
+  { id: 'amenities', label: '어메니티 보충 (샴푸·수건·TP)' },
+  { id: 'ac',        label: '에어컨 필터 확인' },
+  { id: 'inspect',   label: '파손·분실 최종 점검' },
+];
+
+const CHECKED_INIT = Object.fromEntries(CLEANING_CHECKLIST.map(i => [i.id, false]));
+
+function CleaningCard({ monitorState, onCleaningStarted, onCleaningFinished }) {
+  const [checked, setChecked] = useState(CHECKED_INIT);
+
+  const sub = monitorState?.subStatus;
+  const isPending    = sub === 'CLEANING_PENDING';
+  const isInProgress = sub === 'CLEANING_IN_PROGRESS';
+  if (!isPending && !isInProgress) return null;
+
+  const doneCount = CLEANING_CHECKLIST.filter(i => checked[i.id]).length;
+  const allDone   = doneCount === CLEANING_CHECKLIST.length;
+
+  function toggle(id) {
+    setChecked(prev => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  return (
+    <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: 10, padding: '14px 16px' }}>
+      {/* 헤더 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <span style={{ fontSize: 16 }}>🧹</span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#15803d' }}>
+            {isPending ? '청소 대기 중' : `청소 진행 중 (${doneCount}/${CLEANING_CHECKLIST.length})`}
+          </div>
+          <div style={{ fontSize: 10, color: '#4ade80', marginTop: 1 }}>
+            {isPending ? '퇴실 확인됨 — 청소를 시작해주세요' : '항목 완료 후 청소 완료 버튼을 누르세요'}
+          </div>
+        </div>
+      </div>
+
+      {/* CLEANING_IN_PROGRESS: 체크리스트 */}
+      {isInProgress && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+          {CLEANING_CHECKLIST.map(item => (
+            <button
+              key={item.id}
+              onClick={() => toggle(item.id)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                background: checked[item.id] ? '#dcfce7' : '#fff',
+                border: `1.5px solid ${checked[item.id] ? '#86efac' : '#e2e8f0'}`,
+                borderRadius: 8, padding: '9px 12px',
+                cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                transition: 'all 0.12s',
+              }}
+            >
+              <div style={{
+                width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+                background: checked[item.id] ? '#16a34a' : '#fff',
+                border: `2px solid ${checked[item.id] ? '#16a34a' : '#cbd5e1'}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {checked[item.id] && (
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <path d="M1.5 5l2.5 2.5L8.5 2" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </div>
+              <span style={{ fontSize: 12, color: checked[item.id] ? '#15803d' : '#374151', fontWeight: checked[item.id] ? 600 : 400 }}>
+                {item.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* 액션 버튼 */}
+      {isPending && (
+        <button
+          onClick={onCleaningStarted}
+          style={{
+            width: '100%', padding: '10px 0',
+            background: '#16a34a', border: '1.5px solid #15803d', borderRadius: 8,
+            color: '#fff', fontSize: 13, fontWeight: 700,
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >
+          청소 시작
+        </button>
+      )}
+      {isInProgress && (
+        <button
+          onClick={onCleaningFinished}
+          disabled={!allDone}
+          style={{
+            width: '100%', padding: '10px 0',
+            background: allDone ? '#16a34a' : '#f1f5f9',
+            border: `1.5px solid ${allDone ? '#15803d' : '#e2e8f0'}`,
+            borderRadius: 8,
+            color: allDone ? '#fff' : '#94a3b8',
+            fontSize: 13, fontWeight: 700,
+            cursor: allDone ? 'pointer' : 'default',
+            fontFamily: 'inherit',
+            transition: 'all 0.15s',
+          }}
+        >
+          {allDone ? '청소 완료 ✓' : `청소 완료 (${doneCount}/${CLEANING_CHECKLIST.length} 항목 완료)`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function VacantCard({ monitorState, nextReservation, onMaintenanceStarted, onMaintenanceFinished }) {
+  const isMaintenance = monitorState?.subStatus === 'MAINTENANCE';
+  return (
+    <div style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 10, padding: '14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span style={{ fontSize: 16 }}>{isMaintenance ? '🔧' : '🏠'}</span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>
+            {isMaintenance ? '정비 중' : '공실 — 예약 대기 중'}
+          </div>
+          {!isMaintenance && nextReservation?.checkIn && (
+            <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>
+              다음 체크인 {nextReservation.checkIn.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })} {formatTime(nextReservation.checkIn)}
+            </div>
+          )}
+        </div>
+      </div>
+      {isMaintenance ? (
+        <button
+          onClick={onMaintenanceFinished}
+          style={{ width: '100%', padding: '9px 0', background: '#059669', border: '1.5px solid #047857', borderRadius: 8, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+        >
+          정비 완료
+        </button>
+      ) : (
+        <button
+          onClick={onMaintenanceStarted}
+          style={{ width: '100%', padding: '9px 0', background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 8, color: '#374151', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+        >
+          정비 시작
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PreStayCard({ monitorState }) {
+  const isOptimizing = monitorState?.subStatus === 'OPTIMIZING';
+  return (
+    <div style={{ background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: 10, padding: '14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 16 }}>{isOptimizing ? '⚙️' : '✅'}</span>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#1d4ed8' }}>
+            {isOptimizing ? '입실 준비 중...' : '입실 준비 완료'}
+          </div>
+          <div style={{ fontSize: 10, color: '#60a5fa', marginTop: 1 }}>
+            {isOptimizing ? 'HA 씬 실행 중 — 조명·에어컨 설정' : '게스트 입실 대기'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WeatherCard({ weather }) {
+  const meta = weatherMeta(weather.weatherCode);
+  return (
+    <div style={{ background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: 10, padding: '12px 14px', marginBottom: 4 }}>
+      <div style={{ fontSize: 11, color: '#2563eb', fontWeight: 700, marginBottom: 6 }}>
+        {meta.emoji} {weather.locationName} 현재 날씨 · {meta.desc}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+          <span style={{ fontSize: 26, fontWeight: 700, color: '#1a202c', fontFamily: "'DM Mono', monospace", lineHeight: 1 }}>
+            {weather.temp.toFixed(1)}
+          </span>
+          <span style={{ fontSize: 14, color: '#718096' }}>°C</span>
+        </div>
+        <div style={{ textAlign: 'right', fontSize: 11, color: '#64748b', lineHeight: 1.7 }}>
+          <div>체감 {weather.feelsLike.toFixed(1)}°C</div>
+          <div>습도 {weather.humidity}%</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function deviceStateLabel(device) {
+  if (device.isUnavailable) return '연결 안됨';
+  if (device.deviceClass === 'door') return device.isOn ? '열림' : '닫힘';
+  if (device.deviceClass === 'motion') return device.isOn ? '감지됨' : '없음';
+  return device.isOn ? '켜짐' : '꺼짐';
+}
+
+function DeviceCard({ device }) {
+  const label = deviceStateLabel(device);
+  let color, bg, border;
+  if (device.isUnavailable) {
+    color = '#94a3b8'; bg = '#f9fafb'; border = '#e2e8f0';
+  } else if (device.isOn) {
+    color = '#059669'; bg = '#f0fdf4'; border = '#86efac';
+  } else {
+    color = '#6b7280'; bg = '#f8fafc'; border = '#e2e8f0';
+  }
+  return (
+    <div style={{ background: bg, border: `1.5px solid ${border}`, borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ fontSize: 14, flexShrink: 0 }}>{device.icon}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 10, color: '#4a5568', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {device.label}
+        </div>
+        <div style={{ fontSize: 10, fontWeight: 700, color }}>{label}</div>
+      </div>
+    </div>
+  );
 }
 
 function formatTime(d) {
@@ -37,7 +339,7 @@ function formatDateLabel(t) {
   return `${t.getMonth() + 1}/${t.getDate()} (${DAY_KR[t.getDay()]})`;
 }
 
-function StateBar({ seg, windowStart, mainStatusRefs, hourPx }) {
+function StateBar({ seg, windowStart, mainStatusRefs, hourPx, suppressLabel }) {
   const meta = STATE_META[seg.mainStatus];
   if (!meta) return null;
 
@@ -75,7 +377,7 @@ function StateBar({ seg, windowStart, mainStatusRefs, hourPx }) {
           overflow: 'hidden',
         }}
       >
-        {heightPx > 22 && (
+        {heightPx > 22 && !suppressLabel && (
           <span style={{
             fontSize: 10, fontWeight: 700, color: '#fff',
             textShadow: '0 1px 2px rgba(0,0,0,0.4)',
@@ -124,19 +426,21 @@ function StateBar({ seg, windowStart, mainStatusRefs, hourPx }) {
   );
 }
 
-function LiveSensor({ sensorKey, baseVal }) {
+function LiveSensor({ sensorKey, baseVal, label }) {
   const [val, setVal] = useState(baseVal);
   useEffect(() => {
-    const ranges = { temp: 0.3, humidity: 2, noise: 5, power: 80, co2: 30 };
-    const range = ranges[sensorKey] || 1;
+    const ranges = { temp: 0.3, humidity: 2, noise: 5, power: 80, co2: 30, energy: 0 };
+    const range = ranges[sensorKey] ?? 1;
+    const jitter = (sensorKey.length * 137) % 1500; // 센서마다 다른 위상, Math.random 불필요
     const timer = setInterval(() => {
-      setVal(baseVal + (Math.random() - 0.5) * range * 2);
-    }, 2500 + Math.random() * 1500);
+      setVal(v => v + (((Date.now() % 1000) / 1000) - 0.5) * range * 0.4);
+    }, 2500 + jitter);
     return () => clearInterval(timer);
   }, [sensorKey, baseVal]);
 
   const warn = isWarn(sensorKey, val);
-  const display = sensorKey === 'temp' ? val.toFixed(1) : Math.round(val);
+  const display = formatSensorVal(sensorKey, val);
+  const sensorLabel = label ? `${SENSOR_LABELS[sensorKey]} (${label})` : SENSOR_LABELS[sensorKey];
 
   return (
     <div style={{
@@ -149,7 +453,7 @@ function LiveSensor({ sensorKey, baseVal }) {
       gap: 4,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 12, color: '#718096' }}>{SENSOR_ICONS[sensorKey]} {SENSOR_LABELS[sensorKey]}</span>
+        <span style={{ fontSize: 12, color: '#718096' }}>{SENSOR_ICONS[sensorKey]} {sensorLabel}</span>
         {warn && <span style={{ fontSize: 10, color: '#dc2626', fontWeight: 700 }}>⚠ 주의</span>}
       </div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4 }}>
@@ -168,7 +472,7 @@ function LiveSensor({ sensorKey, baseVal }) {
   );
 }
 
-export default function PropertyDetailView({ property, onBack }) {
+export default function PropertyDetailView({ property, weather, onBack, onCleaningStarted, onCleaningFinished, onMaintenanceStarted, onMaintenanceFinished }) {
   const mainStatusRefs = useRef({});
   const timelineRef = useRef(null);
   const now = new Date();
@@ -184,6 +488,24 @@ export default function PropertyDetailView({ property, onBack }) {
   const containerHeight = WINDOW_HOURS * hourPx;
 
   const recentSegs = useMemo(() => getWindowSegments(property, PAST_HOURS, FUTURE_HOURS), [property]);
+
+  // CLEANING 세그먼트 → 청소 슬롯 직접 매핑 (시간 겹침 기준)
+  // reservation.cleaningStatus 경유 시 현재 입실중 예약의 체크아웃 후 청소가 누락됨
+  const cleaningInfoMap = useMemo(() => {
+    const map = new Map();
+    const slots = property.cleaningSlots || [];
+    if (!slots.length) return map;
+    for (const seg of recentSegs) {
+      if (seg.mainStatus !== 'CLEANING' || !seg.isFuture) continue;
+      const slot = slots.find(s => s.start < seg.end && s.end > seg.start);
+      if (slot) {
+        map.set(seg, { cleaningStatus: 'ASSIGNED', cleanerName: slot.cleanerName, cleaningAt: slot.start, cleaningEnd: slot.end });
+      } else {
+        map.set(seg, { cleaningStatus: 'UNASSIGNED' });
+      }
+    }
+    return map;
+  }, [recentSegs, property.cleaningSlots]);
 
   const presentMainStatuses = useMemo(() => {
     const seen = new Set();
@@ -315,8 +637,8 @@ export default function PropertyDetailView({ property, onBack }) {
         >
           <div style={{ position: 'relative', height: containerHeight }}>
             {/* 시간 축 */}
-            {hourMarkers.map((m, i) => (
-              <div key={i} style={{ position: 'absolute', top: m.topPx, left: 0, right: 0, display: 'flex', alignItems: 'flex-start', zIndex: m.isNewDay ? 5 : 1 }}>
+            {hourMarkers.map((m) => (
+              <div key={m.topPx} style={{ position: 'absolute', top: m.topPx, left: 0, right: 0, display: 'flex', alignItems: 'flex-start', zIndex: m.isNewDay ? 5 : 1 }}>
                 {m.isNewDay ? (
                   /* 자정 — 날짜 레이블 강조 */
                   <div style={{
@@ -335,7 +657,7 @@ export default function PropertyDetailView({ property, onBack }) {
                   <div style={{
                     width: LABEL_WIDTH, flexShrink: 0,
                     fontSize: 9,
-                    color: m.isMajor ? '#475569' : m.isMid ? '#94a3b8' : '#b0bec5',
+                    color: hourLabelColor(m),
                     fontFamily: "'DM Mono', monospace",
                     fontWeight: m.isMajor ? 700 : 400,
                     paddingRight: 6, textAlign: 'right',
@@ -345,22 +667,22 @@ export default function PropertyDetailView({ property, onBack }) {
                     {m.label}
                   </div>
                 )}
-                <div style={{
-                  width: TIMELINE_WIDTH,
-                  borderTop: m.isNewDay
-                    ? '2px solid rgba(30,58,138,0.45)'
-                    : m.isMajor ? '1px solid rgba(100,116,139,0.18)'
-                    : m.isMid   ? '1px solid rgba(100,116,139,0.10)'
-                    :             '1px solid rgba(100,116,139,0.05)',
-                }} />
+                <div style={{ width: TIMELINE_WIDTH, borderTop: hourLineBorder(m) }} />
               </div>
             ))}
 
             {/* 상태 바 컬럼 (메인 + 서브) */}
             <div style={{ position: 'absolute', left: LABEL_WIDTH, width: TIMELINE_WIDTH + SUB_BAR_W, top: 0, height: containerHeight }}>
               <div style={{ position: 'relative', height: '100%', borderRadius: 6, overflow: 'hidden', background: '#f0f4f8' }}>
-                {recentSegs.map((seg, i) => (
-                  <StateBar key={i} seg={seg} windowStart={windowStart} mainStatusRefs={mainStatusRefs} hourPx={hourPx} />
+                {recentSegs.map((seg) => (
+                  <StateBar
+                    key={`${seg.mainStatus}-${seg.start.getTime()}`}
+                    seg={seg}
+                    windowStart={windowStart}
+                    mainStatusRefs={mainStatusRefs}
+                    hourPx={hourPx}
+                    suppressLabel={cleaningInfoMap.has(seg)}
+                  />
                 ))}
               </div>
             </div>
@@ -391,18 +713,115 @@ export default function PropertyDetailView({ property, onBack }) {
                 {formatTime(now)}
               </span>
             </div>
+
+            {/* 청소 배정 인디케이터 — CLEANING 세그먼트 위 오버레이 */}
+            {recentSegs.map((seg, i) => {
+              if (seg.mainStatus !== 'CLEANING') return null;
+              const res = cleaningInfoMap.get(seg);
+              if (!res) return null;
+
+              const segEnd = seg.end ?? new Date(seg.start.getTime() + 3 * 3600000);
+              const anchorTime = res.cleaningAt ?? new Date((seg.start.getTime() + segEnd.getTime()) / 2);
+              const topPx = ((anchorTime.getTime() - windowStart.getTime()) / 3600000) * hourPx;
+              const isAssigned = res.cleaningStatus === 'ASSIGNED';
+
+              return (
+                <div
+                  key={`ci-${seg.start.getTime()}`}
+                  style={{
+                    position: 'absolute',
+                    top: topPx - 12,
+                    left: LABEL_WIDTH + (TIMELINE_WIDTH - 22) / 2,
+                    zIndex: 35,
+                    pointerEvents: 'none',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 3,
+                  }}
+                >
+                  {/* 동그라미 */}
+                  <div style={{
+                    width: 22, height: 22, borderRadius: '50%',
+                    background: isAssigned ? '#059669' : '#fff',
+                    border: `2.5px solid ${isAssigned ? '#059669' : '#94a3b8'}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: '0 2px 5px rgba(0,0,0,0.18)',
+                    flexShrink: 0,
+                  }}>
+                    {isAssigned && (
+                      <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                        <path d="M2 5.5l2.5 2.5L9 3" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </div>
+                  {/* 담당자 이름 또는 미배정 */}
+                  <span style={{
+                    fontSize: 9, fontWeight: 700,
+                    color: isAssigned ? '#059669' : '#64748b',
+                    background: 'rgba(255,255,255,0.95)',
+                    padding: '1px 5px',
+                    borderRadius: 3,
+                    border: `1px solid ${isAssigned ? '#d1fae5' : '#e2e8f0'}`,
+                    whiteSpace: 'nowrap',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                  }}>
+                    {isAssigned ? res.cleanerName : '미배정'}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
 
         {/* 센서 패널 — 나머지 공간 전부 */}
         <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {property.sensors && (
+          {property.monitorState?.mainStatus === 'VACANT' && (
+            <VacantCard
+              monitorState={property.monitorState}
+              nextReservation={property.nextReservation}
+              onMaintenanceStarted={onMaintenanceStarted}
+              onMaintenanceFinished={onMaintenanceFinished}
+            />
+          )}
+          {property.monitorState?.mainStatus === 'PRE_STAY_READY' && (
+            <PreStayCard monitorState={property.monitorState} />
+          )}
+          {property.monitorState?.mainStatus === 'CLEANING' && (
+            <CleaningCard
+              monitorState={property.monitorState}
+              onCleaningStarted={onCleaningStarted}
+              onCleaningFinished={onCleaningFinished}
+            />
+          )}
+          {property.monitorState?.mainStatus === 'OCCUPIED' && (
+            <MonitoringStatusCard
+              monitorState={property.monitorState}
+              lastEvent={property.lastMonitorEvent}
+              weather={weather}
+            />
+          )}
+          {weather && <WeatherCard weather={weather} />}
+
+          {(property.sensorReadings ?? (property.sensors && Object.entries(property.sensors).map(([key, val]) => ({ key, val, label: '' }))))?.length > 0 && (
             <>
               <div style={{ fontSize: 12, fontWeight: 700, color: '#718096', letterSpacing: 0.5, marginBottom: 2 }}>실시간 센서</div>
-              {Object.entries(property.sensors).map(([key, val]) => (
-                <LiveSensor key={key} sensorKey={key} baseVal={val} />
+              {(property.sensorReadings ?? Object.entries(property.sensors).map(([key, val]) => ({ key, val, label: '' }))).map((r, i) => (
+                <LiveSensor key={`${r.key}-${i}`} sensorKey={r.key} baseVal={r.val} label={r.label} />
               ))}
             </>
+          )}
+
+          {/* 기기 상태 */}
+          {property.haDevices?.length > 0 && (
+            <div style={{ marginTop: 4 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#718096', letterSpacing: 0.5, marginBottom: 8 }}>기기 상태</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                {property.haDevices.map(device => (
+                  <DeviceCard key={device.entityId} device={device} />
+                ))}
+              </div>
+            </div>
           )}
 
           {/* 예약 정보 */}
@@ -426,60 +845,6 @@ export default function PropertyDetailView({ property, onBack }) {
             </div>
           )}
 
-          {/* 청소 배정 현황 — Google Calendar 싱크 시만 표시 */}
-          {(() => {
-            const futureWithCleaning = (property.reservations || []).filter(
-              r => r.checkIn > now && r.cleaningStatus
-            );
-            if (!futureWithCleaning.length) return null;
-            const unassigned = futureWithCleaning.filter(r => r.cleaningStatus === 'UNASSIGNED').length;
-            return (
-              <div style={{ background: '#fff', border: `1.5px solid ${unassigned ? '#fbbf24' : '#d1fae5'}`, borderRadius: 10, padding: '14px 16px', marginTop: 4 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#718096', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>청소 배정 현황</span>
-                  {unassigned > 0 && (
-                    <span style={{ fontSize: 10, fontWeight: 700, color: '#d97706', background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 6, padding: '1px 7px' }}>
-                      미할당 {unassigned}건
-                    </span>
-                  )}
-                </div>
-                {futureWithCleaning.map((r, i) => (
-                  <div
-                    key={r.uid || i}
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '7px 0',
-                      borderBottom: i < futureWithCleaning.length - 1 ? '1px solid #f0f4f8' : 'none',
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: 12, color: '#1a202c', fontWeight: 600 }}>
-                        체크아웃 {r.checkOut.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
-                      </div>
-                      <div style={{ fontSize: 10, color: '#a0aec0', marginTop: 1 }}>
-                        {r.checkOut.toLocaleDateString('ko-KR', { weekday: 'short' })} {formatTime(r.checkOut)}
-                      </div>
-                    </div>
-                    {r.cleaningStatus === 'ASSIGNED' ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#059669' }}>✓ {r.cleanerName} 배정</span>
-                        {r.cleaningAt && (
-                          <span style={{ fontSize: 10, color: '#718096', fontFamily: "'DM Mono', monospace" }}>
-                            {r.cleaningAt.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}–
-                            {r.cleaningEnd?.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span style={{ fontSize: 11, fontWeight: 700, color: '#d97706', background: '#fffbeb', border: '1px solid #fbbf24', borderRadius: 6, padding: '2px 8px' }}>
-                        ⚠ 미할당
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
         </div>
       </div>
     </div>

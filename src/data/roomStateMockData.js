@@ -420,14 +420,12 @@ function addResCycles(push, property, firstRes, cursor, windowEnd) {
     if (cursor >= windowEnd) break;
     const ci = r.checkIn;
     const co = r.checkOut;
-    const ciDay11 = new Date(ci); ciDay11.setHours(11, 0, 0, 0);
-    const prepAt  = new Date(Math.max(cursor.getTime(), ciDay11.getTime()));
+    // 스펙: 체크인 1시간 전 PRE_STAY_READY 시작
+    const prepAt = new Date(Math.max(cursor.getTime(), ci.getTime() - 3600000));
+    const optEnd = new Date(ci.getTime() - 0.5 * 3600000); // 체크인 30분 전 → OPTIMIZED
     if (prepAt > cursor) { push('VACANT', 'CLEANING_FINISHED', cursor, prepAt); cursor = prepAt; }
-    const optStart = new Date(ci.getTime() - 2 * 3600000);
-    const optEnd   = new Date(ci.getTime() - 0.5 * 3600000);
-    if (cursor < optStart) { push('PRE_STAY_READY', 'CHECKIN_INQUIRY', cursor, optStart); cursor = optStart; }
-    if (cursor < optEnd)   { push('PRE_STAY_READY', 'OPTIMIZING',      cursor, optEnd);   cursor = optEnd; }
-    if (cursor < ci)       { push('PRE_STAY_READY', 'OPTIMIZED',        cursor, ci);       cursor = new Date(ci); }
+    if (cursor < optEnd) { push('PRE_STAY_READY', 'OPTIMIZING', cursor, optEnd); cursor = optEnd; }
+    if (cursor < ci)     { push('PRE_STAY_READY', 'OPTIMIZED',  cursor, ci);    cursor = new Date(ci); }
     if (co && co > cursor) { push('OCCUPIED', 'GOOD_CONDITION',         cursor, co);       cursor = new Date(co); }
     const cleanEnd = new Date(cursor.getTime() + cleanH * 3600000);
     push('CLEANING', 'CLEANING_IN_PROGRESS', cursor, cleanEnd);
@@ -473,16 +471,13 @@ function buildFutureSegments(property, windowEnd) {
       const ci = reservation?.checkIn;
       const co = reservation?.checkOut;
       if (ci && ci > cursor && ci < windowEnd) {
-        // 입실전: 체크인 당일 11:00 시작 (청소 끝나는 시각이 더 늦으면 청소 우선)
-        const ciDay11 = new Date(ci); ciDay11.setHours(11, 0, 0, 0);
-        const prepAt  = new Date(Math.max(cursor.getTime(), ciDay11.getTime()));
+        // 스펙: 체크인 1시간 전 PRE_STAY_READY 시작 (청소 끝나는 시각이 더 늦으면 청소 우선)
+        const prepAt = new Date(Math.max(cursor.getTime(), ci.getTime() - 3600000));
+        const optEnd = new Date(ci.getTime() - 0.5 * 3600000);
         push('VACANT', 'CLEANING_FINISHED', cursor, prepAt);
         if (prepAt > cursor) cursor = prepAt;
-        const optStart = new Date(ci.getTime() - 2 * 3600000);
-        const optEnd   = new Date(ci.getTime() - 0.5 * 3600000);
-        if (cursor < optStart) { push('PRE_STAY_READY', 'CHECKIN_INQUIRY', cursor, optStart); cursor = optStart; }
-        if (cursor < optEnd)   { push('PRE_STAY_READY', 'OPTIMIZING', cursor, optEnd);        cursor = optEnd; }
-        if (cursor < ci)       { push('PRE_STAY_READY', 'OPTIMIZED', cursor, ci);             cursor = new Date(ci); }
+        if (cursor < optEnd) { push('PRE_STAY_READY', 'OPTIMIZING', cursor, optEnd); cursor = optEnd; }
+        if (cursor < ci)     { push('PRE_STAY_READY', 'OPTIMIZED', cursor, ci);      cursor = new Date(ci); }
         if (co && co > cursor) { push('OCCUPIED', 'GOOD_CONDITION', cursor, co); cursor = new Date(co); }
         const c2 = new Date(cursor.getTime() + cleanH * 3600000);
         push('CLEANING', 'CLEANING_IN_PROGRESS', cursor, c2);
@@ -514,16 +509,13 @@ function buildFutureSegments(property, windowEnd) {
         push('VACANT', currentSeg.subStatus, cursor, windowEnd);
         break;
       }
-      // 입실전: 체크인 당일 11:00 시작 (청소 끝나는 시각이 더 늦으면 청소 우선)
-      const ciDay11 = new Date(ci); ciDay11.setHours(11, 0, 0, 0);
-      const prepAt  = new Date(Math.max(cursor.getTime(), ciDay11.getTime()));
+      // 스펙: 체크인 1시간 전 PRE_STAY_READY 시작
+      const prepAt = new Date(Math.max(cursor.getTime(), ci.getTime() - 3600000));
+      const optEnd = new Date(ci.getTime() - 0.5 * 3600000);
       push('VACANT', currentSeg.subStatus, cursor, prepAt);
       if (prepAt > cursor) cursor = prepAt;
-      const optStart = new Date(ci.getTime() - 2 * 3600000);
-      const optEnd   = new Date(ci.getTime() - 0.5 * 3600000);
-      if (cursor < optStart) { push('PRE_STAY_READY', 'CHECKIN_INQUIRY', cursor, optStart); cursor = optStart; }
-      if (cursor < optEnd)   { push('PRE_STAY_READY', 'OPTIMIZING', cursor, optEnd);        cursor = optEnd; }
-      if (cursor < ci)       { push('PRE_STAY_READY', 'OPTIMIZED', cursor, ci);             cursor = new Date(ci); }
+      if (cursor < optEnd) { push('PRE_STAY_READY', 'OPTIMIZING', cursor, optEnd); cursor = optEnd; }
+      if (cursor < ci)     { push('PRE_STAY_READY', 'OPTIMIZED', cursor, ci);      cursor = new Date(ci); }
       const co = reservation?.checkOut;
       if (co && co > cursor) { push('OCCUPIED', 'GOOD_CONDITION', cursor, co); cursor = new Date(co); }
       const cleanEnd = new Date(cursor.getTime() + cleanH * 3600000);
