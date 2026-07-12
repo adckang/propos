@@ -20,15 +20,27 @@ function saveConfig(cfg) {
   localStorage.setItem(LS_KEY, JSON.stringify(cfg));
 }
 
-async function fetchServerConfig() {
+// Pi 파일에서 숙소 목록 로드 (PROPOS_WATCHER_URL → /api/properties)
+async function fetchProperties() {
   try {
-    const res = await fetch('/api/config');
-    if (!res.ok) return null;
+    const res = await fetch('/api/properties');
+    if (!res.ok) return [];
     const data = await res.json();
-    return Object.keys(data).length > 0 ? data : null;
+    return Array.isArray(data) ? data : [];
   } catch {
-    return null;
+    return [];
   }
+}
+
+// Pi 파일에 숙소 목록 저장
+async function putProperties(list) {
+  try {
+    await fetch('/api/properties', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(list),
+    });
+  } catch { /* Pi 미연결 시 무시 — localStorage 캐시 유지 */ }
 }
 
 // ── 설정 모달 ─────────────────────────────────────────────────────────────────
@@ -48,14 +60,15 @@ function SettingsModal({ config, onSave, onClose }) {
 
   async function handleLoadServer() {
     setLoadingServer(true);
-    const serverCfg = await fetchServerConfig();
+    const list = await fetchProperties();
     setLoadingServer(false);
-    if (!serverCfg) {
-      Toast.show('서버에 설정된 환경변수가 없습니다.', 'w');
+    const saved = list[0];
+    if (!saved) {
+      Toast.show('Pi에 저장된 숙소 설정이 없습니다.', 'w');
       return;
     }
-    setForm(f => ({ ...f, ...serverCfg }));
-    Toast.show('서버 기본값을 불러왔습니다. 저장을 눌러 적용하세요.', 's');
+    setForm(f => ({ ...f, ...saved }));
+    Toast.show('Pi에서 설정을 불러왔습니다. 저장을 눌러 적용하세요.', 's');
   }
 
   return (
@@ -313,14 +326,17 @@ export default function RoomStateApp({ onBack }) {
     }
   }, []);
 
-  // localStorage 비어있을 때 서버 환경변수에서 자동 로드 (첫 실행 or 새 기기)
+  // 마운트 시 Pi에서 숙소 설정 로드 — Pi가 source of truth, localStorage는 캐시
   useEffect(() => {
-    if (syncConfig) return;
-    fetchServerConfig().then(serverCfg => {
-      if (!serverCfg?.airbnbIcalUrl) return;
-      saveConfig(serverCfg);
-      setSyncConfig(serverCfg);
-      Toast.show('서버 설정을 자동으로 불러왔습니다.', 's');
+    fetchProperties().then(list => {
+      const piCfg = list[0];
+      if (!piCfg?.airbnbIcalUrl) return;
+      // Pi 값과 로컬 캐시가 다르면 Pi 값으로 갱신
+      const local = loadConfig();
+      if (JSON.stringify(piCfg) !== JSON.stringify(local)) {
+        saveConfig(piCfg);
+        setSyncConfig(piCfg);
+      }
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -507,9 +523,14 @@ export default function RoomStateApp({ onBack }) {
   }, [monitorState.mainStatus]);
 
   const handleSaveSettings = (form) => {
-    saveConfig(form);
+    saveConfig(form);           // localStorage 캐시
     setSyncConfig(form);
     setShowSettings(false);
+    // Pi 파일에 영구 저장 (source of truth)
+    const id = form.id ?? `prop_${Date.now()}`;
+    const withId = { ...form, id };
+    putProperties([withId]);
+    saveConfig(withId);
     // Pi 워처에도 설정 전달 (areaName + district)
     postMonitoringConfig({ areaName: form.name, district: form.district });
   };

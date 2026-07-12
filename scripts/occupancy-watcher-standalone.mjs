@@ -15,6 +15,7 @@
 
 import http from 'node:http';
 import { startWatcher, stopWatcher, getMonitoringState, setMonitoringConfig, setRoomState } from '../server/occupancyWatcher.js';
+import { loadProperties, saveProperties } from '../server/propertiesStore.js';
 
 const PORT = Number(process.env.PROPOS_WATCHER_PORT ?? 3001);
 
@@ -58,6 +59,20 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'PUT' && url.pathname === '/api/monitoring/state') {
     const body = await readBody(req);
     if (body.roomState) { setRoomState(body.roomState); }
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  // ── 숙소 설정 (Pi 파일 영구 저장) ─────────────────────────────────────────
+  if (req.method === 'GET' && url.pathname === '/api/properties') {
+    sendJson(res, 200, loadProperties());
+    return;
+  }
+
+  if (req.method === 'PUT' && url.pathname === '/api/properties') {
+    const body = await readBody(req);
+    const list = Array.isArray(body) ? body : [];
+    saveProperties(list);
     sendJson(res, 200, { ok: true });
     return;
   }
