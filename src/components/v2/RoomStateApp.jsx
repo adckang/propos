@@ -20,6 +20,17 @@ function saveConfig(cfg) {
   localStorage.setItem(LS_KEY, JSON.stringify(cfg));
 }
 
+async function fetchServerConfig() {
+  try {
+    const res = await fetch('/api/config');
+    if (!res.ok) return null;
+    const data = await res.json();
+    return Object.keys(data).length > 0 ? data : null;
+  } catch {
+    return null;
+  }
+}
+
 // ── 설정 모달 ─────────────────────────────────────────────────────────────────
 function SettingsModal({ config, onSave, onClose }) {
   const initial = config ?? {
@@ -32,7 +43,20 @@ function SettingsModal({ config, onSave, onClose }) {
     cleaningDurationHours: 2.5,
   };
   const [form, setForm] = useState(initial);
+  const [loadingServer, setLoadingServer] = useState(false);
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
+
+  async function handleLoadServer() {
+    setLoadingServer(true);
+    const serverCfg = await fetchServerConfig();
+    setLoadingServer(false);
+    if (!serverCfg) {
+      Toast.show('서버에 설정된 환경변수가 없습니다.', 'w');
+      return;
+    }
+    setForm(f => ({ ...f, ...serverCfg }));
+    Toast.show('서버 기본값을 불러왔습니다. 저장을 눌러 적용하세요.', 's');
+  }
 
   return (
     <div style={{
@@ -96,10 +120,18 @@ function SettingsModal({ config, onSave, onClose }) {
           ))}
         </div>
 
-        <div style={{ background: '#f0f4f8', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#4a5568', marginBottom: 20, lineHeight: 1.6 }}>
+        <div style={{ background: '#f0f4f8', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#4a5568', marginBottom: 12, lineHeight: 1.6 }}>
           Airbnb 관리자 → 캘린더 → 내보내기 → iCal URL 복사<br/>
           Google 캘린더 → 설정 → 통합 → iCal 형식 공개 주소
         </div>
+
+        <button onClick={handleLoadServer} disabled={loadingServer} style={{
+          width: '100%', border: '1.5px solid #7c3aed', borderRadius: 10, padding: '9px 0',
+          background: '#f5f0ff', fontSize: 13, fontWeight: 600, color: '#7c3aed',
+          cursor: loadingServer ? 'wait' : 'pointer', fontFamily: 'inherit', marginBottom: 16,
+        }}>
+          {loadingServer ? '불러오는 중...' : '☁ 서버 기본값 불러오기 (Vercel 환경변수)'}
+        </button>
 
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={onClose} style={{
@@ -280,6 +312,17 @@ export default function RoomStateApp({ onBack }) {
       Toast.show(`캘린더 동기화 실패: ${error.message || '설정과 URL을 확인하세요.'}`, 'e');
     }
   }, []);
+
+  // localStorage 비어있을 때 서버 환경변수에서 자동 로드 (첫 실행 or 새 기기)
+  useEffect(() => {
+    if (syncConfig) return;
+    fetchServerConfig().then(serverCfg => {
+      if (!serverCfg?.airbnbIcalUrl) return;
+      saveConfig(serverCfg);
+      setSyncConfig(serverCfg);
+      Toast.show('서버 설정을 자동으로 불러왔습니다.', 's');
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 마운트 + 설정 변경 시 싱크, 이후 15분 주기
   useEffect(() => {
