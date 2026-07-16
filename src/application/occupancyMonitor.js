@@ -1,16 +1,20 @@
 /**
- * OccupancyMonitor — 체류중 상태 감시 엔진
- * 상태 머신 문서: docs/room-state-machine.md 섹션 8·9 기준
+ * OccupancyMonitor — 체류중 상태 감시 엔진 (Layer 3 통합)
+ * 상태 머신 문서: docs/room-state-machine.md 섹션 8·9
+ * 이벤트 감지 설계: docs/event-detection-design.md
  *
  * 설계 원칙:
  * - process()를 30초마다 호출하면 events[] 반환
- * - getNextRoomState() / isValidTransition() 은 호출자(RoomStateApp)가 담당
+ * - Layer 1 SensorEventGenerator → Layer 2 SuspicionTracker → Layer 3 통합
+ * - getNextRoomState() / isValidTransition() 은 호출자(occupancyWatcher)가 담당
  * - 순수 타이머 기반: Date.now() 주입 → 테스트 가능
  *
  * 임계값 수정: src/config/monitoringThresholds.js
  */
 
 import { THRESHOLDS as CFG } from '../config/monitoringThresholds.js';
+import { SensorEventGenerator } from './sensorEventGenerator.js';
+import { SuspicionTracker }     from './suspicionTracker.js';
 
 const MIN = 60_000;
 
@@ -31,9 +35,24 @@ const T = {
   NO_MOTION_AWAY:  CFG.NO_MOTION_AWAY_MIN * MIN,
   DOOR_OPEN:       CFG.DOOR_OPEN_MIN      * MIN,
   CHECKOUT_GRACE:  CFG.CHECKOUT_GRACE_MIN * MIN,
-  CHECKOUT_ABSENT: CFG.CHECKOUT_ABSENT_MIN* MIN,
   FALLBACK_TEMP_DIFF_SUMMER: CFG.FALLBACK_SUMMER_DIFF,
   FALLBACK_TEMP_DIFF_WINTER: CFG.FALLBACK_WINTER_DIFF,
+};
+
+// SensorEventGenerator 설정 (ms)
+const SENSOR_CFG = {
+  EXIT_LOOKBACK_MS:   CFG.EXIT_LOOKBACK_MIN   * MIN,
+  EXIT_NO_MOTION_MS:  CFG.EXIT_NO_MOTION_MIN  * MIN,
+  ENTRY_SUSTAINED_MS: CFG.ENTRY_SUSTAINED_MIN * MIN,
+};
+
+// SuspicionTracker 설정 (ms)
+const SUSPICION_CFG = {
+  CHECKOUT_GRACE_MS:      CFG.CHECKOUT_GRACE_MIN      * MIN,
+  SUSPICION_EXPIRE_MS:    CFG.SUSPICION_EXPIRE_MIN    * MIN,
+  CLEANING_SUSTAINED_MS:  CFG.CLEANING_SUSTAINED_MIN  * MIN,
+  CLEANING_DONE_QUIET_MS: CFG.CLEANING_DONE_QUIET_MIN * MIN,
+  NO_SHOW_WINDOW_MS:      CFG.NO_SHOW_WINDOW_MIN      * MIN,
 };
 
 // ── 유틸 ────────────────────────────────────────────────────────────────────
@@ -116,58 +135,78 @@ function fallbackWasteReasons(snap, seas, iTemp) {
 
 // ── 메인 클래스 ─────────────────────────────────────────────────────────────
 export class OccupancyMonitor {
-  // class field declarations (static initial values)
+  // 기존 추적 상태 (에너지·환경·소음 감지에 사용)
   energyWasteStart  = null;
   energyNormalStart = null;
   envIssueStart     = null;
   envNormalStart    = null;
   doorOpenStart     = null;
-  doorOpenedAt      = null;
+  doorOpenedAt      = null;  // 문 마지막으로 닫힌 시각 (장시간 열림 감지에 유지)
   noMotionStart     = null;
   lastSmoke         = false;
-  noiseWindow       = [];   // [{ dB, timestamp }] — 10분 슬라이딩 윈도우
-  noiseSilentStart  = null; // 소음 score 0 유지 시작 시각
+  noiseWindow       = [];    // [{ dB, timestamp }] — 10분 슬라이딩 윈도우
+  noiseSilentStart  = null;  // 소음 score 0 유지 시작 시각
+
+  // Layer 1/2 — 새 아키텍처
+  _sensorGen = new SensorEventGenerator();
+  _suspicion = new SuspicionTracker();
 
   /**
    * @param {object} p
    * @param {object} p.snap           - 센서 스냅샷
    * @param {{ mainStatus, subStatus }} p.roomState
-   * @param {object|null} p.reservation - { checkOut: Date }
+   * @param {object|null} p.reservation - { checkIn?: Date, checkOut?: Date }
    * @param {number} p.now            - Date.now()
    * @returns {{ type, subType?, severity?, reason, timestamp }[]}
    */
   process({ snap, roomState, reservation, now }) {
-    // 모션·도어는 상태와 무관하게 항상 추적
+    // 모션·도어는 상태와 무관하게 항상 추적 (에너지낭비·문열림 감지용)
     this._trackMotion(snap.motionDetected, now);
     this._trackDoor(snap.doorOpen, now);
 
     const main = roomState?.mainStatus;
     const sub  = roomState?.subStatus;
 
-    // PRE_STAY_READY/OPTIMIZED 상태에서 모션 또는 도어 감지 → 체크인 확정
-    // 캘린더 기반 fallback(deriveNextMonitorState)보다 우선: 실제 입실 즉시 감지
+    // Layer 1: EXIT/ENTRY 시맨틱 이벤트 감지
+    const sensorResult = this._sensorGen.update(snap, now, SENSOR_CFG);
+
+    // Layer 2: 의심 → 확신 (체크인/아웃, 청소 시작/완료)
+    const occupancyEvents = this._suspicion.evaluate({
+      sensorResult,
+      roomState,
+      reservation,
+      motionNow: !!snap.motionDetected,
+      now,
+      cfg: SUSPICION_CFG,
+    });
+
+    // PRE_STAY_READY/OPTIMIZED: 체크인 감지만
     if (main === 'PRE_STAY_READY' && sub === 'OPTIMIZED') {
-      if (snap.motionDetected || snap.doorOpen) {
-        return [{ type: 'check_in_detected',
-          reason: '입실 감지 — 모션/도어 센서 확인', timestamp: now }];
-      }
-      return [];
+      return occupancyEvents; // check_in_detected or []
     }
 
-    if (main !== 'OCCUPIED') return [];
+    // CLEANING: 청소 시작/완료 감지만
+    if (main === 'CLEANING') {
+      return occupancyEvents; // cleaning_started, cleaning_finished or []
+    }
 
-    const seas  = season(snap.outdoorTemp);
-    const iTemp = indoorTemp(snap);
-    const iHum  = indoorHum(snap);
+    // OCCUPIED: 체크아웃(새 로직) + 기존 이벤트 통합
+    if (main === 'OCCUPIED') {
+      const seas  = season(snap.outdoorTemp);
+      const iTemp = indoorTemp(snap);
+      const iHum  = indoorHum(snap);
 
-    return [
-      ...this._smoke(snap, sub, now),
-      ...this._noise(snap, sub, now),
-      ...this._environment(seas, iTemp, iHum, sub, now),
-      ...this._energyWaste(snap, sub, seas, iTemp, now),
-      ...this._doorOpen(sub, now),
-      ...this._checkout(snap, reservation, now),
-    ];
+      return [
+        ...occupancyEvents,   // check_out_detected (먼저 배치 — 우선 상태 전환)
+        ...this._smoke(snap, sub, now),
+        ...this._noise(snap, sub, now),
+        ...this._environment(seas, iTemp, iHum, sub, now),
+        ...this._energyWaste(snap, sub, seas, iTemp, now),
+        ...this._doorOpen(sub, now),
+      ];
+    }
+
+    return [];
   }
 
   // ── 1. 연기 감지 ─────────────────────────────────────────────────────────
@@ -295,29 +334,6 @@ export class OccupancyMonitor {
       const min = Math.round(open / MIN);
       return [{ type: 'complaint_detected', subType: 'door_open', severity: 'WARN',
         reason: `현관문 ${min}분 이상 열림`, timestamp: now }];
-    }
-    return [];
-  }
-
-  // ── 7. 퇴실 감지 ─────────────────────────────────────────────────────────
-  _checkout(snap, reservation, now) {
-    if (!reservation?.checkOut) return [];
-    const graceEnd = reservation.checkOut.getTime() + T.CHECKOUT_GRACE;
-    if (now < graceEnd) return [];
-
-    // noMotionStart=null 은 "모션 있음"이므로 longAbsent=false
-    const longAbsent = this.noMotionStart !== null && elapsed(this.noMotionStart, now) >= T.CHECKOUT_ABSENT;
-    // 문이 최근 2시간 안에 열렸다 닫힌 적 있는지 (퇴실 행동 패턴)
-    const doorEvent = this.doorOpenedAt && (now - this.doorOpenedAt) < 2 * 60 * MIN;
-
-    if (longAbsent) {
-      const min = Math.round(elapsed(this.noMotionStart, now) / MIN);
-      return [{ type: 'check_out_detected',
-        reason: `체크아웃 시각 경과 + ${min}분간 재실 감지 없음`, timestamp: now }];
-    }
-    if (doorEvent && !snap.motionDetected && !snap.doorOpen) {
-      return [{ type: 'check_out_detected',
-        reason: '체크아웃 시각 경과 + 현관문 열림/닫힘 감지 후 재실 없음', timestamp: now }];
     }
     return [];
   }

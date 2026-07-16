@@ -36,4 +36,19 @@ export const THRESHOLDS = {
   // ── 전력 센서 없을 때 fallback (실내외 온도차 기준) ─────────────────────
   FALLBACK_SUMMER_DIFF: 4, // 실내 < 실외 - 이값 → 과냉방 추정 (°C)
   FALLBACK_WINTER_DIFF: 6, // 실내 > 실외 + 이값 → 과난방 추정 (°C)
+
+  // ── EXIT / ENTRY 시맨틱 이벤트 감지 (SensorEventGenerator) ───────────────
+  // EXIT: ① 모션 있음 → ② 문열림닫힘 → ③ N분 모션 없음
+  EXIT_LOOKBACK_MIN:   10, // ①: 문 열리기 직전 이 시간 이내 모션이 있어야 EXIT 후보
+  EXIT_NO_MOTION_MIN:   5, // ③: 문 닫힌 후 N분간 모션 없으면 EXIT 확정
+  // ENTRY: ① 문열림닫힘 → ② 모션 감지 → ③ 모션 N분 지속
+  ENTRY_SUSTAINED_MIN:  3, // ③: 입실 후 모션 N분 지속 → ENTRY 확정
+
+  // ── 의심 → 확신 (SuspicionTracker) ─────────────────────────────────────
+  SUSPICION_EXPIRE_MIN:  120, // 의심 상태 최대 유효 기간 (체크아웃+N분 지나면 취소)
+  NO_SHOW_WINDOW_MIN:     60, // 체크인 시각 + N분 경과 → no_show 판정
+
+  // ── 청소팀 판정 ─────────────────────────────────────────────────────────
+  CLEANING_SUSTAINED_MIN: 20, // ENTRY 후 모션 N분 지속 → 청소팀 (게스트 복귀와 구분)
+  CLEANING_DONE_QUIET_MIN: 10, // EXIT 후 N분 조용 → 청소 완료
 };

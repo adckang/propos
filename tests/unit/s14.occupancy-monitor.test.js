@@ -32,8 +32,10 @@ function snap(overrides = {}) {
 const PRE_STAY_OPTIMIZING = { mainStatus: 'PRE_STAY_READY', subStatus: 'OPTIMIZING' };
 const PRE_STAY_OPTIMIZED  = { mainStatus: 'PRE_STAY_READY', subStatus: 'OPTIMIZED' };
 
-function reservation(checkOutMs) {
-  return { checkOut: new Date(checkOutMs) };
+function reservation(checkOutMs, checkInMs) {
+  const res = { checkOut: new Date(checkOutMs) };
+  if (checkInMs !== undefined) res.checkIn = new Date(checkInMs);
+  return res;
 }
 
 // ── 헬퍼: process 한 번 호출 ──────────────────────────────────────────────
@@ -270,39 +272,70 @@ describe('장시간 문 열림', () => {
 });
 
 // ============================================================
-// 퇴실 감지
+// 퇴실 감지 (새 로직: EXIT 시맨틱 이벤트 → 의심 → 확신)
 // ============================================================
 describe('퇴실 감지', () => {
-  test('유예 기간(20분) 이내 → 퇴실 감지 없음', () => {
-    const baseNow = 0;
+  test('도어 이벤트 없이 모션 없음만으로는 퇴실 감지 안 됨', () => {
     const m = new OccupancyMonitor();
-    const res = reservation(baseNow + 1);          // 지금 바로 체크아웃 시각
+    const res = reservation(1); // checkOut = 지금
 
     call(m, snap({ motionDetected: false }), GOOD, res, 0);
-    const events = call(m, snap({ motionDetected: false }), GOOD, res, 15 * MIN);
-    assert.equal(events.filter(e => e.type === 'check_out_detected').length, 0);
+    const events = call(m, snap({ motionDetected: false }), GOOD, res, 60 * MIN);
+    assert.equal(events.filter(e => e.type === 'check_out_detected').length, 0,
+      'EXIT 없이 모션 없음만으로는 퇴실 감지 안 됨');
   });
 
-  test('유예 후 모션 없음 15분 → check_out_detected', () => {
-    const baseNow = 0;
+  test('EXIT 시퀀스 + 체크아웃 시각 도래 → check_out_detected', () => {
     const m = new OccupancyMonitor();
-    const res = reservation(baseNow + 1);
+    const checkOutMs = 30 * MIN;
+    const res = reservation(checkOutMs);
 
-    // t=0: 모션 있음 (초기 상태 리셋)
-    call(m, snap({ motionDetected: true }),  GOOD, res, 0);
-    // t=1: 모션 없어짐 → noMotionStart=1
-    call(m, snap({ motionDetected: false }), GOOD, res, 1);
-    // 유예 20분 + 모션없음 15분 = 35분 이후 감지
-    const events = call(m, snap({ motionDetected: false }), GOOD, res, 35 * MIN + 2);
+    // t=0: 모션 ON (누군가 있었음)
+    call(m, snap({ motionDetected: true,  doorOpen: false }), GOOD, res, 0);
+    // t=1min: 문 열림 (나가는 중)
+    call(m, snap({ motionDetected: false, doorOpen: true  }), GOOD, res, 1 * MIN);
+    // t=2min: 문 닫힘 → exitPendingAt=2min
+    call(m, snap({ motionDetected: false, doorOpen: false }), GOOD, res, 2 * MIN);
+    // t=7min+1: EXIT 확정 (5분 경과), checkOut(30min) 미도래 → CHECKOUT_SUSPECTED
+    call(m, snap({ motionDetected: false, doorOpen: false }), GOOD, res, 7 * MIN + 1);
+    // t=31min: checkOut(30min) 도래 + 모션 없음 → check_out_detected
+    const events = call(m, snap({ motionDetected: false, doorOpen: false }), GOOD, res, 31 * MIN);
     assert.ok(events.some(e => e.type === 'check_out_detected'), 'check_out_detected 있어야 함');
   });
 
-  test('모션 있으면 유예 후에도 퇴실 감지 안 됨', () => {
-    const baseNow = 0;
+  test('EXIT + checkOut 이미 경과 → 즉시 check_out_detected', () => {
     const m = new OccupancyMonitor();
-    const res = reservation(baseNow + 1);
+    const checkOutMs = 0; // 이미 경과
+    const res = reservation(checkOutMs);
 
-    // 모션 유지
+    call(m, snap({ motionDetected: true,  doorOpen: false }), GOOD, res, 0);
+    call(m, snap({ motionDetected: false, doorOpen: true  }), GOOD, res, 1 * MIN);
+    call(m, snap({ motionDetected: false, doorOpen: false }), GOOD, res, 2 * MIN);
+    // t=7min+1: EXIT 확정, checkOut 이미 경과 → 즉시 확신
+    const events = call(m, snap({ motionDetected: false, doorOpen: false }), GOOD, res, 7 * MIN + 1);
+    assert.ok(events.some(e => e.type === 'check_out_detected'), '즉시 check_out_detected');
+  });
+
+  test('EXIT 후 재입실(모션 재감지) → 의심 취소, 퇴실 감지 안 됨', () => {
+    const m = new OccupancyMonitor();
+    const checkOutMs = 30 * MIN;
+    const res = reservation(checkOutMs);
+
+    call(m, snap({ motionDetected: true,  doorOpen: false }), GOOD, res, 0);
+    call(m, snap({ motionDetected: false, doorOpen: true  }), GOOD, res, 1 * MIN);
+    call(m, snap({ motionDetected: false, doorOpen: false }), GOOD, res, 2 * MIN);
+    call(m, snap({ motionDetected: false, doorOpen: false }), GOOD, res, 7 * MIN + 1); // EXIT 확정
+    // 돌아옴 (모션 재감지 → SuspicionTracker에서 의심 취소)
+    call(m, snap({ motionDetected: true,  doorOpen: false }), GOOD, res, 8 * MIN);
+    const events = call(m, snap({ motionDetected: true,  doorOpen: false }), GOOD, res, 31 * MIN);
+    assert.equal(events.filter(e => e.type === 'check_out_detected').length, 0,
+      '재입실로 의심 취소됨');
+  });
+
+  test('모션 있으면 EXIT 자체가 감지 안 됨 → 퇴실 감지 없음', () => {
+    const m = new OccupancyMonitor();
+    const res = reservation(1); // checkOut = 지금
+
     for (let t = 0; t <= 40 * MIN; t += 5 * MIN)
       call(m, snap({ motionDetected: true }), GOOD, res, t);
 
@@ -312,7 +345,9 @@ describe('퇴실 감지', () => {
 
   test('예약 없으면 퇴실 감지 없음', () => {
     const m = new OccupancyMonitor();
-    call(m, snap({ motionDetected: false }), GOOD, null, 0);
+    call(m, snap({ motionDetected: true,  doorOpen: false }), GOOD, null, 0);
+    call(m, snap({ motionDetected: false, doorOpen: true  }), GOOD, null, 1 * MIN);
+    call(m, snap({ motionDetected: false, doorOpen: false }), GOOD, null, 2 * MIN);
     const events = call(m, snap({ motionDetected: false }), GOOD, null, 60 * MIN);
     assert.equal(events.filter(e => e.type === 'check_out_detected').length, 0);
   });
@@ -397,20 +432,34 @@ describe('소음 민원 감지', () => {
 
 // ============================================================
 // 체크인 감지 (PRE_STAY_READY/OPTIMIZED → check_in_detected)
+// 새 로직: 도어이벤트(열림→닫힘) + 모션 3분 지속 = ENTRY → check_in_detected
 // ============================================================
 describe('체크인 감지', () => {
-  test('PRE_STAY_READY/OPTIMIZED + 모션 감지 → check_in_detected', () => {
+  test('ENTRY 시퀀스 (도어이벤트+모션 3분) → check_in_detected', () => {
     const m = new OccupancyMonitor();
-    const events = call(m, snap({ motionDetected: true }), PRE_STAY_OPTIMIZED, null, 0);
-    assert.equal(events.length, 1);
-    assert.equal(events[0].type, 'check_in_detected');
+    // t=0: 문 열림
+    call(m, snap({ motionDetected: false, doorOpen: true  }), PRE_STAY_OPTIMIZED, null, 0);
+    // t=1min: 문 닫힘 → entryPendingAt=1min
+    call(m, snap({ motionDetected: false, doorOpen: false }), PRE_STAY_OPTIMIZED, null, 1 * MIN);
+    // t=1min+1: 모션 감지 → firstMotionAfterClose
+    call(m, snap({ motionDetected: true,  doorOpen: false }), PRE_STAY_OPTIMIZED, null, 1 * MIN + 1);
+    // t=4min+2: 모션 3분 지속 → ENTRY 확정 → check_in_detected
+    const events = call(m, snap({ motionDetected: true, doorOpen: false }), PRE_STAY_OPTIMIZED, null, 4 * MIN + 2);
+    assert.ok(events.some(e => e.type === 'check_in_detected'), 'check_in_detected 있어야 함');
   });
 
-  test('PRE_STAY_READY/OPTIMIZED + 도어 열림 → check_in_detected', () => {
+  test('도어 이벤트 없이 모션만 → check_in_detected 없음 (새 로직)', () => {
     const m = new OccupancyMonitor();
-    const events = call(m, snap({ motionDetected: false, doorOpen: true }), PRE_STAY_OPTIMIZED, null, 0);
-    assert.equal(events.length, 1);
-    assert.equal(events[0].type, 'check_in_detected');
+    const events = call(m, snap({ motionDetected: true, doorOpen: false }), PRE_STAY_OPTIMIZED, null, 0);
+    assert.deepEqual(events, []);
+  });
+
+  test('도어 열림만 지속 (닫힘 없음) → check_in_detected 없음', () => {
+    const m = new OccupancyMonitor();
+    // 문이 계속 열려있음 — falling edge 없으므로 entryPendingAt 설정 안 됨
+    call(m, snap({ motionDetected: false, doorOpen: true }), PRE_STAY_OPTIMIZED, null, 0);
+    const events = call(m, snap({ motionDetected: true,  doorOpen: true }), PRE_STAY_OPTIMIZED, null, 5 * MIN);
+    assert.equal(events.filter(e => e.type === 'check_in_detected').length, 0);
   });
 
   test('PRE_STAY_READY/OPTIMIZED + 모션·도어 없음 → 이벤트 없음', () => {
@@ -419,9 +468,12 @@ describe('체크인 감지', () => {
     assert.deepEqual(events, []);
   });
 
-  test('PRE_STAY_READY/OPTIMIZING 상태에서는 모션 감지해도 이벤트 없음', () => {
+  test('PRE_STAY_READY/OPTIMIZING 상태에서는 ENTRY 감지해도 이벤트 없음', () => {
     const m = new OccupancyMonitor();
-    const events = call(m, snap({ motionDetected: true }), PRE_STAY_OPTIMIZING, null, 0);
+    call(m, snap({ motionDetected: false, doorOpen: true  }), PRE_STAY_OPTIMIZING, null, 0);
+    call(m, snap({ motionDetected: false, doorOpen: false }), PRE_STAY_OPTIMIZING, null, 1 * MIN);
+    call(m, snap({ motionDetected: true,  doorOpen: false }), PRE_STAY_OPTIMIZING, null, 1 * MIN + 1);
+    const events = call(m, snap({ motionDetected: true,  doorOpen: false }), PRE_STAY_OPTIMIZING, null, 4 * MIN + 2);
     assert.deepEqual(events, []);
   });
 });

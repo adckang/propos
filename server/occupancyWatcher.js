@@ -184,7 +184,10 @@ async function pollCycle() {
     if (!snap) return;
 
     const reservation = config.reservation
-      ? { checkOut: new Date(config.reservation.checkOut) }
+      ? {
+          checkOut: new Date(config.reservation.checkOut),
+          ...(config.reservation.checkIn ? { checkIn: new Date(config.reservation.checkIn) } : {}),
+        }
       : null;
     const now    = Date.now();
     const events = monitor.process({ snap, roomState, reservation, now });
