@@ -8,7 +8,43 @@ import { getAreaData, callService } from '../../infrastructure/haBrowserClient';
 import { getWeatherByDistrict } from '../../infrastructure/weatherClient';
 import { OccupancyMonitor } from '../../application/occupancyMonitor';
 import { getNextRoomState, isValidTransition, INITIAL_STATE } from '../../domain/room-state/roomStateDomain';
+import { DEVICE_ROLE } from '../../domain/device-control/deviceRoles';
 import Toast from '../../utils/toast';
+
+// 기기 역할 한국어 레이블
+const DEVICE_ROLE_LABELS = {
+  AC_MAIN:         '냉난방기',
+  LIGHT_LIVING:    '거실 조명',
+  LIGHT_BEDROOM:   '침실 조명',
+  LIGHT_BATHROOM:  '욕실 조명',
+  LIGHT_ENTRANCE:  '현관 조명',
+  PLUG_TV:         'TV 플러그',
+  PLUG_WASHER:     '세탁기 플러그',
+  FAN_VENTILATION: '환기팬',
+  LOCK_ENTRANCE:   '현관 도어락',
+};
+
+// UI(쉼표 구분 문자열) → API 전송 형태(string | string[] | null)
+function parseDeviceMap(uiDevices = {}) {
+  const result = {};
+  for (const role of Object.values(DEVICE_ROLE)) {
+    const raw = (uiDevices[role] ?? '').trim();
+    if (!raw) { result[role] = null; continue; }
+    const ids = raw.split(',').map(s => s.trim()).filter(Boolean);
+    result[role] = ids.length === 1 ? ids[0] : ids;
+  }
+  return result;
+}
+
+// 저장된 매핑 → UI 표시용 쉼표 문자열
+function formatDeviceMap(devices = {}) {
+  const result = {};
+  for (const role of Object.values(DEVICE_ROLE)) {
+    const val = devices[role];
+    result[role] = Array.isArray(val) ? val.join(', ') : (val ?? '');
+  }
+  return result;
+}
 
 const LS_KEY = 'propos_calendar_sync';
 
@@ -53,10 +89,17 @@ function SettingsModal({ config, onSave, onClose }) {
     checkInHour: 15,
     checkOutHour: 11,
     cleaningDurationHours: 2.5,
+    devices: {},
   };
-  const [form, setForm] = useState(initial);
+  const [form, setForm] = useState({
+    ...initial,
+    _uiDevices: formatDeviceMap(initial.devices),
+  });
   const [loadingServer, setLoadingServer] = useState(false);
+  const [showDevices, setShowDevices] = useState(false);
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
+  const setDevice = (role, val) =>
+    setForm(f => ({ ...f, _uiDevices: { ...f._uiDevices, [role]: val } }));
 
   async function handleLoadServer() {
     setLoadingServer(true);
@@ -67,7 +110,7 @@ function SettingsModal({ config, onSave, onClose }) {
       Toast.show('Pi에 저장된 숙소 설정이 없습니다.', 'w');
       return;
     }
-    setForm(f => ({ ...f, ...saved }));
+    setForm(f => ({ ...f, ...saved, _uiDevices: formatDeviceMap(saved.devices ?? {}) }));
     Toast.show('Pi에서 설정을 불러왔습니다. 저장을 눌러 적용하세요.', 's');
   }
 
@@ -79,6 +122,7 @@ function SettingsModal({ config, onSave, onClose }) {
     }} onClick={onClose}>
       <div style={{
         background: '#fff', borderRadius: 16, padding: 28, width: 420, maxWidth: '95vw',
+        maxHeight: '90vh', overflowY: 'auto',
         boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
       }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: 16, fontWeight: 700, color: '#1a202c', marginBottom: 20 }}>
@@ -138,6 +182,51 @@ function SettingsModal({ config, onSave, onClose }) {
           Google 캘린더 → 설정 → 통합 → iCal 형식 공개 주소
         </div>
 
+        {/* 기기 매핑 섹션 */}
+        <div style={{ marginBottom: 16 }}>
+          <button onClick={() => setShowDevices(v => !v)} style={{
+            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            border: '1.5px solid #e2e8f0', borderRadius: 10, padding: '9px 14px',
+            background: showDevices ? '#f0f4f8' : '#fff', fontSize: 13, fontWeight: 600,
+            color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit',
+          }}>
+            <span>⚡ HA 기기 매핑 (상태 변경 시 자동 제어)</span>
+            <span style={{ fontSize: 11 }}>{showDevices ? '▲' : '▼'}</span>
+          </button>
+
+          {showDevices && (
+            <div style={{
+              border: '1.5px solid #e2e8f0', borderTop: 'none',
+              borderRadius: '0 0 10px 10px', padding: '12px 14px',
+            }}>
+              <div style={{ fontSize: 11, color: '#718096', marginBottom: 10, lineHeight: 1.6 }}>
+                HA entity_id를 입력하세요. 복수 기기는 쉼표로 구분.<br/>
+                예: <span style={{ fontFamily: "'DM Mono', monospace" }}>light.ceiling, light.floor_lamp</span>
+              </div>
+              {Object.values(DEVICE_ROLE).map(role => (
+                <div key={role} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <div style={{
+                    width: 80, fontSize: 12, color: '#4a5568', fontWeight: 600, flexShrink: 0,
+                  }}>
+                    {DEVICE_ROLE_LABELS[role]}
+                  </div>
+                  <input
+                    type="text"
+                    value={form._uiDevices[role] ?? ''}
+                    onChange={e => setDevice(role, e.target.value)}
+                    placeholder={`entity_id (예: ${role.toLowerCase().replace('_', '.')})`}
+                    style={{
+                      flex: 1, border: '1.5px solid #e2e8f0', borderRadius: 7,
+                      padding: '6px 10px', fontSize: 12, fontFamily: "'DM Mono', monospace",
+                      color: '#1a202c', outline: 'none',
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <button onClick={handleLoadServer} disabled={loadingServer} style={{
           width: '100%', border: '1.5px solid #7c3aed', borderRadius: 10, padding: '9px 0',
           background: '#f5f0ff', fontSize: 13, fontWeight: 600, color: '#7c3aed',
@@ -151,7 +240,10 @@ function SettingsModal({ config, onSave, onClose }) {
             flex: 1, border: '1.5px solid #e2e8f0', borderRadius: 10, padding: '10px 0',
             background: '#fff', fontSize: 14, color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit',
           }}>취소</button>
-          <button onClick={() => onSave(form)} style={{
+          <button onClick={() => {
+            const { _uiDevices, ...rest } = form;
+            onSave({ ...rest, devices: parseDeviceMap(_uiDevices) });
+          }} style={{
             flex: 2, border: '2px solid #2563eb', borderRadius: 10, padding: '10px 0',
             background: '#2563eb', fontSize: 14, fontWeight: 700, color: '#fff',
             cursor: 'pointer', fontFamily: 'inherit',
@@ -531,8 +623,8 @@ export default function RoomStateApp({ onBack }) {
     const withId = { ...form, id };
     putProperties([withId]);
     saveConfig(withId);
-    // Pi 워처에도 설정 전달 (areaName + district)
-    postMonitoringConfig({ areaName: form.name, district: form.district });
+    // Pi 워처에도 설정 전달 (areaName + district + devices)
+    postMonitoringConfig({ areaName: form.name, district: form.district, devices: form.devices });
   };
 
   // 실 데이터 + 목업 데이터 병합 (실 데이터 맨 앞, HA 센서·기기·모니터링 상태 주입)

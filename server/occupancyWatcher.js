@@ -16,6 +16,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { callHaService, getHaStates, renderHaTemplate } from './haProxy.js';
+import { executeStateActions } from './deviceActionExecutor.js';
 import { OccupancyMonitor } from '../src/application/occupancyMonitor.js';
 import { getNextRoomState, isValidTransition, INITIAL_STATE } from '../src/domain/room-state/roomStateDomain.js';
 
@@ -201,6 +202,13 @@ async function pollCycle() {
         roomState = nextState;
         changed   = true;
         await sendHaNotification(event, nextState);
+        if (config?.devices) {
+          const result = await executeStateActions(nextState.mainStatus, config.devices);
+          if (result.executed.length)
+            console.log(`[OccupancyWatcher] 기기 제어 완료 (${nextState.mainStatus}):`, result.executed.map(e => e.role));
+          if (result.skipped.length)
+            console.warn(`[OccupancyWatcher] 기기 제어 건너뜀:`, result.skipped.map(s => `${s.role}(${s.reason})`));
+        }
       }
     }
 
