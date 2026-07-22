@@ -126,8 +126,8 @@ function GanttBar({ seg, windowStart, windowMs }) {
 
 export default function PropertyListView({ initialFilter, onSelectProperty, onBack, properties = PROPERTIES }) {
   const [filter, setFilter] = useState(initialFilter || FILTER_ALL);
-  const { windowStart, windowEnd, windowMs, todayLeft, dayLabels, monthLabels } = useGanttWindow();
-  const { now, nowLeft, timeStr } = useLiveNow(windowStart, windowMs);
+  const { windowStart, windowEnd, windowMs, dayLabels, monthLabels } = useGanttWindow();
+  const { nowLeft, timeStr } = useLiveNow(windowStart, windowMs);
 
   const filtered = properties.filter(p =>
     filter === FILTER_ALL || p.currentState.mainStatus === filter
@@ -183,6 +183,17 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
         })}
       </div>
 
+      {/* 간트 헤더 + 목록 래퍼 — 현재 시각 연속선 기준점 */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', minHeight: 0 }}>
+
+        {/* 현재 시각 연속 수직선 — 헤더~목록 전체 관통, 각 행에 개별 선 없음 */}
+        <div style={{
+          position: 'absolute',
+          left: `calc(${20 + STRIP_W + NAME_W + BADGE_W}px + ${nowLeft / 100} * (100% - ${20 + STRIP_W + NAME_W + BADGE_W + 20}px))`,
+          top: 0, bottom: 0,
+          width: 2, background: '#1a202c', zIndex: 20, pointerEvents: 'none',
+        }} />
+
       {/* 간트 헤더 */}
       <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '0 20px', display: 'flex' }}>
         {/* 왼쪽 고정 열 헤더 */}
@@ -194,11 +205,6 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
         {/* 간트 열 헤더 */}
         <div style={{ flex: 1, position: 'relative', height: 72, overflow: 'hidden' }}>
 
-          {/* ① 현재 시각 수직선 — 진한 검정 */}
-          <div style={{
-            position: 'absolute', left: `${nowLeft}%`, top: 0, bottom: 0,
-            width: 2.5, background: '#1a202c', zIndex: 5,
-          }} />
 
           {/* ② 지금 레이블 + 도트 (Detail View와 동일 스타일) */}
           <div style={{
@@ -249,9 +255,8 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
             const sepColor = dl.isSun ? '#fecaca'
               : dl.isSat ? '#bfdbfe'
               : '#c8d3dc';
-            // Today는 빨간선 바로 우측에 배치
-            const posLeft      = dl.isToday ? nowLeft : dl.labelLeft;
-            const posTransform = dl.isToday ? 'translateX(4px)' : 'translateX(-50%)';
+            const posLeft      = dl.labelLeft;
+            const posTransform = 'translateX(-50%)';
 
             return (
               <div key={i}>
@@ -346,11 +351,6 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
                   );
                 })}
 
-                {/* 현재 시각 수직선 */}
-                <div style={{
-                  position: 'absolute', left: `${nowLeft}%`, top: 0, bottom: 0,
-                  width: 2, background: '#1a202c', opacity: 0.6, zIndex: 4,
-                }} />
 
                 {/* 상태 바 (과거 + 미래 예측 포함) */}
                 {mergeGanttSegments(getGanttSegments(prop, windowStart, windowEnd)).map((seg, si) => (
@@ -367,6 +367,7 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
           </div>
         )}
       </div>
+      </div>{/* 간트 래퍼 끝 */}
 
       {/* 범례 */}
       <div style={{ background: '#fff', borderTop: '1px solid #e2e8f0', padding: '10px 20px', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
