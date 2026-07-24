@@ -3,6 +3,15 @@ import CFG from "../src/config/privateConfig.js";
 const HA_BASE = CFG.ha.baseUrl;
 const HA_TOKEN = CFG.ha.token;
 
+export function getHaWsUrl() {
+  if (CFG.ha.wsUrl) return CFG.ha.wsUrl;
+  return HA_BASE.replace(/^https/, 'wss').replace(/^http/, 'ws') + '/api/websocket';
+}
+
+export function getHaToken() {
+  return HA_TOKEN;
+}
+
 function getHeaders() {
   return {
     Authorization: `Bearer ${HA_TOKEN}`,
@@ -68,6 +77,15 @@ export async function renderHaTemplate(template) {
 
 export async function getHaHistory(entityId, startIso) {
   const path = `/api/history/period/${encodeURIComponent(startIso)}?filter_entity_id=${encodeURIComponent(entityId)}&minimal_response=true&no_attributes=true`;
+  const response = await fetch(`${HA_BASE}${path}`, { headers: getHeaders() });
+  if (!response.ok) return [];
+  const data = await parseJsonSafe(response);
+  return Array.isArray(data) && Array.isArray(data[0]) ? data[0] : [];
+}
+
+// 히스토리 재처리용 — 속성(device_class, friendly_name 등) 포함
+export async function getHaHistoryFull(entityId, startIso) {
+  const path = `/api/history/period/${encodeURIComponent(startIso)}?filter_entity_id=${encodeURIComponent(entityId)}`;
   const response = await fetch(`${HA_BASE}${path}`, { headers: getHeaders() });
   if (!response.ok) return [];
   const data = await parseJsonSafe(response);

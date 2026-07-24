@@ -48,11 +48,14 @@ const SENSOR_CFG = {
 
 // SuspicionTracker 설정 (ms)
 const SUSPICION_CFG = {
-  CHECKOUT_GRACE_MS:      CFG.CHECKOUT_GRACE_MIN      * MIN,
-  SUSPICION_EXPIRE_MS:    CFG.SUSPICION_EXPIRE_MIN    * MIN,
-  CLEANING_SUSTAINED_MS:  CFG.CLEANING_SUSTAINED_MIN  * MIN,
-  CLEANING_DONE_QUIET_MS: CFG.CLEANING_DONE_QUIET_MIN * MIN,
-  NO_SHOW_WINDOW_MS:      CFG.NO_SHOW_WINDOW_MIN      * MIN,
+  CHECKOUT_GRACE_MS:         CFG.CHECKOUT_GRACE_MIN         * MIN,
+  EARLY_CHECKOUT_QUIET_MS:   CFG.EARLY_CHECKOUT_QUIET_MIN   * MIN,
+  SUSPICION_EXPIRE_MS:       CFG.SUSPICION_EXPIRE_MIN       * MIN,
+  CLEANING_SUSTAINED_MS:     CFG.CLEANING_SUSTAINED_MIN     * MIN,
+  CLEANING_DONE_QUIET_MS:    CFG.CLEANING_DONE_QUIET_MIN    * MIN,
+  NO_SHOW_WINDOW_MS:         CFG.NO_SHOW_WINDOW_MIN         * MIN,
+  NOISE_QUIET_DB:            CFG.NOISE_QUIET_DB,
+  AC_ON:                     CFG.AC_ON,
 };
 
 // ── 유틸 ────────────────────────────────────────────────────────────────────
@@ -140,9 +143,10 @@ export class OccupancyMonitor {
   energyNormalStart = null;
   envIssueStart     = null;
   envNormalStart    = null;
-  doorOpenStart     = null;
-  doorOpenedAt      = null;  // 문 마지막으로 닫힌 시각 (장시간 열림 감지에 유지)
-  noMotionStart     = null;
+  doorOpenStart          = null;
+  doorOpenedAt           = null;  // 문 마지막으로 닫힌 시각 (장시간 열림 감지에 유지)
+  doorOpenComplaintActive = false; // door_open complaint_detected 발화됨 → resolved 발화 조건 추적
+  noMotionStart          = null;
   lastSmoke         = false;
   noiseWindow       = [];    // [{ dB, timestamp }] — 10분 슬라이딩 윈도우
   noiseSilentStart  = null;  // 소음 score 0 유지 시작 시각
@@ -175,7 +179,9 @@ export class OccupancyMonitor {
       sensorResult,
       roomState,
       reservation,
-      motionNow: !!snap.motionDetected,
+      motionNow:  !!snap.motionDetected,
+      acPower:    snap.acPower    ?? null,
+      noiseLevel: snap.noiseLevel ?? null,
       now,
       cfg: SUSPICION_CFG,
     });
@@ -329,11 +335,18 @@ export class OccupancyMonitor {
   _doorOpen(sub, now) {
     const open = elapsed(this.doorOpenStart, now);
     const hasComplaint = sub === 'ISSUE_COMPLAINT' || sub === 'ISSUE_AND_ENERGY';
-    // doorOpenStart=null 이면 문이 닫혀 있으므로 체크 생략
+
     if (!hasComplaint && this.doorOpenStart !== null && open >= T.DOOR_OPEN) {
+      this.doorOpenComplaintActive = true;
       const min = Math.round(open / MIN);
       return [{ type: 'complaint_detected', subType: 'door_open', severity: 'WARN',
         reason: `현관문 ${min}분 이상 열림`, timestamp: now }];
+    }
+    // door_open으로 complaint가 발생했고, 문이 닫혔으며, 민원 상태가 유지 중 → 해소
+    if (this.doorOpenComplaintActive && hasComplaint && this.doorOpenStart === null) {
+      this.doorOpenComplaintActive = false;
+      return [{ type: 'complaint_resolved', subType: 'door_open',
+        reason: '현관문 닫힘', timestamp: now }];
     }
     return [];
   }

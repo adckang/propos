@@ -45,8 +45,10 @@ export const THRESHOLDS = {
   ENTRY_SUSTAINED_MIN:  3, // ③: 입실 후 모션 N분 지속 → ENTRY 확정
 
   // ── 의심 → 확신 (SuspicionTracker) ─────────────────────────────────────
-  SUSPICION_EXPIRE_MIN:  120, // 의심 상태 최대 유효 기간 (체크아웃+N분 지나면 취소)
-  NO_SHOW_WINDOW_MIN:     60, // 체크인 시각 + N분 경과 → no_show 판정
+  SUSPICION_EXPIRE_MIN:       120, // 의심 상태 최대 유효 기간 (체크아웃+N분 지나면 취소)
+  NO_SHOW_WINDOW_MIN:          60, // 체크인 시각 + N분 경과 → no_show 판정
+  EARLY_CHECKOUT_QUIET_MIN:    20, // Case B: EXIT 후 N분 조용 → 조기 퇴실 확인 메시지
+  NOISE_QUIET_DB:              40, // 이 미만이면 조용한 것으로 판단 (소음 부재 지표)
 
   // ── 청소팀 판정 ─────────────────────────────────────────────────────────
   CLEANING_SUSTAINED_MIN: 20, // ENTRY 후 모션 N분 지속 → 청소팀 (게스트 복귀와 구분)

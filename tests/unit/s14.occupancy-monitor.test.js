@@ -269,6 +269,25 @@ describe('장시간 문 열림', () => {
     const events = call(m, s, GOOD, null, 31 * MIN);
     assert.equal(events.filter(e => e.subType === 'door_open').length, 0);
   });
+
+  test('문 열림 15분 후 닫힘 → complaint_resolved (door_open)', () => {
+    const m = new OccupancyMonitor();
+    // 문 열린 채 15분 경과 → complaint_detected 발화
+    call(m, snap({ doorOpen: true }), GOOD, null, 0);
+    call(m, snap({ doorOpen: true }), GOOD, null, 15 * MIN + 1);
+    // 문 닫힘, 상태는 watcher가 COMPLAINT로 전환한 상황을 시뮬레이션
+    const events = call(m, snap({ doorOpen: false }), COMPLAINT, null, 15 * MIN + 2000);
+    assert.ok(events.some(e => e.type === 'complaint_resolved' && e.subType === 'door_open'));
+  });
+
+  test('연기 complaint 중 문 닫혀 있어도 door_open resolved 없음 (spurious 방지)', () => {
+    const m = new OccupancyMonitor();
+    // door_open complaint 없이 smoke만으로 COMPLAINT 진입
+    call(m, snap({ smokeDetected: true, doorOpen: false }), GOOD, null, 0);
+    // 연기 해제 시 complaint_resolved/smoke 발화 → door_open resolved는 없어야 함
+    const events = call(m, snap({ smokeDetected: false, doorOpen: false }), COMPLAINT, null, 1000);
+    assert.ok(!events.some(e => e.type === 'complaint_resolved' && e.subType === 'door_open'));
+  });
 });
 
 // ============================================================
@@ -496,5 +515,22 @@ describe('복합 시나리오', () => {
     const e2 = call(m, s, COMPLAINT, null, 0);  // smoke already lastSmoke=true, no re-fire
     assert.equal(e1.filter(e => e.type === 'complaint_detected').length, 1);
     assert.equal(e2.filter(e => e.type === 'complaint_detected').length, 0);
+  });
+
+  // ISSUE_AND_ENERGY 복합 경로 (room-state-machine.md: GOOD → ENERGY_WASTE → ISSUE_AND_ENERGY)
+  // 에너지낭비 + 연기가 같은 process() 사이클에 동시 발생 → 두 이벤트 모두 반환되어야 함
+  // 이후 watcher가 순서대로 applyTransition → 복합 상태 도달
+  test('에너지낭비 + 연기 동시 발생 → 같은 process() 호출에서 두 이벤트 반환 (ISSUE_AND_ENERGY 경로)', () => {
+    const m = new OccupancyMonitor();
+    const ENERGY_DETECT = 3 * MIN; // monitoringThresholds.js: ENERGY_DETECT_MIN = 3
+
+    // t=0: 고전력(600W > AC_HIGH 500W) 에너지낭비 조건 시작, 연기 없음
+    call(m, snap({ acPower: 600, motionDetected: true, smokeDetected: false }), GOOD, null, 0);
+
+    // t=3min+1: 에너지낭비 타이머 만료 + 연기 동시 발생 (같은 사이클)
+    const events = call(m, snap({ acPower: 600, motionDetected: true, smokeDetected: true }), GOOD, null, ENERGY_DETECT + 1);
+
+    assert.ok(events.some(e => e.type === 'energy_waste_detected'), 'energy_waste_detected 포함');
+    assert.ok(events.some(e => e.type === 'complaint_detected'),    'complaint_detected 포함');
   });
 });

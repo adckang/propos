@@ -51,16 +51,16 @@ export default function DashboardView({ onSelectStatus, onBack, properties = PRO
       </div>
 
       {/* 요약 배너 */}
-      <div style={{ padding: '12px 20px', background: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: 20 }}>
+      <div data-testid="dashboard-summary" style={{ padding: '12px 20px', background: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: 20 }}>
         <span style={{ fontSize: 13, color: '#4a5568' }}>전체 <strong style={{ color: '#1a202c' }}>{properties.length}</strong>개 숙소</span>
-        <span style={{ fontSize: 13, color: '#4a5568' }}>체류중 <strong style={{ color: '#2563eb' }}>{counts['OCCUPIED']?.total || 0}</strong></span>
-        <span style={{ fontSize: 13, color: '#4a5568' }}>입실전 <strong style={{ color: '#059669' }}>{counts['PRE_STAY_READY']?.total || 0}</strong></span>
-        <span style={{ fontSize: 13, color: '#4a5568' }}>청소중 <strong style={{ color: '#dc2626' }}>{counts['CLEANING']?.total || 0}</strong></span>
-        <span style={{ fontSize: 13, color: '#4a5568' }}>공실 <strong style={{ color: '#6b7280' }}>{counts['VACANT']?.total || 0}</strong></span>
+        <span style={{ fontSize: 13, color: '#4a5568' }}>체류중 <strong data-testid="count-occupied" style={{ color: '#2563eb' }}>{counts['OCCUPIED']?.total || 0}</strong></span>
+        <span style={{ fontSize: 13, color: '#4a5568' }}>입실전 <strong data-testid="count-pre-stay-ready" style={{ color: '#059669' }}>{counts['PRE_STAY_READY']?.total || 0}</strong></span>
+        <span style={{ fontSize: 13, color: '#4a5568' }}>청소중 <strong data-testid="count-cleaning" style={{ color: '#dc2626' }}>{counts['CLEANING']?.total || 0}</strong></span>
+        <span style={{ fontSize: 13, color: '#4a5568' }}>공실 <strong data-testid="count-vacant" style={{ color: '#6b7280' }}>{counts['VACANT']?.total || 0}</strong></span>
       </div>
 
       {/* 상태 카드 그리드 */}
-      <div style={{ padding: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, flex: 1 }}>
+      <div data-testid="status-cards" style={{ padding: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, flex: 1 }}>
         {ORDER.map(mainStatus => {
           const meta = STATE_META[mainStatus];
           const data = counts[mainStatus] || { total: 0, subs: {} };
@@ -70,6 +70,7 @@ export default function DashboardView({ onSelectStatus, onBack, properties = PRO
           return (
             <button
               key={mainStatus}
+              data-testid={`status-card-${mainStatus}`}
               onClick={() => onSelectStatus(mainStatus)}
               style={{
                 background: '#fff',

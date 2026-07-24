@@ -549,7 +549,7 @@ export default function RoomStateApp({ onBack }) {
     return () => { cancelled = true; clearInterval(interval); };
   }, [syncConfig?.name, serverWatcherActive, liveProperty, monitorState]);
 
-  // 서버 워처 폴링 — 30초 주기
+  // 서버 워처 폴링 — 5초 주기
   useEffect(() => {
     if (!syncConfig?.name) return;
     let cancelled = false;
@@ -570,7 +570,7 @@ export default function RoomStateApp({ onBack }) {
     }
 
     pollServer();
-    const interval = setInterval(pollServer, 30000);
+    const interval = setInterval(pollServer, 5000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [syncConfig?.name]);
 
