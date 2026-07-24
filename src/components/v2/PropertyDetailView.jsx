@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { weatherMeta } from '../../infrastructure/weatherClient';
-import { STATE_META, SEGMENT_COLORS, getWindowSegments } from '../../data/roomStateMockData';
+import { STATE_META, SEGMENT_COLORS, getWindowSegments, getGanttSegments } from '../../data/roomStateMockData';
 import { useMobile } from '../../hooks/useMobile';
 
 const PAST_HOURS    = 24;          // 현재 시각 이전 24h
@@ -582,6 +582,19 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
     const tomorrowMid = new Date(todayMid.getTime() + 86400000);
     const todaySegs = recentSegs.filter(s => s.start < tomorrowMid && s.end > todayMid);
 
+    // 7일 수평 타임라인 계산 (today-2 ~ today+5)
+    const hTodayMid = new Date(); hTodayMid.setHours(0, 0, 0, 0);
+    const hStart = new Date(hTodayMid); hStart.setDate(hStart.getDate() - 2);
+    const hEnd   = new Date(hStart);    hEnd.setDate(hEnd.getDate() + 7);
+    const hMs    = hEnd - hStart;
+    const hNowLeft = ((Date.now() - hStart.getTime()) / hMs * 100).toFixed(2);
+    const hDays  = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(hStart); d.setDate(d.getDate() + i);
+      return { date: d.getDate(), isToday: i === 2 };
+    });
+    // 7일 윈도우 세그먼트 (recentSegs는 ±72h라 좁으므로 getGanttSegments로 재계산)
+    const hSegs = getGanttSegments(property, hStart, hEnd);
+
     return (
       <div style={{ background: '#f0f4f8', minHeight: '100%', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
 
@@ -634,6 +647,80 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
             ))}
           </div>
         )}
+
+        {/* 7일 수평 타임라인 — 핵심 뷰 */}
+        <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '10px 16px 0' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6, letterSpacing: 0.3 }}>
+            7일 상태 타임라인
+          </div>
+          {/* 바 영역 */}
+          <div style={{ position: 'relative', height: 40, borderRadius: 6, overflow: 'hidden', background: '#eef2f7', marginBottom: 4 }}>
+            {/* 상태 세그먼트 */}
+            {hSegs.map((seg, si) => {
+              const m = STATE_META[seg.mainStatus];
+              if (!m) return null;
+              const s = Math.max(seg.start.getTime(), hStart.getTime());
+              const e = Math.min(seg.end.getTime(), hEnd.getTime());
+              if (e <= s) return null;
+              const left  = ((s - hStart.getTime()) / hMs * 100).toFixed(2);
+              const width = ((e - s) / hMs * 100).toFixed(2);
+              return (
+                <div key={si} style={{
+                  position: 'absolute', left: `${left}%`, width: `${width}%`,
+                  top: 0, bottom: 0,
+                  background: m.color,
+                  opacity: seg.isFuture ? 0.92 : 0.75,
+                }} />
+              );
+            })}
+            {/* 현재 시각 선 */}
+            <div style={{
+              position: 'absolute', left: `${hNowLeft}%`, top: 0, bottom: 0,
+              width: 2.5, background: '#1a202c', zIndex: 5,
+            }} />
+            {/* 현재 시각 도트 + 레이블 */}
+            <div style={{
+              position: 'absolute', left: `${hNowLeft}%`, top: 3,
+              transform: 'translateX(-50%)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, zIndex: 6,
+              pointerEvents: 'none',
+            }}>
+              <span style={{
+                fontSize: 8, fontWeight: 700, color: '#fff', background: '#1a202c',
+                padding: '1px 4px', borderRadius: 3,
+                fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap',
+              }}>
+                {formatTime(now)}
+              </span>
+            </div>
+          </div>
+          {/* 날짜 레이블 행 */}
+          <div style={{ display: 'flex', marginBottom: 8 }}>
+            {hDays.map((d, i) => (
+              <div key={i} style={{
+                flex: 1, textAlign: 'center', fontSize: 9,
+                fontFamily: "'DM Mono', monospace",
+                fontWeight: d.isToday ? 800 : 400,
+                color: d.isToday ? '#1a202c' : '#94a3b8',
+              }}>
+                {d.isToday ? '오늘' : d.date}
+              </div>
+            ))}
+          </div>
+          {/* 범례 */}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', paddingBottom: 8 }}>
+            {Object.entries(STATE_META).map(([key, meta]) => (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ width: 10, height: 10, borderRadius: 2, background: meta.color }} />
+                <span style={{ fontSize: 9, color: '#718096' }}>{meta.label}</span>
+              </div>
+            ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div style={{ width: 2.5, height: 12, background: '#1a202c', borderRadius: 1 }} />
+              <span style={{ fontSize: 9, color: '#718096' }}>지금</span>
+            </div>
+          </div>
+        </div>
 
         {/* 본문 스크롤 영역 */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
