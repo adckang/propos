@@ -42,6 +42,11 @@ export default function DashboardView({ onSelectStatus, onBack, properties = PRO
             <div style={{ fontSize: 10, color: '#a0aec0', fontFamily: "'DM Mono', monospace" }}>{dateStr} · {timeStr}</div>
           </div>
           {syncBadge && syncBadge}
+          {unassignedCleaningCount > 0 && (
+            <div style={{ background: '#fffbeb', border: '1.5px solid #fbbf24', borderRadius: 8, padding: '4px 8px', fontSize: 11, color: '#d97706', fontWeight: 700, flexShrink: 0 }}>
+              🧹 {unassignedCleaningCount}
+            </div>
+          )}
           {urgentCount > 0 && (
             <div style={{ background: '#fef2f2', border: '1.5px solid #fca5a5', borderRadius: 8, padding: '4px 8px', fontSize: 11, color: '#dc2626', fontWeight: 700, flexShrink: 0 }}>
               ⚠ {urgentCount}건

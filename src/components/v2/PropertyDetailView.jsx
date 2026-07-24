@@ -601,27 +601,23 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
             </div>
           </div>
 
-          {/* 상태 필터 — flex-wrap, 스크롤 없음 */}
+          {/* 상태 필터 — 모바일: 시각 인디케이터 (클릭 없음, 72h 윈도우 내 존재 여부 표시) */}
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
             {Object.entries(STATE_META).map(([key, meta]) => {
               const active = presentMainStatuses.has(key);
               return (
-                <button
+                <div
                   key={key}
-                  onClick={() => active && scrollToState(key)}
-                  disabled={!active}
                   style={{
                     border: `1.5px solid ${active ? meta.color : '#e2e8f0'}`,
                     borderRadius: 20, padding: '3px 9px',
                     background: active ? meta.bg : '#f9fafb',
                     color: active ? meta.color : '#c8d5e0',
                     fontSize: 11, fontWeight: 600,
-                    cursor: active ? 'pointer' : 'default',
-                    fontFamily: 'inherit',
                   }}
                 >
                   {meta.label}
-                </button>
+                </div>
               );
             })}
           </div>

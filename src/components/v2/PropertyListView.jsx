@@ -193,24 +193,6 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
           })}
         </div>
 
-        {/* 날짜 미니 헤더 */}
-        <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '4px 16px', display: 'flex', position: 'sticky', top: 0, zIndex: 10 }}>
-          <div style={{ width: 4 + 120 + 68, flexShrink: 0 }} />
-          <div style={{ flex: 1, position: 'relative', height: 14 }}>
-            {miniDays.map((d, i) => (
-              <div key={i} style={{
-                position: 'absolute', left: `${i / 7 * 100}%`, width: `${100 / 7}%`,
-                textAlign: 'center', fontSize: 9, lineHeight: '14px',
-                fontWeight: d.isToday ? 800 : 400,
-                color: d.isToday ? '#1a202c' : '#94a3b8',
-                fontFamily: "'DM Mono', monospace",
-              }}>
-                {d.isToday ? '오늘' : d.date}
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* 숙소 목록 */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px', display: 'flex', flexDirection: 'column', gap: 5 }}>
           {sorted.map(prop => {
@@ -247,21 +229,22 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
                   </div>
                 </div>
 
-                {/* 줄 2: 7일 미니 타임라인 */}
+                {/* 줄 2: 7일 미니 타임라인 (날짜 레이블 포함) */}
                 <div style={{ display: 'flex', alignItems: 'stretch' }}>
                   <div style={{ width: 4, background: meta.color, opacity: 0.25, flexShrink: 0 }} />
-                  <div style={{ flex: 1, height: 20, position: 'relative', overflow: 'hidden', background: '#f8fafc' }}>
-                    {/* 일 구분선 */}
+                  {/* 타임라인 영역 — 상단 17px: 세그먼트 / 하단 11px: 날짜 레이블 */}
+                  <div style={{ flex: 1, height: 28, position: 'relative', overflow: 'hidden', background: '#f8fafc' }}>
+                    {/* 일 구분선 (전체 높이) */}
                     {miniDays.map((d, i) => (
                       <div key={i} style={{
                         position: 'absolute', left: `${i / 7 * 100}%`, top: 0, bottom: 0,
                         width: d.isToday ? 2 : 1,
-                        background: d.isToday ? '#475569' : '#e2e8f0',
-                        zIndex: d.isToday ? 3 : 1,
-                        opacity: d.isToday ? 0.6 : 1,
+                        background: d.isToday ? '#64748b' : '#e2e8f0',
+                        zIndex: 2,
+                        opacity: d.isToday ? 0.5 : 1,
                       }} />
                     ))}
-                    {/* 상태 세그먼트 */}
+                    {/* 상태 세그먼트 (상단 영역) */}
                     {miniSegs.map((seg, si) => {
                       const m = STATE_META[seg.mainStatus];
                       if (!m) return null;
@@ -273,16 +256,33 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
                       return (
                         <div key={si} style={{
                           position: 'absolute', left: `${left}%`, width: `${width}%`,
-                          top: 3, bottom: 3, background: m.color,
+                          top: 3, bottom: 12, background: m.color,
                           opacity: seg.isFuture ? 0.82 : 0.40, borderRadius: 2,
                         }} />
                       );
                     })}
-                    {/* 현재 시각 선 */}
+                    {/* 현재 시각 선 (세그먼트 영역만) */}
                     <div style={{
-                      position: 'absolute', left: `${miniNowLeft}%`, top: 0, bottom: 0,
+                      position: 'absolute', left: `${miniNowLeft}%`, top: 0, bottom: 11,
                       width: 2, background: '#1a202c', zIndex: 5,
                     }} />
+                    {/* 날짜 레이블 행 (하단 11px, flex 로 7등분) */}
+                    <div style={{
+                      position: 'absolute', bottom: 0, left: 0, right: 0, height: 11,
+                      display: 'flex', borderTop: '1px solid #e2e8f0',
+                    }}>
+                      {miniDays.map((d, i) => (
+                        <div key={i} style={{
+                          flex: 1, textAlign: 'center', fontSize: 7, lineHeight: '11px',
+                          fontFamily: "'DM Mono', monospace",
+                          fontWeight: d.isToday ? 800 : 400,
+                          color: d.isToday ? '#1a202c' : '#b0bec5',
+                          background: d.isToday ? 'rgba(100,116,139,0.06)' : 'transparent',
+                        }}>
+                          {d.isToday ? '오' : d.date}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
