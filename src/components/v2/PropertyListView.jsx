@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { PROPERTIES, STATE_META, SEGMENT_COLORS, getGanttSegments } from '../../data/roomStateMockData';
+import { useMobile } from '../../hooks/useMobile';
 
 const PAST_DAYS   = 6;
 const FUTURE_DAYS = 14;
@@ -125,6 +126,7 @@ function GanttBar({ seg, windowStart, windowMs }) {
 
 
 export default function PropertyListView({ initialFilter, onSelectProperty, onBack, properties = PROPERTIES }) {
+  const isMobile = useMobile();
   const [filter, setFilter] = useState(initialFilter || FILTER_ALL);
   const { windowStart, windowEnd, windowMs, dayLabels, monthLabels } = useGanttWindow();
   const { nowLeft, timeStr } = useLiveNow(windowStart, windowMs);
@@ -146,6 +148,158 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
   const BADGE_W = 82;
   const STRIP_W = 4;
 
+  // ── 모바일 뷰 ────────────────────────────────────────────────────────────────
+  if (isMobile) {
+    const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
+    const miniStart = new Date(todayMid); miniStart.setDate(miniStart.getDate() - 2);
+    const miniEnd   = new Date(miniStart); miniEnd.setDate(miniEnd.getDate() + 7);
+    const miniMs    = miniEnd - miniStart;
+    const miniNowLeft = ((Date.now() - miniStart.getTime()) / miniMs * 100).toFixed(2);
+    const miniDays  = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(miniStart); d.setDate(d.getDate() + i);
+      return { date: d.getDate(), isToday: i === 2 };
+    });
+
+    return (
+      <div style={{ background: '#f0f4f8', minHeight: '100%', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
+        {/* 헤더 */}
+        <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={onBack} style={{ border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', padding: '5px 10px', fontSize: 12, color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+            ← 대시보드
+          </button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1a202c' }}>숙소 목록</div>
+            <div style={{ fontSize: 10, color: '#a0aec0' }}>{sorted.length}개 표시 (전체 {properties.length})</div>
+          </div>
+        </div>
+
+        {/* 필터 바 — 스크롤 없이 wrap */}
+        <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '8px 16px', display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+          {[FILTER_ALL, ...ORDER].map(key => {
+            const meta   = key === FILTER_ALL ? null : STATE_META[key];
+            const cnt    = key === FILTER_ALL ? properties.length : properties.filter(p => p.currentState.mainStatus === key).length;
+            const active = filter === key;
+            return (
+              <button key={key} onClick={() => setFilter(key)} style={{
+                border: `1.5px solid ${active ? (meta?.color || '#2563eb') : '#e2e8f0'}`,
+                borderRadius: 20, padding: '4px 10px',
+                background: active ? (meta?.color || '#2563eb') : '#fff',
+                color: active ? '#fff' : (meta?.color || '#4a5568'),
+                fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+                {meta ? meta.label : '전체'} {cnt}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 날짜 미니 헤더 */}
+        <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '4px 16px', display: 'flex', position: 'sticky', top: 0, zIndex: 10 }}>
+          <div style={{ width: 4 + 120 + 68, flexShrink: 0 }} />
+          <div style={{ flex: 1, position: 'relative', height: 14 }}>
+            {miniDays.map((d, i) => (
+              <div key={i} style={{
+                position: 'absolute', left: `${i / 7 * 100}%`, width: `${100 / 7}%`,
+                textAlign: 'center', fontSize: 9, lineHeight: '14px',
+                fontWeight: d.isToday ? 800 : 400,
+                color: d.isToday ? '#1a202c' : '#94a3b8',
+                fontFamily: "'DM Mono', monospace",
+              }}>
+                {d.isToday ? '오늘' : d.date}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 숙소 목록 */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {sorted.map(prop => {
+            const meta     = STATE_META[prop.currentState.mainStatus];
+            const subLabel = meta.subStates[prop.currentState.subStatus]?.label || '';
+            const isUrgent = prop.currentState.mainStatus === 'OCCUPIED' &&
+              ['ISSUE_AND_ENERGY', 'ISSUE_COMPLAINT', 'ENERGY_WASTE'].includes(prop.currentState.subStatus);
+            const miniSegs = mergeGanttSegments(getGanttSegments(prop, miniStart, miniEnd));
+
+            return (
+              <div
+                key={prop.id}
+                onClick={() => onSelectProperty(prop)}
+                style={{
+                  background: '#fff', borderRadius: 10, overflow: 'hidden',
+                  border: `1.5px solid ${isUrgent ? meta.color : '#e2e8f0'}`,
+                  cursor: 'pointer',
+                }}
+              >
+                {/* 줄 1: 숙소명 + 상태 배지 */}
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <div style={{ width: 4, alignSelf: 'stretch', background: meta.color, flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0, padding: '7px 8px' }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#1a202c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {prop.name}
+                    </div>
+                    <div style={{ fontSize: 9, color: '#a0aec0' }}>{prop.district}</div>
+                  </div>
+                  <div style={{ flexShrink: 0, padding: '4px 8px 4px 0' }}>
+                    <div style={{ background: meta.bg, border: `1px solid ${meta.border}`, borderRadius: 6, padding: '2px 7px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: meta.color, lineHeight: 1.2 }}>{meta.label}</div>
+                      <div style={{ fontSize: 8, color: meta.color, opacity: 0.85, lineHeight: 1.2, whiteSpace: 'nowrap' }}>{subLabel}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 줄 2: 7일 미니 타임라인 */}
+                <div style={{ display: 'flex', alignItems: 'stretch' }}>
+                  <div style={{ width: 4, background: meta.color, opacity: 0.25, flexShrink: 0 }} />
+                  <div style={{ flex: 1, height: 20, position: 'relative', overflow: 'hidden', background: '#f8fafc' }}>
+                    {/* 일 구분선 */}
+                    {miniDays.map((d, i) => (
+                      <div key={i} style={{
+                        position: 'absolute', left: `${i / 7 * 100}%`, top: 0, bottom: 0,
+                        width: d.isToday ? 2 : 1,
+                        background: d.isToday ? '#475569' : '#e2e8f0',
+                        zIndex: d.isToday ? 3 : 1,
+                        opacity: d.isToday ? 0.6 : 1,
+                      }} />
+                    ))}
+                    {/* 상태 세그먼트 */}
+                    {miniSegs.map((seg, si) => {
+                      const m = STATE_META[seg.mainStatus];
+                      if (!m) return null;
+                      const s = Math.max(seg.start.getTime(), miniStart.getTime());
+                      const e = Math.min(seg.end.getTime(), miniEnd.getTime());
+                      if (e <= s) return null;
+                      const left  = ((s - miniStart.getTime()) / miniMs * 100).toFixed(2);
+                      const width = ((e - s) / miniMs * 100).toFixed(2);
+                      return (
+                        <div key={si} style={{
+                          position: 'absolute', left: `${left}%`, width: `${width}%`,
+                          top: 3, bottom: 3, background: m.color,
+                          opacity: seg.isFuture ? 0.82 : 0.40, borderRadius: 2,
+                        }} />
+                      );
+                    })}
+                    {/* 현재 시각 선 */}
+                    <div style={{
+                      position: 'absolute', left: `${miniNowLeft}%`, top: 0, bottom: 0,
+                      width: 2, background: '#1a202c', zIndex: 5,
+                    }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {sorted.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 32, color: '#a0aec0', fontSize: 13 }}>
+              해당 상태의 숙소가 없습니다.
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── 데스크탑 뷰 ───────────────────────────────────────────────────────────────
   return (
     <div style={{ background: '#f0f4f8', minHeight: '100%', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
       {/* 페이지 헤더 */}

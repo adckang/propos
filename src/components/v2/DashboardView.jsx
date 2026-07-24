@@ -1,8 +1,10 @@
 import { PROPERTIES, STATE_META } from '../../data/roomStateMockData';
+import { useMobile } from '../../hooks/useMobile';
 
 const ORDER = ['OCCUPIED', 'PRE_STAY_READY', 'CLEANING', 'VACANT'];
 
 export default function DashboardView({ onSelectStatus, onBack, properties = PROPERTIES, syncBadge }) {
+  const isMobile = useMobile();
   const now = new Date();
   const timeStr = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
@@ -26,6 +28,108 @@ export default function DashboardView({ onSelectStatus, onBack, properties = PRO
     return n + unassigned;
   }, 0);
 
+  // ── 모바일 뷰 ────────────────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <div style={{ background: '#f0f4f8', minHeight: '100%', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
+        {/* 헤더 */}
+        <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={onBack} style={{ border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', padding: '5px 10px', fontSize: 12, color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+            ← 홈
+          </button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1a202c' }}>현황 대시보드</div>
+            <div style={{ fontSize: 10, color: '#a0aec0', fontFamily: "'DM Mono', monospace" }}>{dateStr} · {timeStr}</div>
+          </div>
+          {syncBadge && syncBadge}
+          {urgentCount > 0 && (
+            <div style={{ background: '#fef2f2', border: '1.5px solid #fca5a5', borderRadius: 8, padding: '4px 8px', fontSize: 11, color: '#dc2626', fontWeight: 700, flexShrink: 0 }}>
+              ⚠ {urgentCount}건
+            </div>
+          )}
+        </div>
+
+        {/* 요약 한 줄 */}
+        <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '7px 16px', display: 'flex', justifyContent: 'space-between' }}>
+          {[
+            { label: '전체',   val: properties.length,              color: '#1a202c' },
+            { label: '체류',   val: counts['OCCUPIED']?.total || 0, color: '#2563eb' },
+            { label: '입실전', val: counts['PRE_STAY_READY']?.total || 0, color: '#059669' },
+            { label: '청소',   val: counts['CLEANING']?.total || 0, color: '#dc2626' },
+            { label: '공실',   val: counts['VACANT']?.total || 0,   color: '#6b7280' },
+          ].map(({ label, val, color }) => (
+            <span key={label} style={{ fontSize: 11, color: '#718096', textAlign: 'center' }}>
+              {label}<br />
+              <strong style={{ fontSize: 15, color, fontFamily: "'DM Mono', monospace" }}>{val}</strong>
+            </span>
+          ))}
+        </div>
+
+        {/* 상태 카드 — 1열, 상태 순서대로 */}
+        <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {ORDER.map(mainStatus => {
+            const meta = STATE_META[mainStatus];
+            const data = counts[mainStatus] || { total: 0, subs: {} };
+            const isUrgent = mainStatus === 'OCCUPIED' &&
+              ((data.subs['ISSUE_AND_ENERGY'] || 0) + (data.subs['ISSUE_COMPLAINT'] || 0) + (data.subs['ENERGY_WASTE'] || 0)) > 0;
+
+            return (
+              <button
+                key={mainStatus}
+                onClick={() => onSelectStatus(mainStatus)}
+                style={{
+                  background: '#fff',
+                  border: `2px solid ${isUrgent ? meta.color : meta.border}`,
+                  borderRadius: 12, padding: '12px 14px',
+                  textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+                  boxShadow: isUrgent ? `0 0 0 1px ${meta.color}20` : '0 1px 3px rgba(0,0,0,0.06)',
+                }}
+              >
+                {/* 숫자 + 상태명 한 줄 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <div style={{ fontSize: 34, fontWeight: 800, color: meta.color, lineHeight: 1, fontFamily: "'DM Mono', monospace", minWidth: 44 }}>
+                    {data.total}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: meta.color }}>{meta.label}</div>
+                    <div style={{ fontSize: 10, color: '#a0aec0' }}>{mainStatus}</div>
+                  </div>
+                </div>
+
+                {/* 서브 상태 칩 — 가로 wrap */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {Object.entries(meta.subStates).map(([sub, subMeta]) => {
+                    const cnt = data.subs[sub] || 0;
+                    const isAlert = mainStatus === 'OCCUPIED' &&
+                      ['ISSUE_AND_ENERGY', 'ISSUE_COMPLAINT', 'ENERGY_WASTE'].includes(sub) && cnt > 0;
+                    return (
+                      <div key={sub} style={{
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        background: isAlert ? meta.color : (cnt > 0 ? meta.bg : '#f8fafc'),
+                        border: `1px solid ${isAlert ? meta.color : (cnt > 0 ? meta.border : '#e2e8f0')}`,
+                        borderRadius: 20, padding: '3px 8px',
+                      }}>
+                        <span style={{ fontSize: 11, color: isAlert ? '#fff' : (cnt > 0 ? meta.color : '#b0bec5') }}>
+                          {isAlert ? '⚠ ' : ''}{subMeta.label}
+                        </span>
+                        <span style={{
+                          fontSize: 12, fontWeight: 700,
+                          color: isAlert ? '#fff' : (cnt > 0 ? meta.color : '#d1d5db'),
+                          fontFamily: "'DM Mono', monospace",
+                        }}>{cnt}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ── 데스크탑 뷰 ───────────────────────────────────────────────────────────────
   return (
     <div style={{ background: '#f0f4f8', minHeight: '100%', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
       {/* 헤더 */}

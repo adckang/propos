@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { weatherMeta } from '../../infrastructure/weatherClient';
 import { STATE_META, SEGMENT_COLORS, getWindowSegments } from '../../data/roomStateMockData';
+import { useMobile } from '../../hooks/useMobile';
 
 const PAST_HOURS    = 24;          // 현재 시각 이전 24h
 const FUTURE_HOURS  = 48;          // 현재 시각 이후 48h
@@ -473,6 +474,7 @@ function LiveSensor({ sensorKey, baseVal, label }) {
 }
 
 export default function PropertyDetailView({ property, weather, onBack, onCleaningStarted, onCleaningFinished, onMaintenanceStarted, onMaintenanceFinished }) {
+  const isMobile = useMobile();
   const mainStatusRefs = useRef({});
   const timelineRef = useRef(null);
   const now = new Date();
@@ -569,6 +571,188 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
     }
   }
 
+  // ── 모바일 뷰 ────────────────────────────────────────────────────────────────
+  if (isMobile) {
+    const sensorRows = property.sensorReadings ??
+      (property.sensors ? Object.entries(property.sensors).map(([key, val]) => ({ key, val, label: '' })) : []);
+    const anomalies = sensorRows.filter(r => isWarn(r.key, r.val));
+
+    // 오늘 발생한 이벤트 세그먼트
+    const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
+    const tomorrowMid = new Date(todayMid.getTime() + 86400000);
+    const todaySegs = recentSegs.filter(s => s.start < tomorrowMid && s.end > todayMid);
+
+    return (
+      <div style={{ background: '#f0f4f8', minHeight: '100%', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
+
+        {/* 헤더 */}
+        <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '10px 16px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <button onClick={onBack} style={{ border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', padding: '5px 10px', fontSize: 12, color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+              ← 목록
+            </button>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1a202c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{property.name}</div>
+              <div style={{ fontSize: 10, color: '#a0aec0' }}>{property.district} · {property.id}</div>
+            </div>
+            <div style={{ background: currentMeta.bg, border: `1.5px solid ${currentMeta.border}`, borderRadius: 8, padding: '5px 10px', textAlign: 'center', flexShrink: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: currentMeta.color }}>{currentMeta.label}</div>
+              <div style={{ fontSize: 9, color: currentMeta.color, opacity: 0.9 }}>{currentSubLabel}</div>
+            </div>
+          </div>
+
+          {/* 상태 필터 — flex-wrap, 스크롤 없음 */}
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            {Object.entries(STATE_META).map(([key, meta]) => {
+              const active = presentMainStatuses.has(key);
+              return (
+                <button
+                  key={key}
+                  onClick={() => active && scrollToState(key)}
+                  disabled={!active}
+                  style={{
+                    border: `1.5px solid ${active ? meta.color : '#e2e8f0'}`,
+                    borderRadius: 20, padding: '3px 9px',
+                    background: active ? meta.bg : '#f9fafb',
+                    color: active ? meta.color : '#c8d5e0',
+                    fontSize: 11, fontWeight: 600,
+                    cursor: active ? 'pointer' : 'default',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {meta.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 이상 감지 배너 */}
+        {anomalies.length > 0 && (
+          <div style={{ background: '#fef2f2', borderBottom: '1.5px solid #fca5a5', padding: '8px 16px', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#dc2626' }}>⚠ 이상 감지</span>
+            {anomalies.map(r => (
+              <span key={r.key} style={{ fontSize: 11, background: '#fff', border: '1px solid #fca5a5', borderRadius: 12, padding: '2px 8px', color: '#dc2626' }}>
+                {SENSOR_ICONS[r.key]} {SENSOR_LABELS[r.key]} {formatSensorVal(r.key, r.val)}{SENSOR_UNITS[r.key]}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* 본문 스크롤 영역 */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+          {/* 오늘의 이벤트 요약 */}
+          {todaySegs.length > 0 && (
+            <div style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8 }}>오늘의 상태 흐름</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {todaySegs.map((seg, i) => {
+                  const meta = STATE_META[seg.mainStatus];
+                  const subLabel = meta?.subStates[seg.subStatus]?.label || seg.subStatus;
+                  // 세그가 오늘 시작한 경우 실제 start, 자정 이전 시작이면 "어제~"
+                  const displayStart = seg.start < todayMid
+                    ? '자정 이전'
+                    : formatTime(seg.start);
+                  const displayEnd = seg.end > tomorrowMid
+                    ? '자정 이후'
+                    : (seg.isFuture ? `예정 ${formatTime(seg.end)}` : formatTime(seg.end));
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: meta?.color || '#94a3b8', flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: meta?.color || '#374151' }}>{meta?.label || seg.mainStatus}</span>
+                        <span style={{ fontSize: 10, color: '#718096', marginLeft: 5 }}>{subLabel}</span>
+                      </div>
+                      <div style={{ fontSize: 10, color: '#94a3b8', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
+                        {displayStart} → {displayEnd}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 상태 액션 카드 */}
+          {property.monitorState?.mainStatus === 'VACANT' && (
+            <VacantCard
+              monitorState={property.monitorState}
+              nextReservation={property.nextReservation}
+              onMaintenanceStarted={onMaintenanceStarted}
+              onMaintenanceFinished={onMaintenanceFinished}
+            />
+          )}
+          {property.monitorState?.mainStatus === 'PRE_STAY_READY' && (
+            <PreStayCard monitorState={property.monitorState} />
+          )}
+          {property.monitorState?.mainStatus === 'CLEANING' && (
+            <CleaningCard
+              monitorState={property.monitorState}
+              onCleaningStarted={onCleaningStarted}
+              onCleaningFinished={onCleaningFinished}
+            />
+          )}
+          {property.monitorState?.mainStatus === 'OCCUPIED' && (
+            <MonitoringStatusCard
+              monitorState={property.monitorState}
+              lastEvent={property.lastMonitorEvent}
+              weather={weather}
+            />
+          )}
+
+          {/* 날씨 */}
+          {weather && <WeatherCard weather={weather} />}
+
+          {/* 실시간 센서 — 2열 그리드 */}
+          {sensorRows.length > 0 && (
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#718096', marginBottom: 6 }}>실시간 센서</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {sensorRows.map((r, i) => (
+                  <LiveSensor key={`${r.key}-${i}`} sensorKey={r.key} baseVal={r.val} label={r.label} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 기기 상태 — 2열 그리드 */}
+          {property.haDevices?.length > 0 && (
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#718096', marginBottom: 6 }}>기기 상태</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                {property.haDevices.map(device => (
+                  <DeviceCard key={device.entityId} device={device} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 예약 정보 */}
+          {property.reservation?.guestName && (
+            <div style={{ background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: 10, padding: '12px 14px' }}>
+              <div style={{ fontSize: 11, color: '#2563eb', fontWeight: 700, marginBottom: 6 }}>현재 예약</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#1a202c' }}>{property.reservation.guestName}</div>
+              <div style={{ fontSize: 11, color: '#4a5568', marginTop: 2 }}>{property.reservation.platform}</div>
+              {property.reservation.checkIn && (
+                <div style={{ fontSize: 11, color: '#718096', marginTop: 5 }}>
+                  체크인: {property.reservation.checkIn.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })} {formatTime(property.reservation.checkIn)}
+                </div>
+              )}
+              {property.reservation.checkOut && (
+                <div style={{ fontSize: 11, color: '#718096', marginTop: 2 }}>
+                  체크아웃: {property.reservation.checkOut.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })} {formatTime(property.reservation.checkOut)}
+                </div>
+              )}
+            </div>
+          )}
+
+        </div>
+      </div>
+    );
+  }
+
+  // ── 데스크탑 뷰 ───────────────────────────────────────────────────────────────
   return (
     <div style={{ background: '#f0f4f8', height: '100%', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* 헤더 */}
