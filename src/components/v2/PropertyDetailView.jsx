@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { weatherMeta } from '../../infrastructure/weatherClient';
-import { STATE_META, SEGMENT_COLORS, getWindowSegments, getGanttSegments } from '../../data/roomStateMockData';
+import { STATE_META, SEGMENT_COLORS, getWindowSegments } from '../../data/roomStateMockData';
 import { useMobile } from '../../hooks/useMobile';
 
 const PAST_HOURS    = 24;          // 현재 시각 이전 24h
@@ -340,7 +340,7 @@ function formatDateLabel(t) {
   return `${t.getMonth() + 1}/${t.getDate()} (${DAY_KR[t.getDay()]})`;
 }
 
-function StateBar({ seg, windowStart, mainStatusRefs, hourPx, suppressLabel }) {
+function StateBar({ seg, windowStart, mainStatusRefs, hourPx, suppressLabel, subBarW = SUB_BAR_W }) {
   const meta = STATE_META[seg.mainStatus];
   if (!meta) return null;
 
@@ -393,7 +393,7 @@ function StateBar({ seg, windowStart, mainStatusRefs, hourPx, suppressLabel }) {
       {/* 서브 상태 바 — 미래 OCCUPIED는 숨김 (예측 불가) */}
       {showSub ? (
         <div style={{
-          width: SUB_BAR_W,
+          width: subBarW,
           background: subColor,
           borderLeft: '1px solid rgba(255,255,255,0.35)',
           display: 'flex',
@@ -418,7 +418,7 @@ function StateBar({ seg, windowStart, mainStatusRefs, hourPx, suppressLabel }) {
       ) : (
         /* 미래 OCCUPIED: 서브 바 자리는 유지하되 빈 공간으로 */
         <div style={{
-          width: SUB_BAR_W, flexShrink: 0,
+          width: subBarW, flexShrink: 0,
           background: 'rgba(255,255,255,0.12)',
           borderLeft: '1px solid rgba(255,255,255,0.2)',
         }} />
@@ -571,310 +571,61 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
     }
   }
 
-  // ── 모바일 뷰 ────────────────────────────────────────────────────────────────
-  if (isMobile) {
-    const sensorRows = property.sensorReadings ??
-      (property.sensors ? Object.entries(property.sensors).map(([key, val]) => ({ key, val, label: '' })) : []);
-    const anomalies = sensorRows.filter(r => isWarn(r.key, r.val));
+  // 모바일 전용 추가 데이터 (isMobile && ... 블록에서 사용)
+  const sensorRows = property.sensorReadings ??
+    (property.sensors ? Object.entries(property.sensors).map(([key, val]) => ({ key, val, label: '' })) : []);
+  const anomalies = sensorRows.filter(r => isWarn(r.key, r.val));
+  const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
+  const tomorrowMid = new Date(todayMid.getTime() + 86400000);
+  const todaySegs = recentSegs.filter(s => s.start < tomorrowMid && s.end > todayMid);
 
-    // 오늘 발생한 이벤트 세그먼트
-    const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
-    const tomorrowMid = new Date(todayMid.getTime() + 86400000);
-    const todaySegs = recentSegs.filter(s => s.start < tomorrowMid && s.end > todayMid);
+  // 반응형 상수 — JSX 구조는 동일
+  const LABEL_W    = isMobile ? 32 : LABEL_WIDTH;
+  const TIMELINE_W = isMobile ? 40 : TIMELINE_WIDTH;
+  const SUB_W      = isMobile ? 18 : SUB_BAR_W;
+  const tlPad      = isMobile ? '8px 4px 40px 8px' : '16px 8px 40px 16px';
+  const detailPad  = isMobile ? '10px 12px' : '16px';
 
-    // 7일 수평 타임라인 계산 (today-2 ~ today+5)
-    const hTodayMid = new Date(); hTodayMid.setHours(0, 0, 0, 0);
-    const hStart = new Date(hTodayMid); hStart.setDate(hStart.getDate() - 2);
-    const hEnd   = new Date(hStart);    hEnd.setDate(hEnd.getDate() + 7);
-    const hMs    = hEnd - hStart;
-    const hNowLeft = ((Date.now() - hStart.getTime()) / hMs * 100).toFixed(2);
-    const hDays  = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(hStart); d.setDate(d.getDate() + i);
-      return { date: d.getDate(), isToday: i === 2 };
-    });
-    // 7일 윈도우 세그먼트 (recentSegs는 ±72h라 좁으므로 getGanttSegments로 재계산)
-    const hSegs = getGanttSegments(property, hStart, hEnd);
-
-    return (
-      <div style={{ background: '#f0f4f8', minHeight: '100%', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
-
-        {/* 헤더 */}
-        <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '10px 16px', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <button onClick={onBack} style={{ border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', padding: '5px 10px', fontSize: 12, color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
-              ← 목록
-            </button>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#1a202c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{property.name}</div>
-              <div style={{ fontSize: 10, color: '#a0aec0' }}>{property.district} · {property.id}</div>
-            </div>
-            <div style={{ background: currentMeta.bg, border: `1.5px solid ${currentMeta.border}`, borderRadius: 8, padding: '5px 10px', textAlign: 'center', flexShrink: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: currentMeta.color }}>{currentMeta.label}</div>
-              <div style={{ fontSize: 9, color: currentMeta.color, opacity: 0.9 }}>{currentSubLabel}</div>
-            </div>
-          </div>
-
-          {/* 상태 필터 — 모바일: 시각 인디케이터 (클릭 없음, 72h 윈도우 내 존재 여부 표시) */}
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            {Object.entries(STATE_META).map(([key, meta]) => {
-              const active = presentMainStatuses.has(key);
-              return (
-                <div
-                  key={key}
-                  style={{
-                    border: `1.5px solid ${active ? meta.color : '#e2e8f0'}`,
-                    borderRadius: 20, padding: '3px 9px',
-                    background: active ? meta.bg : '#f9fafb',
-                    color: active ? meta.color : '#c8d5e0',
-                    fontSize: 11, fontWeight: 600,
-                  }}
-                >
-                  {meta.label}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* 이상 감지 배너 */}
-        {anomalies.length > 0 && (
-          <div style={{ background: '#fef2f2', borderBottom: '1.5px solid #fca5a5', padding: '8px 16px', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#dc2626' }}>⚠ 이상 감지</span>
-            {anomalies.map(r => (
-              <span key={r.key} style={{ fontSize: 11, background: '#fff', border: '1px solid #fca5a5', borderRadius: 12, padding: '2px 8px', color: '#dc2626' }}>
-                {SENSOR_ICONS[r.key]} {SENSOR_LABELS[r.key]} {formatSensorVal(r.key, r.val)}{SENSOR_UNITS[r.key]}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* 7일 수평 타임라인 — 핵심 뷰 */}
-        <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '10px 16px 0' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6, letterSpacing: 0.3 }}>
-            7일 상태 타임라인
-          </div>
-          {/* 바 영역 */}
-          <div style={{ position: 'relative', height: 40, borderRadius: 6, overflow: 'hidden', background: '#eef2f7', marginBottom: 4 }}>
-            {/* 상태 세그먼트 */}
-            {hSegs.map((seg, si) => {
-              const m = STATE_META[seg.mainStatus];
-              if (!m) return null;
-              const s = Math.max(seg.start.getTime(), hStart.getTime());
-              const e = Math.min(seg.end.getTime(), hEnd.getTime());
-              if (e <= s) return null;
-              const left  = ((s - hStart.getTime()) / hMs * 100).toFixed(2);
-              const width = ((e - s) / hMs * 100).toFixed(2);
-              return (
-                <div key={si} style={{
-                  position: 'absolute', left: `${left}%`, width: `${width}%`,
-                  top: 0, bottom: 0,
-                  background: m.color,
-                  opacity: seg.isFuture ? 0.92 : 0.75,
-                }} />
-              );
-            })}
-            {/* 현재 시각 선 */}
-            <div style={{
-              position: 'absolute', left: `${hNowLeft}%`, top: 0, bottom: 0,
-              width: 2.5, background: '#1a202c', zIndex: 5,
-            }} />
-            {/* 현재 시각 도트 + 레이블 */}
-            <div style={{
-              position: 'absolute', left: `${hNowLeft}%`, top: 3,
-              transform: 'translateX(-50%)',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, zIndex: 6,
-              pointerEvents: 'none',
-            }}>
-              <span style={{
-                fontSize: 8, fontWeight: 700, color: '#fff', background: '#1a202c',
-                padding: '1px 4px', borderRadius: 3,
-                fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap',
-              }}>
-                {formatTime(now)}
-              </span>
-            </div>
-          </div>
-          {/* 날짜 레이블 행 */}
-          <div style={{ display: 'flex', marginBottom: 8 }}>
-            {hDays.map((d, i) => (
-              <div key={i} style={{
-                flex: 1, textAlign: 'center', fontSize: 9,
-                fontFamily: "'DM Mono', monospace",
-                fontWeight: d.isToday ? 800 : 400,
-                color: d.isToday ? '#1a202c' : '#94a3b8',
-              }}>
-                {d.isToday ? '오늘' : d.date}
-              </div>
-            ))}
-          </div>
-          {/* 범례 */}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', paddingBottom: 8 }}>
-            {Object.entries(STATE_META).map(([key, meta]) => (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <div style={{ width: 10, height: 10, borderRadius: 2, background: meta.color }} />
-                <span style={{ fontSize: 9, color: '#718096' }}>{meta.label}</span>
-              </div>
-            ))}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <div style={{ width: 2.5, height: 12, background: '#1a202c', borderRadius: 1 }} />
-              <span style={{ fontSize: 9, color: '#718096' }}>지금</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 본문 스크롤 영역 */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-          {/* 오늘의 이벤트 요약 */}
-          {todaySegs.length > 0 && (
-            <div style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8 }}>오늘의 상태 흐름</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                {todaySegs.map((seg, i) => {
-                  const meta = STATE_META[seg.mainStatus];
-                  const subLabel = meta?.subStates[seg.subStatus]?.label || seg.subStatus;
-                  // 세그가 오늘 시작한 경우 실제 start, 자정 이전 시작이면 "어제~"
-                  const displayStart = seg.start < todayMid
-                    ? '자정 이전'
-                    : formatTime(seg.start);
-                  const displayEnd = seg.end > tomorrowMid
-                    ? '자정 이후'
-                    : (seg.isFuture ? `예정 ${formatTime(seg.end)}` : formatTime(seg.end));
-                  return (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: meta?.color || '#94a3b8', flexShrink: 0 }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: meta?.color || '#374151' }}>{meta?.label || seg.mainStatus}</span>
-                        <span style={{ fontSize: 10, color: '#718096', marginLeft: 5 }}>{subLabel}</span>
-                      </div>
-                      <div style={{ fontSize: 10, color: '#94a3b8', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
-                        {displayStart} → {displayEnd}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* 상태 액션 카드 */}
-          {property.monitorState?.mainStatus === 'VACANT' && (
-            <VacantCard
-              monitorState={property.monitorState}
-              nextReservation={property.nextReservation}
-              onMaintenanceStarted={onMaintenanceStarted}
-              onMaintenanceFinished={onMaintenanceFinished}
-            />
-          )}
-          {property.monitorState?.mainStatus === 'PRE_STAY_READY' && (
-            <PreStayCard monitorState={property.monitorState} />
-          )}
-          {property.monitorState?.mainStatus === 'CLEANING' && (
-            <CleaningCard
-              monitorState={property.monitorState}
-              onCleaningStarted={onCleaningStarted}
-              onCleaningFinished={onCleaningFinished}
-            />
-          )}
-          {property.monitorState?.mainStatus === 'OCCUPIED' && (
-            <MonitoringStatusCard
-              monitorState={property.monitorState}
-              lastEvent={property.lastMonitorEvent}
-              weather={weather}
-            />
-          )}
-
-          {/* 날씨 */}
-          {weather && <WeatherCard weather={weather} />}
-
-          {/* 실시간 센서 — 2열 그리드 */}
-          {sensorRows.length > 0 && (
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#718096', marginBottom: 6 }}>실시간 센서</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                {sensorRows.map((r, i) => (
-                  <LiveSensor key={`${r.key}-${i}`} sensorKey={r.key} baseVal={r.val} label={r.label} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 기기 상태 — 2열 그리드 */}
-          {property.haDevices?.length > 0 && (
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#718096', marginBottom: 6 }}>기기 상태</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                {property.haDevices.map(device => (
-                  <DeviceCard key={device.entityId} device={device} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 예약 정보 */}
-          {property.reservation?.guestName && (
-            <div style={{ background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: 10, padding: '12px 14px' }}>
-              <div style={{ fontSize: 11, color: '#2563eb', fontWeight: 700, marginBottom: 6 }}>현재 예약</div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#1a202c' }}>{property.reservation.guestName}</div>
-              <div style={{ fontSize: 11, color: '#4a5568', marginTop: 2 }}>{property.reservation.platform}</div>
-              {property.reservation.checkIn && (
-                <div style={{ fontSize: 11, color: '#718096', marginTop: 5 }}>
-                  체크인: {property.reservation.checkIn.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })} {formatTime(property.reservation.checkIn)}
-                </div>
-              )}
-              {property.reservation.checkOut && (
-                <div style={{ fontSize: 11, color: '#718096', marginTop: 2 }}>
-                  체크아웃: {property.reservation.checkOut.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })} {formatTime(property.reservation.checkOut)}
-                </div>
-              )}
-            </div>
-          )}
-
-        </div>
-      </div>
-    );
-  }
-
-  // ── 데스크탑 뷰 ───────────────────────────────────────────────────────────────
+  // ── 단일 JSX 트리 — isMobile로 크기/간격만 조정 ───────────────────────────────
   return (
     <div style={{ background: '#f0f4f8', height: '100%', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* 헤더 */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '14px 20px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-          <button onClick={onBack} style={{ border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', padding: '6px 12px', fontSize: 13, color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit' }}>
+      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: isMobile ? '10px 16px' : '14px 20px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 12, marginBottom: 10 }}>
+          <button onClick={onBack} style={{ border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', padding: isMobile ? '5px 10px' : '6px 12px', fontSize: isMobile ? 12 : 13, color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
             ← 목록
           </button>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: '#1a202c' }}>{property.name}</div>
-            <div style={{ fontSize: 12, color: '#a0aec0' }}>{property.district} · {property.id}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, color: '#1a202c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{property.name}</div>
+            <div style={{ fontSize: isMobile ? 10 : 12, color: '#a0aec0' }}>{property.district} · {property.id}</div>
           </div>
           <div style={{
             background: currentMeta.bg, border: `1.5px solid ${currentMeta.border}`,
-            borderRadius: 10, padding: '8px 14px', textAlign: 'center',
+            borderRadius: isMobile ? 8 : 10, padding: isMobile ? '5px 10px' : '8px 14px', textAlign: 'center', flexShrink: 0,
           }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: currentMeta.color }}>{currentMeta.label}</div>
-            <div style={{ fontSize: 11, color: currentMeta.color, opacity: 0.9 }}>{currentSubLabel}</div>
+            <div style={{ fontSize: isMobile ? 12 : 14, fontWeight: 700, color: currentMeta.color }}>{currentMeta.label}</div>
+            <div style={{ fontSize: isMobile ? 9 : 11, color: currentMeta.color, opacity: 0.9 }}>{currentSubLabel}</div>
           </div>
         </div>
 
-        {/* 상태 필터 탭 */}
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto' }}>
+        {/* 상태 필터 탭 — 모바일: 시각 인디케이터만 (클릭 없음), PC: 탭 클릭 → 해당 구간 이동 */}
+        <div style={{ display: 'flex', gap: isMobile ? 5 : 8, overflowX: isMobile ? 'hidden' : 'auto', flexWrap: 'nowrap' }}>
           {Object.entries(STATE_META).map(([key, meta]) => {
             const active = presentMainStatuses.has(key);
             return (
               <button
                 key={key}
-                onClick={() => active && scrollToState(key)}
+                onClick={() => !isMobile && active && scrollToState(key)}
                 disabled={!active}
                 style={{
                   flexShrink: 0,
                   border: `1.5px solid ${active ? meta.color : '#e2e8f0'}`,
                   borderRadius: 20,
-                  padding: '4px 13px',
+                  padding: isMobile ? '3px 9px' : '4px 13px',
                   background: active ? meta.bg : '#f9fafb',
                   color: active ? meta.color : '#c8d5e0',
-                  fontSize: 12, fontWeight: 600,
-                  cursor: active ? 'pointer' : 'default',
+                  fontSize: isMobile ? 11 : 12, fontWeight: 600,
+                  cursor: (!isMobile && active) ? 'pointer' : 'default',
                   fontFamily: 'inherit',
                   transition: 'all 0.15s',
                 }}
@@ -883,23 +634,37 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
               </button>
             );
           })}
-          <span style={{ fontSize: 11, color: '#a0aec0', alignSelf: 'center', marginLeft: 4, flexShrink: 0 }}>
-            탭 클릭 → 해당 구간
-          </span>
+          {!isMobile && (
+            <span style={{ fontSize: 11, color: '#a0aec0', alignSelf: 'center', marginLeft: 4, flexShrink: 0 }}>
+              탭 클릭 → 해당 구간
+            </span>
+          )}
         </div>
       </div>
+
+      {/* 이상 감지 배너 — 모바일만 표시 */}
+      {isMobile && anomalies.length > 0 && (
+        <div style={{ background: '#fef2f2', borderBottom: '1.5px solid #fca5a5', padding: '8px 16px', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#dc2626' }}>⚠ 이상 감지</span>
+          {anomalies.map(r => (
+            <span key={r.key} style={{ fontSize: 11, background: '#fff', border: '1px solid #fca5a5', borderRadius: 12, padding: '2px 8px', color: '#dc2626' }}>
+              {SENSOR_ICONS[r.key]} {SENSOR_LABELS[r.key]} {formatSensorVal(r.key, r.val)}{SENSOR_UNITS[r.key]}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* 본문: 타임라인(좁게) + 센서 패널(넓게) */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
-        {/* 세로 타임라인 — 고정 폭 */}
+        {/* 세로 타임라인 — 반응형 폭 */}
         <div
           ref={timelineRef}
           style={{
-            width: LABEL_WIDTH + TIMELINE_WIDTH + SUB_BAR_W + 24,  // 레이블 + 메인바 + 서브바 + 패딩
+            width: LABEL_W + TIMELINE_W + SUB_W + (isMobile ? 20 : 24),
             flexShrink: 0,
             overflowY: 'auto',
-            padding: '16px 8px 40px 16px',
+            padding: tlPad,
           }}
         >
           <div style={{ position: 'relative', height: containerHeight }}>
@@ -909,7 +674,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
                 {m.isNewDay ? (
                   /* 자정 — 날짜 레이블 강조 */
                   <div style={{
-                    width: LABEL_WIDTH, flexShrink: 0,
+                    width: LABEL_W, flexShrink: 0,
                     fontSize: 10, fontWeight: 800,
                     color: '#1e3a8a',
                     fontFamily: "'DM Sans', sans-serif",
@@ -922,7 +687,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
                   </div>
                 ) : (
                   <div style={{
-                    width: LABEL_WIDTH, flexShrink: 0,
+                    width: LABEL_W, flexShrink: 0,
                     fontSize: 9,
                     color: hourLabelColor(m),
                     fontFamily: "'DM Mono', monospace",
@@ -934,12 +699,12 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
                     {m.label}
                   </div>
                 )}
-                <div style={{ width: TIMELINE_WIDTH, borderTop: hourLineBorder(m) }} />
+                <div style={{ width: TIMELINE_W, borderTop: hourLineBorder(m) }} />
               </div>
             ))}
 
             {/* 상태 바 컬럼 (메인 + 서브) */}
-            <div style={{ position: 'absolute', left: LABEL_WIDTH, width: TIMELINE_WIDTH + SUB_BAR_W, top: 0, height: containerHeight }}>
+            <div style={{ position: 'absolute', left: LABEL_W, width: TIMELINE_W + SUB_W, top: 0, height: containerHeight }}>
               <div style={{ position: 'relative', height: '100%', borderRadius: 6, overflow: 'hidden', background: '#f0f4f8' }}>
                 {recentSegs.map((seg) => (
                   <StateBar
@@ -949,6 +714,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
                     mainStatusRefs={mainStatusRefs}
                     hourPx={hourPx}
                     suppressLabel={cleaningInfoMap.has(seg)}
+                    subBarW={SUB_W}
                   />
                 ))}
               </div>
@@ -967,7 +733,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
             }} />
             {/* 현재 시각 마커 — 레이블 */}
             <div style={{
-              position: 'absolute', top: nowTopPx - 22, left: LABEL_WIDTH + 4,
+              position: 'absolute', top: nowTopPx - 22, left: LABEL_W + 4,
               display: 'flex', alignItems: 'center', gap: 4,
               zIndex: 30, pointerEvents: 'none',
             }}>
@@ -998,7 +764,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
                   style={{
                     position: 'absolute',
                     top: topPx - 12,
-                    left: LABEL_WIDTH + (TIMELINE_WIDTH - 22) / 2,
+                    left: LABEL_W + (TIMELINE_W - 22) / 2,
                     zIndex: 35,
                     pointerEvents: 'none',
                     display: 'flex',
@@ -1042,7 +808,35 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
         </div>
 
         {/* 센서 패널 — 나머지 공간 전부 */}
-        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: detailPad, display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+          {/* 오늘의 상태 흐름 — 모바일만 표시 */}
+          {isMobile && todaySegs.length > 0 && (
+            <div style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8 }}>오늘의 상태 흐름</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {todaySegs.map((seg, i) => {
+                  const meta = STATE_META[seg.mainStatus];
+                  const subLabel = meta?.subStates[seg.subStatus]?.label || seg.subStatus;
+                  const displayStart = seg.start < todayMid ? '자정 이전' : formatTime(seg.start);
+                  const displayEnd = seg.end > tomorrowMid ? '자정 이후' : (seg.isFuture ? `예정 ${formatTime(seg.end)}` : formatTime(seg.end));
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: meta?.color || '#94a3b8', flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: meta?.color || '#374151' }}>{meta?.label || seg.mainStatus}</span>
+                        <span style={{ fontSize: 10, color: '#718096', marginLeft: 5 }}>{subLabel}</span>
+                      </div>
+                      <div style={{ fontSize: 10, color: '#94a3b8', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
+                        {displayStart} → {displayEnd}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {property.monitorState?.mainStatus === 'VACANT' && (
             <VacantCard
               monitorState={property.monitorState}
@@ -1070,10 +864,10 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
           )}
           {weather && <WeatherCard weather={weather} />}
 
-          {(property.sensorReadings ?? (property.sensors && Object.entries(property.sensors).map(([key, val]) => ({ key, val, label: '' }))))?.length > 0 && (
+          {sensorRows.length > 0 && (
             <>
               <div style={{ fontSize: 12, fontWeight: 700, color: '#718096', letterSpacing: 0.5, marginBottom: 2 }}>실시간 센서</div>
-              {(property.sensorReadings ?? Object.entries(property.sensors).map(([key, val]) => ({ key, val, label: '' }))).map((r, i) => (
+              {sensorRows.map((r, i) => (
                 <LiveSensor key={`${r.key}-${i}`} sensorKey={r.key} baseVal={r.val} label={r.label} />
               ))}
             </>

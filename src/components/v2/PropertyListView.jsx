@@ -144,177 +144,33 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
     return (subUrgency[a.currentState.subStatus] ?? 9) - (subUrgency[b.currentState.subStatus] ?? 9);
   });
 
-  const NAME_W  = 140;
-  const BADGE_W = 82;
-  const STRIP_W = 4;
+  const PAD         = isMobile ? 12 : 20;
+  const NAME_W      = isMobile ? 86 : 140;
+  const BADGE_W     = isMobile ? 52 : 82;
+  const STRIP_W     = 4;
+  const GANTT_H     = isMobile ? 44 : 72;   // 간트 헤더 높이
+  const ROW_GANTT_H = isMobile ? 26 : 40;   // 숙소 행 간트 바 높이
+  // 고정 열 너비: 모바일 2행 레이아웃은 스트립만, PC는 스트립+이름+배지
+  const fixedLeft   = isMobile ? PAD + STRIP_W : PAD + STRIP_W + NAME_W + BADGE_W;
 
-  // ── 모바일 뷰 ────────────────────────────────────────────────────────────────
-  if (isMobile) {
-    const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
-    const miniStart = new Date(todayMid); miniStart.setDate(miniStart.getDate() - 2);
-    const miniEnd   = new Date(miniStart); miniEnd.setDate(miniEnd.getDate() + 7);
-    const miniMs    = miniEnd - miniStart;
-    const miniNowLeft = ((Date.now() - miniStart.getTime()) / miniMs * 100).toFixed(2);
-    const miniDays  = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(miniStart); d.setDate(d.getDate() + i);
-      return { date: d.getDate(), isToday: i === 2 };
-    });
-
-    return (
-      <div style={{ background: '#f0f4f8', minHeight: '100%', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
-        {/* 헤더 */}
-        <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={onBack} style={{ border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', padding: '5px 10px', fontSize: 12, color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
-            ← 대시보드
-          </button>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#1a202c' }}>숙소 목록</div>
-            <div style={{ fontSize: 10, color: '#a0aec0' }}>{sorted.length}개 표시 (전체 {properties.length})</div>
-          </div>
-        </div>
-
-        {/* 필터 바 — 스크롤 없이 wrap */}
-        <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '8px 16px', display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-          {[FILTER_ALL, ...ORDER].map(key => {
-            const meta   = key === FILTER_ALL ? null : STATE_META[key];
-            const cnt    = key === FILTER_ALL ? properties.length : properties.filter(p => p.currentState.mainStatus === key).length;
-            const active = filter === key;
-            return (
-              <button key={key} onClick={() => setFilter(key)} style={{
-                border: `1.5px solid ${active ? (meta?.color || '#2563eb') : '#e2e8f0'}`,
-                borderRadius: 20, padding: '4px 10px',
-                background: active ? (meta?.color || '#2563eb') : '#fff',
-                color: active ? '#fff' : (meta?.color || '#4a5568'),
-                fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-              }}>
-                {meta ? meta.label : '전체'} {cnt}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* 숙소 목록 */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px', display: 'flex', flexDirection: 'column', gap: 5 }}>
-          {sorted.map(prop => {
-            const meta     = STATE_META[prop.currentState.mainStatus];
-            const subLabel = meta.subStates[prop.currentState.subStatus]?.label || '';
-            const isUrgent = prop.currentState.mainStatus === 'OCCUPIED' &&
-              ['ISSUE_AND_ENERGY', 'ISSUE_COMPLAINT', 'ENERGY_WASTE'].includes(prop.currentState.subStatus);
-            const miniSegs = mergeGanttSegments(getGanttSegments(prop, miniStart, miniEnd));
-
-            return (
-              <div
-                key={prop.id}
-                onClick={() => onSelectProperty(prop)}
-                style={{
-                  background: '#fff', borderRadius: 10, overflow: 'hidden',
-                  border: `1.5px solid ${isUrgent ? meta.color : '#e2e8f0'}`,
-                  cursor: 'pointer',
-                }}
-              >
-                {/* 줄 1: 숙소명 + 상태 배지 */}
-                <div style={{ display: 'flex', alignItems: 'center', minHeight: 44 }}>
-                  <div style={{ width: 4, alignSelf: 'stretch', background: meta.color, flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0, padding: '8px 10px' }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1a202c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
-                      {prop.name}
-                    </div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.3 }}>{prop.district}</div>
-                  </div>
-                  <div style={{ flexShrink: 0, padding: '6px 10px 6px 0' }}>
-                    <div style={{ background: meta.bg, border: `1.5px solid ${meta.border}`, borderRadius: 8, padding: '4px 9px', textAlign: 'center', minWidth: 52 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: meta.color, lineHeight: 1.3 }}>{meta.label}</div>
-                      <div style={{ fontSize: 10, color: meta.color, opacity: 0.85, lineHeight: 1.3, whiteSpace: 'nowrap' }}>{subLabel}</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 줄 2: 7일 타임라인 — 세그먼트 + 날짜 레이블 */}
-                <div style={{ display: 'flex', alignItems: 'stretch' }}>
-                  <div style={{ width: 4, background: meta.color, opacity: 0.3, flexShrink: 0 }} />
-                  <div style={{ flex: 1, height: 36, position: 'relative', overflow: 'hidden', background: '#eef2f7' }}>
-                    {/* 상태 세그먼트 — 과거: 진하게(0.75), 미래: 더 진하게(0.92) */}
-                    {miniSegs.map((seg, si) => {
-                      const m = STATE_META[seg.mainStatus];
-                      if (!m) return null;
-                      const s = Math.max(seg.start.getTime(), miniStart.getTime());
-                      const e = Math.min(seg.end.getTime(), miniEnd.getTime());
-                      if (e <= s) return null;
-                      const left  = ((s - miniStart.getTime()) / miniMs * 100).toFixed(2);
-                      const width = ((e - s) / miniMs * 100).toFixed(2);
-                      return (
-                        <div key={si} style={{
-                          position: 'absolute', left: `${left}%`, width: `${width}%`,
-                          top: 2, bottom: 13,
-                          background: m.color,
-                          opacity: seg.isFuture ? 0.92 : 0.75,
-                        }} />
-                      );
-                    })}
-                    {/* 현재 시각 선 */}
-                    <div style={{
-                      position: 'absolute', left: `${miniNowLeft}%`, top: 0, bottom: 13,
-                      width: 2.5, background: '#1a202c', zIndex: 5,
-                    }} />
-                    {/* 날짜 레이블 행 (하단 13px) */}
-                    <div style={{
-                      position: 'absolute', bottom: 0, left: 0, right: 0, height: 13,
-                      display: 'flex', borderTop: '1px solid #d1d9e0', background: '#e8edf4',
-                    }}>
-                      {miniDays.map((d, i) => (
-                        <div key={i} style={{
-                          flex: 1, textAlign: 'center', fontSize: 8, lineHeight: '13px',
-                          fontFamily: "'DM Mono', monospace",
-                          fontWeight: d.isToday ? 800 : 400,
-                          color: d.isToday ? '#1a202c' : '#94a3b8',
-                          background: d.isToday ? 'rgba(26,32,44,0.08)' : 'transparent',
-                        }}>
-                          {d.isToday ? '오늘' : d.date}
-                        </div>
-                      ))}
-                    </div>
-                    {/* 일 구분선 (날짜 영역 위) */}
-                    {miniDays.map((d, i) => (
-                      <div key={i} style={{
-                        position: 'absolute', left: `${i / 7 * 100}%`, top: 0, bottom: 13,
-                        width: 1, background: d.isToday ? '#94a3b8' : '#d1d9e0',
-                        zIndex: 3, opacity: d.isToday ? 0.8 : 0.6,
-                      }} />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-
-          {sorted.length === 0 && (
-            <div style={{ textAlign: 'center', padding: 32, color: '#a0aec0', fontSize: 13 }}>
-              해당 상태의 숙소가 없습니다.
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ── 데스크탑 뷰 ───────────────────────────────────────────────────────────────
+  // ── 단일 JSX 트리 — isMobile로 크기/간격만 조정 ───────────────────────────────
   return (
     <div style={{ background: '#f0f4f8', minHeight: '100%', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
       {/* 페이지 헤더 */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button onClick={onBack} style={{ border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', padding: '6px 12px', fontSize: 13, color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit' }}>
+      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: isMobile ? '10px 16px' : '14px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button onClick={onBack} style={{ border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', padding: isMobile ? '5px 10px' : '6px 12px', fontSize: isMobile ? 12 : 13, color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit' }}>
           ← 대시보드
         </button>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 17, fontWeight: 700, color: '#1a202c' }}>숙소 목록</div>
+          <div style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, color: '#1a202c' }}>숙소 목록</div>
           <div style={{ fontSize: 12, color: '#a0aec0', fontFamily: "'DM Mono', monospace" }}>
             20일 타임라인 · {sorted.length}개 표시 (전체 {properties.length})
           </div>
         </div>
       </div>
 
-      {/* 필터 바 */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '10px 20px', display: 'flex', gap: 8, overflowX: 'auto' }}>
+      {/* 필터 바 — 모바일: 소형 버튼 한 줄, PC: 일반 크기 */}
+      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: `${isMobile ? 7 : 10}px ${PAD}px`, display: 'flex', gap: isMobile ? 4 : 8, overflowX: 'hidden', flexWrap: 'nowrap' }}>
         {[FILTER_ALL, ...ORDER].map(key => {
           const meta   = key === FILTER_ALL ? null : STATE_META[key];
           const cnt    = key === FILTER_ALL ? properties.length : properties.filter(p => p.currentState.mainStatus === key).length;
@@ -323,10 +179,10 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
             <button key={key} onClick={() => setFilter(key)} style={{
               flexShrink: 0,
               border: `1.5px solid ${active ? (meta?.color || '#2563eb') : '#e2e8f0'}`,
-              borderRadius: 20, padding: '5px 14px',
+              borderRadius: 20, padding: isMobile ? '3px 7px' : '5px 14px',
               background: active ? (meta?.color || '#2563eb') : '#fff',
               color: active ? '#fff' : (meta?.color || '#4a5568'),
-              fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: isMobile ? 10 : 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
               transition: 'all 0.15s',
             }}>
               {meta ? meta.label : '전체'} {cnt}
@@ -338,24 +194,23 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
       {/* 간트 헤더 + 목록 래퍼 — 현재 시각 연속선 기준점 */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', minHeight: 0 }}>
 
-        {/* 현재 시각 연속 수직선 — 헤더~목록 전체 관통, 각 행에 개별 선 없음 */}
+        {/* 현재 시각 연속 수직선 — 헤더~목록 전체 관통 */}
         <div style={{
           position: 'absolute',
-          left: `calc(${20 + STRIP_W + NAME_W + BADGE_W}px + ${nowLeft / 100} * (100% - ${20 + STRIP_W + NAME_W + BADGE_W + 20}px))`,
+          left: `calc(${fixedLeft}px + ${nowLeft / 100} * (100% - ${fixedLeft + PAD}px))`,
           top: 0, bottom: 0,
           width: 2, background: '#1a202c', zIndex: 20, pointerEvents: 'none',
         }} />
 
-      {/* 간트 헤더 */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '0 20px', display: 'flex' }}>
-        {/* 왼쪽 고정 열 헤더 */}
-        <div style={{ width: STRIP_W + NAME_W, flexShrink: 0, padding: '8px 0 8px 8px', fontSize: 11, color: '#a0aec0', fontWeight: 600, letterSpacing: 0.5, display: 'flex', alignItems: 'flex-end' }}>
-          숙소
+      {/* 간트 헤더 — 모바일: 스트립 너비만 고정, PC: 스트립+이름+배지 */}
+      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: `0 ${PAD}px`, display: 'flex' }}>
+        <div style={{ width: isMobile ? STRIP_W : STRIP_W + NAME_W, flexShrink: 0, padding: isMobile ? undefined : '8px 0 8px 8px', fontSize: 11, color: '#a0aec0', fontWeight: 600, letterSpacing: 0.5, display: 'flex', alignItems: 'flex-end' }}>
+          {!isMobile && '숙소'}
         </div>
-        <div style={{ width: BADGE_W, flexShrink: 0 }} />
+        <div style={{ width: isMobile ? 0 : BADGE_W, flexShrink: 0 }} />
 
         {/* 간트 열 헤더 */}
-        <div style={{ flex: 1, position: 'relative', height: 72, overflow: 'hidden' }}>
+        <div style={{ flex: 1, position: 'relative', height: GANTT_H, overflow: 'hidden' }}>
 
 
           {/* ② 지금 레이블 + 도트 (Detail View와 동일 스타일) */}
@@ -384,8 +239,8 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#1a202c' }} />
           </div>
 
-          {/* ③ 월/연도 — Today 레이블 아래 */}
-          {monthLabels.map((ml, i) => (
+          {/* ③ 월/연도 — PC만 표시 */}
+          {!isMobile && monthLabels.map((ml, i) => (
             <div key={i} style={{
               position: 'absolute', left: `${ml.left}%`, top: 30,
               fontSize: 10, color: '#64748b', fontWeight: 700,
@@ -421,19 +276,19 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
                 }} />
                 {/* 날짜 레이블 (Today 포함 전부 표시) */}
                 <div style={{
-                  position: 'absolute', left: `${posLeft}%`, top: 44,
+                  position: 'absolute', left: `${posLeft}%`, top: isMobile ? 37 : 44,
                   transform: posTransform,
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
                 }}>
-                  <span style={{
+                  {!isMobile && <span style={{
                     fontSize: 8, color: txtColor,
                     fontFamily: "'DM Mono', monospace", lineHeight: 1,
                     fontWeight: dl.isToday || dl.isWeekend ? 700 : 400,
                   }}>
                     {dl.dayOfWeek}
-                  </span>
+                  </span>}
                   <span style={{
-                    fontSize: 11, color: txtColor,
+                    fontSize: isMobile ? 9 : 11, color: txtColor,
                     fontFamily: "'DM Mono', monospace",
                     fontWeight: dl.isToday || dl.isWeekend ? 700 : 400, lineHeight: 1,
                   }}>
@@ -447,7 +302,7 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
       </div>
 
       {/* 숙소 목록 */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 20px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: `8px ${PAD}px` }}>
         {sorted.map((prop) => {
           const meta     = STATE_META[prop.currentState.mainStatus];
           const subLabel = meta.subStates[prop.currentState.subStatus]?.label || prop.currentState.subStatus;
@@ -459,31 +314,65 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
               key={prop.id}
               onClick={() => onSelectProperty(prop)}
               style={{
-                display: 'flex', alignItems: 'center',
+                // 모바일: CSS grid 2행(이름줄/타임라인줄), PC: flex 1행
+                display: isMobile ? 'grid' : 'flex',
+                gridTemplateColumns: isMobile ? `${STRIP_W}px 1fr ${BADGE_W}px` : undefined,
+                gridTemplateRows: isMobile ? 'auto auto' : undefined,
+                alignItems: isMobile ? 'stretch' : 'center',
                 background: '#fff', borderRadius: 10, marginBottom: 6,
                 border: `1.5px solid ${isUrgent ? meta.color : '#e2e8f0'}`,
                 cursor: 'pointer', overflow: 'hidden',
               }}
             >
-              <div style={{ width: STRIP_W, alignSelf: 'stretch', background: meta.color, flexShrink: 0 }} />
-              <div style={{ width: NAME_W, flexShrink: 0, padding: '10px 10px' }}>
+              {/* 색상 스트립 — 모바일: grid 1열 양쪽 행 span */}
+              <div style={{
+                gridRow: isMobile ? '1 / 3' : undefined,
+                gridColumn: isMobile ? '1' : undefined,
+                width: isMobile ? undefined : STRIP_W,
+                alignSelf: 'stretch', background: meta.color, flexShrink: 0,
+              }} />
+
+              {/* 숙소명 — 모바일: grid 1행 2열 */}
+              <div style={{
+                gridRow: isMobile ? '1' : undefined,
+                gridColumn: isMobile ? '2' : undefined,
+                width: isMobile ? undefined : NAME_W,
+                flexShrink: isMobile ? undefined : 0,
+                padding: isMobile ? '5px 8px' : '10px 10px',
+                minWidth: 0,
+              }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: '#1a202c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {prop.name}
                 </div>
-                <div style={{ fontSize: 10, color: '#a0aec0' }}>{prop.district}</div>
+                {!isMobile && <div style={{ fontSize: 10, color: '#a0aec0' }}>{prop.district}</div>}
               </div>
-              <div style={{ width: BADGE_W, flexShrink: 0, padding: '0 6px' }}>
+
+              {/* 상태 배지 — 모바일: grid 1행 3열 */}
+              <div style={{
+                gridRow: isMobile ? '1' : undefined,
+                gridColumn: isMobile ? '3' : undefined,
+                width: isMobile ? undefined : BADGE_W,
+                flexShrink: 0,
+                padding: isMobile ? '4px 5px' : '0 6px',
+                display: 'flex', alignItems: 'center',
+              }}>
                 <div style={{
                   background: meta.bg, border: `1px solid ${meta.border}`,
-                  borderRadius: 7, padding: '4px 6px', textAlign: 'center',
+                  borderRadius: 7, padding: isMobile ? '3px 4px' : '4px 6px',
+                  textAlign: 'center', width: '100%',
                 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: meta.color, lineHeight: 1.2 }}>{meta.label}</div>
                   <div style={{ fontSize: 9, color: meta.color, opacity: 0.8, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subLabel}</div>
                 </div>
               </div>
 
-              {/* 간트 바 */}
-              <div style={{ flex: 1, position: 'relative', height: 40, overflow: 'hidden' }}>
+              {/* 간트 바 — 모바일: grid 2행 2~3열 span */}
+              <div style={{
+                gridRow: isMobile ? '2' : undefined,
+                gridColumn: isMobile ? '2 / 4' : undefined,
+                flex: isMobile ? undefined : 1,
+                position: 'relative', height: ROW_GANTT_H, overflow: 'hidden',
+              }}>
                 {/* 과거 구간 배경 — 연한 회색으로 "지난 시간" 느낌 */}
                 <div style={{
                   position: 'absolute', left: 0, top: 0, bottom: 0, width: `${nowLeft}%`,
@@ -522,7 +411,7 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
       </div>{/* 간트 래퍼 끝 */}
 
       {/* 범례 */}
-      <div style={{ background: '#fff', borderTop: '1px solid #e2e8f0', padding: '10px 20px', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ background: '#fff', borderTop: '1px solid #e2e8f0', padding: `10px ${PAD}px`, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         {Object.entries(STATE_META).map(([key, meta]) => (
           <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <div style={{ width: 12, height: 12, background: meta.color, borderRadius: 3 }} />
