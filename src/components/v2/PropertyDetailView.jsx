@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { weatherMeta } from '../../infrastructure/weatherClient';
 import { STATE_META, SEGMENT_COLORS, getWindowSegments } from '../../data/roomStateMockData';
 import { useMobile } from '../../hooks/useMobile';
@@ -479,6 +480,8 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
   const timelineRef = useRef(null);
   const now = new Date();
 
+  const [lightboxSnap, setLightboxSnap] = useState(null);
+
   // 화면 높이 기반 초기 추정: 헤더 약 140px 제외 후 40시간 분할
   const [hourPx, setHourPx] = useState(() =>
     Math.max(20, Math.floor((window.innerHeight - 140) / VISIBLE_HOURS))
@@ -896,7 +899,8 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
                   const thumbW = isMobile ? 110 : 140;
                   const thumbH = isMobile ? 70 : 88;
                   return (
-                    <div key={snap.ts} style={{ flexShrink: 0, width: thumbW }}>
+                    <div key={snap.ts} style={{ flexShrink: 0, width: thumbW, cursor: 'pointer' }}
+                      onClick={() => setLightboxSnap(snap)}>
                       <img
                         src={`/api/camera/snapshot?path=${encodeURIComponent(snap.path)}`}
                         alt={label}
@@ -910,6 +914,35 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
               </div>
             </div>
           )}
+
+          {/* CCTV 라이트박스 */}
+          {lightboxSnap && (() => {
+            const d = new Date(lightboxSnap.ts);
+            const label = d.toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            return (
+              <div
+                onClick={() => setLightboxSnap(null)}
+                style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                  <span style={{ color: '#cbd5e0', fontSize: 13 }}>{label}</span>
+                  <button onClick={() => setLightboxSnap(null)} style={{ width: 32, height: 32, borderRadius: 8, border: '1.5px solid #4a5568', background: '#2d3748', color: '#a0aec0', fontSize: 16, cursor: 'pointer' }}>✕</button>
+                </div>
+                <div onClick={e => e.stopPropagation()} style={{ width: '90vw', height: '80vh' }}>
+                  <TransformWrapper minScale={0.5} maxScale={8} centerOnInit>
+                    <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }} contentStyle={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <img
+                        src={`/api/camera/snapshot?path=${encodeURIComponent(lightboxSnap.path)}`}
+                        alt={label}
+                        style={{ maxWidth: '90vw', maxHeight: '80vh', borderRadius: 8, userSelect: 'none' }}
+                      />
+                    </TransformComponent>
+                  </TransformWrapper>
+                </div>
+                <div style={{ color: '#4a5568', fontSize: 11, marginTop: 14 }}>배경 클릭·✕ 닫기 &nbsp;·&nbsp; 휠/핀치 확대 &nbsp;·&nbsp; 드래그 이동</div>
+              </div>
+            );
+          })()}
 
           {/* 예약 정보 */}
           {property.reservation?.guestName && (

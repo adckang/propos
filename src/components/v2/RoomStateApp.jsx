@@ -564,7 +564,6 @@ export default function RoomStateApp({ onBack }) {
           setServerWatcherActive(true);
           const log = state.eventLog;
           if (log?.length) setLastMonitorEvent(log[log.length - 1]);
-          setSnapshotLog(state.snapshotLog ?? []);
         }
       } catch {
         setServerWatcherActive(false);
@@ -575,6 +574,23 @@ export default function RoomStateApp({ onBack }) {
     const interval = setInterval(pollServer, 5000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [syncConfig?.name]);
+
+  // snapshotLog 폴링 — syncConfig 무관하게 항상 실행
+  useEffect(() => {
+    let cancelled = false;
+
+    async function pollSnapshot() {
+      try {
+        const state = await fetchMonitoringState();
+        if (cancelled || !state) return;
+        setSnapshotLog(state.snapshotLog ?? []);
+      } catch { /* 연결 없으면 무시 */ }
+    }
+
+    pollSnapshot();
+    const interval = setInterval(pollSnapshot, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
 
   // 날씨 폴링 — district 기준, 15분 주기
   useEffect(() => {
@@ -643,8 +659,8 @@ export default function RoomStateApp({ onBack }) {
         lastMonitorEvent,
         serverWatcherActive,
         snapshotLog,
-      }, ...PROPERTIES]
-    : PROPERTIES;
+      }, ...PROPERTIES.map(p => ({ ...p, snapshotLog }))]
+    : PROPERTIES.map(p => ({ ...p, snapshotLog }));
 
   // ID로 항상 최신 mergedProperties에서 lookup → 폴링 업데이트가 즉시 반영됨
   const selectedProperty = mergedProperties.find(p => p.id === selectedPropertyId) ?? null;
