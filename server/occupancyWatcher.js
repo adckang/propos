@@ -41,8 +41,18 @@ let config    = null;
 const monitor  = new OccupancyMonitor();
 const eventLog     = [];
 const softEventLog = [];  // checkout_confirmation_needed / early_checkin_suspected / no_show_suspected
+const snapshotLog  = [];  // { path, ts, roomState } — CCTV 출입 스냅샷
 let lastError   = null;
 let lastEventAt = Date.now(); // 마지막 정상 이벤트 시각 (히스토리 재처리 기준점)
+
+// HA input_text 헬퍼 엔티티 ID — propos.public.json entities.cctvSnapshotInput에서 읽음
+function loadSnapshotEntity() {
+  try {
+    const raw = readFileSync(join(__dir, '..', 'src', 'config', 'propos.public.json'), 'utf8');
+    return JSON.parse(raw).entities?.cctvSnapshotInput ?? null;
+  } catch { return null; }
+}
+const SNAPSHOT_INPUT_ENTITY = loadSnapshotEntity();
 
 // ── WebSocket 상태 ────────────────────────────────────────────────────────────
 let ws             = null;
@@ -280,8 +290,24 @@ function triggerDebounce() {
   debounceTimer = setTimeout(() => processNow(), 500);
 }
 
+// ── CCTV 스냅샷 기록 ──────────────────────────────────────────────────────────
+function recordSnapshot(path) {
+  snapshotLog.push({ path, ts: Date.now(), roomState: { ...roomState } });
+  if (snapshotLog.length > 30) snapshotLog.shift();
+  console.log(`[Watcher] 스냅샷 기록: ${path}`);
+}
+
 // ── WebSocket 이벤트 핸들러 ────────────────────────────────────────────────────
 function handleStateChanged(entityId, newState) {
+  // 스냅샷 신호 — area 필터 밖에서도 항상 수신
+  if (SNAPSHOT_INPUT_ENTITY && entityId === SNAPSHOT_INPUT_ENTITY) {
+    const path = newState?.state;
+    if (path && path !== 'unknown' && path !== '' && path.startsWith('/local/')) {
+      recordSnapshot(path);
+    }
+    return;
+  }
+
   if (!areaEntityIds.has(entityId)) return; // 이 숙소 엔티티가 아니면 무시
 
   if (isReplaying) {
@@ -489,6 +515,7 @@ export function getMonitoringState() {
     roomState,
     eventLog:      eventLog.slice(-20),
     softEventLog:  softEventLog.slice(-20),
+    snapshotLog:   snapshotLog.slice(-20),
     config:      config ? { areaName: config.areaName } : null,
     wsConnected: ws?.readyState === WebSocket.OPEN,
     isReplaying,

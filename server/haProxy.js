@@ -3,6 +3,10 @@ import CFG from "../src/config/privateConfig.js";
 const HA_BASE = CFG.ha.baseUrl;
 const HA_TOKEN = CFG.ha.token;
 
+export function getHaBaseUrl() {
+  return HA_BASE;
+}
+
 export function getHaWsUrl() {
   if (CFG.ha.wsUrl) return CFG.ha.wsUrl;
   return HA_BASE.replace(/^https/, 'wss').replace(/^http/, 'ws') + '/api/websocket';

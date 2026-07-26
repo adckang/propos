@@ -5,7 +5,8 @@
     "tempSensor": "sensor.temperature_humidity_sensor_temperature",
     "humiditySensor": "sensor.temperature_humidity_sensor_humidity",
     "noiseSensor": null,
-    "powerSensor": null
+    "powerSensor": null,
+    "cctvSnapshotInput": "input_text.propos_last_snapshot"
   },
   "sensorThresholds": {
     "temp": { "warn": 30, "critical": 35 },

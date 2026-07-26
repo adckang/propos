@@ -368,6 +368,7 @@ export default function RoomStateApp({ onBack }) {
 
   // 모니터링 상태 — 서버(Pi watcher)에서 폴링, fallback으로 브라우저 로컬 실행
   const [monitorState, setMonitorState]         = useState(INITIAL_STATE);
+  const [snapshotLog, setSnapshotLog]           = useState([]);
   const [serverWatcherActive, setServerWatcherActive] = useState(false);
   const [lastMonitorEvent, setLastMonitorEvent] = useState(null);
   const localMonitorRef = useRef(new OccupancyMonitor());
@@ -563,6 +564,7 @@ export default function RoomStateApp({ onBack }) {
           setServerWatcherActive(true);
           const log = state.eventLog;
           if (log?.length) setLastMonitorEvent(log[log.length - 1]);
+          setSnapshotLog(state.snapshotLog ?? []);
         }
       } catch {
         setServerWatcherActive(false);
@@ -640,6 +642,7 @@ export default function RoomStateApp({ onBack }) {
         monitorState,
         lastMonitorEvent,
         serverWatcherActive,
+        snapshotLog,
       }, ...PROPERTIES]
     : PROPERTIES;
 

@@ -16,6 +16,7 @@
 import http from 'node:http';
 import { startWatcher, stopWatcher, getMonitoringState, setMonitoringConfig, setRoomState } from '../server/occupancyWatcher.js';
 import { loadProperties, saveProperties } from '../server/propertiesStore.js';
+import { getHaBaseUrl, getHaToken } from '../server/haProxy.js';
 
 const PORT = Number(process.env.PROPOS_WATCHER_PORT ?? 3001);
 
@@ -74,6 +75,33 @@ const server = http.createServer(async (req, res) => {
     const list = Array.isArray(body) ? body : [];
     saveProperties(list);
     sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  // ── 카메라 스냅샷 이미지 프록시 ───────────────────────────────────────────────
+  // GET /api/camera/snapshot?path=/local/snapshots/entry_XXX.jpg
+  // HA가 /config/www/snapshots/에 저장한 이미지를 브라우저에 중계
+  if (req.method === 'GET' && url.pathname === '/api/camera/snapshot') {
+    const imgPath = url.searchParams.get('path') ?? '';
+    if (!imgPath.startsWith('/local/snapshots/') || imgPath.includes('..')) {
+      sendJson(res, 400, { error: 'invalid path' });
+      return;
+    }
+    try {
+      const imgUrl = `${getHaBaseUrl()}${imgPath}`;
+      const imgRes = await fetch(imgUrl, {
+        headers: { Authorization: `Bearer ${getHaToken()}` },
+      });
+      if (!imgRes.ok) { res.writeHead(404); res.end(); return; }
+      const buf = Buffer.from(await imgRes.arrayBuffer());
+      res.writeHead(200, {
+        'Content-Type': imgRes.headers.get('content-type') || 'image/jpeg',
+        'Content-Length': buf.length,
+        'Cache-Control': 'public, max-age=86400',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.end(buf);
+    } catch { res.writeHead(502); res.end(); }
     return;
   }
 

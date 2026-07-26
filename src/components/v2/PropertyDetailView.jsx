@@ -885,6 +885,32 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
             </div>
           )}
 
+          {/* CCTV 출입 스냅샷 */}
+          {property.snapshotLog?.length > 0 && (
+            <div style={{ marginTop: 4 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#718096', letterSpacing: 0.5, marginBottom: 8 }}>출입 기록 (CCTV)</div>
+              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+                {[...property.snapshotLog].reverse().map((snap) => {
+                  const d = new Date(snap.ts);
+                  const label = d.toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  const thumbW = isMobile ? 110 : 140;
+                  const thumbH = isMobile ? 70 : 88;
+                  return (
+                    <div key={snap.ts} style={{ flexShrink: 0, width: thumbW }}>
+                      <img
+                        src={`/api/camera/snapshot?path=${encodeURIComponent(snap.path)}`}
+                        alt={label}
+                        style={{ width: '100%', height: thumbH, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0', display: 'block' }}
+                        onError={e => { e.currentTarget.style.display = 'none'; }}
+                      />
+                      <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 3, textAlign: 'center' }}>{label}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* 예약 정보 */}
           {property.reservation?.guestName && (
             <div style={{ background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: 10, padding: '14px 16px', marginTop: 4 }}>

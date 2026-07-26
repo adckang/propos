@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import { handleNodeHaRequest } from "./server/haApiHandlers.js";
 import { handleNodeIcalRequest } from "./server/icalApiHandlers.js";
 import { startWatcher, getMonitoringState, setMonitoringConfig, setRoomState } from "./server/occupancyWatcher.js";
+import { getHaBaseUrl, getHaToken } from "./server/haProxy.js";
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -17,6 +18,25 @@ async function readBody(req) {
   if (!chunks.length) return {};
   try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
   catch { return {}; }
+}
+
+async function handleCameraSnapshot(req, res) {
+  const imgPath = new URL(req.url, "http://localhost").searchParams.get("path") ?? "";
+  if (!imgPath.startsWith("/local/snapshots/") || imgPath.includes("..")) {
+    res.statusCode = 400; res.end(); return;
+  }
+  try {
+    const imgRes = await fetch(`${getHaBaseUrl()}${imgPath}`, {
+      headers: { Authorization: `Bearer ${getHaToken()}` },
+    });
+    if (!imgRes.ok) { res.statusCode = 404; res.end(); return; }
+    const buf = Buffer.from(await imgRes.arrayBuffer());
+    res.statusCode = 200;
+    res.setHeader("Content-Type", imgRes.headers.get("content-type") || "image/jpeg");
+    res.setHeader("Content-Length", buf.length);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.end(buf);
+  } catch { res.statusCode = 502; res.end(); }
 }
 
 function apiProxyPlugin() {
@@ -43,6 +63,10 @@ function apiProxyPlugin() {
         const body = await readBody(req);
         if (body.roomState) setRoomState(body.roomState);
         sendJson(res, 200, { ok: true });
+        return;
+      }
+      if (req.url?.startsWith("/api/camera/snapshot") && req.method === "GET") {
+        await handleCameraSnapshot(req, res);
         return;
       }
       next();
