@@ -32,8 +32,9 @@ import {
 
 const __dir    = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dir, '..', 'data');
-const STATE_FILE  = join(DATA_DIR, 'monitoring-state.json');
-const CONFIG_FILE = join(DATA_DIR, 'monitoring-config.json');
+const STATE_FILE        = join(DATA_DIR, 'monitoring-state.json');
+const CONFIG_FILE       = join(DATA_DIR, 'monitoring-config.json');
+const SNAPSHOT_LOG_FILE = join(DATA_DIR, 'snapshotLog.json');
 
 // ── 공유 상태 ─────────────────────────────────────────────────────────────────
 let roomState = INITIAL_STATE;
@@ -104,6 +105,19 @@ function loadPersistedConfig() {
 function persistConfig(cfg) {
   ensureDataDir();
   try { writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2)); } catch { /* ignore */ }
+}
+
+function persistSnapshotLog() {
+  ensureDataDir();
+  try { writeFileSync(SNAPSHOT_LOG_FILE, JSON.stringify(snapshotLog, null, 2)); } catch { /* ignore */ }
+}
+
+function loadSnapshotLog() {
+  try {
+    const raw = readFileSync(SNAPSHOT_LOG_FILE, 'utf8');
+    const saved = JSON.parse(raw);
+    if (Array.isArray(saved)) snapshotLog.push(...saved.slice(-30));
+  } catch { /* 파일 없으면 빈 배열 유지 */ }
 }
 
 // ── 스냅샷 빌드 ───────────────────────────────────────────────────────────────
@@ -294,6 +308,7 @@ function triggerDebounce() {
 function recordSnapshot(path) {
   snapshotLog.push({ path, ts: Date.now(), roomState: { ...roomState } });
   if (snapshotLog.length > 30) snapshotLog.shift();
+  persistSnapshotLog();
   console.log(`[Watcher] 스냅샷 기록: ${path}`);
 }
 
@@ -565,6 +580,7 @@ export function startWatcher() {
 
   roomState = loadPersistedState();
   config    = loadPersistedConfig();
+  loadSnapshotLog();
   console.log('[Watcher] 시작');
 
   // 비동기 초기화 (fire-and-forget)
