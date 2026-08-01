@@ -6,7 +6,16 @@
  * 환경변수 미설정 시 503 반환.
  */
 
-const WATCHER_URL = process.env.PROPOS_WATCHER_URL;
+const WATCHER_URLS = (() => {
+  try { return JSON.parse(process.env.PROPOS_WATCHER_URLS ?? '{}'); }
+  catch { return {}; }
+})();
+const DEFAULT_WATCHER_URL = process.env.PROPOS_WATCHER_URL;
+
+function resolveWatcherUrl(watcherId) {
+  if (watcherId && WATCHER_URLS[watcherId]) return WATCHER_URLS[watcherId];
+  return DEFAULT_WATCHER_URL ?? null;
+}
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -28,6 +37,9 @@ export default async function handler(req, res) {
     sendJson(res, 405, { error: 'Method not allowed' });
     return;
   }
+
+  const watcherId = req.query?.watcherId ?? null;
+  const WATCHER_URL = resolveWatcherUrl(watcherId);
 
   if (!WATCHER_URL) {
     sendJson(res, 503, { error: 'PROPOS_WATCHER_URL not configured' });

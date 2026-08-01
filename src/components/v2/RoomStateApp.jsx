@@ -84,6 +84,7 @@ function SettingsModal({ config, onSave, onClose }) {
   const initial = config ?? {
     name: '내 숙소',
     district: '',
+    watcherId: 'watcher1',
     airbnbIcalUrl: '',
     googleCalIcalUrl: '',
     checkInHour: 15,
@@ -132,6 +133,7 @@ function SettingsModal({ config, onSave, onClose }) {
         {[
           { label: '숙소 이름', key: 'name', type: 'text', placeholder: '파주 게스트하우스' },
           { label: '지역 (선택)', key: 'district', type: 'text', placeholder: '파주 (시·군·구 제외)' },
+          { label: 'Pi 워처 ID', key: 'watcherId', type: 'text', placeholder: 'watcher1' },
           { label: 'Airbnb iCal URL', key: 'airbnbIcalUrl', type: 'url', placeholder: 'https://www.airbnb.com/calendar/ical/...' },
           { label: 'Google 캘린더 iCal URL (선택)', key: 'googleCalIcalUrl', type: 'url', placeholder: 'https://calendar.google.com/calendar/ical/...' },
         ].map(({ label, key, type, placeholder }) => (
@@ -290,9 +292,10 @@ function buildReservation(property) {
 }
 
 // ── 서버 모니터링 API ─────────────────────────────────────────────────────────
-async function postMonitoringConfig(cfg) {
+async function postMonitoringConfig(cfg, watcherId = null) {
+  const qs = watcherId ? `?watcherId=${encodeURIComponent(watcherId)}` : '';
   try {
-    await fetch('/api/monitoring/config', {
+    await fetch(`/api/monitoring/config${qs}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cfg),
@@ -336,15 +339,17 @@ function deriveNextMonitorState(calMain, calSub, monitorState) {
   return null;
 }
 
-async function fetchMonitoringState() {
-  const res = await fetch('/api/monitoring/state');
+async function fetchMonitoringState(watcherId = null) {
+  const qs = watcherId ? `?watcherId=${encodeURIComponent(watcherId)}` : '';
+  const res = await fetch(`/api/monitoring/state${qs}`);
   if (!res.ok) return null;
   return res.json();
 }
 
-async function putMonitoringRoomState(roomState) {
+async function putMonitoringRoomState(roomState, watcherId = null) {
+  const qs = watcherId ? `?watcherId=${encodeURIComponent(watcherId)}` : '';
   try {
-    await fetch('/api/monitoring/state', {
+    await fetch(`/api/monitoring/state${qs}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ roomState }),
@@ -395,6 +400,7 @@ export default function RoomStateApp({ onBack }) {
         id:                   'LIVE_001',
         name:                 cfg.name || '내 숙소',
         district:             cfg.district || '',
+        watcherId:            cfg.watcherId ?? null,
         checkInHour:          cfg.checkInHour ?? 15,
         checkOutHour:         cfg.checkOutHour ?? 11,
         cleaningDurationHours: cfg.cleaningDurationHours ?? 2.5,
@@ -553,11 +559,12 @@ export default function RoomStateApp({ onBack }) {
   // 서버 워처 폴링 — 5초 주기
   useEffect(() => {
     if (!syncConfig?.name) return;
+    const watcherId = syncConfig?.watcherId ?? null;
     let cancelled = false;
 
     async function pollServer() {
       try {
-        const state = await fetchMonitoringState();
+        const state = await fetchMonitoringState(watcherId);
         if (cancelled || !state) return;
         if (state.roomState) {
           setMonitorState(state.roomState);
@@ -573,15 +580,16 @@ export default function RoomStateApp({ onBack }) {
     pollServer();
     const interval = setInterval(pollServer, 5000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [syncConfig?.name]);
+  }, [syncConfig?.name, syncConfig?.watcherId]);
 
-  // snapshotLog 폴링 — syncConfig 무관하게 항상 실행
+  // snapshotLog 폴링 — 라이브 숙소(syncConfig)의 워처에서만 가져옴
   useEffect(() => {
+    const watcherId = syncConfig?.watcherId ?? null;
     let cancelled = false;
 
     async function pollSnapshot() {
       try {
-        const state = await fetchMonitoringState();
+        const state = await fetchMonitoringState(watcherId);
         if (cancelled || !state) return;
         setSnapshotLog(state.snapshotLog ?? []);
       } catch { /* 연결 없으면 무시 */ }
@@ -590,7 +598,7 @@ export default function RoomStateApp({ onBack }) {
     pollSnapshot();
     const interval = setInterval(pollSnapshot, 5000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, []);
+  }, [syncConfig?.watcherId]);
 
   // 날씨 폴링 — district 기준, 15분 주기
   useEffect(() => {
@@ -642,7 +650,10 @@ export default function RoomStateApp({ onBack }) {
     putProperties([withId]);
     saveConfig(withId);
     // Pi 워처에도 설정 전달 (areaName + district + devices)
-    postMonitoringConfig({ areaName: form.name, district: form.district, devices: form.devices });
+    postMonitoringConfig(
+      { areaName: form.name, district: form.district, devices: form.devices },
+      form.watcherId ?? null,
+    );
   };
 
   // 실 데이터 + 목업 데이터 병합 (실 데이터 맨 앞, HA 센서·기기·모니터링 상태 주입)
@@ -659,8 +670,8 @@ export default function RoomStateApp({ onBack }) {
         lastMonitorEvent,
         serverWatcherActive,
         snapshotLog,
-      }, ...PROPERTIES.map(p => ({ ...p, snapshotLog }))]
-    : PROPERTIES.map(p => ({ ...p, snapshotLog }));
+      }, ...PROPERTIES.map(p => ({ ...p, snapshotLog: [] }))]
+    : PROPERTIES.map(p => ({ ...p, snapshotLog: [] }));
 
   // ID로 항상 최신 mergedProperties에서 lookup → 폴링 업데이트가 즉시 반영됨
   const selectedProperty = mergedProperties.find(p => p.id === selectedPropertyId) ?? null;

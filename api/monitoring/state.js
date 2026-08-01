@@ -1,15 +1,27 @@
 /**
  * Vercel 서버리스 함수 — 모니터링 상태 중계
- * GET  → Pi 워처(PROPOS_WATCHER_URL:3001)에서 roomState 읽어옴
+ * GET  → Pi 워처에서 roomState 읽어옴
  * POST → 브라우저 설정을 Pi 워처로 전달 (reservation, areaName 등)
  * PUT  → roomState 수동 덮어쓰기
  *
  * 환경변수:
- *   PROPOS_WATCHER_URL  Pi의 Tailscale 주소 (예: http://100.x.x.x:3001)
- *                       없으면 haProxy 기반 직접 HA 접근 불가 → 503
+ *   PROPOS_WATCHER_URLS   JSON 맵: {"watcher1":"https://...","watcher2":"https://..."}
+ *   PROPOS_WATCHER_URL    단일 URL 폴백 (기존 설정 하위 호환)
+ *
+ * ?watcherId=watcher1 쿼리 파라미터로 Pi 선택.
+ * watcherId 미지정 시 PROPOS_WATCHER_URL 폴백.
  */
 
-const WATCHER_URL = process.env.PROPOS_WATCHER_URL;
+const WATCHER_URLS = (() => {
+  try { return JSON.parse(process.env.PROPOS_WATCHER_URLS ?? '{}'); }
+  catch { return {}; }
+})();
+const DEFAULT_WATCHER_URL = process.env.PROPOS_WATCHER_URL;
+
+function resolveWatcherUrl(watcherId) {
+  if (watcherId && WATCHER_URLS[watcherId]) return WATCHER_URLS[watcherId];
+  return DEFAULT_WATCHER_URL ?? null;
+}
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -26,6 +38,9 @@ async function readBody(req) {
 }
 
 export default async function handler(req, res) {
+  const watcherId = req.query?.watcherId ?? null;
+  const WATCHER_URL = resolveWatcherUrl(watcherId);
+
   if (!WATCHER_URL) {
     sendJson(res, 503, { error: 'PROPOS_WATCHER_URL not configured' });
     return;

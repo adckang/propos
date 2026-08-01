@@ -1,14 +1,27 @@
 /**
  * Vercel 서버리스 함수 — CCTV 스냅샷 이미지 중계
- * GET /api/camera/snapshot?path=/local/snapshots/entry_XXX.jpg
+ * GET /api/camera/snapshot?path=/local/snapshots/entry_XXX.jpg&watcherId=watcher1
  *
- * Pi 워처(PROPOS_WATCHER_URL:3001)가 HA에서 이미지를 가져와 반환.
- * 브라우저가 HA나 Pi에 직접 접근할 필요 없이 이 엔드포인트만 사용.
+ * 환경변수:
+ *   PROPOS_WATCHER_URLS  JSON 맵: {"watcher1":"https://...","watcher2":"https://..."}
+ *   PROPOS_WATCHER_URL   단일 URL 폴백 (기존 설정 하위 호환)
  */
 
-const WATCHER_URL = process.env.PROPOS_WATCHER_URL;
+const WATCHER_URLS = (() => {
+  try { return JSON.parse(process.env.PROPOS_WATCHER_URLS ?? '{}'); }
+  catch { return {}; }
+})();
+const DEFAULT_WATCHER_URL = process.env.PROPOS_WATCHER_URL;
+
+function resolveWatcherUrl(watcherId) {
+  if (watcherId && WATCHER_URLS[watcherId]) return WATCHER_URLS[watcherId];
+  return DEFAULT_WATCHER_URL ?? null;
+}
 
 export default async function handler(req, res) {
+  const watcherId = req.query?.watcherId ?? null;
+  const WATCHER_URL = resolveWatcherUrl(watcherId);
+
   if (!WATCHER_URL) {
     res.statusCode = 503;
     res.end();

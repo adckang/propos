@@ -902,7 +902,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
                     <div key={snap.ts} style={{ flexShrink: 0, width: thumbW, cursor: 'pointer' }}
                       onClick={() => setLightboxSnap(snap)}>
                       <img
-                        src={`/api/camera/snapshot?path=${encodeURIComponent(snap.path)}`}
+                        src={`/api/camera/snapshot?path=${encodeURIComponent(snap.path)}${property.watcherId ? `&watcherId=${encodeURIComponent(property.watcherId)}` : ''}`}
                         alt={label}
                         style={{ width: '100%', height: thumbH, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0', display: 'block' }}
                         onError={e => { e.currentTarget.style.display = 'none'; }}
@@ -932,7 +932,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
                   <TransformWrapper minScale={0.5} maxScale={8} centerOnInit>
                     <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }} contentStyle={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <img
-                        src={`/api/camera/snapshot?path=${encodeURIComponent(lightboxSnap.path)}`}
+                        src={`/api/camera/snapshot?path=${encodeURIComponent(lightboxSnap.path)}${property.watcherId ? `&watcherId=${encodeURIComponent(property.watcherId)}` : ''}`}
                         alt={label}
                         style={{ maxWidth: '90vw', maxHeight: '80vh', borderRadius: 8, userSelect: 'none' }}
                       />
