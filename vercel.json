@@ -2,6 +2,16 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "crons": [
+    {
+      "path": "/api/cron/daily-plan",
+      "schedule": "0 23 * * *"
+    },
+    {
+      "path": "/api/cron/daily-result",
+      "schedule": "0 13 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/:path((?!api/|assets/|.*\\..*).*)",

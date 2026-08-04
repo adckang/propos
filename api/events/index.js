@@ -7,9 +7,9 @@
 
 import { createPool } from "@vercel/postgres";
 import { kv } from "@vercel/kv";
-import { validateEvent } from "../src/domain/eventValidation.js";
-import { processEvent } from "../src/application/eventService.js";
-import { notifyEvent } from "../server/slackNotifier.js";
+import { validateEvent } from "../../src/domain/eventValidation.js";
+import { processEvent } from "../../src/application/eventService.js";
+import { notifyEvent } from "../../server/slackNotifier.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
