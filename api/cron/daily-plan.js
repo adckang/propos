@@ -12,7 +12,9 @@ import { kv } from "@vercel/kv";
 import { getStatsForPeriod } from "../../src/application/reportingService.js";
 
 const WEBHOOK_URL = process.env.PROPOS_SLACK_WEBHOOK;
-const DASHBOARD_URL = "https://proposonline.com";
+const DASHBOARD_URL = process.env.PROPOS_BASE_URL
+  || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null)
+  || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:5173");
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];

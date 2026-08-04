@@ -6,6 +6,14 @@
 
 const WEBHOOK_URL = process.env.PROPOS_SLACK_WEBHOOK;
 
+// PROPOS_BASE_URL 우선, 그 다음 Vercel 자동 주입 URL, 마지막 localhost
+function getBaseUrl() {
+  if (process.env.PROPOS_BASE_URL) return process.env.PROPOS_BASE_URL;
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "http://localhost:5173";
+}
+
 /**
  * 이벤트 발생을 Slack에 알린다.
  * @param {string} eventId - Postgres events.id (UUID)
@@ -16,7 +24,7 @@ const WEBHOOK_URL = process.env.PROPOS_SLACK_WEBHOOK;
 export async function notifyEvent(eventId, propertyId, type) {
   if (!WEBHOOK_URL) return { sent: false };
 
-  const url = `https://proposonline.com/events/${eventId}`;
+  const url = `${getBaseUrl()}/events/${eventId}`;
   const text = `[${propertyId}] ${type} → ${url}`;
 
   const res = await fetch(WEBHOOK_URL, {
