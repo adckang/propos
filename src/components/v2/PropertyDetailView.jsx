@@ -3,6 +3,10 @@ import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { weatherMeta } from '../../infrastructure/weatherClient';
 import { STATE_META, SEGMENT_COLORS, getWindowSegments } from '../../data/roomStateMockData';
 import { useMobile } from '../../hooks/useMobile';
+import { useReportingStats } from '../../hooks/useReportingStats';
+import TimelineFilter from './reporting/TimelineFilter';
+import KpiTiles from './reporting/KpiTiles';
+import SummaryBanner from './reporting/SummaryBanner';
 
 const PAST_HOURS    = 24;          // 현재 시각 이전 24h
 const FUTURE_HOURS  = 48;          // 현재 시각 이후 48h
@@ -479,6 +483,8 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
   const mainStatusRefs = useRef({});
   const timelineRef = useRef(null);
   const now = new Date();
+  const [period, setPeriod] = useState('now');
+  const { stats, summary, loading: statsLoading } = useReportingStats(period, property.id);
 
   const [lightboxSnap, setLightboxSnap] = useState(null);
 
@@ -644,6 +650,11 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
           )}
         </div>
       </div>
+
+      {/* 리포팅: 타임라인 필터 + KPI 타일 + 요약 배너 */}
+      <TimelineFilter period={period} onChange={setPeriod} isMobile={isMobile} />
+      <KpiTiles period={period} stats={stats} loading={statsLoading} isMobile={isMobile} />
+      <SummaryBanner summary={summary} loading={statsLoading} isMobile={isMobile} />
 
       {/* 이상 감지 배너 — 모바일만 표시 */}
       {isMobile && anomalies.length > 0 && (

@@ -8,6 +8,10 @@
       "destination": "/index.html"
     }
   ],
+  "crons": [
+    { "path": "/api/cron/daily-plan",   "schedule": "0 23 * * *" },
+    { "path": "/api/cron/daily-result", "schedule": "0 13 * * *" }
+  ],
   "headers": [
     {
       "source": "/api/ha/:path*",

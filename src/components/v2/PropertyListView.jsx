@@ -1,6 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { PROPERTIES, STATE_META, SEGMENT_COLORS, getGanttSegments } from '../../data/roomStateMockData';
 import { useMobile } from '../../hooks/useMobile';
+import { useReportingStats } from '../../hooks/useReportingStats';
+import TimelineFilter from './reporting/TimelineFilter';
+import KpiTiles from './reporting/KpiTiles';
+import SummaryBanner from './reporting/SummaryBanner';
 
 const PAST_DAYS   = 6;
 const FUTURE_DAYS = 14;
@@ -128,6 +132,8 @@ function GanttBar({ seg, windowStart, windowMs }) {
 export default function PropertyListView({ initialFilter, onSelectProperty, onBack, properties = PROPERTIES }) {
   const isMobile = useMobile();
   const [filter, setFilter] = useState(initialFilter || FILTER_ALL);
+  const [period, setPeriod] = useState('now');
+  const { stats, summary, loading: statsLoading } = useReportingStats(period, null);
   const { windowStart, windowEnd, windowMs, dayLabels, monthLabels } = useGanttWindow();
   const { nowLeft, timeStr } = useLiveNow(windowStart, windowMs);
 
@@ -169,7 +175,12 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
         </div>
       </div>
 
-      {/* 필터 바 — 모바일: 소형 버튼 한 줄, PC: 일반 크기 */}
+      {/* 타임라인 필터 + KPI 타일 + 요약 배너 */}
+      <TimelineFilter period={period} onChange={setPeriod} isMobile={isMobile} />
+      <KpiTiles period={period} stats={stats} loading={statsLoading} isMobile={isMobile} />
+      <SummaryBanner summary={summary} loading={statsLoading} isMobile={isMobile} />
+
+      {/* 상태 필터 바 — 모바일: 소형 버튼 한 줄, PC: 일반 크기 */}
       <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: `${isMobile ? 7 : 10}px ${PAD}px`, display: 'flex', gap: isMobile ? 4 : 8, overflowX: 'hidden', flexWrap: 'nowrap' }}>
         {[FILTER_ALL, ...ORDER].map(key => {
           const meta   = key === FILTER_ALL ? null : STATE_META[key];
