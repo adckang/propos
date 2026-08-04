@@ -10,6 +10,9 @@
 - entity ID 하드코딩 금지 → `src/config/publicConfig.js`
 - iCal URL 소스코드 커밋 금지 → localStorage(`propos_calendar_sync`)만
 - 다크 색상 재사용 금지: `#02080d` `#030f18` `#00d4ff` `#00ff88`
+- DB/KV/Blob/Slack 자격증명 브라우저 번들 포함 금지 → `api/*` 프록시만
+- `@vercel/postgres` `@vercel/kv` `@vercel/blob` → `api/` 폴더에서만 import (`src/` 금지)
+- `PROPOS_SLACK_WEBHOOK` 소스코드·git 커밋 금지 → Vercel 환경변수만
 
 ## UI 원칙
 - 라이트 테마. 한 화면에 최소 정보, 점진적 공개.

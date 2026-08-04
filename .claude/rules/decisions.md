@@ -45,6 +45,19 @@
 - **구현 위치**: `src/infrastructure/haBrowserClient.js`, `server/haProxy.js`, `api/ha/*`
 - **버린 대안**: 브라우저 번들에서 Bearer 토큰으로 HA REST/WebSocket 직접 호출
 
+## [D-014] 데이터 저장 계층 분리 (2026-08-04 확정)
+- **결정**: Vercel Postgres(진실 원천) + KV(캐시) + Blob(스냅샷 첨부) 3계층 분리
+- **이유**: 히스토리 추적성·무결성 확보. 각 저장소를 특성에 맞게 사용.
+- **설계 정본**: `docs/data-storage-design.md`
+- **핵심 규칙**:
+  - 쓰기 순서 고정: Postgres → KV → Blob → Slack
+  - `@vercel/*` 패키지는 `api/` 폴더에서만 import (`src/` 금지 — Vite 빌드 오류)
+  - `PROPOS_SLACK_WEBHOOK` 포함 모든 저장소 자격증명은 Vercel 환경변수만
+  - 이벤트 타입 정본: `src/config/eventTypes.js` (Pi + Vercel 공유)
+  - device_time = 표시·비즈니스 기준 / server_time = 삽입 순서 보장용
+- **버린 대안**: Supabase 별도 도입 → Vercel 내장 스토리지로 충분
+- **버린 대안**: Pi JSON 파일만 → Pi 장애 시 히스토리 접근 불가
+
 ## [D-010] 시나리오 레지스트리 경량화
 - **결정**: `docs/scenarios.yaml`에 `entry_function` 추가, `content_keys` 제거
 - **이유**: content_keys는 다이어그램/소스와 3중 중복이었고 기계 검증 없음. entry_function은 verify:scenarios가 source + diagram 양쪽 검증.
