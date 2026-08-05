@@ -13,15 +13,22 @@ test.describe("PROPOS smoke", () => {
     page.on("console", message => {
       if (message.type() === "error") {
         const text = message.text();
-        if (!text.includes("favicon")) consoleErrors.push(text);
+        // favicon 404 and API resource 404 are expected in vite preview (no serverless runtime)
+        if (!text.includes("favicon") && !text.includes("Failed to load resource")) {
+          consoleErrors.push(text);
+        }
       }
     });
     page.on("response", response => {
       if (response.status() >= 500) failedResponses.push(`${response.status()} ${response.url()}`);
     });
 
-    // ── 랜딩 ──────────────────────────────────────────────
+    // ── RSM 대시보드 기본 화면 (앱 기본값) → 홈으로 이동 ──────
     await page.goto("/");
+    await expect(page.getByText("현황 대시보드")).toBeVisible();
+    await returnButton().click(); // ← 홈 → landing
+
+    // ── 랜딩 ──────────────────────────────────────────────
     await expect(page.getByText("에어비앤비 완전 관리 시스템")).toBeVisible();
     await expect(page.getByRole("button", { name: "대표 숙소 상세 보기" })).toBeVisible();
     await expect(page.getByRole("button", { name: "커맨드 센터 열기" })).toBeVisible();
