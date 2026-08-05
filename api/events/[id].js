@@ -3,7 +3,7 @@
  * 단일 이벤트 상세 조회 — Slack 알림 링크 목적지.
  */
 
-import { createPool } from "@vercel/postgres";
+import { Pool } from "pg";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "invalid event id" });
   }
 
-  const db = createPool({ connectionString: process.env.POSTGRES_URL });
+  const db = new Pool({ connectionString: process.env.POSTGRES_URL });
   try {
     const result = await db.query("SELECT * FROM events WHERE id = $1", [id]);
 

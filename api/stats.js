@@ -3,7 +3,7 @@
  * 기간별 KPI 수치 + 요약 문장 반환.
  */
 
-import { createPool } from "@vercel/postgres";
+import { Pool } from "pg";
 import { kv } from "@vercel/kv";
 import { getStatsForPeriod } from "../src/application/reportingService.js";
 
@@ -24,7 +24,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: `invalid period: ${period}` });
   }
 
-  const db = createPool({ connectionString: process.env.POSTGRES_URL });
+  const db = new Pool({ connectionString: process.env.POSTGRES_URL });
   try {
     const result = await getStatsForPeriod(period, {
       db,

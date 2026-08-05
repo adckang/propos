@@ -5,7 +5,7 @@
  * @vercel/postgres, @vercel/kv는 api/ 폴더에서만 import (D-014).
  */
 
-import { createPool } from "@vercel/postgres";
+import { Pool } from "pg";
 import { kv } from "@vercel/kv";
 import { validateEvent } from "../../src/domain/eventValidation.js";
 import { processEvent } from "../../src/application/eventService.js";
@@ -25,7 +25,7 @@ export default async function handler(req, res) {
     });
   }
 
-  const db = createPool({ connectionString: process.env.POSTGRES_URL });
+  const db = new Pool({ connectionString: process.env.POSTGRES_URL });
 
   try {
     const result = await processEvent(validation.data, {

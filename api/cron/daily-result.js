@@ -7,7 +7,7 @@
  *   오늘 하루 발생 이벤트 집계 (DB) + 현재 숙소 상태 (KV)
  */
 
-import { createPool } from "@vercel/postgres";
+import { Pool } from "pg";
 import { kv } from "@vercel/kv";
 import { countPeriodEvents } from "../../src/domain/reportingDomain.js";
 import { queryEvents } from "../../src/infrastructure/eventRepository.js";
@@ -58,7 +58,7 @@ export default async function handler(req, res) {
     return res.status(401).end();
   }
 
-  const db = createPool({ connectionString: process.env.POSTGRES_URL });
+  const db = new Pool({ connectionString: process.env.POSTGRES_URL });
   try {
     const todayRange = getKSTTodayRangeUTC();
     const [todayEvents, nowResult] = await Promise.all([

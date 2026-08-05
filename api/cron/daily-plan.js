@@ -7,7 +7,7 @@
  *   현재 숙소 상태 요약 (KV) + 이번 주 누적 KPI (DB)
  */
 
-import { createPool } from "@vercel/postgres";
+import { Pool } from "pg";
 import { kv } from "@vercel/kv";
 import { getStatsForPeriod } from "../../src/application/reportingService.js";
 
@@ -45,7 +45,7 @@ export default async function handler(req, res) {
     return res.status(401).end();
   }
 
-  const db = createPool({ connectionString: process.env.POSTGRES_URL });
+  const db = new Pool({ connectionString: process.env.POSTGRES_URL });
   try {
     const [nowResult, weekResult] = await Promise.all([
       getStatsForPeriod("now",       { db, kv }),

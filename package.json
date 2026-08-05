@@ -23,10 +23,10 @@
   "dependencies": {
     "@vercel/analytics": "^2.0.1",
     "@vercel/kv": "^3.0.0",
-    "@vercel/postgres": "^0.10.0",
     "autoprefixer": "^10.5.0",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.16.0",
+    "pg": "^8.22.0",
     "postcss": "^8.5.14",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

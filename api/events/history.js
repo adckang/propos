@@ -3,7 +3,7 @@
  * 기간 내 이벤트 목록 반환.
  */
 
-import { createPool } from "@vercel/postgres";
+import { Pool } from "pg";
 import { getPeriodRange } from "../../src/domain/reportingDomain.js";
 import { queryEvents } from "../../src/infrastructure/eventRepository.js";
 
@@ -26,7 +26,7 @@ export default async function handler(req, res) {
 
   const limitNum = Math.min(Math.max(parseInt(limit) || 50, 1), 200);
 
-  const db = createPool({ connectionString: process.env.POSTGRES_URL });
+  const db = new Pool({ connectionString: process.env.POSTGRES_URL });
   try {
     let range;
     if (period === "now") {
