@@ -7,7 +7,7 @@
 
 import { SOFT_EVENT_TYPES, UNIMPLEMENTED_EVENT_TYPES } from "../config/eventTypes.js";
 import { insertEvent, updateEventStatus } from "../infrastructure/eventRepository.js";
-import { setRoomState } from "../infrastructure/kvStore.js";
+import { setRoomState, delRoomState } from "../infrastructure/kvStore.js";
 
 /**
  * @param {object} event - validateEvent 통과한 이벤트
@@ -64,7 +64,7 @@ async function _updateRoomStateCache(kv, event) {
     check_out_detected: { mainStatus: "CLEANING", subStatus: "CLEANING_PENDING" },
     cleaning_started: { mainStatus: "CLEANING", subStatus: "CLEANING_IN_PROGRESS" },
     cleaning_finished: { mainStatus: "VACANT", subStatus: "CLEANING_FINISHED" },
-    energy_waste_detected: null,   // subStatus만 변경 → 현재 상태 읽기 필요, 캐시 무효화만
+    energy_waste_detected: null,   // subStatus만 변경 → 즉시 캐시 무효화 (delRoomState)
     energy_waste_resolved: null,
     complaint_detected: null,
     complaint_resolved: null,
@@ -73,8 +73,8 @@ async function _updateRoomStateCache(kv, event) {
   const next = STATE_MAP[event.type];
   if (next) {
     await setRoomState(kv, event.property_id, next);
-  } else {
-    // subStatus 변경이 필요한 이벤트는 TTL 만료로 자연 캐시 무효화
-    // (다음 조회 시 DB에서 재계산)
+  } else if (event.type in STATE_MAP) {
+    // subStatus 변경 이벤트: 5분 TTL 대기 없이 즉시 무효화
+    await delRoomState(kv, event.property_id);
   }
 }

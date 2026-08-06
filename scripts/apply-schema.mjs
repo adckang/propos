@@ -7,7 +7,8 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 import { readFileSync } from "node:fs";
-import { createPool } from "@vercel/postgres";
+import pg from "pg";
+const { Pool: createPool } = pg;
 
 // .env.local 수동 파싱 (dotenv 의존성 없이)
 try {
@@ -24,7 +25,7 @@ if (!process.env.POSTGRES_URL) {
 }
 
 const sql = readFileSync("data/schema.sql", "utf8");
-const pool = createPool({ connectionString: process.env.POSTGRES_URL });
+const pool = new createPool({ connectionString: process.env.POSTGRES_URL });
 
 try {
   await pool.query(sql);

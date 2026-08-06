@@ -23,6 +23,17 @@ export async function setRoomState(kv, propertyId, state) {
 }
 
 /**
+ * KV에서 숙소 상태 캐시를 삭제한다.
+ * energy_waste/complaint 이벤트처럼 subStatus만 바뀌는 경우
+ * TTL 만료를 기다리지 않고 즉시 무효화한다.
+ * @param {object} kv
+ * @param {string} propertyId
+ */
+export async function delRoomState(kv, propertyId) {
+  await kv.del(`state:${propertyId}`);
+}
+
+/**
  * KV에서 숙소 현재 상태를 읽는다.
  * @param {object} kv
  * @param {string} propertyId
