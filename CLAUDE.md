@@ -36,16 +36,19 @@ npm run verify:scenarios  시나리오 드리프트 확인
 ```
 
 ## Vercel 배포 현황 (2026-08-06 확정)
-- **생산 URL**: `propos-henna.vercel.app`
+- **프로덕션 프로젝트**: `propos-project-v2` (커스텀 도메인 구매, GitHub 자동배포 연결됨)
+- **프로덕션 URL**: `www.proposonline.com`
+- **주의**: `propos` (propos-henna.vercel.app)는 중복 프로젝트 — 무시할 것
 - **배포 성공**: API 함수 17개 → 10개 통합 (Hobby 12함수 한도 해소)
 - **API catch-all 구조**:
   - `api/ha/[...slug].js` — state/states/service/history/template
   - `api/cron/[...slug].js` — daily-plan/daily-result
   - `api/monitoring/[...slug].js` — config/state
   - `api/events/[...slug].js` — history/:uuid
-- **환경변수 설정 필요** (Vercel 대시보드):
-  - `POSTGRES_URL` — Vercel Postgres 연결 문자열
-  - `KV_REST_API_URL` + `KV_REST_API_TOKEN` — Vercel KV 자격증명
-  - `PROPOS_SLACK_WEBHOOK` — Slack 인커밍 웹훅
-  - `CRON_SECRET` — 크론 외부 호출 차단 (선택)
+- **환경변수** (`propos-project-v2`에 모두 설정 완료):
+  - `POSTGRES_URL` — Neon Postgres (`neon-violet-park`)
+  - `KV_REST_API_URL` + `KV_REST_API_TOKEN` — Upstash KV (`upstash-kv-coral-ridge`)
+  - `PROPOS_SLACK_WEBHOOK` — Slack 인커밍 웹훅 (설정 완료)
+  - `CRON_SECRET` — 크론 외부 호출 차단 (미설정 → 추가 필요)
 - **크론 스케줄**: 매일 UTC 23:00 (KST 08:00) 브리핑 / UTC 13:00 (KST 22:00) 결산
+- **Slack 알림**: 정상 작동 확인 (2026-08-06)
