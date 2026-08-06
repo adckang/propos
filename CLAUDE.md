@@ -1,6 +1,6 @@
 # PROPOS
 > Airbnb 숙소 관리 시스템. Vite + React 18. Vercel + 라즈베리파이 + Tailscale.
-> 업데이트: 2026-07-11
+> 업데이트: 2026-08-06
 
 ## 코드 규칙 (절대)
 - `innerHTML` 금지 → `textContent` 또는 `escapeHtml()`
@@ -34,3 +34,18 @@ npm run build        빌드 (dist/ 생성)
 npm run verify:all   전체 검증 + 로그
 npm run verify:scenarios  시나리오 드리프트 확인
 ```
+
+## Vercel 배포 현황 (2026-08-06 확정)
+- **생산 URL**: `propos-henna.vercel.app`
+- **배포 성공**: API 함수 17개 → 10개 통합 (Hobby 12함수 한도 해소)
+- **API catch-all 구조**:
+  - `api/ha/[...slug].js` — state/states/service/history/template
+  - `api/cron/[...slug].js` — daily-plan/daily-result
+  - `api/monitoring/[...slug].js` — config/state
+  - `api/events/[...slug].js` — history/:uuid
+- **환경변수 설정 필요** (Vercel 대시보드):
+  - `POSTGRES_URL` — Vercel Postgres 연결 문자열
+  - `KV_REST_API_URL` + `KV_REST_API_TOKEN` — Vercel KV 자격증명
+  - `PROPOS_SLACK_WEBHOOK` — Slack 인커밍 웹훅
+  - `CRON_SECRET` — 크론 외부 호출 차단 (선택)
+- **크론 스케줄**: 매일 UTC 23:00 (KST 08:00) 브리핑 / UTC 13:00 (KST 22:00) 결산
