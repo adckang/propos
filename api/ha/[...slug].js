@@ -15,8 +15,9 @@ const HANDLERS = {
 };
 
 export default async function handler(req, res) {
-  const slug = req.query.slug;
-  const action = Array.isArray(slug) ? slug[0] : slug;
+  const action = (req.query?.slug
+    ? (Array.isArray(req.query.slug) ? req.query.slug[0] : req.query.slug)
+    : (req.url || "").split("?")[0].split("/").filter(Boolean)[2]) || "";
   const handle = HANDLERS[action];
   if (!handle) {
     res.statusCode = 404;

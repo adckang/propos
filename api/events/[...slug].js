@@ -19,8 +19,9 @@ const VALID_PERIODS = [
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method Not Allowed" });
 
-  const slug = req.query.slug;
-  const action = Array.isArray(slug) ? slug[0] : slug;
+  const action = (req.query?.slug
+    ? (Array.isArray(req.query.slug) ? req.query.slug[0] : req.query.slug)
+    : (req.url || "").split("?")[0].split("/").filter(Boolean)[2]) || "";
 
   const db = new Pool({ connectionString: process.env.POSTGRES_URL });
   try {
