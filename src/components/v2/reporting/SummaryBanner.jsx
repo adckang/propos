@@ -11,13 +11,12 @@ function isUrgent(text) {
 }
 
 export default function SummaryBanner({ summary, loading, isMobile = false }) {
-  if (loading) {
+  // stale content가 없는 진짜 첫 로딩일 때만 skeleton 표시
+  if (loading && !summary) {
     return (
       <div style={{
         height: isMobile ? 32 : 38,
         background: '#f1f5f9', borderBottom: '1px solid #e2e8f0',
-        margin: isMobile ? '0 12px 8px' : '0 20px 10px',
-        borderRadius: 8,
       }} />
     );
   }
@@ -35,6 +34,9 @@ export default function SummaryBanner({ summary, loading, isMobile = false }) {
       color: urgent ? '#dc2626' : '#065f46',
       fontWeight: 600,
       display: 'flex', alignItems: 'center', gap: 8,
+      // 새 데이터 로딩 중: 살짝 투명하게 (깜빡임 없이 상태 표시)
+      opacity: loading ? 0.55 : 1,
+      transition: 'opacity 0.2s ease',
     }}>
       <span style={{ fontSize: isMobile ? 13 : 15 }}>{urgent ? '⚠' : '✓'}</span>
       {summary}

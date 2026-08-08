@@ -13,6 +13,7 @@ export function useReportingStats(period, propertyId = null) {
 
   useEffect(() => {
     let cancelled = false;
+    // stats/summary는 유지 (stale-while-revalidating) — 깜빡임 방지
     setState(s => ({ ...s, loading: true, error: null }));
 
     const params = new URLSearchParams({ period });
@@ -29,7 +30,8 @@ export function useReportingStats(period, propertyId = null) {
       })
       .catch(err => {
         if (cancelled) return;
-        setState({ stats: null, summary: '', loading: false, error: err.message });
+        // 에러 시에도 이전 stats/summary 유지 (초기화하지 않음)
+        setState(s => ({ ...s, loading: false, error: err.message }));
       });
 
     return () => { cancelled = true; };
