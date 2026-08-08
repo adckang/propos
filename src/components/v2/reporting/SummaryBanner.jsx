@@ -11,16 +11,6 @@ function isUrgent(text) {
 }
 
 export default function SummaryBanner({ summary, loading, isMobile = false }) {
-  // stale content가 없는 진짜 첫 로딩일 때만 skeleton 표시
-  if (loading && !summary) {
-    return (
-      <div style={{
-        height: isMobile ? 32 : 38,
-        background: '#f1f5f9', borderBottom: '1px solid #e2e8f0',
-      }} />
-    );
-  }
-
   if (!summary) return null;
 
   const urgent = isUrgent(summary);
