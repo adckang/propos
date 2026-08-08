@@ -436,7 +436,7 @@ function LiveSensor({ sensorKey, baseVal, label }) {
   useEffect(() => {
     const ranges = { temp: 0.3, humidity: 2, noise: 5, power: 80, co2: 30, energy: 0 };
     const range = ranges[sensorKey] ?? 1;
-    const jitter = (sensorKey.length * 137) % 1500; // 센서마다 다른 위상, Math.random 불필요
+    const jitter = (sensorKey.length * 137) % 1500;
     const timer = setInterval(() => {
       setVal(v => v + (((Date.now() % 1000) / 1000) - 0.5) * range * 0.4);
     }, 2500 + jitter);
@@ -451,27 +451,79 @@ function LiveSensor({ sensorKey, baseVal, label }) {
     <div style={{
       background: warn ? '#fef2f2' : '#f9fafb',
       border: `1.5px solid ${warn ? '#fca5a5' : '#e2e8f0'}`,
-      borderRadius: 10,
-      padding: '12px 14px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 4,
+      borderRadius: 8, padding: '8px 10px',
+      display: 'flex', alignItems: 'center', gap: 6,
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 12, color: '#718096' }}>{SENSOR_ICONS[sensorKey]} {sensorLabel}</span>
-        {warn && <span style={{ fontSize: 10, color: '#dc2626', fontWeight: 700 }}>⚠ 주의</span>}
+      <span style={{ fontSize: 14, flexShrink: 0 }}>{SENSOR_ICONS[sensorKey]}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 10, color: '#4a5568', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {sensorLabel}
+        </div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: warn ? '#dc2626' : '#1a202c', fontFamily: "'DM Mono', monospace", display: 'flex', alignItems: 'center', gap: 3 }}>
+          {display}{SENSOR_UNITS[sensorKey]}
+          <div style={{ width: 5, height: 5, borderRadius: '50%', background: warn ? '#dc2626' : '#059669', animation: 'pulse 2s ease infinite', flexShrink: 0 }} />
+        </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4 }}>
-        <span style={{ fontSize: 26, fontWeight: 700, color: warn ? '#dc2626' : '#1a202c', fontFamily: "'DM Mono', monospace", lineHeight: 1 }}>
-          {display}
+      {warn && <span style={{ fontSize: 9, color: '#dc2626', fontWeight: 700, flexShrink: 0 }}>⚠</span>}
+    </div>
+  );
+}
+
+function CollapsibleSection({ title, issueCount = 0, summaryWhenGood, issuePreview, children }) {
+  const [open, setOpen] = useState(false);
+  const hasIssue = issueCount > 0;
+
+  return (
+    <div style={{
+      background: '#fff',
+      border: `1.5px solid ${hasIssue ? '#fca5a5' : '#e2e8f0'}`,
+      borderRadius: 10,
+      overflow: 'hidden',
+    }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+          padding: '11px 14px', background: 'none', border: 'none',
+          cursor: 'pointer', fontFamily: 'inherit',
+        }}
+      >
+        <span style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 700, color: hasIssue ? '#dc2626' : '#374151' }}>
+          {title}
         </span>
-        <span style={{ fontSize: 14, color: '#718096', paddingBottom: 2 }}>{SENSOR_UNITS[sensorKey]}</span>
+        {!open && (
+          <span style={{ fontSize: 10, fontWeight: 600, color: hasIssue ? '#dc2626' : '#059669', whiteSpace: 'nowrap' }}>
+            {hasIssue ? `⚠ ${issueCount}건` : summaryWhenGood}
+          </span>
+        )}
+        <span style={{
+          fontSize: 10, color: '#94a3b8', flexShrink: 0,
+          display: 'inline-block',
+          transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+          transition: 'transform 0.2s ease',
+        }}>▼</span>
+      </button>
+
+      {/* 접힌 상태 + 이상 있을 때: 문제 항목 미리보기 */}
+      {!open && hasIssue && issuePreview && (
+        <div style={{ padding: '0 14px 10px' }}>
+          {issuePreview}
+        </div>
+      )}
+
+      {/* 펼친 상태: 전체 내용 */}
+      <div style={{
+        maxHeight: open ? '900px' : '0',
+        overflow: 'hidden',
+        transition: 'max-height 0.28s ease',
+      }}>
         <div style={{
-          width: 7, height: 7, borderRadius: '50%',
-          background: warn ? '#dc2626' : '#059669',
-          marginLeft: 4, marginBottom: 3,
-          animation: 'pulse 2s ease infinite',
-        }} />
+          padding: '10px 14px 14px',
+          borderTop: '1px solid #f1f5f9',
+          display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -601,9 +653,8 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
   const sensorRows = property.sensorReadings ??
     (property.sensors ? Object.entries(property.sensors).map(([key, val]) => ({ key, val, label: '' })) : []);
   const anomalies = sensorRows.filter(r => isWarn(r.key, r.val));
-  const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
-  const tomorrowMid = new Date(todayMid.getTime() + 86400000);
-  const todaySegs = recentSegs.filter(s => s.start < tomorrowMid && s.end > todayMid);
+  const unavailableDevices = (property.haDevices || []).filter(d => d.isUnavailable);
+  const snapshotCount = property.snapshotLog?.length ?? 0;
 
   // 반응형 상수 — JSX 구조는 동일
   const LABEL_W    = isMobile ? 32 : LABEL_WIDTH;
@@ -671,19 +722,8 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
       {/* 요약 배너 — 현재 period 통계 요약 */}
       <SummaryBanner summary={summary} loading={statsLoading} isMobile={isMobile} />
 
-      {/* 이상 감지 배너 — 모바일만 표시 */}
-      {isMobile && anomalies.length > 0 && (
-        <div style={{ background: '#fef2f2', borderBottom: '1.5px solid #fca5a5', padding: '8px 16px', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#dc2626' }}>⚠ 이상 감지</span>
-          {anomalies.map(r => (
-            <span key={r.key} style={{ fontSize: 11, background: '#fff', border: '1px solid #fca5a5', borderRadius: 12, padding: '2px 8px', color: '#dc2626' }}>
-              {SENSOR_ICONS[r.key]} {SENSOR_LABELS[r.key]} {formatSensorVal(r.key, r.val)}{SENSOR_UNITS[r.key]}
-            </span>
-          ))}
-        </div>
-      )}
 
-      {/* 본문: 타임라인(좁게) + 센서 패널(넓게) */}
+{/* 본문: 타임라인(좁게) + 센서 패널(넓게) */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
         {/* 세로 타임라인 — 반응형 폭 */}
@@ -851,36 +891,10 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
           </div>{/* 타임라인 스크롤 영역 끝 */}
         </div>{/* 세로 타임라인 패널 끝 */}
 
-        {/* 센서 패널 — 나머지 공간 전부 */}
-        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: detailPad, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* 우측 패널 — 4개 접이식 카테고리 */}
+        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: detailPad, display: 'flex', flexDirection: 'column', gap: 8 }}>
 
-          {/* 오늘의 상태 흐름 — 모바일만 표시 */}
-          {isMobile && todaySegs.length > 0 && (
-            <div style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8 }}>오늘의 상태 흐름</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                {todaySegs.map((seg, i) => {
-                  const meta = STATE_META[seg.mainStatus];
-                  const subLabel = meta?.subStates[seg.subStatus]?.label || seg.subStatus;
-                  const displayStart = seg.start < todayMid ? '자정 이전' : formatTime(seg.start);
-                  const displayEnd = seg.end > tomorrowMid ? '자정 이후' : (seg.isFuture ? `예정 ${formatTime(seg.end)}` : formatTime(seg.end));
-                  return (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: meta?.color || '#94a3b8', flexShrink: 0 }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: meta?.color || '#374151' }}>{meta?.label || seg.mainStatus}</span>
-                        <span style={{ fontSize: 10, color: '#718096', marginLeft: 5 }}>{subLabel}</span>
-                      </div>
-                      <div style={{ fontSize: 10, color: '#94a3b8', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
-                        {displayStart} → {displayEnd}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
+          {/* 상태별 액션 카드 (최상단 고정) */}
           {property.monitorState?.mainStatus === 'VACANT' && (
             <VacantCard
               monitorState={property.monitorState}
@@ -906,33 +920,89 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
               weather={weather}
             />
           )}
-          {weather && <WeatherCard weather={weather} />}
 
+          {/* ① 기타정보 */}
+          <CollapsibleSection
+            title="기타정보"
+            issueCount={0}
+            summaryWhenGood={weather ? `${weatherMeta(weather.weatherCode).emoji} ${weather.temp.toFixed(1)}°C` : '−'}
+          >
+            {weather && <WeatherCard weather={weather} />}
+            {property.reservation?.guestName && (
+              <div style={{ background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ fontSize: 11, color: '#2563eb', fontWeight: 700, marginBottom: 6 }}>현재 예약</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#1a202c' }}>{property.reservation.guestName}</div>
+                <div style={{ fontSize: 11, color: '#4a5568', marginTop: 1 }}>{property.reservation.platform}</div>
+                {property.reservation.checkIn && (
+                  <div style={{ fontSize: 11, color: '#718096', marginTop: 5 }}>
+                    체크인 {property.reservation.checkIn.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })} {formatTime(property.reservation.checkIn)}
+                    {property.reservation.checkOut && (
+                      <span> · 체크아웃 {property.reservation.checkOut.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })} {formatTime(property.reservation.checkOut)}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {!weather && !property.reservation?.guestName && (
+              <div style={{ fontSize: 12, color: '#a0aec0', textAlign: 'center', padding: '8px 0' }}>정보 없음</div>
+            )}
+          </CollapsibleSection>
+
+          {/* ② 실시간 센서 */}
           {sensorRows.length > 0 && (
-            <>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#718096', letterSpacing: 0.5, marginBottom: 2 }}>실시간 센서</div>
-              {sensorRows.map((r, i) => (
-                <LiveSensor key={`${r.key}-${i}`} sensorKey={r.key} baseVal={r.val} label={r.label} />
-              ))}
-            </>
+            <CollapsibleSection
+              title="실시간 센서"
+              issueCount={anomalies.length}
+              summaryWhenGood="이상 없음 ✓"
+              issuePreview={
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {anomalies.map(r => (
+                    <span key={r.key} style={{ fontSize: 11, background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 6, padding: '3px 8px', color: '#dc2626', fontWeight: 600 }}>
+                      {SENSOR_ICONS[r.key]} {formatSensorVal(r.key, r.val)}{SENSOR_UNITS[r.key]}
+                    </span>
+                  ))}
+                </div>
+              }
+            >
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: 6 }}>
+                {sensorRows.map((r, i) => (
+                  <LiveSensor key={`${r.key}-${i}`} sensorKey={r.key} baseVal={r.val} label={r.label} />
+                ))}
+              </div>
+            </CollapsibleSection>
           )}
 
-          {/* 기기 상태 */}
+          {/* ③ 기기상태 */}
           {property.haDevices?.length > 0 && (
-            <div style={{ marginTop: 4 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#718096', letterSpacing: 0.5, marginBottom: 8 }}>기기 상태</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            <CollapsibleSection
+              title="기기상태"
+              issueCount={unavailableDevices.length}
+              summaryWhenGood="모두 연결됨 ✓"
+              issuePreview={
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {unavailableDevices.map(d => (
+                    <span key={d.entityId} style={{ fontSize: 11, background: '#f9fafb', border: '1px solid #fca5a5', borderRadius: 6, padding: '3px 8px', color: '#94a3b8', fontWeight: 600 }}>
+                      {d.icon} {d.label} 연결 안됨
+                    </span>
+                  ))}
+                </div>
+              }
+            >
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: 6 }}>
                 {property.haDevices.map(device => (
                   <DeviceCard key={device.entityId} device={device} />
                 ))}
               </div>
-            </div>
+            </CollapsibleSection>
           )}
 
-          {/* CCTV 출입 스냅샷 */}
-          {property.snapshotLog?.length > 0 && (
-            <div style={{ marginTop: 4 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#718096', letterSpacing: 0.5, marginBottom: 8 }}>출입 기록 (CCTV)</div>
+          {/* ④ 출입기록 */}
+          {snapshotCount > 0 && (
+            <CollapsibleSection
+              title="출입기록"
+              issueCount={0}
+              summaryWhenGood={`최근 ${snapshotCount}건`}
+            >
               <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
                 {[...property.snapshotLog].reverse().map((snap) => {
                   const d = new Date(snap.ts);
@@ -953,7 +1023,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
                   );
                 })}
               </div>
-            </div>
+            </CollapsibleSection>
           )}
 
           {/* CCTV 라이트박스 */}
@@ -984,27 +1054,6 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
               </div>
             );
           })()}
-
-          {/* 예약 정보 */}
-          {property.reservation?.guestName && (
-            <div style={{ background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: 10, padding: '14px 16px', marginTop: 4 }}>
-              <div style={{ fontSize: 11, color: '#2563eb', fontWeight: 700, marginBottom: 8 }}>현재 예약</div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: '#1a202c' }}>{property.reservation.guestName}</div>
-              <div style={{ fontSize: 12, color: '#4a5568', marginTop: 2 }}>{property.reservation.platform}</div>
-              {property.reservation.checkIn && (
-                <div style={{ fontSize: 11, color: '#718096', marginTop: 6 }}>
-                  체크인: {property.reservation.checkIn.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}{' '}
-                  {formatTime(property.reservation.checkIn)}
-                </div>
-              )}
-              {property.reservation.checkOut && (
-                <div style={{ fontSize: 11, color: '#718096', marginTop: 2 }}>
-                  체크아웃: {property.reservation.checkOut.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}{' '}
-                  {formatTime(property.reservation.checkOut)}
-                </div>
-              )}
-            </div>
-          )}
 
         </div>
       </div>
