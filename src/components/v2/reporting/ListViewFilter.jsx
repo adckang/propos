@@ -72,10 +72,10 @@ export default function ListViewFilter({
               onClick={() => onModeChange(m)}
               style={{
                 border: 'none',
-                padding: isMobile ? '5px 10px' : '6px 14px',
+                padding: isMobile ? '3px 7px' : '4px 10px',
                 background: active ? '#1a202c' : '#fff',
                 color: active ? '#fff' : '#94a3b8',
-                fontSize: isMobile ? 11 : 12,
+                fontSize: isMobile ? 10 : 11,
                 fontWeight: 700,
                 cursor: 'pointer',
                 fontFamily: "'DM Sans', sans-serif",
@@ -106,11 +106,11 @@ export default function ListViewFilter({
               style={{
                 flex: 1,
                 border: `1.5px solid ${active ? '#1a202c' : '#e2e8f0'}`,
-                borderRadius: 8,
-                padding: isMobile ? '5px 0' : '6px 0',
+                borderRadius: 20,
+                padding: isMobile ? '3px 0' : '4px 0',
                 background: active ? '#1a202c' : isCenter ? '#f8fafc' : '#fff',
                 color: active ? '#fff' : isCenter ? '#374151' : '#94a3b8',
-                fontSize: isMobile ? 12 : 13,
+                fontSize: isMobile ? 10 : 11,
                 fontWeight: active ? 700 : isCenter ? 600 : 500,
                 cursor: 'pointer',
                 fontFamily: "'DM Sans', sans-serif",

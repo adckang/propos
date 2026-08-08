@@ -956,7 +956,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
                 </div>
               }
             >
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: 6 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(110px, 1fr))', gap: 5 }}>
                 {sensorRows.map((r, i) => (
                   <LiveSensor key={`${r.key}-${i}`} sensorKey={r.key} baseVal={r.val} label={r.label} />
                 ))}
@@ -980,7 +980,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
                 </div>
               }
             >
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: 6 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(110px, 1fr))', gap: 5 }}>
                 {property.haDevices.map(device => (
                   <DeviceCard key={device.entityId} device={device} />
                 ))}

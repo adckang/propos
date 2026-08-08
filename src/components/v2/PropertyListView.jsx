@@ -372,6 +372,7 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
         {sorted.map((prop) => {
           const meta     = STATE_META[prop.currentState.mainStatus];
           const subLabel = meta.subStates[prop.currentState.subStatus]?.label || prop.currentState.subStatus;
+          const subColor = SEGMENT_COLORS[`${prop.currentState.mainStatus}/${prop.currentState.subStatus}`] || meta.color;
           const isUrgent = prop.currentState.mainStatus === 'OCCUPIED' &&
             ['ISSUE_AND_ENERGY', 'ISSUE_COMPLAINT', 'ENERGY_WASTE'].includes(prop.currentState.subStatus);
 
@@ -430,8 +431,7 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
                   borderRadius: 7, padding: isMobile ? '3px 4px' : '4px 6px',
                   textAlign: 'center', width: '100%',
                 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: meta.color, lineHeight: 1.2 }}>{meta.label}</div>
-                  <div style={{ fontSize: 9, color: meta.color, opacity: 0.8, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subLabel}</div>
+                  <div style={{ fontSize: isMobile ? 9 : 10, fontWeight: 700, color: subColor, lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subLabel}</div>
                 </div>
               </div>
 
