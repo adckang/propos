@@ -56,11 +56,6 @@ export default function DashboardView({ onSelectStatus, onBack, properties = PRO
             {isMobile ? `🧹 ${unassignedCleaningCount}` : `🧹 청소 미할당 ${unassignedCleaningCount}건`}
           </div>
         )}
-        {urgentCount > 0 && (
-          <div style={{ background: '#fef2f2', border: '1.5px solid #fca5a5', borderRadius: 8, padding: isMobile ? '4px 8px' : '6px 12px', fontSize: isMobile ? 11 : 12, color: '#dc2626', fontWeight: 700, flexShrink: 0 }}>
-            {isMobile ? `⚠ ${urgentCount}건` : `⚠ 즉시 확인 ${urgentCount}건`}
-          </div>
-        )}
       </div>
 
       {/* 요약 배너 — 모바일: 5열 grid, PC: flex */}

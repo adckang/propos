@@ -478,14 +478,13 @@ function CollapsibleSection({ title, issueCount = 0, summaryWhenGood, issuePrevi
       background: '#fff',
       border: `1.5px solid ${hasIssue ? '#fca5a5' : '#e2e8f0'}`,
       borderRadius: 10,
-      overflow: 'hidden',
     }}>
       <button
         onClick={() => setOpen(o => !o)}
         style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-          padding: '11px 14px', background: 'none', border: 'none',
-          cursor: 'pointer', fontFamily: 'inherit',
+          width: '100%', display: 'flex', alignItems: 'center', gap: 6,
+          padding: '9px 12px', background: 'none', border: 'none',
+          cursor: 'pointer', fontFamily: 'inherit', borderRadius: 10,
         }}
       >
         <span style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 700, color: hasIssue ? '#dc2626' : '#374151' }}>
@@ -506,21 +505,21 @@ function CollapsibleSection({ title, issueCount = 0, summaryWhenGood, issuePrevi
 
       {/* 접힌 상태 + 이상 있을 때: 문제 항목 미리보기 */}
       {!open && hasIssue && issuePreview && (
-        <div style={{ padding: '0 14px 10px' }}>
+        <div style={{ padding: '0 12px 9px' }}>
           {issuePreview}
         </div>
       )}
 
-      {/* 펼친 상태: 전체 내용 */}
+      {/* 펼친 상태: 전체 내용 — overflow visible로 잘림 방지 */}
       <div style={{
-        maxHeight: open ? '900px' : '0',
-        overflow: 'hidden',
+        maxHeight: open ? '1500px' : '0',
+        overflow: open ? 'visible' : 'hidden',
         transition: 'max-height 0.28s ease',
       }}>
         <div style={{
-          padding: '10px 14px 14px',
+          padding: '8px 12px 12px',
           borderTop: '1px solid #f1f5f9',
-          display: 'flex', flexDirection: 'column', gap: 8,
+          display: 'flex', flexDirection: 'column', gap: 6,
         }}>
           {children}
         </div>
@@ -675,13 +674,6 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, color: '#1a202c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{property.name}</div>
             <div style={{ fontSize: isMobile ? 10 : 12, color: '#a0aec0' }}>{property.district} · {property.id}</div>
-          </div>
-          <div style={{
-            background: currentMeta.bg, border: `1.5px solid ${currentMeta.border}`,
-            borderRadius: isMobile ? 8 : 10, padding: isMobile ? '5px 10px' : '8px 14px', textAlign: 'center', flexShrink: 0,
-          }}>
-            <div style={{ fontSize: isMobile ? 12 : 14, fontWeight: 700, color: currentMeta.color }}>{currentMeta.label}</div>
-            <div style={{ fontSize: isMobile ? 9 : 11, color: currentMeta.color, opacity: 0.9 }}>{currentSubLabel}</div>
           </div>
         </div>
 
@@ -892,7 +884,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
         </div>{/* 세로 타임라인 패널 끝 */}
 
         {/* 우측 패널 — 4개 접이식 카테고리 */}
-        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: detailPad, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', padding: detailPad, display: 'flex', flexDirection: 'column', gap: 5 }}>
 
           {/* 상태별 액션 카드 (최상단 고정) */}
           {property.monitorState?.mainStatus === 'VACANT' && (

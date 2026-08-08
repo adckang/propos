@@ -94,10 +94,10 @@ export default function DetailViewFilter({
             isMobile={isMobile}
             onClick={() => onDayOffsetChange(dayOffset - 1)}
           />
-          {/* 현재 위치 (오늘 기준 reset or 현재 dayLabel) */}
+          {/* 오늘 — 항상 고정 레이블, 클릭 시 dayOffset=0 리셋 */}
           <NavButton
-            symbol={daySymbol(dayOffset)}
-            label={dayLabel(dayOffset)}
+            symbol="○"
+            label="오늘"
             active={dayOffset === 0}
             isCenter
             isMobile={isMobile}

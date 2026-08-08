@@ -203,17 +203,14 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
   // ── 단일 JSX 트리 — isMobile로 크기/간격만 조정 ───────────────────────────────
   return (
     <div style={{ background: '#f0f4f8', minHeight: '100%', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
-      {/* 페이지 헤더 */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: isMobile ? '10px 16px' : '14px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button onClick={onBack} style={{ border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', padding: isMobile ? '5px 10px' : '6px 12px', fontSize: isMobile ? 12 : 13, color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit' }}>
+      {/* 최소 헤더 — 뒤로가기 + 숙소 수 */}
+      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: isMobile ? '7px 12px' : '9px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button onClick={onBack} style={{ border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', padding: isMobile ? '4px 9px' : '5px 11px', fontSize: isMobile ? 12 : 13, color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
           ← 대시보드
         </button>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, color: '#1a202c' }}>숙소 목록</div>
-          <div style={{ fontSize: 12, color: '#a0aec0', fontFamily: "'DM Mono', monospace" }}>
-            20일 타임라인 · {sorted.length}개 표시 (전체 {properties.length})
-          </div>
-        </div>
+        <span style={{ fontSize: 11, color: '#a0aec0', fontFamily: "'DM Mono', monospace" }}>
+          {sorted.length} / {properties.length}
+        </span>
       </div>
 
       {/* 타임라인 네비게이터 + 요약 배너 */}
