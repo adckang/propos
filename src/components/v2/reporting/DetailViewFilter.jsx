@@ -1,17 +1,19 @@
 /**
- * Detail View 좌측 상단 필터 (reporting-feature-design.md 섹션 2).
- * 타임라인 위에 배치 — 수직 레이아웃, 상하 방향 네비게이션.
+ * Detail View 좌측 타임라인 네비게이터.
  *
  * 바이너리 토글 (일 | 시) + 수직 3행 네비게이터
- *   일 모드: - 하루 전 / ○ 오늘 / + 다음날
- *   시 모드: - 한시간 전 / ○ 지금 / + 한시간 후
+ *   일 모드: 전날(dayOffset−1) | 오늘/D±N(dayOffset→0) | 다음날(dayOffset+1)
+ *   시 모드: 한시간 전 | 지금 | 한시간 후  (hourPeriod 고정값)
+ *
+ * Props:
+ *   dayOffset          — 일 단위 오프셋 (0=오늘, -1=어제, +1=내일 …±7)
+ *   onDayOffsetChange  — (nextOffset) => void
+ *   mode               — 'day' | 'hour'
+ *   onModeChange       — ('day'|'hour') => void
+ *   hourPeriod         — 'last_hour' | 'now' | 'next_hour'
+ *   onHourPeriodChange — (p) => void
+ *   isMobile
  */
-
-const DAY_ITEMS = [
-  { key: 'yesterday', symbol: '−', label: '하루 전' },
-  { key: 'today',     symbol: '○', label: '오늘'    },
-  { key: 'tomorrow',  symbol: '+', label: '다음날'  },
-];
 
 const HOUR_ITEMS = [
   { key: 'last_hour', symbol: '−', label: '한시간 전' },
@@ -19,23 +21,24 @@ const HOUR_ITEMS = [
   { key: 'next_hour', symbol: '+', label: '한시간 후' },
 ];
 
-const DEFAULT_BY_MODE = { day: 'today', hour: 'now' };
-
-function detectMode(period) {
-  if (['yesterday', 'today', 'tomorrow'].includes(period)) return 'day';
-  if (['last_hour', 'now', 'next_hour'].includes(period)) return 'hour';
-  return 'day';
+function dayLabel(offset) {
+  if (offset === 0)  return '오늘';
+  if (offset === -1) return '전날';
+  if (offset === 1)  return '내일';
+  return offset < 0 ? `D${offset}일` : `D+${offset}일`;
 }
 
-export default function DetailViewFilter({ period, onChange, isMobile = false }) {
-  const mode = detectMode(period);
-  const items = mode === 'day' ? DAY_ITEMS : HOUR_ITEMS;
+function daySymbol(offset) {
+  if (offset === 0) return '○';
+  return offset < 0 ? '−' : '+';
+}
 
-  function switchMode(next) {
-    if (next === mode) return;
-    onChange(DEFAULT_BY_MODE[next]);
-  }
-
+export default function DetailViewFilter({
+  dayOffset, onDayOffsetChange,
+  mode, onModeChange,
+  hourPeriod, onHourPeriodChange,
+  isMobile = false,
+}) {
   return (
     <div style={{
       display: 'flex',
@@ -58,7 +61,7 @@ export default function DetailViewFilter({ period, onChange, isMobile = false })
           return (
             <button
               key={m}
-              onClick={() => switchMode(m)}
+              onClick={() => onModeChange(m)}
               style={{
                 flex: 1,
                 border: 'none',
@@ -80,51 +83,104 @@ export default function DetailViewFilter({ period, onChange, isMobile = false })
       </div>
 
       {/* 수직 네비게이터 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {items.map((item, i) => {
-          const active = period === item.key;
-          const isCenter = i === 1;
-          return (
-            <button
+      {mode === 'day' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {/* 이전 날 */}
+          <NavButton
+            symbol="−"
+            label="전날"
+            active={dayOffset < 0}
+            isCenter={false}
+            isMobile={isMobile}
+            onClick={() => onDayOffsetChange(dayOffset - 1)}
+          />
+          {/* 현재 위치 (오늘 기준 reset or 현재 dayLabel) */}
+          <NavButton
+            symbol={daySymbol(dayOffset)}
+            label={dayLabel(dayOffset)}
+            active={dayOffset === 0}
+            isCenter
+            isMobile={isMobile}
+            onClick={() => onDayOffsetChange(0)}
+          />
+          {/* 다음 날 */}
+          <NavButton
+            symbol="+"
+            label="다음날"
+            active={dayOffset > 0}
+            isCenter={false}
+            isMobile={isMobile}
+            onClick={() => onDayOffsetChange(dayOffset + 1)}
+          />
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {HOUR_ITEMS.map((item, i) => (
+            <NavButton
               key={item.key}
-              onClick={() => onChange(item.key)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
-                border: `1.5px solid ${active ? '#1a202c' : '#e2e8f0'}`,
-                borderRadius: 6,
-                padding: isMobile ? '4px 6px' : '5px 7px',
-                background: active ? '#1a202c' : isCenter ? '#f8fafc' : '#fff',
-                color: active ? '#fff' : isCenter ? '#374151' : '#94a3b8',
-                cursor: 'pointer',
-                fontFamily: "'DM Sans', sans-serif",
-                transition: 'all 0.15s',
-                width: '100%',
-                textAlign: 'left',
-              }}
-            >
-              <span style={{
-                fontSize: isMobile ? 11 : 12,
-                fontWeight: 700,
-                width: 12,
-                textAlign: 'center',
-                flexShrink: 0,
-                fontFamily: "'DM Mono', monospace",
-              }}>
-                {item.symbol}
-              </span>
-              <span style={{
-                fontSize: isMobile ? 10 : 11,
-                fontWeight: active ? 700 : isCenter ? 600 : 400,
-                whiteSpace: 'nowrap',
-              }}>
-                {item.label}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+              symbol={item.symbol}
+              label={item.label}
+              active={hourPeriod === item.key}
+              isCenter={i === 1}
+              isMobile={isMobile}
+              onClick={() => onHourPeriodChange(item.key)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* 일 오프셋 표시 (0이 아닐 때) */}
+      {mode === 'day' && dayOffset !== 0 && (
+        <div style={{
+          fontSize: isMobile ? 9 : 10,
+          color: '#94a3b8',
+          fontFamily: "'DM Mono', monospace",
+          textAlign: 'center',
+        }}>
+          {dayOffset > 0 ? `+${dayOffset}일` : `${dayOffset}일`}
+        </div>
+      )}
     </div>
+  );
+}
+
+function NavButton({ symbol, label, active, isCenter, isMobile, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 5,
+        border: `1.5px solid ${active ? '#1a202c' : '#e2e8f0'}`,
+        borderRadius: 6,
+        padding: isMobile ? '4px 6px' : '5px 7px',
+        background: active ? '#1a202c' : isCenter ? '#f8fafc' : '#fff',
+        color: active ? '#fff' : isCenter ? '#374151' : '#94a3b8',
+        cursor: 'pointer',
+        fontFamily: "'DM Sans', sans-serif",
+        transition: 'all 0.15s',
+        width: '100%',
+        textAlign: 'left',
+      }}
+    >
+      <span style={{
+        fontSize: isMobile ? 11 : 12,
+        fontWeight: 700,
+        width: 12,
+        textAlign: 'center',
+        flexShrink: 0,
+        fontFamily: "'DM Mono', monospace",
+      }}>
+        {symbol}
+      </span>
+      <span style={{
+        fontSize: isMobile ? 10 : 11,
+        fontWeight: active ? 700 : isCenter ? 600 : 400,
+        whiteSpace: 'nowrap',
+      }}>
+        {label}
+      </span>
+    </button>
   );
 }

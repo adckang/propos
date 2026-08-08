@@ -47,6 +47,7 @@ function formatDeviceMap(devices = {}) {
 }
 
 const LS_KEY = 'propos_calendar_sync';
+const LS_PAST_RES_KEY = 'propos_past_reservations';
 
 function loadConfig() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || 'null'); }
@@ -54,6 +55,28 @@ function loadConfig() {
 }
 function saveConfig(cfg) {
   localStorage.setItem(LS_KEY, JSON.stringify(cfg));
+}
+
+// 과거 예약 캐시 — iCal 피드에서 사라진 past reservation 보존
+function loadPastReservations() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS_PAST_RES_KEY) || '[]');
+    return raw.map(r => ({ ...r, checkIn: new Date(r.checkIn), checkOut: new Date(r.checkOut) }));
+  } catch { return []; }
+}
+function savePastReservations(reservations) {
+  const now = new Date();
+  const past = reservations.filter(r => r.checkOut <= now);
+  localStorage.setItem(LS_PAST_RES_KEY, JSON.stringify(past));
+}
+function mergePastReservations(freshFromFeed, now = new Date()) {
+  const cached = loadPastReservations();
+  const freshMap = new Map(freshFromFeed.map(r => [r.uid, r]));
+  // 캐시에 있는 과거 예약 중 피드에 없는 것만 보존 (피드가 더 최신이면 피드 우선)
+  const onlyInCache = cached.filter(r => r.checkOut <= now && !freshMap.has(r.uid));
+  const merged = [...onlyInCache, ...freshFromFeed].sort((a, b) => a.checkIn - b.checkIn);
+  savePastReservations(merged);
+  return merged;
 }
 
 // Pi 파일에서 숙소 목록 로드 (PROPOS_WATCHER_URL → /api/properties)
@@ -385,10 +408,13 @@ export default function RoomStateApp({ onBack }) {
     if (!cfg?.airbnbIcalUrl) return;
     setSyncStatus('syncing');
     try {
-      const reservations = await syncAirbnbReservations(cfg.airbnbIcalUrl, {
+      const freshReservations = await syncAirbnbReservations(cfg.airbnbIcalUrl, {
         checkInHour:  cfg.checkInHour  ?? 15,
         checkOutHour: cfg.checkOutHour ?? 11,
       });
+
+      // 과거 예약은 iCal 피드에서 제거되어도 로컬 캐시로 보존
+      const reservations = mergePastReservations(freshReservations);
 
       let cleaningSlots = [];
       if (cfg.googleCalIcalUrl) {

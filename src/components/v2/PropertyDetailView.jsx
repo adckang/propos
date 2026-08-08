@@ -7,9 +7,9 @@ import { useReportingStats } from '../../hooks/useReportingStats';
 import DetailViewFilter from './reporting/DetailViewFilter';
 import SummaryBanner from './reporting/SummaryBanner';
 
-const PAST_HOURS    = 24;          // 현재 시각 이전 24h
-const FUTURE_HOURS  = 48;          // 현재 시각 이후 48h
-const WINDOW_HOURS  = PAST_HOURS + FUTURE_HOURS;  // 총 72h
+const PAST_HOURS    = 7 * 24;      // 현재 시각 이전 7일 (168h)
+const FUTURE_HOURS  = 7 * 24;      // 현재 시각 이후 7일 (168h)
+const WINDOW_HOURS  = PAST_HOURS + FUTURE_HOURS;  // 총 336h (14일)
 const VISIBLE_HOURS = 20;          // 한 화면에 보여줄 시간 수 (1시간 칸 크기 기준)
 const TIMELINE_WIDTH = 60;
 const LABEL_WIDTH    = 46;
@@ -482,8 +482,22 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
   const mainStatusRefs = useRef({});
   const timelineRef = useRef(null);
   const now = new Date();
-  const [period, setPeriod] = useState('today');
-  const { stats, summary, loading: statsLoading } = useReportingStats(period, property.id);
+
+  // 타임라인 뷰포트 네비게이션 state
+  const [dayOffset, setDayOffset]   = useState(0);              // 0=오늘, ±N=N일 이동
+  const [tlMode, setTlMode]         = useState('day');           // 'day'|'hour'
+  const [hourPeriod, setHourPeriod] = useState('now');           // 'last_hour'|'now'|'next_hour'
+
+  // 뷰포트 위치 → 통계 기간 자동 도출
+  const statsPeriod = useMemo(() => {
+    if (tlMode === 'hour') return hourPeriod;
+    if (dayOffset === -1) return 'yesterday';
+    if (dayOffset === 0)  return 'today';
+    if (dayOffset === 1)  return 'tomorrow';
+    return dayOffset < 0 ? 'last_week' : 'next_week';
+  }, [tlMode, dayOffset, hourPeriod]);
+
+  const { stats, summary, loading: statsLoading } = useReportingStats(statsPeriod, property.id);
 
   const [lightboxSnap, setLightboxSnap] = useState(null);
 
@@ -563,20 +577,18 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
     if (h > 0) setHourPx(h / VISIBLE_HOURS);
   }, []);
 
-  // period 변경 또는 hourPx 확정 시 해당 시간대로 타임라인 스크롤
-  // period가 'now'/'today' → 현재 시각(nowTopPx) 기준 상단 30% 위치
-  // 그 외 → now 기준 ±시간 오프셋 계산
+  // 네비게이션 변경 또는 hourPx 확정 시 타임라인 스크롤
+  // dayOffset × 24h + hourPeriod 오프셋으로 목표 위치 계산
   useEffect(() => {
     if (!timelineRef.current) return;
     const visibleH = timelineRef.current.clientHeight;
-    const PERIOD_HOUR_OFFSET = {
-      yesterday: -24, today: 0, now: 0,
-      tomorrow: 24, last_hour: -1, next_hour: 1,
-    };
-    const offsetH = PERIOD_HOUR_OFFSET[period] ?? 0;
-    const targetTop = Math.max(0, (PAST_HOURS + offsetH) * hourPx - visibleH * 0.3);
+    const hourOffset = tlMode === 'hour'
+      ? (hourPeriod === 'last_hour' ? -1 : hourPeriod === 'next_hour' ? 1 : 0)
+      : 0;
+    const totalH = PAST_HOURS + dayOffset * 24 + hourOffset;
+    const targetTop = Math.max(0, totalH * hourPx - visibleH * 0.3);
     timelineRef.current.scrollTo({ top: targetTop, behavior: 'smooth' });
-  }, [hourPx, period]);
+  }, [hourPx, dayOffset, tlMode, hourPeriod]);
 
   function scrollToState(mainStatus) {
     const el = mainStatusRefs.current[mainStatus];
@@ -682,8 +694,16 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
           flexDirection: 'column',
           borderRight: '1px solid #e2e8f0',
         }}>
-          {/* 기간 필터 — 타임라인 위 고정 */}
-          <DetailViewFilter period={period} onChange={setPeriod} isMobile={isMobile} />
+          {/* 타임라인 네비게이터 — 위 고정 */}
+          <DetailViewFilter
+            dayOffset={dayOffset}
+            onDayOffsetChange={(d) => setDayOffset(Math.max(-7, Math.min(7, d)))}
+            mode={tlMode}
+            onModeChange={setTlMode}
+            hourPeriod={hourPeriod}
+            onHourPeriodChange={setHourPeriod}
+            isMobile={isMobile}
+          />
 
           {/* 타임라인 스크롤 영역 */}
           <div
