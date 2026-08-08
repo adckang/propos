@@ -8,6 +8,7 @@ export default function DashboardView({ onSelectStatus, onBack, properties = PRO
   const now = new Date();
   const timeStr = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
+  const dateStrShort = `${now.getMonth() + 1}.${now.getDate()}(${['일','월','화','수','목','금','토'][now.getDay()]}) ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
 
   const counts = {};
   for (const p of properties) {
@@ -36,10 +37,19 @@ export default function DashboardView({ onSelectStatus, onBack, properties = PRO
         <button onClick={onBack} style={{ border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', padding: isMobile ? '5px 10px' : '6px 12px', fontSize: isMobile ? 12 : 13, color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
           ← 홈
         </button>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, color: '#1a202c' }}>현황 대시보드</div>
-          <div style={{ fontSize: isMobile ? 10 : 12, color: '#a0aec0', fontFamily: "'DM Mono', monospace" }}>{dateStr} · {timeStr}{!isMobile && ' 기준'}</div>
-        </div>
+        {isMobile ? (
+          /* 모바일: 제목 + 날짜시간 한 줄 인라인 */
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 6, overflow: 'hidden' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#1a202c', whiteSpace: 'nowrap' }}>현황 대시보드</span>
+            <span style={{ fontSize: 10, color: '#a0aec0', fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dateStrShort}</span>
+          </div>
+        ) : (
+          /* PC: 기존 2줄 레이아웃 */
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: '#1a202c' }}>현황 대시보드</div>
+            <div style={{ fontSize: 12, color: '#a0aec0', fontFamily: "'DM Mono', monospace" }}>{dateStr} · {timeStr} 기준</div>
+          </div>
+        )}
         {syncBadge && syncBadge}
         {unassignedCleaningCount > 0 && (
           <div style={{ background: '#fffbeb', border: '1.5px solid #fbbf24', borderRadius: 8, padding: isMobile ? '4px 8px' : '6px 12px', fontSize: isMobile ? 11 : 12, color: '#d97706', fontWeight: 700, flexShrink: 0 }}>
