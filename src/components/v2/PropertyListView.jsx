@@ -170,28 +170,33 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
   // 고정 열 너비: 모바일 2행 레이아웃은 스트립만, PC는 스트립+이름+배지
   const fixedLeft   = isMobile ? PAD + STRIP_W : PAD + STRIP_W + NAME_W + BADGE_W;
 
-  // ── 간트 헤더 드래그-to-스크롤 ─────────────────────────────────────────────────
+  // ── 간트 드래그-to-스크롤 (헤더 + 각 숙소 행 공용) ────────────────────────────
+  // didDragRef: pointerup 이후 click 이벤트까지 살아있어야 하므로 ref 사용
   const ganttHeaderRef = useRef(null);
-  const dragRef = useRef({ active: false, startX: 0, startOffset: 0 });
+  const dragRef   = useRef({ active: false, startX: 0, startOffset: 0 });
+  const didDragRef = useRef(false);      // drag vs click 구별용
   const [isDragging, setIsDragging] = useState(false);
 
-  function onGanttPointerDown(e) {
+  function startGanttDrag(e) {
     dragRef.current = { active: true, startX: e.clientX, startOffset: windowOffset };
     setIsDragging(true);
     e.currentTarget.setPointerCapture(e.pointerId);
   }
-  function onGanttPointerMove(e) {
-    if (!dragRef.current.active || !ganttHeaderRef.current) return;
-    const w = ganttHeaderRef.current.clientWidth;
-    if (!w) return;
+  function updateGanttDrag(e) {
+    if (!dragRef.current.active) return;
+    // 너비: 이벤트 대상 요소 또는 헤더 ref 폴백
+    const w = e.currentTarget.clientWidth || ganttHeaderRef.current?.clientWidth || 1;
     const dx = e.clientX - dragRef.current.startX;
-    // 왼쪽으로 드래그 → 미래 방향, 오른쪽 → 과거 방향
-    const delta = Math.round((-dx / w) * TOTAL_DAYS);
-    setWindowOffset(dragRef.current.startOffset + delta);
+    if (Math.abs(dx) >= 5) {           // 5px 이상이면 드래그로 확정
+      didDragRef.current = true;
+      const delta = Math.round((-dx / w) * TOTAL_DAYS);
+      setWindowOffset(dragRef.current.startOffset + delta);
+    }
   }
-  function onGanttPointerUp() {
+  function endGanttDrag() {
     dragRef.current.active = false;
     setIsDragging(false);
+    // didDragRef는 click 이벤트에서 초기화 (여기서 지우면 click이 먼저 볼 수 없음)
   }
 
   // ── 단일 JSX 트리 — isMobile로 크기/간격만 조정 ───────────────────────────────
@@ -264,10 +269,10 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
         <div
           ref={ganttHeaderRef}
           style={{ flex: 1, position: 'relative', height: GANTT_H, overflow: 'hidden', cursor: isDragging ? 'grabbing' : 'grab', userSelect: 'none' }}
-          onPointerDown={onGanttPointerDown}
-          onPointerMove={onGanttPointerMove}
-          onPointerUp={onGanttPointerUp}
-          onPointerCancel={onGanttPointerUp}
+          onPointerDown={startGanttDrag}
+          onPointerMove={updateGanttDrag}
+          onPointerUp={endGanttDrag}
+          onPointerCancel={endGanttDrag}
         >
 
 
@@ -370,9 +375,12 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
           return (
             <div
               key={prop.id}
-              onClick={() => onSelectProperty(prop)}
+              onClick={() => {
+                // 간트 바 드래그였으면 상세 이동 억제
+                if (didDragRef.current) { didDragRef.current = false; return; }
+                onSelectProperty(prop);
+              }}
               style={{
-                // 모바일: CSS grid 2행(이름줄/타임라인줄), PC: flex 1행
                 display: isMobile ? 'grid' : 'flex',
                 gridTemplateColumns: isMobile ? `${STRIP_W}px 1fr ${BADGE_W}px` : undefined,
                 gridTemplateRows: isMobile ? 'auto auto' : undefined,
@@ -424,13 +432,21 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
                 </div>
               </div>
 
-              {/* 간트 바 — 모바일: grid 2행 2~3열 span */}
-              <div style={{
-                gridRow: isMobile ? '2' : undefined,
-                gridColumn: isMobile ? '2 / 4' : undefined,
-                flex: isMobile ? undefined : 1,
-                position: 'relative', height: ROW_GANTT_H, overflow: 'hidden',
-              }}>
+              {/* 간트 바 — 드래그로 타임라인 이동, 짧은 탭은 상세 이동 */}
+              <div
+                style={{
+                  gridRow: isMobile ? '2' : undefined,
+                  gridColumn: isMobile ? '2 / 4' : undefined,
+                  flex: isMobile ? undefined : 1,
+                  position: 'relative', height: ROW_GANTT_H, overflow: 'hidden',
+                  cursor: isDragging ? 'grabbing' : 'grab',
+                  userSelect: 'none',
+                }}
+                onPointerDown={startGanttDrag}
+                onPointerMove={updateGanttDrag}
+                onPointerUp={endGanttDrag}
+                onPointerCancel={endGanttDrag}
+              >
                 {/* 과거 구간 배경 — 연한 회색으로 "지난 시간" 느낌 */}
                 <div style={{
                   position: 'absolute', left: 0, top: 0, bottom: 0, width: `${nowLeft}%`,
