@@ -3,7 +3,6 @@ import { PROPERTIES, STATE_META, SEGMENT_COLORS, getGanttSegments } from '../../
 import { useMobile } from '../../hooks/useMobile';
 import { useReportingStats } from '../../hooks/useReportingStats';
 import ListViewFilter from './reporting/ListViewFilter';
-import KpiTiles from './reporting/KpiTiles';
 import SummaryBanner from './reporting/SummaryBanner';
 
 const PAST_DAYS   = 6;
@@ -16,20 +15,17 @@ const DAY_NAMES   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTH_NAMES = ['January','February','March','April','May','June',
                      'July','August','September','October','November','December'];
 
-// 윈도우 경계 + 날짜/월 레이블 (정적 — 하루에 한 번만 계산)
-function useGanttWindow() {
+// 윈도우 경계 + 날짜/월 레이블.
+// offsetDays: 타임라인 스크롤 위치 (0 = 오늘 중심, -7 = 지난주, +7 = 다음주)
+function useGanttWindow(offsetDays = 0) {
   return useMemo(() => {
     const todayMidnight = new Date();
     todayMidnight.setHours(0, 0, 0, 0);
 
-    const windowStart = new Date(todayMidnight);
-    windowStart.setDate(windowStart.getDate() - PAST_DAYS);
-
-    const windowEnd = new Date(todayMidnight);
-    windowEnd.setDate(windowEnd.getDate() + FUTURE_DAYS);
-
-    const windowMs  = windowEnd - windowStart;
-    const todayLeft = (PAST_DAYS / TOTAL_DAYS * 100).toFixed(2); // 30%
+    // offsetDays만큼 윈도우 전체를 이동
+    const windowStart = new Date(todayMidnight.getTime() + (offsetDays - PAST_DAYS) * 86400000);
+    const windowEnd   = new Date(todayMidnight.getTime() + (offsetDays + FUTURE_DAYS) * 86400000);
+    const windowMs    = windowEnd - windowStart;
 
     const dayLabels   = [];
     const monthLabels = [];
@@ -38,19 +34,20 @@ function useGanttWindow() {
     for (let i = 0; i < TOTAL_DAYS; i++) {
       const d   = new Date(windowStart);
       d.setDate(d.getDate() + i);
-      const rel       = i - PAST_DAYS;
+      // 실제 오늘로부터 몇 일 차이인지 (0 = 오늘, 음수 = 과거, 양수 = 미래)
+      const relToToday = i - (PAST_DAYS - offsetDays);
       const colLeft   = (i / TOTAL_DAYS * 100).toFixed(2);
-      const labelLeft = ((i + 0.5) / TOTAL_DAYS * 100).toFixed(2); // 열 중앙
+      const labelLeft = ((i + 0.5) / TOTAL_DAYS * 100).toFixed(2);
 
-      const dayNum = d.getDay(); // 0=Sun, 6=Sat
+      const dayNum = d.getDay();
       dayLabels.push({
         dayOfWeek: DAY_NAMES[dayNum],
         date:      d.getDate(),
         dayNum,
         colLeft,
         labelLeft,
-        isToday:   rel === 0,
-        isFuture:  rel > 0,
+        isToday:   relToToday === 0,
+        isFuture:  relToToday > 0,
         isSat:     dayNum === 6,
         isSun:     dayNum === 0,
         isWeekend: dayNum === 0 || dayNum === 6,
@@ -63,8 +60,8 @@ function useGanttWindow() {
       }
     }
 
-    return { windowStart, windowEnd, windowMs, todayLeft, dayLabels, monthLabels };
-  }, []);
+    return { windowStart, windowEnd, windowMs, dayLabels, monthLabels };
+  }, [offsetDays]);
 }
 
 // 현재 시각 위치 (1분마다 갱신)
@@ -132,9 +129,23 @@ function GanttBar({ seg, windowStart, windowMs }) {
 export default function PropertyListView({ initialFilter, onSelectProperty, onBack, properties = PROPERTIES }) {
   const isMobile = useMobile();
   const [filter, setFilter] = useState(initialFilter || FILTER_ALL);
-  const [period, setPeriod] = useState('this_week');
-  const { stats, summary, loading: statsLoading } = useReportingStats(period, null);
-  const { windowStart, windowEnd, windowMs, dayLabels, monthLabels } = useGanttWindow();
+  const [windowOffset, setWindowOffset] = useState(0); // 일 단위 스크롤 오프셋
+  const [listMode, setListMode] = useState('week');    // 'week' | 'day'
+
+  // 현재 뷰포트 위치 → 통계 기간 자동 도출
+  const statsPeriod = useMemo(() => {
+    if (listMode === 'week') {
+      if (windowOffset <= -4) return 'last_week';
+      if (windowOffset >= 4)  return 'next_week';
+      return 'this_week';
+    }
+    if (windowOffset < 0) return 'yesterday';
+    if (windowOffset > 0) return 'tomorrow';
+    return 'today';
+  }, [windowOffset, listMode]);
+
+  const { stats, summary, loading: statsLoading } = useReportingStats(statsPeriod, null);
+  const { windowStart, windowEnd, windowMs, dayLabels, monthLabels } = useGanttWindow(windowOffset);
   const { nowLeft, timeStr } = useLiveNow(windowStart, windowMs);
 
   const filtered = properties.filter(p =>
@@ -175,9 +186,14 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
         </div>
       </div>
 
-      {/* 기간 필터 + KPI 타일 + 요약 배너 */}
-      <ListViewFilter period={period} onChange={setPeriod} isMobile={isMobile} />
-      <KpiTiles period={period} stats={stats} loading={statsLoading} isMobile={isMobile} />
+      {/* 타임라인 네비게이터 + 요약 배너 */}
+      <ListViewFilter
+        windowOffset={windowOffset}
+        onOffsetChange={setWindowOffset}
+        mode={listMode}
+        onModeChange={setListMode}
+        isMobile={isMobile}
+      />
       <SummaryBanner summary={summary} loading={statsLoading} isMobile={isMobile} />
 
       {/* 상태 필터 바 — 모바일: 소형 버튼 한 줄, PC: 일반 크기 */}

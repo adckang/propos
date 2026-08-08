@@ -5,7 +5,6 @@ import { STATE_META, SEGMENT_COLORS, getWindowSegments } from '../../data/roomSt
 import { useMobile } from '../../hooks/useMobile';
 import { useReportingStats } from '../../hooks/useReportingStats';
 import DetailViewFilter from './reporting/DetailViewFilter';
-import KpiTiles from './reporting/KpiTiles';
 import SummaryBanner from './reporting/SummaryBanner';
 
 const PAST_HOURS    = 24;          // 현재 시각 이전 24h
@@ -564,14 +563,20 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
     if (h > 0) setHourPx(h / VISIBLE_HOURS);
   }, []);
 
-  // hourPx 확정 후 "지금" 마커를 화면 상단 30% 위치로 스크롤
-  // → 화면 위 30%: 과거 / 아래 70%: 미래
+  // period 변경 또는 hourPx 확정 시 해당 시간대로 타임라인 스크롤
+  // period가 'now'/'today' → 현재 시각(nowTopPx) 기준 상단 30% 위치
+  // 그 외 → now 기준 ±시간 오프셋 계산
   useEffect(() => {
-    if (timelineRef.current) {
-      const visibleH = timelineRef.current.clientHeight;
-      timelineRef.current.scrollTop = nowTopPx - visibleH * 0.3;
-    }
-  }, [hourPx, nowTopPx]);
+    if (!timelineRef.current) return;
+    const visibleH = timelineRef.current.clientHeight;
+    const PERIOD_HOUR_OFFSET = {
+      yesterday: -24, today: 0, now: 0,
+      tomorrow: 24, last_hour: -1, next_hour: 1,
+    };
+    const offsetH = PERIOD_HOUR_OFFSET[period] ?? 0;
+    const targetTop = Math.max(0, (PAST_HOURS + offsetH) * hourPx - visibleH * 0.3);
+    timelineRef.current.scrollTo({ top: targetTop, behavior: 'smooth' });
+  }, [hourPx, period]);
 
   function scrollToState(mainStatus) {
     const el = mainStatusRefs.current[mainStatus];
@@ -651,8 +656,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
         </div>
       </div>
 
-      {/* KPI 타일 + 요약 배너 (기간 필터는 좌측 타임라인 상단에 배치) */}
-      <KpiTiles period={period} stats={stats} loading={statsLoading} isMobile={isMobile} />
+      {/* 요약 배너 — 현재 period 통계 요약 */}
       <SummaryBanner summary={summary} loading={statsLoading} isMobile={isMobile} />
 
       {/* 이상 감지 배너 — 모바일만 표시 */}
