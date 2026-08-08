@@ -45,10 +45,17 @@ function Tile({ label, value, sub, accent, warn = false, isMobile }) {
 }
 
 const PERIOD_TYPE = {
+  // 실시간
   now:        'now',
+  today:      'now',
+  // 현재/혼합
   this_week:  'current', this_month:  'current',
+  // 과거
   last_week:  'past',    last_month:  'past',
+  yesterday:  'past',    last_hour:   'past',
+  // 미래
   next_week:  'future',  next_month:  'future',
+  tomorrow:   'future',  next_hour:   'future',
 };
 
 export default function KpiTiles({ period, stats, loading, isMobile = false }) {

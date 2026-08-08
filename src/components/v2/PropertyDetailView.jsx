@@ -4,7 +4,7 @@ import { weatherMeta } from '../../infrastructure/weatherClient';
 import { STATE_META, SEGMENT_COLORS, getWindowSegments } from '../../data/roomStateMockData';
 import { useMobile } from '../../hooks/useMobile';
 import { useReportingStats } from '../../hooks/useReportingStats';
-import TimelineFilter from './reporting/TimelineFilter';
+import DetailViewFilter from './reporting/DetailViewFilter';
 import KpiTiles from './reporting/KpiTiles';
 import SummaryBanner from './reporting/SummaryBanner';
 
@@ -483,7 +483,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
   const mainStatusRefs = useRef({});
   const timelineRef = useRef(null);
   const now = new Date();
-  const [period, setPeriod] = useState('now');
+  const [period, setPeriod] = useState('today');
   const { stats, summary, loading: statsLoading } = useReportingStats(period, property.id);
 
   const [lightboxSnap, setLightboxSnap] = useState(null);
@@ -651,8 +651,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
         </div>
       </div>
 
-      {/* 리포팅: 타임라인 필터 + KPI 타일 + 요약 배너 */}
-      <TimelineFilter period={period} onChange={setPeriod} isMobile={isMobile} />
+      {/* KPI 타일 + 요약 배너 (기간 필터는 좌측 타임라인 상단에 배치) */}
       <KpiTiles period={period} stats={stats} loading={statsLoading} isMobile={isMobile} />
       <SummaryBanner summary={summary} loading={statsLoading} isMobile={isMobile} />
 
@@ -672,15 +671,21 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
         {/* 세로 타임라인 — 반응형 폭 */}
-        <div
-          ref={timelineRef}
-          style={{
-            width: LABEL_W + TIMELINE_W + SUB_W + (isMobile ? 20 : 24),
-            flexShrink: 0,
-            overflowY: 'auto',
-            padding: tlPad,
-          }}
-        >
+        <div style={{
+          width: LABEL_W + TIMELINE_W + SUB_W + (isMobile ? 20 : 24),
+          flexShrink: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          borderRight: '1px solid #e2e8f0',
+        }}>
+          {/* 기간 필터 — 타임라인 위 고정 */}
+          <DetailViewFilter period={period} onChange={setPeriod} isMobile={isMobile} />
+
+          {/* 타임라인 스크롤 영역 */}
+          <div
+            ref={timelineRef}
+            style={{ flex: 1, overflowY: 'auto', padding: tlPad }}
+          >
           <div style={{ position: 'relative', height: containerHeight }}>
             {/* 시간 축 */}
             {hourMarkers.map((m) => (
@@ -819,7 +824,8 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
               );
             })}
           </div>
-        </div>
+          </div>{/* 타임라인 스크롤 영역 끝 */}
+        </div>{/* 세로 타임라인 패널 끝 */}
 
         {/* 센서 패널 — 나머지 공간 전부 */}
         <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: detailPad, display: 'flex', flexDirection: 'column', gap: 10 }}>

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { PROPERTIES, STATE_META, SEGMENT_COLORS, getGanttSegments } from '../../data/roomStateMockData';
 import { useMobile } from '../../hooks/useMobile';
 import { useReportingStats } from '../../hooks/useReportingStats';
-import TimelineFilter from './reporting/TimelineFilter';
+import ListViewFilter from './reporting/ListViewFilter';
 import KpiTiles from './reporting/KpiTiles';
 import SummaryBanner from './reporting/SummaryBanner';
 
@@ -132,7 +132,7 @@ function GanttBar({ seg, windowStart, windowMs }) {
 export default function PropertyListView({ initialFilter, onSelectProperty, onBack, properties = PROPERTIES }) {
   const isMobile = useMobile();
   const [filter, setFilter] = useState(initialFilter || FILTER_ALL);
-  const [period, setPeriod] = useState('now');
+  const [period, setPeriod] = useState('this_week');
   const { stats, summary, loading: statsLoading } = useReportingStats(period, null);
   const { windowStart, windowEnd, windowMs, dayLabels, monthLabels } = useGanttWindow();
   const { nowLeft, timeStr } = useLiveNow(windowStart, windowMs);
@@ -175,8 +175,8 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
         </div>
       </div>
 
-      {/* 타임라인 필터 + KPI 타일 + 요약 배너 */}
-      <TimelineFilter period={period} onChange={setPeriod} isMobile={isMobile} />
+      {/* 기간 필터 + KPI 타일 + 요약 배너 */}
+      <ListViewFilter period={period} onChange={setPeriod} isMobile={isMobile} />
       <KpiTiles period={period} stats={stats} loading={statsLoading} isMobile={isMobile} />
       <SummaryBanner summary={summary} loading={statsLoading} isMobile={isMobile} />
 
