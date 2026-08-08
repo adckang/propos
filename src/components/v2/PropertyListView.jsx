@@ -93,7 +93,7 @@ function mergeGanttSegments(segs) {
   return merged;
 }
 
-function GanttBar({ seg, windowStart, windowMs }) {
+function GanttBar({ seg, windowStart, windowMs, isDragging }) {
   const meta = STATE_META[seg.mainStatus];
   if (!meta) return null;
   const windowEnd = windowStart.getTime() + windowMs;
@@ -115,7 +115,7 @@ function GanttBar({ seg, windowStart, windowMs }) {
         display: 'flex', flexDirection: 'column',
         opacity: isFuture ? 0.92 : 0.42,
         minWidth: 3, overflow: 'hidden',
-        transition: 'left 0.25s ease, width 0.25s ease',
+        transition: isDragging ? 'none' : 'left 0.25s ease, width 0.25s ease',
       }}
     >
       {/* 메인 상태 바 */}
@@ -257,7 +257,7 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
           left: `calc(${fixedLeft}px + ${nowLeft / 100} * (100% - ${fixedLeft + PAD}px))`,
           top: 0, bottom: 0,
           width: 2, background: '#1a202c', zIndex: 20, pointerEvents: 'none',
-          transition: 'left 0.25s ease',
+          transition: isDragging ? 'none' : 'left 0.25s ease',
         }} />
 
       {/* 간트 헤더 — 모바일: 스트립 너비만 고정, PC: 스트립+이름+배지 */}
@@ -284,7 +284,7 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
             transform: 'translateX(-50%)',
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             gap: 3, zIndex: 10,
-            transition: 'left 0.25s ease',
+            transition: isDragging ? 'none' : 'left 0.25s ease',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap' }}>
               <span style={{
@@ -312,7 +312,7 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
               fontSize: 10, color: '#64748b', fontWeight: 700,
               fontFamily: "'DM Sans', sans-serif", letterSpacing: 0.2,
               paddingLeft: 4, whiteSpace: 'nowrap',
-              transition: 'left 0.25s ease',
+              transition: isDragging ? 'none' : 'left 0.25s ease',
             }}>
               {ml.label}
             </div>
@@ -340,14 +340,14 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
                   width: dl.isWeekend ? 1.5 : 1,
                   background: sepColor,
                   zIndex: 1,
-                  transition: 'left 0.25s ease',
+                  transition: isDragging ? 'none' : 'left 0.25s ease',
                 }} />
                 {/* 날짜 레이블 (Today 포함 전부 표시) */}
                 <div style={{
                   position: 'absolute', left: `${posLeft}%`, top: isMobile ? 37 : 44,
                   transform: posTransform,
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
-                  transition: 'left 0.25s ease',
+                  transition: isDragging ? 'none' : 'left 0.25s ease',
                 }}>
                   {!isMobile && <span style={{
                     fontSize: 8, color: txtColor,
@@ -457,7 +457,7 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
                 <div style={{
                   position: 'absolute', left: 0, top: 0, bottom: 0, width: `${nowLeft}%`,
                   background: 'rgba(241,245,249,0.7)', zIndex: 0,
-                  transition: 'width 0.25s ease',
+                  transition: isDragging ? 'none' : 'width 0.25s ease',
                 }} />
 
                 {/* 일자 구분선 */}
@@ -469,7 +469,7 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
                       width: dl.isWeekend ? 1.5 : 1,
                       background: sepColor,
                       zIndex: 0,
-                      transition: 'left 0.25s ease',
+                      transition: isDragging ? 'none' : 'left 0.25s ease',
                     }} />
                   );
                 })}
@@ -477,7 +477,7 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
 
                 {/* 상태 바 (과거 + 미래 예측 포함) */}
                 {mergeGanttSegments(getGanttSegments(prop, windowStart, windowEnd)).map((seg, si) => (
-                  <GanttBar key={si} seg={seg} windowStart={windowStart} windowMs={windowMs} />
+                  <GanttBar key={si} seg={seg} windowStart={windowStart} windowMs={windowMs} isDragging={isDragging} />
                 ))}
               </div>
             </div>
