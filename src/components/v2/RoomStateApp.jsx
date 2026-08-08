@@ -66,14 +66,23 @@ function loadPastReservations() {
 }
 function savePastReservations(reservations) {
   const now = new Date();
-  const past = reservations.filter(r => r.checkOut <= now);
-  localStorage.setItem(LS_PAST_RES_KEY, JSON.stringify(past));
+  // 과거 예약 + 현재 체류 중인 예약(나중에 과거가 될 수 있음)을 캐시에 보존.
+  // 오프라인 중 체크아웃이 발생하면 피드에서 사라지기 전에 캐시가 없으면 유실되므로
+  // active 예약도 함께 저장해둔다.
+  const toSave = reservations.filter(r =>
+    r.checkOut <= now ||                          // 완료된 과거 예약
+    (r.checkIn <= now && r.checkOut > now)        // 현재 체류 중 (안전망)
+  );
+  localStorage.setItem(LS_PAST_RES_KEY, JSON.stringify(toSave));
 }
 function mergePastReservations(freshFromFeed, now = new Date()) {
   const cached = loadPastReservations();
   const freshMap = new Map(freshFromFeed.map(r => [r.uid, r]));
-  // 캐시에 있는 과거 예약 중 피드에 없는 것만 보존 (피드가 더 최신이면 피드 우선)
-  const onlyInCache = cached.filter(r => r.checkOut <= now && !freshMap.has(r.uid));
+  // 캐시에 있는 과거/active 예약 중 피드에 없는 것만 보존 (피드 우선).
+  // 취소된 미래 예약은 캐시에 존재할 수 없음 — savePastReservations가
+  // checkOut <= now 또는 active 만 저장하기 때문에 미래 예약은 캐시 제외.
+  // 따라서 "취소된 미래 예약이 캐시에 남는" 버그는 발생하지 않음.
+  const onlyInCache = cached.filter(r => !freshMap.has(r.uid));
   const merged = [...onlyInCache, ...freshFromFeed].sort((a, b) => a.checkIn - b.checkIn);
   savePastReservations(merged);
   return merged;

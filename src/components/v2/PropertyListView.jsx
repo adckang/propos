@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { PROPERTIES, STATE_META, SEGMENT_COLORS, getGanttSegments } from '../../data/roomStateMockData';
 import { useMobile } from '../../hooks/useMobile';
 import { useReportingStats } from '../../hooks/useReportingStats';
@@ -170,6 +170,30 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
   // 고정 열 너비: 모바일 2행 레이아웃은 스트립만, PC는 스트립+이름+배지
   const fixedLeft   = isMobile ? PAD + STRIP_W : PAD + STRIP_W + NAME_W + BADGE_W;
 
+  // ── 간트 헤더 드래그-to-스크롤 ─────────────────────────────────────────────────
+  const ganttHeaderRef = useRef(null);
+  const dragRef = useRef({ active: false, startX: 0, startOffset: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+
+  function onGanttPointerDown(e) {
+    dragRef.current = { active: true, startX: e.clientX, startOffset: windowOffset };
+    setIsDragging(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+  function onGanttPointerMove(e) {
+    if (!dragRef.current.active || !ganttHeaderRef.current) return;
+    const w = ganttHeaderRef.current.clientWidth;
+    if (!w) return;
+    const dx = e.clientX - dragRef.current.startX;
+    // 왼쪽으로 드래그 → 미래 방향, 오른쪽 → 과거 방향
+    const delta = Math.round((-dx / w) * TOTAL_DAYS);
+    setWindowOffset(dragRef.current.startOffset + delta);
+  }
+  function onGanttPointerUp() {
+    dragRef.current.active = false;
+    setIsDragging(false);
+  }
+
   // ── 단일 JSX 트리 — isMobile로 크기/간격만 조정 ───────────────────────────────
   return (
     <div style={{ background: '#f0f4f8', minHeight: '100%', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
@@ -236,8 +260,15 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
         </div>
         <div style={{ width: isMobile ? 0 : BADGE_W, flexShrink: 0 }} />
 
-        {/* 간트 열 헤더 */}
-        <div style={{ flex: 1, position: 'relative', height: GANTT_H, overflow: 'hidden' }}>
+        {/* 간트 열 헤더 — 드래그로 타임라인 이동 */}
+        <div
+          ref={ganttHeaderRef}
+          style={{ flex: 1, position: 'relative', height: GANTT_H, overflow: 'hidden', cursor: isDragging ? 'grabbing' : 'grab', userSelect: 'none' }}
+          onPointerDown={onGanttPointerDown}
+          onPointerMove={onGanttPointerMove}
+          onPointerUp={onGanttPointerUp}
+          onPointerCancel={onGanttPointerUp}
+        >
 
 
           {/* ② 지금 레이블 + 도트 (Detail View와 동일 스타일) */}
