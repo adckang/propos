@@ -1,7 +1,7 @@
 import { PROPERTIES, STATE_META } from '../../data/roomStateMockData';
 import { useMobile } from '../../hooks/useMobile';
 
-const ORDER = ['OCCUPIED', 'PRE_STAY_READY', 'CLEANING', 'VACANT'];
+const ORDER = ['CLEANING', 'PRE_STAY_READY', 'OCCUPIED', 'VACANT'];
 
 export default function DashboardView({ onSelectStatus, onBack, properties = PROPERTIES, syncBadge }) {
   const isMobile = useMobile();
@@ -72,13 +72,13 @@ export default function DashboardView({ onSelectStatus, onBack, properties = PRO
           {isMobile ? '전체' : '전체 '}<strong style={{ color: '#1a202c', fontFamily: isMobile ? "'DM Mono', monospace" : undefined, fontSize: isMobile ? 15 : undefined }}>{properties.length}</strong>{!isMobile && '개 숙소'}
         </span>
         <span style={{ fontSize: isMobile ? 10 : 13, color: '#4a5568', ...(isMobile ? { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 } : {}) }}>
-          {isMobile ? '체류' : '체류중 '}<strong data-testid="count-occupied" style={{ color: '#2563eb', fontFamily: isMobile ? "'DM Mono', monospace" : undefined, fontSize: isMobile ? 15 : undefined }}>{counts['OCCUPIED']?.total || 0}</strong>
+          {isMobile ? '청소' : '청소중 '}<strong data-testid="count-cleaning" style={{ color: '#dc2626', fontFamily: isMobile ? "'DM Mono', monospace" : undefined, fontSize: isMobile ? 15 : undefined }}>{counts['CLEANING']?.total || 0}</strong>
         </span>
         <span style={{ fontSize: isMobile ? 10 : 13, color: '#4a5568', ...(isMobile ? { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 } : {}) }}>
           {isMobile ? '입실전' : '입실전 '}<strong data-testid="count-pre-stay-ready" style={{ color: '#059669', fontFamily: isMobile ? "'DM Mono', monospace" : undefined, fontSize: isMobile ? 15 : undefined }}>{counts['PRE_STAY_READY']?.total || 0}</strong>
         </span>
         <span style={{ fontSize: isMobile ? 10 : 13, color: '#4a5568', ...(isMobile ? { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 } : {}) }}>
-          {isMobile ? '청소' : '청소중 '}<strong data-testid="count-cleaning" style={{ color: '#dc2626', fontFamily: isMobile ? "'DM Mono', monospace" : undefined, fontSize: isMobile ? 15 : undefined }}>{counts['CLEANING']?.total || 0}</strong>
+          {isMobile ? '체류' : '체류중 '}<strong data-testid="count-occupied" style={{ color: '#2563eb', fontFamily: isMobile ? "'DM Mono', monospace" : undefined, fontSize: isMobile ? 15 : undefined }}>{counts['OCCUPIED']?.total || 0}</strong>
         </span>
         <span style={{ fontSize: isMobile ? 10 : 13, color: '#4a5568', ...(isMobile ? { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 } : {}) }}>
           {isMobile ? '공실' : '공실 '}<strong data-testid="count-vacant" style={{ color: '#6b7280', fontFamily: isMobile ? "'DM Mono', monospace" : undefined, fontSize: isMobile ? 15 : undefined }}>{counts['VACANT']?.total || 0}</strong>

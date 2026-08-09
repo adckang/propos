@@ -290,7 +290,11 @@ function SettingsModal({ config, onSave, onClose }) {
 
 // ── 싱크 상태 뱃지 ─────────────────────────────────────────────────────────────
 function SyncBadge({ status, lastSynced, onSync, onSettings }) {
-  const fmt = d => d ? d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '';
+  const fmtWithDate = d => {
+    if (!d) return '';
+    const h = d.getHours(), m = d.getMinutes().toString().padStart(2, '0');
+    return `${d.getMonth()+1}/${d.getDate()} ${h < 12 ? 'AM' : 'PM'} ${(h%12||12).toString().padStart(2,'0')}:${m}`;
+  };
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       {status === 'syncing' && (
@@ -298,7 +302,7 @@ function SyncBadge({ status, lastSynced, onSync, onSettings }) {
       )}
       {status === 'ok' && lastSynced && (
         <div style={{ fontSize: 12, color: '#059669', fontFamily: "'DM Mono', monospace" }}>
-          ● LIVE {fmt(lastSynced)}
+          ● LIVE {fmtWithDate(lastSynced)}
         </div>
       )}
       {status === 'error' && (

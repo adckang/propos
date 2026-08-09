@@ -4,6 +4,7 @@ import { handleNodeHaRequest } from "./server/haApiHandlers.js";
 import { handleNodeIcalRequest } from "./server/icalApiHandlers.js";
 import { startWatcher, getMonitoringState, setMonitoringConfig, setRoomState } from "./server/occupancyWatcher.js";
 import { getHaBaseUrl, getHaToken } from "./server/haProxy.js";
+import { fetchWeather } from "./server/weatherService.js";
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -67,6 +68,18 @@ function apiProxyPlugin() {
       }
       if (req.url?.startsWith("/api/camera/snapshot") && req.method === "GET") {
         await handleCameraSnapshot(req, res);
+        return;
+      }
+      if (req.url?.startsWith("/api/weather") && req.method === "GET") {
+        const district = new URL(req.url, "http://localhost").searchParams.get("district") ?? "";
+        if (!district) { sendJson(res, 400, { error: "district required" }); return; }
+        try {
+          const result = await fetchWeather(district, process.env.PROPOS_KMA_API_KEY ?? null);
+          if (result.error) { sendJson(res, result.status ?? 500, { error: result.error }); return; }
+          sendJson(res, 200, result.data);
+        } catch (err) {
+          sendJson(res, 502, { error: err.message });
+        }
         return;
       }
       next();

@@ -8,7 +8,7 @@ import SummaryBanner from './reporting/SummaryBanner';
 const PAST_DAYS   = 6;
 const FUTURE_DAYS = 14;
 const TOTAL_DAYS  = PAST_DAYS + FUTURE_DAYS;  // 20일 한 페이지
-const ORDER       = ['OCCUPIED', 'PRE_STAY_READY', 'CLEANING', 'VACANT'];
+const ORDER       = ['CLEANING', 'PRE_STAY_READY', 'OCCUPIED', 'VACANT'];
 const FILTER_ALL  = 'ALL';
 
 const DAY_NAMES   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -147,7 +147,7 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
 
   const { stats, summary, loading: statsLoading } = useReportingStats(statsPeriod, null);
   const { windowStart, windowEnd, windowMs, dayLabels, monthLabels } = useGanttWindow(windowOffset);
-  const { nowLeft, timeStr } = useLiveNow(windowStart, windowMs);
+  const { now, nowLeft, timeStr } = useLiveNow(windowStart, windowMs);
 
   const filtered = properties.filter(p =>
     filter === FILTER_ALL || p.currentState.mainStatus === filter
@@ -164,7 +164,7 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
 
   const PAD         = isMobile ? 12 : 20;
   const NAME_W      = isMobile ? 86 : 140;
-  const BADGE_W     = isMobile ? 52 : 82;
+  const BADGE_W     = isMobile ? 80 : 110;
   const STRIP_W     = 4;
   const GANTT_H     = isMobile ? 44 : 72;   // 간트 헤더 높이
   const ROW_GANTT_H = isMobile ? 26 : 40;   // 숙소 행 간트 바 높이
@@ -203,25 +203,21 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
   // ── 단일 JSX 트리 — isMobile로 크기/간격만 조정 ───────────────────────────────
   return (
     <div style={{ background: '#f0f4f8', minHeight: '100%', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
-      {/* 최소 헤더 — 뒤로가기 + 숙소 수 */}
+      {/* 최소 헤더 — 뒤로가기 + LIVE 인디케이터 */}
       <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: isMobile ? '7px 12px' : '9px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={onBack} style={{ border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', padding: isMobile ? '4px 9px' : '5px 11px', fontSize: isMobile ? 12 : 13, color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
           ← 대시보드
         </button>
-        <span style={{ fontSize: 11, color: '#a0aec0', fontFamily: "'DM Mono', monospace" }}>
-          {sorted.length} / {properties.length}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: isMobile ? 10 : 11, fontFamily: "'DM Mono', monospace", color: '#059669', fontWeight: 700, whiteSpace: 'nowrap' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#059669', display: 'inline-block', flexShrink: 0 }} />
+            {`LIVE ${now.getMonth()+1}/${now.getDate()} ${now.getHours() < 12 ? 'AM' : 'PM'} ${(now.getHours()%12||12).toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`}
+          </span>
+          <span style={{ fontSize: 10, color: '#c8d3dc', fontFamily: "'DM Mono', monospace" }}>
+            {sorted.length}/{properties.length}
+          </span>
+        </div>
       </div>
-
-      {/* 타임라인 네비게이터 + 요약 배너 */}
-      <ListViewFilter
-        windowOffset={windowOffset}
-        onOffsetChange={setWindowOffset}
-        mode={listMode}
-        onModeChange={setListMode}
-        isMobile={isMobile}
-      />
-      <SummaryBanner summary={summary} loading={statsLoading} isMobile={isMobile} />
 
       {/* 상태 필터 바 — 모바일: 소형 버튼 한 줄, PC: 일반 크기 */}
       <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: `${isMobile ? 7 : 10}px ${PAD}px`, display: 'flex', gap: isMobile ? 4 : 8, overflowX: 'hidden', flexWrap: 'nowrap' }}>
@@ -244,6 +240,16 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
           );
         })}
       </div>
+
+      {/* 타임라인 네비게이터 + 요약 배너 */}
+      <ListViewFilter
+        windowOffset={windowOffset}
+        onOffsetChange={setWindowOffset}
+        mode={listMode}
+        onModeChange={setListMode}
+        isMobile={isMobile}
+      />
+      <SummaryBanner summary={summary} loading={statsLoading} isMobile={isMobile} />
 
       {/* 간트 헤더 + 목록 래퍼 — 현재 시각 연속선 기준점 */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', minHeight: 0 }}>

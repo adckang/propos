@@ -63,7 +63,7 @@ export default async function handler(req, res) {
 
   const db = new Pool({ connectionString: process.env.POSTGRES_URL });
   try {
-    await ensureTable(db);
+    await ensureTable(db); // 첫 배포 후 테이블 생성되면 이 줄 제거 가능
 
     const event = {
       id:          randomUUID(),

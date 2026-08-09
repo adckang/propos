@@ -25,6 +25,27 @@ function isWarn(key, val) {
   return val >= lo;
 }
 
+function sensorFriendlyMessage(key, val, label) {
+  const loc = label ? `${label} ` : '';
+  const v = formatSensorVal(key, val);
+  switch (key) {
+    case 'temp':     return `${loc}온도가 ${v}°C로 높아요. 에어컨을 켜거나 창문을 열어 환기해 주세요.`;
+    case 'humidity': return `${loc}습도가 ${v}%로 높아요. 제습기를 켜거나 환기를 해주세요.`;
+    case 'noise':    return `${loc}소음이 ${v}dB로 높아요. 게스트에게 조용히 해달라고 안내가 필요해요.`;
+    case 'power':    return `전력 사용량이 ${v}W로 높아요. 불필요한 전자제품이 켜져 있는지 확인해 주세요.`;
+    case 'co2':      return `${loc}CO₂ 농도가 ${v}ppm으로 높아요. 창문을 열어 환기해 주세요.`;
+    default:         return `${loc}${SENSOR_LABELS[key] || key} 이상이 감지됐어요.`;
+  }
+}
+
+function deviceFriendlyMessage(device) {
+  const name = device.label || device.entityId;
+  if (name.includes('센서') || name.includes('감지')) return `${name}가 응답하지 않아요. 배터리를 교체해 주세요.`;
+  if (name.includes('도어락') || name.includes('잠금')) return `${name}이 연결되지 않았어요. 전원 상태를 확인해 주세요.`;
+  if (name.includes('에어컨') || name.includes('조명') || name.includes('플러그')) return `${name}이 응답하지 않아요. 전원이 꺼져 있는지 확인해 주세요.`;
+  return `${name}이 연결되지 않았어요. 전원 상태를 확인해 주세요.`;
+}
+
 function formatSensorVal(key, val) {
   if (key === 'energy') return val.toFixed(3);
   if (key === 'temp')   return val.toFixed(1);
@@ -45,10 +66,10 @@ function hourLineBorder(m) {
 }
 
 const MONITOR_SUB_META = {
-  GOOD_CONDITION:   { label: '정상',      color: '#059669', bg: '#f0fdf4', border: '#bbf7d0', icon: '✓' },
-  ENERGY_WASTE:     { label: '에너지 낭비', color: '#d97706', bg: '#fffbeb', border: '#fde68a', icon: '⚡' },
-  ISSUE_COMPLAINT:  { label: '민원 이슈',  color: '#dc2626', bg: '#fef2f2', border: '#fecaca', icon: '⚠' },
-  ISSUE_AND_ENERGY: { label: '복합 이슈',  color: '#7c3aed', bg: '#faf5ff', border: '#ddd6fe', icon: '🚨' },
+  GOOD_CONDITION:   { label: '정상',      color: '#059669', bg: '#f0fdf4', border: '#bbf7d0', icon: '✓',  friendlyMsg: null },
+  ENERGY_WASTE:     { label: '에너지 낭비', color: '#d97706', bg: '#fffbeb', border: '#fde68a', icon: '⚡', friendlyMsg: '에너지 낭비가 감지됐어요. 불필요한 전자제품이 켜져 있는지 확인해 주세요.' },
+  ISSUE_COMPLAINT:  { label: '민원 이슈',  color: '#dc2626', bg: '#fef2f2', border: '#fecaca', icon: '⚠', friendlyMsg: '게스트 민원이 접수됐어요. 빠르게 확인하고 조치가 필요해요.' },
+  ISSUE_AND_ENERGY: { label: '복합 이슈',  color: '#7c3aed', bg: '#faf5ff', border: '#ddd6fe', icon: '🚨', friendlyMsg: '민원과 에너지 낭비가 동시에 감지됐어요. 즉시 확인이 필요해요.' },
 };
 
 function MonitoringStatusCard({ monitorState, lastEvent, weather }) {
@@ -70,13 +91,13 @@ function MonitoringStatusCard({ monitorState, lastEvent, weather }) {
         )}
       </div>
 
-      {/* 감지 사유 */}
-      {!isGood && lastEvent?.reason && (
+      {/* 친절한 안내 메시지 */}
+      {!isGood && meta.friendlyMsg && (
         <div style={{
-          fontSize: 11, color: '#374151', lineHeight: 1.65,
+          fontSize: 12, color: meta.color, lineHeight: 1.65, fontWeight: 500,
           borderTop: `1px solid ${meta.border}`, paddingTop: 8,
         }}>
-          {lastEvent.reason}
+          {meta.friendlyMsg}
         </div>
       )}
 
@@ -538,6 +559,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
   const [dayOffset, setDayOffset]   = useState(0);              // 0=오늘, ±N=N일 이동
   const [tlMode, setTlMode]         = useState('day');           // 'day'|'hour'
   const [hourPeriod, setHourPeriod] = useState('now');           // 'last_hour'|'now'|'next_hour'
+  const [scrollVersion, setScrollVersion] = useState(0);        // 같은 버튼 재클릭 시 강제 스크롤
 
   // 뷰포트 위치 → 통계 기간 자동 도출
   const statsPeriod = useMemo(() => {
@@ -639,7 +661,8 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
     const totalH = PAST_HOURS + dayOffset * 24 + hourOffset;
     const targetTop = Math.max(0, totalH * hourPx - visibleH * 0.3);
     timelineRef.current.scrollTo({ top: targetTop, behavior: 'smooth' });
-  }, [hourPx, dayOffset, tlMode, hourPeriod]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hourPx, dayOffset, tlMode, hourPeriod, scrollVersion]);
 
   function scrollToState(mainStatus) {
     const el = mainStatusRefs.current[mainStatus];
@@ -679,7 +702,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
 
         {/* 상태 필터 탭 — 모바일: 시각 인디케이터만 (클릭 없음), PC: 탭 클릭 → 해당 구간 이동 */}
         <div style={{ display: 'flex', gap: isMobile ? 5 : 8, overflowX: isMobile ? 'hidden' : 'auto', flexWrap: 'nowrap' }}>
-          {Object.entries(STATE_META).map(([key, meta]) => {
+          {(['CLEANING', 'PRE_STAY_READY', 'OCCUPIED', 'VACANT']).map(key => { const meta = STATE_META[key]; if (!meta) return null;
             const active = presentMainStatuses.has(key);
             return (
               <button
@@ -729,11 +752,21 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
           {/* 타임라인 네비게이터 — 위 고정 */}
           <DetailViewFilter
             dayOffset={dayOffset}
-            onDayOffsetChange={(d) => setDayOffset(Math.max(-7, Math.min(7, d)))}
+            onDayOffsetChange={(d) => {
+              setDayOffset(Math.max(-7, Math.min(7, d)));
+              setScrollVersion(v => v + 1);
+            }}
             mode={tlMode}
-            onModeChange={setTlMode}
+            onModeChange={(m) => {
+              setTlMode(m);
+              if (m === 'hour') { setDayOffset(0); setHourPeriod('now'); }
+              setScrollVersion(v => v + 1);
+            }}
             hourPeriod={hourPeriod}
-            onHourPeriodChange={setHourPeriod}
+            onHourPeriodChange={(p) => {
+              setHourPeriod(p);
+              setScrollVersion(v => v + 1);
+            }}
             isMobile={isMobile}
           />
 
@@ -947,11 +980,14 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
               issueCount={anomalies.length}
               summaryWhenGood="이상 없음 ✓"
               issuePreview={
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                   {anomalies.map(r => (
-                    <span key={r.key} style={{ fontSize: 11, background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 6, padding: '3px 8px', color: '#dc2626', fontWeight: 600 }}>
-                      {SENSOR_ICONS[r.key]} {formatSensorVal(r.key, r.val)}{SENSOR_UNITS[r.key]}
-                    </span>
+                    <div key={r.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                      <span style={{ fontSize: 13, flexShrink: 0, marginTop: 1 }}>{SENSOR_ICONS[r.key]}</span>
+                      <span style={{ fontSize: 12, color: '#dc2626', lineHeight: 1.55 }}>
+                        {sensorFriendlyMessage(r.key, r.val, r.label)}
+                      </span>
+                    </div>
                   ))}
                 </div>
               }
@@ -971,11 +1007,14 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
               issueCount={unavailableDevices.length}
               summaryWhenGood="모두 연결됨 ✓"
               issuePreview={
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                   {unavailableDevices.map(d => (
-                    <span key={d.entityId} style={{ fontSize: 11, background: '#f9fafb', border: '1px solid #fca5a5', borderRadius: 6, padding: '3px 8px', color: '#94a3b8', fontWeight: 600 }}>
-                      {d.icon} {d.label} 연결 안됨
-                    </span>
+                    <div key={d.entityId} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                      <span style={{ fontSize: 13, flexShrink: 0, marginTop: 1 }}>{d.icon}</span>
+                      <span style={{ fontSize: 12, color: '#dc2626', lineHeight: 1.55 }}>
+                        {deviceFriendlyMessage(d)}
+                      </span>
+                    </div>
                   ))}
                 </div>
               }
