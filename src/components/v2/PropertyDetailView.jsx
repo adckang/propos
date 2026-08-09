@@ -309,8 +309,8 @@ function WeatherCard({ weather }) {
           <span style={{ fontSize: 14, color: '#718096' }}>°C</span>
         </div>
         <div style={{ textAlign: 'right', fontSize: 11, color: '#64748b', lineHeight: 1.7 }}>
-          <div>체감 {weather.feelsLike.toFixed(1)}°C</div>
-          <div>습도 {weather.humidity}%</div>
+          {weather.feelsLike != null && <div>체감 {weather.feelsLike.toFixed(1)}°C</div>}
+          {weather.humidity != null && <div>습도 {weather.humidity}%</div>}
         </div>
       </div>
     </div>
