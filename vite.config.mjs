@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { handleNodeHaRequest } from "./server/haApiHandlers.js";
 import { handleNodeIcalRequest } from "./server/icalApiHandlers.js";
@@ -40,7 +40,7 @@ async function handleCameraSnapshot(req, res) {
   } catch { res.statusCode = 502; res.end(); }
 }
 
-function apiProxyPlugin() {
+function apiProxyPlugin(env) {
   const attachMiddleware = server => {
     server.middlewares.use(async (req, res, next) => {
       if (req.url?.startsWith("/api/ha/")) {
@@ -74,7 +74,7 @@ function apiProxyPlugin() {
         const district = new URL(req.url, "http://localhost").searchParams.get("district") ?? "";
         if (!district) { sendJson(res, 400, { error: "district required" }); return; }
         try {
-          const result = await fetchWeather(district, process.env.PROPOS_KMA_API_KEY ?? null);
+          const result = await fetchWeather(district, env.PROPOS_KMA_API_KEY ?? null);
           if (result.error) { sendJson(res, result.status ?? 500, { error: result.error }); return; }
           sendJson(res, 200, result.data);
         } catch (err) {
@@ -99,32 +99,36 @@ function apiProxyPlugin() {
   };
 }
 
-export default defineConfig({
-  plugins: [react(), apiProxyPlugin()],
-  // ── dev/preview 서버: 0.0.0.0 바인딩 + 고정 포트 ──
-  // host:true → localhost 외 네트워크/VSCode 터널 포워딩으로도 접속 가능
-  // strictPort → 포트 점유 시 다른 포트로 튀지 않고 실패(포워딩 포트 고정)
-  server: {
-    host: true,
-    port: 5173,
-    strictPort: true,
-  },
-  preview: {
-    host: true,
-    port: 4173,
-    strictPort: true,
-  },
-  build: {
-    outDir: "dist",
-    emptyOutDir: true,
-    commonjsOptions: {
-      include: [
-        /node_modules/,
-        /src\/application\//,
-        /src\/domain\//,
-        /src\/infrastructure\//,
-        /src\/config\//,
-      ],
+export default defineConfig(({ mode }) => {
+  // 접두사 '' → VITE_ 제한 없이 .env.local 전체 로드 (PROPOS_* 포함)
+  const env = loadEnv(mode, process.cwd(), '');
+
+  return {
+    plugins: [react(), apiProxyPlugin(env)],
+    // host:true → 0.0.0.0 바인딩 (VSCode 터널/네트워크 접속 허용)
+    // strictPort → 포트 점유 시 다른 포트로 튀지 않음
+    server: {
+      host: true,
+      port: 5173,
+      strictPort: true,
     },
-  },
+    preview: {
+      host: true,
+      port: 4173,
+      strictPort: true,
+    },
+    build: {
+      outDir: "dist",
+      emptyOutDir: true,
+      commonjsOptions: {
+        include: [
+          /node_modules/,
+          /src\/application\//,
+          /src\/domain\//,
+          /src\/infrastructure\//,
+          /src\/config\//,
+        ],
+      },
+    },
+  };
 });
