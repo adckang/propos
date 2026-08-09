@@ -111,7 +111,7 @@ function MonitoringStatusCard({ monitorState, lastEvent, weather }) {
           <div>전력 센서 미설치 → 지역 기상 데이터(Open-Meteo)로 대체</div>
           {weather && (
             <div style={{ marginTop: 2 }}>
-              실외 기온 {weather.temp.toFixed(1)}°C · 습도 {weather.humidity}%
+              실외 기온 {weather.temp?.toFixed(1)}°C{weather.humidity != null ? ` · 습도 ${weather.humidity}%` : ''}
               {lastEvent.snap?.indoorTemps?.length > 0 && (
                 <span> · 실내 평균 {(lastEvent.snap.indoorTemps.reduce((s, r) => s + r.val, 0) / lastEvent.snap.indoorTemps.length).toFixed(1)}°C</span>
               )}
@@ -950,7 +950,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
           <CollapsibleSection
             title="기타정보"
             issueCount={0}
-            summaryWhenGood={weather ? `${weatherMeta(weather.weatherCode).emoji} ${weather.temp.toFixed(1)}°C` : '−'}
+            summaryWhenGood={weather?.temp != null ? `${weatherMeta(weather.weatherCode).emoji} ${weather.temp.toFixed(1)}°C` : '−'}
           >
             {weather && <WeatherCard weather={weather} />}
             {property.reservation?.guestName && (
