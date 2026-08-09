@@ -5,6 +5,8 @@
 
 sleep 15
 
+export PROPOS_PI_SECRET="propos-pi-secret-2026"
+
 setsid node /config/propos/scripts/occupancy-watcher-standalone.mjs \
   >> /config/propos/watcher.log 2>&1 &
 

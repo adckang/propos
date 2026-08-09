@@ -11,7 +11,7 @@
  *   운영: pm2 start scripts/occupancy-watcher-standalone.mjs --name propos-watcher
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
@@ -36,6 +36,15 @@ const STATE_FILE        = join(DATA_DIR, 'monitoring-state.json');
 const CONFIG_FILE       = join(DATA_DIR, 'monitoring-config.json');
 const SNAPSHOT_LOG_FILE = join(DATA_DIR, 'snapshotLog.json');
 
+// Vercel 이벤트 리포트 설정
+const VERCEL_URL              = 'https://proposonline.com';
+const PI_SECRET               = process.env.PROPOS_PI_SECRET ?? null;
+
+// 스냅샷 파일 보관 기간 (10일)
+const HA_SNAPSHOT_DIR         = '/config/www/snapshots';
+const SNAPSHOT_RETENTION_MS   = 10 * 24 * 60 * 60 * 1000;
+const SNAPSHOT_LOG_MAX        = 200;
+
 // ── 공유 상태 ─────────────────────────────────────────────────────────────────
 let roomState = INITIAL_STATE;
 let config    = null;
@@ -45,6 +54,7 @@ const softEventLog = [];  // checkout_confirmation_needed / early_checkin_suspec
 const snapshotLog  = [];  // { path, ts, roomState } — CCTV 출입 스냅샷
 let lastError   = null;
 let lastEventAt = Date.now(); // 마지막 정상 이벤트 시각 (히스토리 재처리 기준점)
+let snapshotCleanupTimer = null;
 
 // HA input_text 헬퍼 엔티티 ID — propos.public.json entities.cctvSnapshotInput에서 읽음
 function loadSnapshotEntity() {
@@ -116,7 +126,7 @@ function loadSnapshotLog() {
   try {
     const raw = readFileSync(SNAPSHOT_LOG_FILE, 'utf8');
     const saved = JSON.parse(raw);
-    if (Array.isArray(saved)) snapshotLog.push(...saved.slice(-30));
+    if (Array.isArray(saved)) snapshotLog.push(...saved.slice(-SNAPSHOT_LOG_MAX));
   } catch { /* 파일 없으면 빈 배열 유지 */ }
 }
 
@@ -235,6 +245,9 @@ async function handleSoftEvent(event) {
   };
   softEventLog.push(entry);
   if (softEventLog.length > 50) softEventLog.shift();
+
+  reportEventToVercel(event.type, true, { reason: event.reason ?? null }).catch(() => {});
+
   console.log(`[SoftEvent] ${event.type}/${entry.subType ?? '-'} → [${entry.recipients.join(', ')}] "${event.reason}"`);
 }
 
@@ -245,9 +258,16 @@ async function applyTransition(event) {
     return;
   }
   const nextState = getNextRoomState(roomState, event.type);
-  eventLog.push({ ...event, prevState: roomState, newState: nextState, ts: Date.now() });
+  const entry = { ...event, prevState: roomState, newState: nextState, ts: Date.now() };
+  eventLog.push(entry);
   if (eventLog.length > 100) eventLog.shift();
   roomState = nextState;
+
+  reportEventToVercel(event.type, false, {
+    prevState: entry.prevState,
+    newState:  nextState,
+    reason:    event.reason ?? null,
+  }).catch(() => {});
 
   console.log(`[Watcher] 상태 전환: ${nextState.mainStatus}/${nextState.subStatus} ← ${event.type}`);
 
@@ -307,9 +327,55 @@ function triggerDebounce() {
 // ── CCTV 스냅샷 기록 ──────────────────────────────────────────────────────────
 function recordSnapshot(path) {
   snapshotLog.push({ path, ts: Date.now(), roomState: { ...roomState } });
-  if (snapshotLog.length > 30) snapshotLog.shift();
+  if (snapshotLog.length > SNAPSHOT_LOG_MAX) snapshotLog.shift();
   persistSnapshotLog();
   console.log(`[Watcher] 스냅샷 기록: ${path}`);
+}
+
+// ── Vercel 이벤트 리포트 (fire-and-forget) ────────────────────────────────────
+async function reportEventToVercel(type, isSoft, data = null) {
+  if (!PI_SECRET || !config?.areaName) return;
+  try {
+    await fetch(`${VERCEL_URL}/api/events/write`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-pi-secret': PI_SECRET,
+      },
+      body: JSON.stringify({
+        type,
+        is_soft:     isSoft,
+        device_time: Date.now(),
+        property_id: config.areaName,
+        data,
+      }),
+    });
+  } catch { /* 네트워크 오류 무시 — 로컬 상태는 이미 기록됨 */ }
+}
+
+// ── 스냅샷 파일 정리 (10일 초과 삭제) ───────────────────────────────────────
+function cleanupOldSnapshots() {
+  const now    = Date.now();
+  const cutoff = now - SNAPSHOT_RETENTION_MS;
+
+  // 파일 삭제
+  try {
+    const files = readdirSync(HA_SNAPSHOT_DIR);
+    let deleted = 0;
+    for (const file of files) {
+      if (!file.endsWith('.jpg') && !file.endsWith('.jpeg') && !file.endsWith('.png')) continue;
+      const fullPath = join(HA_SNAPSHOT_DIR, file);
+      try {
+        if (statSync(fullPath).mtimeMs < cutoff) { unlinkSync(fullPath); deleted++; }
+      } catch { /* skip */ }
+    }
+    if (deleted > 0) console.log(`[Watcher] 스냅샷 정리: ${deleted}개 삭제 (10일 초과)`);
+  } catch { /* 디렉토리 없으면 무시 */ }
+
+  // snapshotLog에서 오래된 항목 제거
+  const before = snapshotLog.length;
+  snapshotLog.splice(0, snapshotLog.length, ...snapshotLog.filter(s => s.ts >= cutoff));
+  if (snapshotLog.length !== before) persistSnapshotLog();
 }
 
 // ── WebSocket 이벤트 핸들러 ────────────────────────────────────────────────────
@@ -583,6 +649,10 @@ export function startWatcher() {
   loadSnapshotLog();
   console.log('[Watcher] 시작');
 
+  // 스냅샷 정리: 시작 즉시 + 매 시간
+  cleanupOldSnapshots();
+  snapshotCleanupTimer = setInterval(cleanupOldSnapshots, 60 * 60 * 1000);
+
   // 비동기 초기화 (fire-and-forget)
   (async () => {
     await initEntityMap();
@@ -602,8 +672,9 @@ export function startWatcher() {
 export function stopWatcher() {
   ws?.close();
   ws = null;
-  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-  if (calendarTimer)  { clearInterval(calendarTimer);  calendarTimer  = null; }
-  if (debounceTimer)  { clearTimeout(debounceTimer);   debounceTimer  = null; }
+  if (reconnectTimer)       { clearTimeout(reconnectTimer);         reconnectTimer       = null; }
+  if (calendarTimer)        { clearInterval(calendarTimer);          calendarTimer        = null; }
+  if (debounceTimer)        { clearTimeout(debounceTimer);           debounceTimer        = null; }
+  if (snapshotCleanupTimer) { clearInterval(snapshotCleanupTimer);   snapshotCleanupTimer = null; }
   console.log('[Watcher] 중지');
 }
