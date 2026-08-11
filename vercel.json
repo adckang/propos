@@ -17,7 +17,7 @@
     },
     {
       "path": "/api/cron/cleaning-followup",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 2 * * *"
     }
   ],
   "rewrites": [
