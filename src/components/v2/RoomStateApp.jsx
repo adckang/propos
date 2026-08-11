@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import DashboardView from './DashboardView';
 import PropertyListView from './PropertyListView';
 import PropertyDetailView from './PropertyDetailView';
+import CleaningManager from './CleaningManager';
 import { PROPERTIES } from '../../data/roomStateMockData';
 import { syncAirbnbReservations, syncGoogleCalendarSlots, buildLiveProperty, deriveCurrentState } from '../../application/calendarSyncService';
 import { getAreaData, callService } from '../../infrastructure/haBrowserClient';
@@ -289,7 +290,7 @@ function SettingsModal({ config, onSave, onClose }) {
 }
 
 // ── 싱크 상태 뱃지 ─────────────────────────────────────────────────────────────
-function SyncBadge({ status, lastSynced, onSync, onSettings }) {
+function SyncBadge({ status, lastSynced, onSync, onSettings, onCleaning }) {
   const fmtWithDate = d => {
     if (!d) return '';
     const h = d.getHours(), m = d.getMinutes().toString().padStart(2, '0');
@@ -316,6 +317,10 @@ function SyncBadge({ status, lastSynced, onSync, onSettings }) {
         border: '1.5px solid #e2e8f0', borderRadius: 7, background: '#fff',
         padding: '4px 10px', fontSize: 12, color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit',
       }}>⚙</button>
+      <button onClick={onCleaning} title="청소 관리" style={{
+        border: '1.5px solid #e2e8f0', borderRadius: 7, background: '#fff',
+        padding: '4px 10px', fontSize: 12, color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit',
+      }}>청소</button>
     </div>
   );
 }
@@ -716,7 +721,15 @@ export default function RoomStateApp({ onBack }) {
   const selectedProperty = mergedProperties.find(p => p.id === selectedPropertyId) ?? null;
 
   let currentView;
-  if (view === 'detail' && selectedProperty) {
+  if (view === 'cleaning') {
+    currentView = (
+      <CleaningManager
+        syncConfig={syncConfig}
+        liveProperty={liveProperty}
+        onBack={() => setView('dashboard')}
+      />
+    );
+  } else if (view === 'detail' && selectedProperty) {
     currentView = (
       <PropertyDetailView
         property={selectedProperty}
@@ -749,6 +762,7 @@ export default function RoomStateApp({ onBack }) {
             lastSynced={lastSynced}
             onSync={() => runSync(syncConfig)}
             onSettings={() => setShowSettings(true)}
+            onCleaning={() => setView('cleaning')}
           />
         }
       />
