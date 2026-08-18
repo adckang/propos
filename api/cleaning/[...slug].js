@@ -39,7 +39,12 @@ async function getGoogleToken() {
 
 function parseSlug(req) {
   const raw = req.query?.slug;
-  return Array.isArray(raw) ? raw : raw ? [raw] : [];
+  if (raw) return Array.isArray(raw) ? raw : [raw];
+  // URL 파싱 폴백 (Vercel 런타임에서 query slug 미주입 시)
+  const path = (req.url || "").split("?")[0];
+  const parts = path.split("/").filter(Boolean);
+  const idx = parts.indexOf("cleaning");
+  return idx >= 0 ? parts.slice(idx + 1) : [];
 }
 function sendJson(res, status, body) { res.status(status).json(body); }
 function normalizePhone(raw) {
