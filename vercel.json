@@ -23,11 +23,11 @@
   "rewrites": [
     {
       "source": "/api/c/:id",
-      "destination": "/api/cleaning/c/:id"
+      "destination": "/api/cleaning/c?id=:id"
     },
     {
       "source": "/api/d/:token",
-      "destination": "/api/cleaning/d/:token"
+      "destination": "/api/cleaning/d?token=:token"
     },
     {
       "source": "/api/calendar/webhook",

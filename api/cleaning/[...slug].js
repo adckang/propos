@@ -342,7 +342,10 @@ async function handleGmailWebhook(req, res) {
 
 export default async function handler(req, res) {
   const slug = parseSlug(req);
-  const [resource, id] = slug;
+  const [resource] = slug;
+  // id/token은 쿼리 파라미터로 수신 (Vercel [..slug] 2-segment 라우팅 불안정)
+  const id    = req.query?.id    ?? null;
+  const token = req.query?.token ?? null;
   try {
     if (resource === "cleaners") {
       if (!id) {
@@ -365,11 +368,18 @@ export default async function handler(req, res) {
         if (req.method === "GET") return await getJob(res, id);
       }
     }
-    if (resource === "dispatch" && id) {
-      if (req.method === "POST") return await dispatchJob(res, id);
+    if (resource === "dispatch") {
+      const jobId = id ?? (await readBody(req)).job_id;
+      if (req.method === "POST" && jobId) return await dispatchJob(res, jobId);
     }
-    if (resource === "c" && id) return await handleConfirmRedirect(req, res, id);
-    if (resource === "d" && id) return await handleDecline(req, res, id);
+    if (resource === "c") {
+      const propId = id ?? req.query?.property_id;
+      if (propId) return await handleConfirmRedirect(req, res, propId);
+    }
+    if (resource === "d") {
+      const tok = token ?? id;
+      if (tok) return await handleDecline(req, res, tok);
+    }
     if (resource === "calendar-webhook") return await handleCalendarWebhook(req, res);
     if (resource === "gmail-webhook")    return await handleGmailWebhook(req, res);
     return sendJson(res, 404, { error: "Not found" });
