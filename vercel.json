@@ -22,6 +22,22 @@
   ],
   "rewrites": [
     {
+      "source": "/api/c/:id",
+      "destination": "/api/cleaning/c/:id"
+    },
+    {
+      "source": "/api/d/:token",
+      "destination": "/api/cleaning/d/:token"
+    },
+    {
+      "source": "/api/calendar/webhook",
+      "destination": "/api/cleaning/calendar-webhook"
+    },
+    {
+      "source": "/api/gmail/webhook",
+      "destination": "/api/cleaning/gmail-webhook"
+    },
+    {
       "source": "/:path((?!api/|assets/|.*\\..*).*)",
       "destination": "/index.html"
     }
