@@ -116,14 +116,14 @@ async function listProperties(res) {
 
 async function upsertProperty(req, res) {
   const b = await readBody(req);
-  const { property_id, name, checkout_hour, cleaning_duration_hours, google_calendar_id, google_calendar_booking_url } = b;
+  const { property_id, name, checkout_hour, cleaning_duration_hours, google_calendar_id, google_calendar_booking_url, host_phone } = b;
   if (!property_id || !name) return sendJson(res, 400, { error: "property_id, name 필수" });
   const { rows } = await db.query(
-    `INSERT INTO property_cleaning_config (property_id,name,checkout_hour,cleaning_duration_hours,google_calendar_id,google_calendar_booking_url,updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,NOW())
-     ON CONFLICT (property_id) DO UPDATE SET name=$2,checkout_hour=$3,cleaning_duration_hours=$4,google_calendar_id=$5,google_calendar_booking_url=$6,updated_at=NOW()
+    `INSERT INTO property_cleaning_config (property_id,name,checkout_hour,cleaning_duration_hours,google_calendar_id,google_calendar_booking_url,host_phone,updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+     ON CONFLICT (property_id) DO UPDATE SET name=$2,checkout_hour=$3,cleaning_duration_hours=$4,google_calendar_id=$5,google_calendar_booking_url=$6,host_phone=$7,updated_at=NOW()
      RETURNING *`,
-    [property_id, name, checkout_hour ?? 11, cleaning_duration_hours ?? 2.5, google_calendar_id ?? null, google_calendar_booking_url ?? null]
+    [property_id, name, checkout_hour ?? 11, cleaning_duration_hours ?? 2.5, google_calendar_id ?? null, google_calendar_booking_url ?? null, host_phone ?? null]
   );
   return sendJson(res, 200, rows[0]);
 }

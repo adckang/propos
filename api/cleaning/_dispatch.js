@@ -3,6 +3,8 @@
  * Vercel 라우팅에서 제외되는 _ 접두사 파일.
  */
 
+import { sendPush } from "./_push.js";
+
 const SLACK_WEBHOOK = process.env.PROPOS_SLACK_WEBHOOK;
 const BASE_URL =
   process.env.PROPOS_BASE_URL ||
@@ -45,6 +47,40 @@ export async function createNotif(db, { jobId, cleanerId, tier }) {
     }
   }
   throw new Error(`토큰 생성 실패 (job=${jobId}, cleaner=${cleanerId})`);
+}
+
+// ── FCM 푸시 발송 ────────────────────────────────────────
+
+/**
+ * FCM 푸시 발송 + 실패 시 cleaners.fcm_status 업데이트
+ */
+async function sendJobPush(db, cleaner, { title, body, data = {} }) {
+  if (!cleaner.fcm_token) return false;
+
+  const result = await sendPush(cleaner.fcm_token, { title, body, data });
+  if (result.success) return true;
+
+  const { errorCode } = result;
+  if (errorCode === "UNREGISTERED") {
+    await db.query(
+      `UPDATE cleaners SET fcm_status='unregistered' WHERE id=$1`,
+      [cleaner.id]
+    );
+    await postSlack(
+      `[PROPOS] ⚠️ ${cleaner.name ?? cleaner.phone} 앱 삭제 감지 — 푸시 전달 실패`
+    );
+  } else if (errorCode === "INVALID_ARGUMENT") {
+    await db.query(
+      `UPDATE cleaners SET fcm_status='invalid' WHERE id=$1`,
+      [cleaner.id]
+    );
+    await postSlack(
+      `[PROPOS] ⚠️ ${cleaner.name ?? cleaner.phone} FCM 토큰 오류 — 재설치 필요`
+    );
+  } else {
+    console.error(`[sendJobPush] 알 수 없는 오류 (cleaner=${cleaner.id}):`, errorCode);
+  }
+  return false;
 }
 
 // ── SMS 발송 (android-sms-gateway 직접 호출) ─────────────
@@ -165,7 +201,7 @@ export async function advanceJob(db, job) {
   const propertyName = propCfg?.name ?? job.property_id;
 
   if (nextStatus === "NOTIFYING_BULK") {
-    return dispatchBulk(db, job, propertyName);
+    return dispatchBulk(db, job, propertyName, propCfg);
   }
 
   const tier = nextStatus.replace("NOTIFYING_", ""); // VIP_1 | VIP_2 | VIP_3
@@ -181,8 +217,13 @@ export async function advanceJob(db, job) {
   }
 
   const notif = await createNotif(db, { jobId: job.id, cleanerId: cleaner.id, tier });
-  const msg = buildSmsVip(job, propertyName, notif.token);
-  await sendSms(cleaner.phone, msg);
+  const calendarUrl = propCfg?.google_calendar_booking_url ?? `${BASE_URL}/c/${job.property_id}`;
+  const dt = fmtDate(job.cleaning_start_at);
+  await sendJobPush(db, cleaner, {
+    title: "[PROPOS] 청소 요청",
+    body: `${propertyName} ${dt}`,
+    data: { jobId: String(job.id), token: notif.token, calendarUrl, hostPhone: propCfg?.host_phone ?? "" },
+  });
 
   await db.query(
     `UPDATE cleaning_jobs SET status=$1, updated_at=NOW() WHERE id=$2`,
@@ -193,7 +234,7 @@ export async function advanceJob(db, job) {
 /** 중복 발송 방지: 해당 날짜에 이미 해당 VIP가 다른 job의 NOTIFYING 상태인지 */
 async function getAvailableVip(db, job, tier) {
   const { rows: [cleaner] } = await db.query(
-    `SELECT * FROM cleaners WHERE tier=$1 AND active=true LIMIT 1`,
+    `SELECT * FROM cleaners WHERE tier=$1 AND active=true AND fcm_token IS NOT NULL AND fcm_status='active' LIMIT 1`,
     [tier]
   );
   if (!cleaner) return null;
@@ -212,14 +253,18 @@ async function getAvailableVip(db, job, tier) {
   return rows.length ? null : cleaner;
 }
 
-async function dispatchBulk(db, job, propertyName) {
+async function dispatchBulk(db, job, propertyName, propCfg) {
   const checkoutDate = new Date(job.checkout_at).toISOString().slice(0, 10);
+  const calendarUrl = propCfg?.google_calendar_booking_url ?? `${BASE_URL}/c/${job.property_id}`;
+  const dt = fmtDate(job.cleaning_start_at);
 
-  // BULK 대상: active + 같은 날 다른 job에 NOTIFYING 중이지 않은 청소자
+  // BULK 대상: active + FCM 활성 + 같은 날 다른 job에 NOTIFYING 중이지 않은 청소자
   const { rows: cleaners } = await db.query(
     `SELECT c.* FROM cleaners c
      WHERE c.active = true
        AND c.tier = 'BULK'
+       AND c.fcm_token IS NOT NULL
+       AND c.fcm_status = 'active'
        AND NOT EXISTS (
          SELECT 1 FROM cleaning_notifs n2
          JOIN cleaning_jobs j2 ON j2.id = n2.job_id
@@ -234,8 +279,11 @@ async function dispatchBulk(db, job, propertyName) {
   for (const cleaner of cleaners) {
     try {
       const notif = await createNotif(db, { jobId: job.id, cleanerId: cleaner.id, tier: "BULK" });
-      const msg = buildSmsBulk(job, propertyName, notif.token);
-      await sendSms(cleaner.phone, msg);
+      await sendJobPush(db, cleaner, {
+        title: "[PROPOS] 청소 아르바이트 안내",
+        body: `${propertyName} ${dt} 선착순`,
+        data: { jobId: String(job.id), token: notif.token, calendarUrl, hostPhone: propCfg?.host_phone ?? "" },
+      });
     } catch (e) {
       console.error(`BULK 발송 실패 (${cleaner.id}):`, e.message);
     }
