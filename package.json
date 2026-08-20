@@ -24,6 +24,7 @@
     "@vercel/analytics": "^2.0.1",
     "@vercel/kv": "^2.0.0",
     "autoprefixer": "^10.5.0",
+    "firebase-admin": "^14.3.0",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.16.0",
     "pg": "^8.22.0",
