@@ -17,15 +17,15 @@
     },
     {
       "source": "/api/calendar/webhook",
-      "destination": "/api/cleaning/calendar-webhook"
+      "destination": "/api/cleaning/calendar-webhook?slug=calendar-webhook"
     },
     {
       "source": "/api/gmail/webhook",
-      "destination": "/api/cleaning/gmail-webhook"
+      "destination": "/api/cleaning/gmail-webhook?slug=gmail-webhook"
     },
     {
       "source": "/api/gmail/watch",
-      "destination": "/api/cleaning/gmail-watch"
+      "destination": "/api/cleaning/gmail-watch?slug=gmail-watch"
     },
     {
       "source": "/:path((?!api/|assets/|.*\\..*).*)",
