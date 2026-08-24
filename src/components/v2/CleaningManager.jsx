@@ -250,7 +250,10 @@ function PropertyPanel({ syncConfig, liveProperty }) {
     cleaning_duration_hours: syncConfig?.cleaningDurationHours ?? 2.5,
     google_calendar_id: '',
     google_calendar_booking_url: '',
+    host_phone: '',
+    ical_url: '',
   });
+  const [icalAlreadySet, setIcalAlreadySet] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -261,6 +264,7 @@ function PropertyPanel({ syncConfig, liveProperty }) {
       const found = list.find(p => p.property_id === propertyId);
       if (found) {
         setSaved(true);
+        setIcalAlreadySet(!!found.ical_url);
         setForm({
           property_id: found.property_id,
           name: found.name,
@@ -268,6 +272,8 @@ function PropertyPanel({ syncConfig, liveProperty }) {
           cleaning_duration_hours: found.cleaning_duration_hours,
           google_calendar_id: found.google_calendar_id ?? '',
           google_calendar_booking_url: found.google_calendar_booking_url ?? '',
+          host_phone: found.host_phone ?? '',
+          ical_url: '',
         });
       }
     }).catch(() => {});
@@ -284,6 +290,7 @@ function PropertyPanel({ syncConfig, liveProperty }) {
           ...form,
           google_calendar_id: form.google_calendar_id || null,
           google_calendar_booking_url: form.google_calendar_booking_url || null,
+          ical_url: form.ical_url || null,
         }),
       });
       setSaved(true);
@@ -387,6 +394,13 @@ function PropertyPanel({ syncConfig, liveProperty }) {
           </div>
           <div />
           <div>
+            <div style={labelStyle}>호스트 연락처 (선택)</div>
+            <input type="tel" value={form.host_phone}
+              onChange={e => set('host_phone', e.target.value)}
+              placeholder="010-1234-5678" style={monoInputStyle} />
+          </div>
+          <div />
+          <div>
             <div style={labelStyle}>Google Calendar ID (선택)</div>
             <input type="text" value={form.google_calendar_id}
               onChange={e => set('google_calendar_id', e.target.value)}
@@ -397,6 +411,23 @@ function PropertyPanel({ syncConfig, liveProperty }) {
             <input type="url" value={form.google_calendar_booking_url}
               onChange={e => set('google_calendar_booking_url', e.target.value)}
               placeholder="https://calendar.google.com/..." style={monoInputStyle} />
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <div style={labelStyle}>
+              Airbnb iCal URL
+              {icalAlreadySet && (
+                <span style={{ marginLeft: 6, color: '#059669', fontWeight: 400, fontSize: 11 }}>
+                  ✓ 설정됨 (변경 시에만 입력)
+                </span>
+              )}
+            </div>
+            <input type="url" value={form.ical_url}
+              onChange={e => set('ical_url', e.target.value)}
+              placeholder={icalAlreadySet ? '(유지됨) 변경 시에만 입력' : 'https://www.airbnb.com/calendar/ical/...'}
+              style={monoInputStyle} />
+            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
+              서버 폴링용 (Gmail 예약 감지 시 자동 iCal 재폴링). 입력하지 않으면 기존 값 유지.
+            </div>
           </div>
         </div>
 
@@ -456,7 +487,11 @@ function JobsPanel() {
     }
   }, [statusFilter]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    const timer = setInterval(load, 60_000);
+    return () => clearInterval(timer);
+  }, [load]);
 
   async function toggleExpand(id) {
     if (expandedId === id) { setExpandedId(null); return; }
@@ -478,6 +513,22 @@ function JobsPanel() {
       Toast.show('발송 실패: ' + e2.message, 'e');
     }
   }
+
+  async function cancelJob(jobId, e) {
+    e.stopPropagation();
+    try {
+      await apiFetch(`/api/cleaning/jobs?id=${jobId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'CANCELLED' }),
+      });
+      Toast.show('일정 취소 완료', 's');
+      await load();
+    } catch (e2) {
+      Toast.show('취소 실패: ' + e2.message, 'e');
+    }
+  }
+
+  const CANCELLABLE = new Set(['PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED','ESCALATED']);
 
   return (
     <div>
@@ -552,6 +603,13 @@ function JobsPanel() {
                       color: '#2563eb', padding: '5px 12px', fontSize: 12, fontWeight: 700,
                       cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
                     }}>발송 시작</button>
+                  )}
+                  {CANCELLABLE.has(j.status) && (
+                    <button onClick={e => cancelJob(j.id, e)} style={{
+                      border: '1.5px solid #dc2626', borderRadius: 7, background: '#fff',
+                      color: '#dc2626', padding: '5px 10px', fontSize: 11, fontWeight: 700,
+                      cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
+                    }}>취소</button>
                   )}
 
                   <span style={{ fontSize: 11, color: '#9ca3af', flexShrink: 0 }}>

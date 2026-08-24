@@ -4,20 +4,8 @@
   "outputDirectory": "dist",
   "crons": [
     {
-      "path": "/api/cron/daily-plan",
-      "schedule": "0 23 * * *"
-    },
-    {
-      "path": "/api/cron/daily-result",
-      "schedule": "0 13 * * *"
-    },
-    {
-      "path": "/api/cron/monthly-cleaning",
-      "schedule": "0 0 15 * *"
-    },
-    {
-      "path": "/api/cron/cleaning-followup",
-      "schedule": "0 2 * * *"
+      "path": "/api/cron/tick",
+      "schedule": "0 * * * *"
     }
   ],
   "rewrites": [
@@ -36,6 +24,10 @@
     {
       "source": "/api/gmail/webhook",
       "destination": "/api/cleaning/gmail-webhook"
+    },
+    {
+      "source": "/api/gmail/watch",
+      "destination": "/api/cleaning/gmail-watch"
     },
     {
       "source": "/:path((?!api/|assets/|.*\\..*).*)",
