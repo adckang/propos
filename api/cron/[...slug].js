@@ -405,13 +405,43 @@ export default async function handler(req, res) {
 
     // Vercel Hobby 크론: /api/cron/morning (UTC 23:00 = KST 08:00)
     if (action === "morning") {
-      const kstDay = new Date(Date.now() + 9 * 3600000).getUTCDate();
-      await handleDailyPlan(db, { status: () => ({ json: () => {} }), json: () => {} });
-      await handleWorkerHealthCheck(db, { status: () => ({ json: () => {} }), json: () => {} });
+      const kstNow = new Date(Date.now() + 9 * 3600000);
+      const kstDay = kstNow.getUTCDate();
+      const kstDayOfWeek = kstNow.getUTCDay(); // 0=일, 1=월 ...
+      const nullRes = { status: () => ({ json: () => {} }), json: () => {} };
+      const ran = [];
+
+      await handleDailyPlan(db, nullRes);         ran.push("daily-plan");
+      await handleWorkerHealthCheck(db, nullRes);  ran.push("worker-health-check");
+
       if (kstDay === 15) {
-        await handleMonthlyClean(db, { status: () => ({ json: () => {} }), json: () => {} });
+        await handleMonthlyClean(db, nullRes);     ran.push("monthly-cleaning");
       }
-      return res.status(200).json({ ok: true, ran: ["daily-plan", "worker-health-check", ...(kstDay === 15 ? ["monthly-cleaning"] : [])] });
+
+      // Gmail Watch 7일 만료 → 매주 월요일 자동 갱신
+      if (kstDayOfWeek === 1) {
+        try {
+          const GMAIL_API = "https://gmail.googleapis.com/gmail/v1";
+          const topicName = process.env.GOOGLE_PUBSUB_TOPIC;
+          if (topicName) {
+            const gToken = await getGoogleToken();
+            const r = await fetch(`${GMAIL_API}/users/me/watch`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${gToken}` },
+              body: JSON.stringify({ topicName, labelIds: ["INBOX"], labelFilterBehavior: "INCLUDE" }),
+            });
+            if (r.ok) {
+              const w = await r.json();
+              await postSlack(`[PROPOS] 📬 Gmail Watch 자동 갱신 완료 (만료: ${new Date(Number(w.expiration)).toISOString().slice(0, 10)})`);
+              ran.push("gmail-watch-renewed");
+            }
+          }
+        } catch (e) {
+          console.error("[morning] Gmail Watch 갱신 실패:", e.message);
+        }
+      }
+
+      return res.status(200).json({ ok: true, ran });
     }
 
     // Vercel Hobby 크론: /api/cron/evening (UTC 13:00 = KST 22:00)
