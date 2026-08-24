@@ -8,10 +8,18 @@ import { kv } from "@vercel/kv";
 import {
   advanceJob,
   buildSmsRemind,
-  sendSms,
+  calcCleaningTimes,
   postSlack,
   getPropertyConfig,
 } from "../cleaning/_dispatch.js";
+import { notify } from "../cleaning/_notify.js";
+import {
+  getGoogleToken,
+  createBlockerEvent,
+  deleteBlockerEvent,
+  getNextMonthDates,
+  parseCheckoutsFromIcal,
+} from "../cleaning/_calendar.js";
 import { getStatsForPeriod } from "../../src/application/reportingService.js";
 import { countPeriodEvents } from "../../src/domain/reportingDomain.js";
 import { queryEvents } from "../../src/infrastructure/eventRepository.js";
@@ -99,39 +107,125 @@ async function handleDailyResult(db, res) {
 // ── 월간 청소 배치 ─────────────────────────────────────────
 
 async function handleMonthlyClean(db, res) {
-  const kstNow = new Date(Date.now() + 9 * 3_600_000);
-  const nextMonth = new Date(Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth() + 1, 1));
-  const nextMonthEnd = new Date(Date.UTC(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth() + 1, 1));
+  // Google OAuth (실패해도 iCal 파트는 계속 시도)
+  let gToken = null;
+  try { gToken = await getGoogleToken(); }
+  catch (e) { console.error("[monthly-clean] Google OAuth 실패:", e.message); }
 
-  // 다음 달 PENDING job 전체 조회 (날짜 오름차순)
+  const nextMonthDates = getNextMonthDates();
+  const targetYM = nextMonthDates[0].slice(0, 7); // "YYYY-MM"
+
+  const { rows: properties } = await db.query(
+    `SELECT * FROM property_cleaning_config`
+  );
+
+  let blockersCreated = 0, blockersSkipped = 0, jobsCreated = 0, jobsSkipped = 0;
+
+  for (const prop of properties) {
+    // [1] 다음 달 전체 날짜 블로커 생성 (google_calendar_id 있을 때만)
+    if (gToken && prop.google_calendar_id) {
+      for (const date of nextMonthDates) {
+        const { rows: existing } = await db.query(
+          `SELECT 1 FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2`,
+          [prop.property_id, date]
+        );
+        if (existing.length) { blockersSkipped++; continue; }
+        try {
+          const eventId = await createBlockerEvent(
+            prop.google_calendar_id, date,
+            prop.checkout_hour, prop.cleaning_duration_hours,
+            prop.property_id, gToken
+          );
+          await db.query(
+            `INSERT INTO property_calendar_blockers (property_id, block_date, event_id)
+             VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+            [prop.property_id, date, eventId]
+          );
+          blockersCreated++;
+        } catch (e) {
+          console.error(`[monthly-clean] 블로커 생성 실패 (${prop.property_id}/${date}):`, e.message);
+          blockersSkipped++;
+        }
+      }
+    }
+
+    // [2] iCal 폴링 → 예약된 체크아웃 날짜 추출 (ical_url 있을 때만)
+    if (prop.ical_url) {
+      let icalText;
+      try {
+        const r = await fetch(prop.ical_url);
+        if (!r.ok) throw new Error(`iCal HTTP ${r.status}`);
+        icalText = await r.text();
+      } catch (e) {
+        console.error(`[monthly-clean] iCal 폴링 실패 (${prop.property_id}):`, e.message);
+        continue;
+      }
+
+      const checkouts = parseCheckoutsFromIcal(icalText, targetYM);
+
+      // [3] checkout_at마다 cleaning_job 생성 + 블로커 삭제
+      for (const { date, uid } of checkouts) {
+        const { cleaning_start_at, cleaning_end_at } = calcCleaningTimes(
+          date, prop.checkout_hour, prop.cleaning_duration_hours
+        );
+        const { rowCount } = await db.query(
+          `INSERT INTO cleaning_jobs
+             (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source)
+           VALUES ($1,$2,$3,$4,$5,'MONTHLY_BATCH')
+           ON CONFLICT (property_id,checkout_at) DO NOTHING`,
+          [
+            prop.property_id,
+            uid ?? null,
+            cleaning_start_at.toISOString(),
+            cleaning_start_at.toISOString(),
+            cleaning_end_at.toISOString(),
+          ]
+        );
+        if (rowCount > 0) jobsCreated++; else jobsSkipped++;
+
+        // 해당 날짜 블로커 삭제 → 예약 가능 슬롯 오픈
+        const { rows: blocker } = await db.query(
+          `DELETE FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2 RETURNING event_id`,
+          [prop.property_id, date]
+        );
+        if (blocker.length && gToken && prop.google_calendar_id) {
+          await deleteBlockerEvent(prop.google_calendar_id, blocker[0].event_id, gToken).catch((e) =>
+            console.error(`[monthly-clean] 블로커 삭제 실패 (${prop.property_id}/${date}):`, e.message)
+          );
+        }
+      }
+    }
+  }
+
+  // [4] 다음 달 PENDING job → dispatch_after 설정 (같은 날 여러 건: 10분 간격)
+  const kstNow = new Date(Date.now() + 9 * 3_600_000);
+  const nextMonthStart = new Date(Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth() + 1, 1));
+  const nextMonthEnd   = new Date(Date.UTC(nextMonthStart.getUTCFullYear(), nextMonthStart.getUTCMonth() + 1, 1));
+
   const { rows: pendingJobs } = await db.query(
     `SELECT * FROM cleaning_jobs
      WHERE status = 'PENDING'
        AND cleaning_start_at >= $1
        AND cleaning_start_at < $2
      ORDER BY cleaning_start_at ASC`,
-    [nextMonth.toISOString(), nextMonthEnd.toISOString()]
+    [nextMonthStart.toISOString(), nextMonthEnd.toISOString()]
   );
 
-  // 같은 날 여러 건: dispatch_after를 10분 간격으로 설정 (Vercel timeout 방지)
-  // 실제 발송은 followup 크론이 dispatch_after 도래 시 처리
   const dateCount = {};
   for (const job of pendingJobs) {
     const dateKey = new Date(job.cleaning_start_at).toISOString().slice(0, 10);
     const seq = dateCount[dateKey] ?? 0;
     dateCount[dateKey] = seq + 1;
-
-    const dispatchAfterMs = Date.now() + seq * 10 * 60_000;
     await db.query(
       `UPDATE cleaning_jobs SET dispatch_after=$1 WHERE id=$2`,
-      [new Date(dispatchAfterMs).toISOString(), job.id]
+      [new Date(Date.now() + seq * 10 * 60_000).toISOString(), job.id]
     );
   }
 
   await postSlack(
-    `[PROPOS] 🗓 월간 청소 배치 스케줄링 완료 — ${pendingJobs.length}건 (dispatch_after 설정)`
+    `[PROPOS] 🗓 월간 청소 배치 완료 — 블로커 ${blockersCreated}건 생성 · 일정 ${jobsCreated}건 생성 · 발송 스케줄링 ${pendingJobs.length}건`
   );
-  return res.status(200).json({ ok: true, scheduled: pendingJobs.length });
+  return res.status(200).json({ ok: true, blockersCreated, jobsCreated, scheduled: pendingJobs.length });
 }
 
 // ── 후속 처리 크론 (30분마다) ─────────────────────────────
@@ -176,7 +270,7 @@ async function handleCleaningFollowup(db, res) {
   // BULK 리마인드 (1시간 경과 + reminded_at IS NULL)
   const { rows: bulkNotifs } = await db.query(
     `SELECT n.*, j.property_id, j.cleaning_start_at, j.id AS job_id,
-            c.phone, c.name AS cleaner_name
+            c.phone, c.fcm_token, c.fcm_status, c.name AS cleaner_name
      FROM cleaning_notifs n
      JOIN cleaning_jobs j ON j.id = n.job_id
      JOIN cleaners c ON c.id = n.cleaner_id
@@ -189,14 +283,20 @@ async function handleCleaningFollowup(db, res) {
   for (const notif of bulkNotifs) {
     const cfg = await getPropertyConfig(db, notif.property_id);
     const propName = cfg?.name ?? notif.property_id;
-    const msg = buildSmsRemind(
+    const smsText = buildSmsRemind(
       { property_id: notif.property_id, cleaning_start_at: notif.cleaning_start_at },
       propName,
       notif.token
     );
-    await sendSms(notif.phone, msg).catch((e) =>
-      console.error(`[followup] 리마인드 SMS 실패 (${notif.phone}):`, e.message)
-    );
+    const cleaner = { id: notif.cleaner_id, fcm_token: notif.fcm_token, fcm_status: notif.fcm_status, phone: notif.phone, name: notif.cleaner_name };
+    const calendarUrl = cfg?.google_calendar_booking_url ?? `${DASHBOARD_URL}/c/${notif.property_id}`;
+    await notify(db, cleaner, {
+      title: "[PROPOS] 청소 재안내",
+      body: `${propName} 청소 일정 아직 미확정입니다`,
+      data: { jobId: String(notif.job_id), token: notif.token, calendarUrl, hostPhone: cfg?.host_phone ?? "" },
+      smsText,
+      notifId: notif.id,
+    }).catch((e) => console.error(`[followup] 리마인드 발송 실패 (${notif.cleaner_id}):`, e.message));
     await db.query(
       `UPDATE cleaning_notifs SET reminded_at=NOW() WHERE id=$1`,
       [notif.id]
@@ -242,6 +342,45 @@ async function handleCleaningFollowup(db, res) {
   return res.status(200).json({ ok: true, advanced, reminded, escalated });
 }
 
+// ── Worker 앱 헬스체크 크론 ─────────────────────────────────
+
+async function handleWorkerHealthCheck(db, res) {
+  // 30일 미접속 active → inactive 전환
+  const { rowCount: deactivated } = await db.query(`
+    UPDATE cleaners
+    SET fcm_status = 'inactive'
+    WHERE fcm_status = 'active'
+      AND last_seen_at < NOW() - INTERVAL '30 days'
+  `);
+
+  // 7일 초과 active → Slack 경고 목록
+  const { rows: stale } = await db.query(`
+    SELECT name, phone, last_seen_at
+    FROM cleaners
+    WHERE fcm_status = 'active'
+      AND last_seen_at < NOW() - INTERVAL '7 days'
+    ORDER BY last_seen_at ASC
+  `);
+
+  if (stale.length > 0) {
+    const lines = stale.map((w) => {
+      const days = Math.floor((Date.now() - new Date(w.last_seen_at)) / 86_400_000);
+      return `  • ${w.name ?? w.phone} — ${days}일 미접속`;
+    });
+    await postSlack(
+      `[PROPOS] 🟡 Worker 앱 장기 미접속 (${stale.length}명)\n${lines.join("\n")}`
+    );
+  }
+
+  if (deactivated > 0) {
+    await postSlack(
+      `[PROPOS] 🟠 Worker 앱 비활성 전환 — ${deactivated}명 (30일 미접속)`
+    );
+  }
+
+  return res.status(200).json({ ok: true, deactivated, stale: stale.length });
+}
+
 // ── 라우터 ──────────────────────────────────────────────────
 
 export default async function handler(req, res) {
@@ -258,10 +397,11 @@ export default async function handler(req, res) {
 
   const db = new Pool({ connectionString: process.env.POSTGRES_URL });
   try {
-    if (action === "daily-plan")        return await handleDailyPlan(db, res);
-    if (action === "daily-result")      return await handleDailyResult(db, res);
-    if (action === "monthly-cleaning")  return await handleMonthlyClean(db, res);
-    if (action === "cleaning-followup") return await handleCleaningFollowup(db, res);
+    if (action === "daily-plan")          return await handleDailyPlan(db, res);
+    if (action === "daily-result")        return await handleDailyResult(db, res);
+    if (action === "monthly-cleaning")    return await handleMonthlyClean(db, res);
+    if (action === "cleaning-followup")   return await handleCleaningFollowup(db, res);
+    if (action === "worker-health-check") return await handleWorkerHealthCheck(db, res);
     return res.status(404).json({ error: "Not found" });
   } catch (err) {
     console.error(`[cron/${action}] error:`, err);
