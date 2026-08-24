@@ -671,9 +671,163 @@ function JobsPanel() {
   );
 }
 
+// ── WorkerApprovalPanel ───────────────────────────────────────────────────────
+
+const FCM_STATUS_LABEL = {
+  active:       '앱 활성',
+  inactive:     '장기 미접속',
+  invalid:      '토큰 오류',
+  unregistered: '앱 삭제됨',
+  uninstalled:  'SMS 전용',
+};
+
+function approvalStatusLabel(c) {
+  if (!c.active && c.app_installed_at) return '앱 설치됨 · 승인 대기';
+  if (!c.active)                        return '승인 대기';
+  if (c.fcm_status === 'active')        return '활성 (앱)';
+  if (c.fcm_status === 'inactive')      return '활성 (장기 미접속)';
+  return '활성 (SMS)';
+}
+
+function WorkerApprovalPanel() {
+  const [cleaners, setCleaners] = useState([]);
+  const [loading, setLoading]   = useState(true);
+
+  const load = useCallback(async () => {
+    try {
+      const data = await apiFetch('/api/cleaning/cleaners');
+      setCleaners(data);
+    } catch (e) {
+      Toast.show(e.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const setActive = async (id, approve) => {
+    try {
+      await apiFetch(`/api/cleaning/cleaners/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: approve }),
+      });
+      Toast.show(approve ? '승인 완료' : '비활성화 완료', 'success');
+      load();
+    } catch (e) {
+      Toast.show(e.message, 'error');
+    }
+  };
+
+  const pending = cleaners.filter(c => !c.active);
+  const active  = cleaners.filter(c => c.active);
+
+  const cardStyle = {
+    background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 10,
+    padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12,
+  };
+
+  const renderRow = (c, isPending) => (
+    <div key={c.id} style={cardStyle}>
+      <div style={{
+        width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+        background: isPending ? '#fef3c7' : '#d1fae5',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 15, fontWeight: 700,
+        color: isPending ? '#92400e' : '#065f46',
+      }}>
+        {(c.name ?? c.phone ?? '?')[0]}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#1a202c' }}>
+          {c.name ?? '이름 없음'}
+          <span style={{
+            marginLeft: 8, fontSize: 11, fontWeight: 600,
+            color: TIER_COLORS[c.tier] ?? '#6b7280',
+          }}>{TIER_LABELS[c.tier]}</span>
+        </div>
+        <div style={{ fontSize: 12, color: '#718096', marginTop: 2 }}>
+          {c.phone}
+          {c.email && <span style={{ marginLeft: 8 }}>{c.email}</span>}
+        </div>
+        <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{
+            fontSize: 11, fontWeight: 600, padding: '2px 7px', borderRadius: 10,
+            background: isPending ? '#fef3c7' : '#d1fae5',
+            color: isPending ? '#92400e' : '#065f46',
+            border: `1px solid ${isPending ? '#fde68a' : '#6ee7b7'}`,
+          }}>{approvalStatusLabel(c)}</span>
+          {!isPending && c.fcm_status && (
+            <span style={{
+              fontSize: 11, padding: '2px 7px', borderRadius: 10,
+              background: '#f1f5f9', color: '#475569',
+              border: '1px solid #e2e8f0',
+            }}>{FCM_STATUS_LABEL[c.fcm_status] ?? c.fcm_status}</span>
+          )}
+          {c.last_seen_at && (
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>
+              최근 접속 {new Date(c.last_seen_at).toLocaleDateString('ko-KR')}
+            </span>
+          )}
+        </div>
+      </div>
+      {isPending ? (
+        <button
+          onClick={() => setActive(c.id, true)}
+          style={{
+            border: '1.5px solid #059669', borderRadius: 8, background: '#059669',
+            color: '#fff', padding: '7px 14px', fontSize: 13, fontWeight: 700,
+            cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
+          }}>승인</button>
+      ) : (
+        <button
+          onClick={() => setActive(c.id, false)}
+          style={{
+            border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff',
+            color: '#64748b', padding: '7px 14px', fontSize: 13,
+            cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
+          }}>비활성화</button>
+      )}
+    </div>
+  );
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>불러오는 중…</div>;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* 승인 대기 */}
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 10, padding: '2px 8px' }}>
+            승인 대기 {pending.length}명
+          </span>
+        </div>
+        {pending.length === 0
+          ? <div style={{ color: '#94a3b8', fontSize: 13, padding: '12px 0' }}>대기 중인 직원 없음</div>
+          : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{pending.map(c => renderRow(c, true))}</div>
+        }
+      </div>
+
+      {/* 활성 직원 */}
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#065f46', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ background: '#d1fae5', border: '1px solid #6ee7b7', borderRadius: 10, padding: '2px 8px' }}>
+            활성 직원 {active.length}명
+          </span>
+        </div>
+        {active.length === 0
+          ? <div style={{ color: '#94a3b8', fontSize: 13, padding: '12px 0' }}>활성 직원 없음</div>
+          : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{active.map(c => renderRow(c, false))}</div>
+        }
+      </div>
+    </div>
+  );
+}
+
 // ── CleaningManager (기본 내보내기) ──────────────────────────────────────────
 
 const TABS = [
+  { key: 'approval', label: '직원 승인' },
   { key: 'cleaners', label: '청소자' },
   { key: 'property', label: '숙소 설정' },
   { key: 'jobs',     label: '청소 일정' },
@@ -720,6 +874,7 @@ export default function CleaningManager({ syncConfig, liveProperty, onBack }) {
 
       {/* 콘텐츠 */}
       <div style={{ padding: '24px 20px', maxWidth: 800, margin: '0 auto' }}>
+        {tab === 'approval' && <WorkerApprovalPanel />}
         {tab === 'cleaners' && <CleanersPanel />}
         {tab === 'property' && <PropertyPanel syncConfig={syncConfig} liveProperty={liveProperty} />}
         {tab === 'jobs'     && <JobsPanel />}
