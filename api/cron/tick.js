@@ -36,10 +36,10 @@ export default async function handler(req, res) {
   const { hour, day } = kstNow();
 
   const tasks = [];
-  if (hour === 8)              tasks.push("daily-plan");
-  if (hour === 9)              tasks.push("worker-health-check");
-  if (hour === 22)             tasks.push("daily-result");
-  if (hour === 0 && day === 15) tasks.push("monthly-cleaning");
+  if (hour === 8)               tasks.push("daily-plan");
+  if (hour === 8)               tasks.push("worker-health-check");   // daily-plan과 동시 실행
+  if (hour === 8 && day === 15) tasks.push("monthly-cleaning");      // 매월 15일 아침
+  if (hour === 22)              tasks.push("daily-result");
 
   const results = {};
   for (const action of tasks) {

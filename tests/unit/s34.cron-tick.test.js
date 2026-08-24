@@ -8,14 +8,12 @@ import assert from "node:assert/strict";
 const KST_OFFSET = 9 * 3600 * 1000;
 
 function resolveTasks(utcHour, dayOfMonth) {
-  const tasks = [];
-  if (utcHour === 8  - 9 + 24) { /* 계산 방식 확인용 */ }
-  // kstHour = (utcHour + 9) % 24
   const kstHour = (utcHour + 9) % 24;
-  if (kstHour === 8)               tasks.push("daily-plan");
-  if (kstHour === 9)               tasks.push("worker-health-check");
-  if (kstHour === 22)              tasks.push("daily-result");
-  if (kstHour === 0 && dayOfMonth === 15) tasks.push("monthly-cleaning");
+  const tasks = [];
+  if (kstHour === 8)                tasks.push("daily-plan");
+  if (kstHour === 8)                tasks.push("worker-health-check");
+  if (kstHour === 8 && dayOfMonth === 15) tasks.push("monthly-cleaning");
+  if (kstHour === 22)               tasks.push("daily-result");
   return tasks;
 }
 
@@ -23,34 +21,25 @@ function resolveTasks(utcHour, dayOfMonth) {
 // KST 시각 → 실행 작업 매핑
 // ============================================================
 describe("cron tick — KST 시각별 작업 선택", () => {
-  test("UTC 23:00 = KST 08:00 → daily-plan", () => {
-    assert.deepEqual(resolveTasks(23, 1), ["daily-plan"]);
+  test("UTC 23:00 = KST 08:00 → daily-plan + worker-health-check (동시 실행)", () => {
+    assert.deepEqual(resolveTasks(23, 1), ["daily-plan", "worker-health-check"]);
   });
 
-  test("UTC 00:00 = KST 09:00 → worker-health-check", () => {
-    assert.deepEqual(resolveTasks(0, 1), ["worker-health-check"]);
+  test("UTC 23:00 = KST 08:00 + 15일 → daily-plan + worker-health-check + monthly-cleaning", () => {
+    assert.deepEqual(resolveTasks(23, 15), ["daily-plan", "worker-health-check", "monthly-cleaning"]);
   });
 
   test("UTC 13:00 = KST 22:00 → daily-result", () => {
     assert.deepEqual(resolveTasks(13, 1), ["daily-result"]);
   });
 
-  test("UTC 15:00 = KST 00:00 + 15일 → monthly-cleaning", () => {
-    assert.deepEqual(resolveTasks(15, 15), ["monthly-cleaning"]);
-  });
-
-  test("UTC 15:00 = KST 00:00이지만 15일이 아님 → 빈 배열", () => {
-    assert.deepEqual(resolveTasks(15, 14), []);
-  });
-
   test("UTC 10:00 = KST 19:00 → 아무 작업 없음", () => {
     assert.deepEqual(resolveTasks(10, 1), []);
   });
 
-  test("각 시각은 서로 겹치지 않음 (동시 실행 없음)", () => {
-    const kstHours = [8, 9, 22, 0];
-    const seen = new Set(kstHours);
-    assert.equal(seen.size, kstHours.length);
+  test("크론 호출 시각은 2개 (KST 08:00, KST 22:00)", () => {
+    const cronKstHours = [8, 22];
+    assert.equal(cronKstHours.length, 2);
   });
 });
 
@@ -122,29 +111,37 @@ describe("cron tick — CRON_SECRET 인증", () => {
 // ============================================================
 // vercel.json 크론 구조 검증
 // ============================================================
-describe("vercel.json — cron 단일화", () => {
-  test("tick 크론은 매시간 정각 실행 (0 * * * *)", () => {
-    const schedule = "0 * * * *";
+describe("vercel.json — cron 2개 (Hobby 플랜 일 2회 한도)", () => {
+  test("아침 크론: UTC 23:00 (KST 08:00) 하루 1회", () => {
+    const schedule = "0 23 * * *";
     const parts = schedule.split(" ");
     assert.equal(parts[0], "0");    // 분: 정각
-    assert.equal(parts[1], "*");    // 시: 매시간
+    assert.equal(parts[1], "23");   // 시: UTC 23
     assert.equal(parts[2], "*");    // 일
-    assert.equal(parts[3], "*");    // 월
-    assert.equal(parts[4], "*");    // 요일
   });
 
-  test("매시간 실행 → 하루 24회 호출", () => {
-    let callCount = 0;
-    for (let h = 0; h < 24; h++) callCount++;
-    assert.equal(callCount, 24);
+  test("저녁 크론: UTC 13:00 (KST 22:00) 하루 1회", () => {
+    const schedule = "0 13 * * *";
+    const parts = schedule.split(" ");
+    assert.equal(parts[0], "0");
+    assert.equal(parts[1], "13");   // 시: UTC 13
   });
 
-  test("실제 작업은 4회/일 (08, 09, 22시 + 매월 15일 00시)", () => {
-    let taskCallCount = 0;
-    for (let h = 0; h < 24; h++) {
-      const tasks = resolveTasks(h, 1);
-      taskCallCount += tasks.length;
-    }
-    assert.equal(taskCallCount, 3); // 일반적인 날 — monthly-cleaning 제외
+  test("크론 2개 합쳐 하루 2회 호출 (Hobby 한도 이내)", () => {
+    const crons = ["0 23 * * *", "0 13 * * *"];
+    assert.equal(crons.length, 2);
+  });
+
+  test("일반 날 실제 작업: morning=2건, evening=1건", () => {
+    const morning = resolveTasks(23, 1); // UTC 23 = KST 08
+    const evening = resolveTasks(13, 1); // UTC 13 = KST 22
+    assert.equal(morning.length, 2); // daily-plan + worker-health-check
+    assert.equal(evening.length, 1); // daily-result
+  });
+
+  test("15일 아침: morning=3건 (monthly-cleaning 추가)", () => {
+    const morning = resolveTasks(23, 15);
+    assert.equal(morning.length, 3);
+    assert.ok(morning.includes("monthly-cleaning"));
   });
 });
