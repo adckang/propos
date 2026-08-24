@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS property_cleaning_config (
   cleaning_duration_hours    FLOAT NOT NULL DEFAULT 2.5,
   google_calendar_id         TEXT,
   google_calendar_booking_url TEXT,
+  host_phone                 TEXT,
+  ical_url                   TEXT,            -- Airbnb iCal 폴링 URL (백엔드 전용, git 비공개)
   updated_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -37,10 +39,11 @@ CREATE TABLE IF NOT EXISTS cleaning_jobs (
   status              TEXT NOT NULL DEFAULT 'PENDING'
                         CHECK (status IN (
                           'PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3',
-                          'NOTIFYING_BULK','BULK_REMINDED','ESCALATED','ASSIGNED','COMPLETED'
+                          'NOTIFYING_BULK','BULK_REMINDED','ESCALATED','ASSIGNED','COMPLETED','CANCELLED'
                         )),
   assigned_cleaner_id UUID REFERENCES cleaners(id),
-  google_event_id     TEXT,
+  google_event_id          TEXT,
+  google_blocker_event_id  TEXT,
   source              TEXT NOT NULL
                         CHECK (source IN ('MONTHLY_BATCH','SHORT_NOTICE')),
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -59,7 +62,17 @@ CREATE TABLE IF NOT EXISTS cleaning_notifs (
   reminded_at  TIMESTAMPTZ,
   response     TEXT CHECK (response IS NULL OR response IN ('DECLINED','DECLINED_AFTER_ASSIGNED')),
   response_at  TIMESTAMPTZ,
+  channel      TEXT CHECK (channel IS NULL OR channel IN ('FCM','SMS','SMS_FALLBACK')),
   UNIQUE (job_id, cleaner_id)
+);
+
+-- 캘린더 블로커 이벤트 ID 저장 (월간 배치 → 블로커 삭제 시 사용)
+CREATE TABLE IF NOT EXISTS property_calendar_blockers (
+  property_id TEXT    NOT NULL,
+  block_date  DATE    NOT NULL,
+  event_id    TEXT    NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (property_id, block_date)
 );
 
 CREATE INDEX IF NOT EXISTS idx_cleaning_jobs_status   ON cleaning_jobs(status);

@@ -10,32 +10,24 @@ import {
   sendCompletionSmsToRest,
   postSlack,
 } from "./_dispatch.js";
+import {
+  getGoogleToken,
+  createBlockerEvent,
+  deleteBlockerEvent,
+  getNextMonthDates,
+  parseAllFutureCheckouts,
+} from "./_calendar.js";
 
 const db = new Pool({ connectionString: process.env.POSTGRES_URL });
 
-const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 const GMAIL_API    = "https://gmail.googleapis.com/gmail/v1";
-let _gToken = null, _gExpiry = 0;
-
-async function getGoogleToken() {
-  if (_gToken && Date.now() < _gExpiry - 60_000) return _gToken;
-  const r = await fetch(GOOGLE_TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id:     process.env.GOOGLE_CLIENT_ID,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET,
-      refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
-      grant_type:    "refresh_token",
-    }),
-  });
-  const d = await r.json();
-  if (!d.access_token) throw new Error(`Google OAuth 실패: ${JSON.stringify(d)}`);
-  _gToken = d.access_token;
-  _gExpiry = Date.now() + (d.expires_in ?? 3600) * 1000;
-  return _gToken;
-}
+const BASE_URL     =
+  process.env.PROPOS_BASE_URL ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : null) ||
+  "https://www.proposonline.com";
 
 function parseSlug(req) {
   const raw = req.query?.slug;
@@ -116,19 +108,60 @@ async function listProperties(res) {
 
 async function upsertProperty(req, res) {
   const b = await readBody(req);
-  const { property_id, name, checkout_hour, cleaning_duration_hours, google_calendar_id, google_calendar_booking_url, host_phone } = b;
+  const { property_id, name, checkout_hour, cleaning_duration_hours, google_calendar_id, google_calendar_booking_url, host_phone, ical_url } = b;
   if (!property_id || !name) return sendJson(res, 400, { error: "property_id, name 필수" });
   const { rows } = await db.query(
-    `INSERT INTO property_cleaning_config (property_id,name,checkout_hour,cleaning_duration_hours,google_calendar_id,google_calendar_booking_url,host_phone,updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
-     ON CONFLICT (property_id) DO UPDATE SET name=$2,checkout_hour=$3,cleaning_duration_hours=$4,google_calendar_id=$5,google_calendar_booking_url=$6,host_phone=$7,updated_at=NOW()
+    `INSERT INTO property_cleaning_config (property_id,name,checkout_hour,cleaning_duration_hours,google_calendar_id,google_calendar_booking_url,host_phone,ical_url,updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+     ON CONFLICT (property_id) DO UPDATE SET name=$2,checkout_hour=$3,cleaning_duration_hours=$4,google_calendar_id=$5,google_calendar_booking_url=$6,host_phone=$7,ical_url=COALESCE($8,property_cleaning_config.ical_url),updated_at=NOW()
      RETURNING *`,
-    [property_id, name, checkout_hour ?? 11, cleaning_duration_hours ?? 2.5, google_calendar_id ?? null, google_calendar_booking_url ?? null, host_phone ?? null]
+    [property_id, name, checkout_hour ?? 11, cleaning_duration_hours ?? 2.5, google_calendar_id ?? null, google_calendar_booking_url ?? null, host_phone ?? null, ical_url ?? null]
   );
   return sendJson(res, 200, rows[0]);
 }
 
+async function runFollowupChecks() {
+  // VIP 1시간 창 만료 → 다음 단계로
+  const { rows: vipJobs } = await db.query(
+    `SELECT j.* FROM cleaning_jobs j
+     JOIN LATERAL (
+       SELECT sent_at FROM cleaning_notifs WHERE job_id=j.id ORDER BY sent_at DESC LIMIT 1
+     ) n ON true
+     WHERE j.status IN ('NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3')
+       AND n.sent_at < NOW() - INTERVAL '1 hour'`
+  );
+  for (const job of vipJobs) {
+    await advanceJob(db, job).catch(e => console.error("[followup] VIP advance 실패:", e.message));
+  }
+
+  // BULK 3시간 경과 → ESCALATED + Slack
+  const { rows: bulkJobs } = await db.query(
+    `SELECT j.id, j.property_id, j.cleaning_start_at FROM cleaning_jobs j
+     JOIN LATERAL (
+       SELECT MIN(sent_at) AS first_sent FROM cleaning_notifs WHERE job_id=j.id
+     ) n ON true
+     WHERE j.status IN ('NOTIFYING_BULK','BULK_REMINDED')
+       AND n.first_sent < NOW() - INTERVAL '3 hours'`
+  );
+  for (const job of bulkJobs) {
+    const { rows } = await db.query(
+      `UPDATE cleaning_jobs SET status='ESCALATED', updated_at=NOW()
+       WHERE id=$1 AND status IN ('NOTIFYING_BULK','BULK_REMINDED') RETURNING id`,
+      [job.id]
+    );
+    if (!rows.length) continue;
+    const cfg = await getPropertyConfig(db, job.property_id).catch(() => null);
+    const date = new Date(job.cleaning_start_at).toISOString().slice(0, 10);
+    await postSlack(
+      `[PROPOS] 🚨 ${cfg?.name ?? job.property_id} ${date} 청소 배정 실패. 수동 처리 필요.`
+    ).catch(() => {});
+  }
+}
+
 async function listJobs(req, res) {
+  // jobs 조회 시 타임아웃 체크 편승 실행 (외부 크론 불필요)
+  runFollowupChecks().catch(e => console.error("[listJobs] followup:", e.message));
+
   const status = req.query?.status ?? null;
   const limit  = Math.min(parseInt(req.query?.limit) || 50, 200);
   const vals = [];
@@ -182,7 +215,24 @@ async function syncJobs(req, res) {
        VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (property_id,checkout_at) DO NOTHING`,
       [property_id, uid ?? null, checkoutAt, checkoutAt, cleaning_end_at.toISOString(), source]
     );
-    if (rowCount > 0) created++; else skipped++;
+    if (rowCount > 0) {
+      created++;
+      // 해당 날짜 블로커 삭제 (예약 확정 → 슬롯 오픈)
+      const { rows: blocker } = await db.query(
+        `DELETE FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2 RETURNING event_id`,
+        [property_id, date]
+      );
+      if (blocker.length && cfg.google_calendar_id) {
+        try {
+          const gTok = await getGoogleToken();
+          await deleteBlockerEvent(cfg.google_calendar_id, blocker[0].event_id, gTok);
+        } catch (e) {
+          console.error(`[syncJobs] 블로커 삭제 실패 (${property_id}/${date}):`, e.message);
+        }
+      }
+    } else {
+      skipped++;
+    }
   }
   return sendJson(res, 200, { ok: true, created, skipped });
 }
@@ -210,20 +260,28 @@ async function handleConfirmRedirect(req, res, propertyId) {
 
 async function handleDecline(req, res, token) {
   if (req.method !== "GET") return res.status(405).end();
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  const isApi = req.query?.format === "api";
+  const respond = (status, title, message) => {
+    if (isApi) return res.status(status).json({ ok: status < 400, message });
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.status(status).send(htmlPage(title, message));
+  };
+
   const t = (token ?? "").toUpperCase();
-  if (!t || !/^[A-Z0-9]{6}$/.test(t)) return res.status(404).send(htmlPage("링크 오류", "유효하지 않은 링크입니다."));
+  if (!t || !/^[A-Z0-9]{6}$/.test(t)) return respond(404, "링크 오류", "유효하지 않은 링크입니다.");
   const { rows: [notif] } = await db.query(
     `SELECT n.id, n.job_id, n.cleaner_id, n.token, n.response,
             j.status AS job_status, j.property_id, j.cleaning_start_at
      FROM cleaning_notifs n JOIN cleaning_jobs j ON j.id=n.job_id WHERE n.token=$1`,
     [t]
   );
-  if (!notif) return res.status(404).send(htmlPage("링크 오류", "링크를 찾을 수 없습니다."));
-  if (notif.response) return res.status(200).send(htmlPage("이미 처리됨", "이미 처리된 링크입니다."));
+  if (!notif) return respond(404, "링크 오류", "링크를 찾을 수 없습니다.");
+  if (notif.response) return respond(200, "이미 처리됨", "이미 처리된 링크입니다.");
+  if (notif.job_status === "CANCELLED")
+    return respond(200, "취소된 일정", "해당 청소 일정은 이미 취소됐습니다. 감사합니다.");
   if (["ASSIGNED", "COMPLETED"].includes(notif.job_status)) {
     await db.query(`UPDATE cleaning_notifs SET response='DECLINED_AFTER_ASSIGNED',response_at=NOW() WHERE token=$1`, [t]);
-    return res.status(200).send(htmlPage("배정 완료", "이미 배정 완료된 건입니다. 감사합니다."));
+    return respond(200, "배정 완료", "이미 배정 완료된 건입니다. 감사합니다.");
   }
   await db.query(`UPDATE cleaning_notifs SET response='DECLINED',response_at=NOW() WHERE token=$1`, [t]);
   if (["NOTIFYING_VIP_1","NOTIFYING_VIP_2","NOTIFYING_VIP_3"].includes(notif.job_status)) {
@@ -241,7 +299,7 @@ async function handleDecline(req, res, token) {
       await postSlack(`[PROPOS] 🚨 ${notif.property_id} ${date} 청소 배정 실패 (전원 거절). 수동 처리 필요.`);
     }
   }
-  return res.status(200).send(htmlPage("거절 처리 완료", "거절 처리됐습니다. 감사합니다."));
+  return respond(200, "거절 처리 완료", "거절 처리됐습니다. 감사합니다.");
 }
 
 async function handleCalendarWebhook(req, res) {
@@ -260,19 +318,22 @@ async function handleCalendarWebhook(req, res) {
     `SELECT * FROM property_cleaning_config WHERE google_calendar_id=$1`, [calendarId]
   );
   if (!propCfg) return res.status(200).end();
+  // updatedMin: 최근 30분 이내에 생성/수정된 이벤트만 — 신규 예약 감지용
   const since = new Date(Date.now() - 30 * 60_000).toISOString();
+  const timeMin = new Date().toISOString(); // 과거 완료 건 제외
   const evtRes = await fetch(
-    `${CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events?timeMin=${since}&singleEvents=true&orderBy=startTime&maxResults=10`,
+    `${CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events?updatedMin=${since}&timeMin=${timeMin}&singleEvents=true&orderBy=updated&showDeleted=false&maxResults=10`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
   const events = (await evtRes.json()).items ?? [];
   for (const evt of events) {
+    if (evt.summary === "[PROPOS-BLOCK]") continue; // 블로커 이벤트 건너뜀
     const attendeeEmail = evt.attendees?.[0]?.email?.toLowerCase();
     if (!attendeeEmail) continue;
     const { rows: [cleaner] } = await db.query(`SELECT * FROM cleaners WHERE email=$1`, [attendeeEmail]);
     const { rows: [job] } = await db.query(
       `SELECT * FROM cleaning_jobs WHERE property_id=$1
-       AND status IN ('NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED')
+       AND status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED')
        ORDER BY cleaning_start_at ASC LIMIT 1`,
       [propCfg.property_id]
     );
@@ -328,10 +389,9 @@ async function handleGmailWebhook(req, res) {
         const subject = (msg.payload?.headers ?? []).find((hdr) => hdr.name === "Subject")?.value ?? "";
         if (RESERVATION_SUBJECTS.some((s) => subject.toLowerCase().includes(s))) {
           await postSlack("[PROPOS] 📬 에어비앤비 신규 예약 이메일 감지. iCal 재폴링 트리거.");
-          const { rows: pendingJobs } = await db.query(
-            `SELECT * FROM cleaning_jobs WHERE status='PENDING' AND cleaning_start_at<=NOW()+INTERVAL '14 days' ORDER BY cleaning_start_at ASC`
+          await syncAllPropertiesIcal(db).catch((e) =>
+            console.error("[gmail-webhook] iCal 재폴링 실패:", e.message)
           );
-          for (const job of pendingJobs) await advanceJob(db, job).catch(() => {});
           return res.status(200).end();
         }
       }
@@ -340,11 +400,214 @@ async function handleGmailWebhook(req, res) {
   return res.status(200).end();
 }
 
+// ── 공통: 전체 숙소 iCal 재폴링 + 신규 예약 처리 ──────────────
+
+async function syncAllPropertiesIcal(db) {
+  const { rows: properties } = await db.query(
+    `SELECT * FROM property_cleaning_config WHERE ical_url IS NOT NULL`
+  );
+  if (!properties.length) return;
+
+  const now = Date.now();
+  let gToken = null;
+  try { gToken = await getGoogleToken(); } catch { /* OAuth 실패 → 블로커 삭제 스킵 */ }
+
+  for (const prop of properties) {
+    let icalText;
+    try {
+      const r = await fetch(prop.ical_url);
+      if (!r.ok) throw new Error(`iCal HTTP ${r.status}`);
+      icalText = await r.text();
+    } catch (e) {
+      console.error(`[syncAllIcal] iCal 폴링 실패 (${prop.property_id}):`, e.message);
+      continue;
+    }
+
+    const checkouts = parseAllFutureCheckouts(icalText, now);
+
+    for (const { date, uid } of checkouts) {
+      const { cleaning_start_at, cleaning_end_at } = calcCleaningTimes(
+        date, prop.checkout_hour, prop.cleaning_duration_hours
+      );
+      const diffDays = (cleaning_start_at.getTime() - now) / 86_400_000;
+      const source = diffDays <= 14 ? "SHORT_NOTICE" : "MONTHLY_BATCH";
+
+      const { rowCount } = await db.query(
+        `INSERT INTO cleaning_jobs
+           (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source)
+         VALUES ($1,$2,$3,$4,$5,$6)
+         ON CONFLICT (property_id,checkout_at) DO NOTHING`,
+        [prop.property_id, uid ?? null, cleaning_start_at.toISOString(),
+         cleaning_start_at.toISOString(), cleaning_end_at.toISOString(), source]
+      );
+
+      if (rowCount > 0 && source === "SHORT_NOTICE") {
+        // 블로커 삭제 → 슬롯 오픈
+        const { rows: blocker } = await db.query(
+          `DELETE FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2 RETURNING event_id`,
+          [prop.property_id, date]
+        );
+        if (blocker.length && gToken && prop.google_calendar_id) {
+          await deleteBlockerEvent(prop.google_calendar_id, blocker[0].event_id, gToken).catch(
+            (e) => console.error(`[syncAllIcal] 블로커 삭제 실패 (${prop.property_id}/${date}):`, e.message)
+          );
+        }
+        // 즉시 발동 (followup 크론 대기 없이)
+        const { rows: [newJob] } = await db.query(
+          `SELECT * FROM cleaning_jobs WHERE property_id=$1 AND checkout_at=$2`,
+          [prop.property_id, cleaning_start_at.toISOString()]
+        );
+        if (newJob) {
+          await advanceJob(db, newJob).catch(
+            (e) => console.error(`[syncAllIcal] advanceJob 실패 (${prop.property_id}/${date}):`, e.message)
+          );
+        }
+        await postSlack(
+          `[PROPOS] 🚀 SHORT_NOTICE 신규 예약: ${prop.name ?? prop.property_id} ${date} → 즉시 알림 발송`
+        );
+      }
+    }
+  }
+}
+
+// ── 부트스트랩: 현재 달(또는 지정 월) 블로커 일괄 생성 ────────────
+
+async function bootstrapBlockers(req, res) {
+  if (req.method !== "POST") return res.status(405).end();
+  const b = await readBody(req);
+  const { property_id, month } = b; // month: "YYYY-MM" (없으면 현재 달)
+
+  const query = property_id
+    ? `SELECT * FROM property_cleaning_config WHERE property_id=$1 AND google_calendar_id IS NOT NULL`
+    : `SELECT * FROM property_cleaning_config WHERE google_calendar_id IS NOT NULL`;
+  const { rows: properties } = await db.query(query, property_id ? [property_id] : []);
+  if (!properties.length)
+    return sendJson(res, 404, { error: "숙소 없음 또는 google_calendar_id 미설정" });
+
+  let targetDates;
+  if (month && /^\d{4}-\d{2}$/.test(month)) {
+    const [y, m] = month.split("-").map(Number);
+    const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const pad = (n) => String(n).padStart(2, "0");
+    targetDates = Array.from({ length: days }, (_, i) => `${month}-${pad(i + 1)}`);
+  } else {
+    const kst = new Date(Date.now() + 9 * 3_600_000);
+    const y = kst.getUTCFullYear();
+    const m = kst.getUTCMonth() + 1;
+    const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const pad = (n) => String(n).padStart(2, "0");
+    targetDates = Array.from({ length: days }, (_, i) => `${y}-${pad(m)}-${pad(i + 1)}`);
+  }
+
+  let gToken;
+  try { gToken = await getGoogleToken(); }
+  catch (e) { return sendJson(res, 500, { error: `Google OAuth 실패: ${e.message}` }); }
+
+  let created = 0, skipped = 0;
+  for (const prop of properties) {
+    for (const date of targetDates) {
+      const { rows: existing } = await db.query(
+        `SELECT 1 FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2`,
+        [prop.property_id, date]
+      );
+      if (existing.length) { skipped++; continue; }
+      try {
+        const eventId = await createBlockerEvent(
+          prop.google_calendar_id, date,
+          prop.checkout_hour, prop.cleaning_duration_hours,
+          prop.property_id, gToken
+        );
+        await db.query(
+          `INSERT INTO property_calendar_blockers (property_id, block_date, event_id)
+           VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+          [prop.property_id, date, eventId]
+        );
+        created++;
+      } catch (e) {
+        console.error(`[bootstrap] 블로커 생성 실패 (${prop.property_id}/${date}):`, e.message);
+        skipped++;
+      }
+    }
+  }
+  return sendJson(res, 200, { ok: true, created, skipped });
+}
+
+// ── 예약 취소: 상태 CANCELLED + 블로커 재생성 ────────────────────
+
+async function cancelJob(req, res, jobId) {
+  if (req.method !== "PATCH") return res.status(405).end();
+  const { rows: [job] } = await db.query(
+    `SELECT j.*, p.google_calendar_id, p.checkout_hour, p.cleaning_duration_hours
+     FROM cleaning_jobs j
+     LEFT JOIN property_cleaning_config p ON p.property_id = j.property_id
+     WHERE j.id=$1`,
+    [jobId]
+  );
+  if (!job) return sendJson(res, 404, { error: "일정 없음" });
+  if (["COMPLETED", "CANCELLED"].includes(job.status))
+    return sendJson(res, 409, { error: `이미 ${job.status} 상태` });
+
+  const { rows: updated } = await db.query(
+    `UPDATE cleaning_jobs SET status='CANCELLED', updated_at=NOW() WHERE id=$1 RETURNING id`,
+    [jobId]
+  );
+  if (!updated.length) return sendJson(res, 409, { error: "업데이트 실패" });
+
+  // 블로커 재생성 → 슬롯 다시 잠금
+  let newBlockerEventId = null;
+  if (job.google_calendar_id) {
+    try {
+      const gTok = await getGoogleToken();
+      const date = new Date(job.cleaning_start_at).toISOString().slice(0, 10);
+      const eventId = await createBlockerEvent(
+        job.google_calendar_id, date,
+        job.checkout_hour, job.cleaning_duration_hours,
+        job.property_id, gTok
+      );
+      await db.query(
+        `INSERT INTO property_calendar_blockers (property_id, block_date, event_id)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (property_id, block_date) DO UPDATE SET event_id=$3, created_at=NOW()`,
+        [job.property_id, date, eventId]
+      );
+      await db.query(
+        `UPDATE cleaning_jobs SET google_blocker_event_id=$1 WHERE id=$2`,
+        [eventId, jobId]
+      );
+      newBlockerEventId = eventId;
+    } catch (e) {
+      console.error(`[cancelJob] 블로커 재생성 실패 (${jobId}):`, e.message);
+    }
+  }
+  return sendJson(res, 200, { ok: true, newBlockerEventId });
+}
+
+// ── Gmail Watch 등록 ─────────────────────────────────────────
+
+async function registerGmailWatch(req, res) {
+  if (req.method !== "POST") return res.status(405).end();
+  const topicName = process.env.GOOGLE_PUBSUB_TOPIC;
+  if (!topicName) return sendJson(res, 500, { error: "GOOGLE_PUBSUB_TOPIC 환경변수 없음" });
+  let token;
+  try { token = await getGoogleToken(); }
+  catch (e) { return sendJson(res, 500, { error: `Google OAuth 실패: ${e.message}` }); }
+  const r = await fetch(`${GMAIL_API}/users/me/watch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ topicName, labelIds: ["INBOX"], labelFilterBehavior: "INCLUDE" }),
+  });
+  const result = await r.json();
+  if (!r.ok) return sendJson(res, 502, { error: "Gmail Watch 등록 실패", detail: result });
+  return sendJson(res, 200, { ok: true, historyId: result.historyId, expiration: result.expiration });
+}
+
 export default async function handler(req, res) {
   const slug = parseSlug(req);
   const [resource] = slug;
-  // id/token은 쿼리 파라미터로 수신 (Vercel [..slug] 2-segment 라우팅 불안정)
-  const id    = req.query?.id    ?? null;
+  // id/token은 쿼리 파라미터 우선. 없으면 slug[1]이 UUID 형식일 때 폴백 (UI 경로 파라미터 호환)
+  const slugId = slug.length > 1 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug[1])
+    ? slug[1] : null;
+  const id    = req.query?.id    ?? slugId ?? null;
   const token = req.query?.token ?? null;
   try {
     if (resource === "cleaners") {
@@ -372,6 +635,12 @@ export default async function handler(req, res) {
       const jobId = id ?? (await readBody(req)).job_id;
       if (req.method === "POST" && jobId) return await dispatchJob(res, jobId);
     }
+    if (resource === "jobs" && id && req.method === "PATCH") {
+      const b = await readBody(req);
+      if (b.status === "CANCELLED") return await cancelJob(req, res, id);
+    }
+    if (resource === "bootstrap") return await bootstrapBlockers(req, res);
+    if (resource === "gmail-watch")  return await registerGmailWatch(req, res);
     if (resource === "c") {
       const propId = id ?? req.query?.property_id;
       if (propId) return await handleConfirmRedirect(req, res, propId);
