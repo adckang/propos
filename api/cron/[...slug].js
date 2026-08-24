@@ -402,6 +402,23 @@ export default async function handler(req, res) {
     if (action === "monthly-cleaning")    return await handleMonthlyClean(db, res);
     if (action === "cleaning-followup")   return await handleCleaningFollowup(db, res);
     if (action === "worker-health-check") return await handleWorkerHealthCheck(db, res);
+
+    // Vercel Hobby 크론: /api/cron/morning (UTC 23:00 = KST 08:00)
+    if (action === "morning") {
+      const kstDay = new Date(Date.now() + 9 * 3600000).getUTCDate();
+      await handleDailyPlan(db, { status: () => ({ json: () => {} }), json: () => {} });
+      await handleWorkerHealthCheck(db, { status: () => ({ json: () => {} }), json: () => {} });
+      if (kstDay === 15) {
+        await handleMonthlyClean(db, { status: () => ({ json: () => {} }), json: () => {} });
+      }
+      return res.status(200).json({ ok: true, ran: ["daily-plan", "worker-health-check", ...(kstDay === 15 ? ["monthly-cleaning"] : [])] });
+    }
+
+    // Vercel Hobby 크론: /api/cron/evening (UTC 13:00 = KST 22:00)
+    if (action === "evening") {
+      return await handleDailyResult(db, res);
+    }
+
     return res.status(404).json({ error: "Not found" });
   } catch (err) {
     console.error(`[cron/${action}] error:`, err);
