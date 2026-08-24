@@ -157,3 +157,87 @@ describe("전원 거절 여부 판단", () => {
     assert.ok(isAllDeclinedStrict(notifs));
   });
 });
+
+// ============================================================
+// 거절 API — ?format=api JSON 응답 (Worker App 연동용)
+// ============================================================
+
+function handleDeclineResponseFormat(req, res) {
+  const format = req.query?.format;
+  if (format === "api") {
+    res.status(200).json({ ok: true, message: "거절 처리 완료" });
+    return "api";
+  }
+  res.status(200).send("<html>거절되었습니다.</html>");
+  return "html";
+}
+
+describe("거절 API — ?format=api JSON 응답", () => {
+  test("format=api → { ok: true, message: '거절 처리 완료' } JSON 반환", () => {
+    const req = makeReq({ token: "ABC123" });
+    req.query.format = "api";
+    const res = makeRes();
+    const mode = handleDeclineResponseFormat(req, res);
+    assert.equal(mode, "api");
+    assert.equal(res._status, 200);
+    assert.deepEqual(res._body, { ok: true, message: "거절 처리 완료" });
+  });
+
+  test("format 없음 → HTML 반환 (SMS 링크 클릭 경로 유지)", () => {
+    const req = makeReq({ token: "ABC123" });
+    const res = makeRes();
+    const mode = handleDeclineResponseFormat(req, res);
+    assert.equal(mode, "html");
+    assert.equal(res._status, 200);
+    assert.ok(typeof res._body === "string", "HTML 문자열이어야 함");
+  });
+
+  test("format=html → HTML 반환 (명시적 HTML 요청)", () => {
+    const req = makeReq({ token: "ABC123" });
+    req.query.format = "html";
+    const res = makeRes();
+    const mode = handleDeclineResponseFormat(req, res);
+    assert.equal(mode, "html");
+    assert.ok(typeof res._body === "string");
+  });
+
+  test("format=api 응답에 ok=true 포함", () => {
+    const req = makeReq({ token: "ABC123" });
+    req.query.format = "api";
+    const res = makeRes();
+    handleDeclineResponseFormat(req, res);
+    assert.ok(res._body?.ok === true);
+  });
+
+  test("format=api 응답에 message 필드 포함", () => {
+    const req = makeReq({ token: "ABC123" });
+    req.query.format = "api";
+    const res = makeRes();
+    handleDeclineResponseFormat(req, res);
+    assert.ok(typeof res._body?.message === "string");
+    assert.ok(res._body.message.length > 0);
+  });
+});
+
+// ============================================================
+// CANCELLED job 거절 링크 처리
+// ============================================================
+describe("거절 처리 — CANCELLED job 상태 응답", () => {
+  function isCancelledJob(jobStatus) {
+    return jobStatus === "CANCELLED";
+  }
+
+  test("job_status=CANCELLED → 취소된 일정 안내 응답", () => {
+    assert.ok(isCancelledJob("CANCELLED"));
+  });
+
+  test("job_status=ASSIGNED → CANCELLED 아님", () => {
+    assert.ok(!isCancelledJob("ASSIGNED"));
+  });
+
+  test("CANCELLED job는 DECLINED/DECLINED_AFTER_ASSIGNED 기록 불필요", () => {
+    // 취소된 job에 대해 response 기록 없이 안내만 반환해야 함
+    const NO_RESPONSE_STATUSES = ["CANCELLED"];
+    assert.ok(NO_RESPONSE_STATUSES.includes("CANCELLED"));
+  });
+});

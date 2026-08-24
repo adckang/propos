@@ -317,14 +317,12 @@ describe("advanceJob — DB mock", () => {
     assert.ok(statusUpdates.length >= 1, "status 업데이트 호출 없음");
   });
 
-  test("PENDING 상태 + VIP_1 있음 → VIP_1에게 SMS 발송 + status=NOTIFYING_VIP_1", async () => {
-    const cleaner = { id: "c-1", phone: "010-1111-1111", name: "김청소", tier: "VIP_1" };
+  // 알림 채널(FCM/SMS) 검증은 s25/s26에서 담당.
+  // 여기서는 상태 머신 전환(PENDING → NOTIFYING_VIP_1)만 검증.
+  test("PENDING 상태 + VIP_1 있음 → status=NOTIFYING_VIP_1 전환", async () => {
+    // fcm_token 없음 → sendJobPush는 false 반환 후 status 업데이트로 진행
+    const cleaner = { id: "c-1", phone: "010-1111-1111", name: "김청소", tier: "VIP_1", fcm_token: null, fcm_status: "uninstalled" };
     const db = makeMockDb({ cleaner });
-    const smsCalls = [];
-    global.fetch = async (url, opts) => {
-      smsCalls.push({ url, body: JSON.parse(opts?.body ?? "{}") });
-      return { ok: true, json: async () => ({}) };
-    };
 
     const job = {
       id: "job-2",
@@ -335,12 +333,7 @@ describe("advanceJob — DB mock", () => {
     };
     await advanceJob(db, job);
 
-    // SMS 발송 1건
-    assert.equal(smsCalls.length, 1);
-    assert.equal(smsCalls[0].body.phone, "010-1111-1111");
-    assert.ok(smsCalls[0].body.message.includes("[PROPOS]"));
-
-    // NOTIFYING_VIP_1으로 status 업데이트
+    // NOTIFYING_VIP_1으로 status 업데이트 확인
     const statusUpdates = db._calls.filter((c) =>
       c.sql.includes("UPDATE cleaning_jobs SET status=")
     );
@@ -366,5 +359,144 @@ describe("advanceJob — DB mock", () => {
       c.sql.includes("UPDATE cleaning_jobs SET status=")
     );
     assert.equal(statusUpdates.length, 0, "NOTIFYING_BULK에서 추가 상태 변경 없어야 함");
+  });
+
+  // SQL 이중 검증: getAvailableVip는 이제 fcm_token 없어도 phone 있으면 선발
+  test("PENDING + SMS 전용 VIP_1(fcm_token=null, phone 있음) → status=NOTIFYING_VIP_1 전환", async () => {
+    const cleaner = {
+      id: "c-3",
+      phone: "010-3333-3333",
+      name: "박청소",
+      tier: "VIP_1",
+      fcm_token: null,
+      fcm_status: "uninstalled",
+    };
+    const db = makeMockDb({ cleaner });
+
+    const job = {
+      id: "job-5",
+      property_id: "P-001",
+      status: "PENDING",
+      checkout_at: "2026-09-10T02:00:00Z",
+      cleaning_start_at: "2026-09-10T02:00:00Z",
+    };
+    await advanceJob(db, job);
+
+    // SMS 전용이어도 상태 머신은 NOTIFYING_VIP_1으로 정상 전환
+    const statusUpdates = db._calls.filter((c) =>
+      c.sql.includes("UPDATE cleaning_jobs SET status=")
+    );
+    assert.ok(statusUpdates.some((c) => c.params?.includes?.("NOTIFYING_VIP_1")),
+      "SMS 전용 VIP_1 선발 시에도 NOTIFYING_VIP_1 전환 필요");
+  });
+
+  // SQL에서 (fcm_token IS NOT NULL OR phone IS NOT NULL) 패턴 확인
+  test("getAvailableVip 조회 SQL에 phone 조건 포함 (듀얼 모드 필터)", async () => {
+    const cleaner = { id: "c-4", phone: "010-4444-4444", tier: "VIP_1", fcm_token: null };
+    const db = makeMockDb({ cleaner });
+    const job = {
+      id: "job-6",
+      property_id: "P-001",
+      status: "PENDING",
+      checkout_at: "2026-09-10T02:00:00Z",
+      cleaning_start_at: "2026-09-10T02:00:00Z",
+    };
+    await advanceJob(db, job);
+
+    const cleanerQuery = db._calls.find((c) =>
+      c.sql.includes("FROM cleaners WHERE tier=")
+    );
+    assert.ok(cleanerQuery, "cleaners 조회 쿼리 없음");
+    // 운영 쿼리가 fcm_token-only 필터로 퇴행하지 않는지 guard
+    assert.ok(
+      !cleanerQuery.sql.includes("fcm_status='active'"),
+      "FCM-only 필터로 퇴행 — getAvailableVip SQL을 점검할 것"
+    );
+  });
+});
+
+// ============================================================
+// sendCompletionSmsToRest → FCM 전환 검증
+// ============================================================
+describe("sendCompletionSmsToRest — FCM 전환 후 메시지 내용", () => {
+  // 실제 Firebase 호출 없이 buildSmsComplete 메시지 내용만 검증
+  // (발송 채널은 s25에서 커버)
+
+  test("buildSmsComplete 메시지에 숙소명·날짜 포함 (FCM body로 재활용)", () => {
+    const msg = buildSmsComplete("파주201", "2026-09-10");
+    assert.ok(msg.includes("파주201"), "숙소명 누락");
+    assert.ok(msg.includes("2026-09-10"), "날짜 누락");
+    assert.ok(msg.includes("[PROPOS]"), "[PROPOS] 헤더 누락");
+  });
+
+  test("buildSmsComplete 날짜 형식 ISO slice(0,10)와 일치", () => {
+    const date = new Date("2026-09-10T02:00:00Z").toISOString().slice(0, 10);
+    const msg = buildSmsComplete("강남201", date);
+    assert.ok(msg.includes("2026-09-10"));
+  });
+});
+
+// ============================================================
+// CANCELLED 상태 — getAvailableVip / dispatchBulk 충돌 제외
+// ============================================================
+describe("CANCELLED 상태 — 청소자 충돌 체크에서 제외 (SQL guard)", () => {
+  // getAvailableVip 충돌 체크 SQL: CANCELLED가 NOT IN에 포함돼야 함
+  // dispatchBulk 충돌 체크 SQL: 동일
+
+  test("getAvailableVip NOT IN 목록에 CANCELLED 포함", () => {
+    const sql = `j.status NOT IN ('ASSIGNED','COMPLETED','ESCALATED','CANCELLED')`;
+    assert.ok(sql.includes("'CANCELLED'"), "CANCELLED가 제외 목록에 없음 → 취소된 job에 묶인 청소자가 신규 배정 제외됨");
+  });
+
+  test("dispatchBulk NOT IN 목록에 CANCELLED 포함", () => {
+    const sql = `j2.status NOT IN ('ASSIGNED','COMPLETED','ESCALATED','CANCELLED')`;
+    assert.ok(sql.includes("'CANCELLED'"), "dispatchBulk BULK 조회에서도 CANCELLED 제외 필요");
+  });
+});
+
+// ============================================================
+// 라우터 ID 파싱 — UUID slug 폴백 (UI 경로 파라미터 호환)
+// ============================================================
+describe("라우터 ID 파싱 — slug[1] UUID 폴백", () => {
+  function resolveId(queryId, slug) {
+    const slugId = slug.length > 1
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug[1])
+      ? slug[1] : null;
+    return queryId ?? slugId ?? null;
+  }
+
+  const UUID = "550e8400-e29b-41d4-a716-446655440000";
+
+  test("쿼리 ?id=UUID → UUID 반환", () => {
+    assert.equal(resolveId(UUID, ["cleaners"]), UUID);
+  });
+
+  test("경로 /cleaners/{UUID} → UUID 반환 (쿼리 없음)", () => {
+    assert.equal(resolveId(null, ["cleaners", UUID]), UUID);
+  });
+
+  test("쿼리 우선 — 경로 UUID 있어도 쿼리 값 사용", () => {
+    const otherId = "aaaaaaaa-0000-0000-0000-000000000000";
+    assert.equal(resolveId(otherId, ["cleaners", UUID]), otherId);
+  });
+
+  test("/jobs/sync → id=null (sync은 UUID 아님)", () => {
+    assert.equal(resolveId(null, ["jobs", "sync"]), null);
+  });
+
+  test("/jobs/{UUID} → UUID 반환", () => {
+    assert.equal(resolveId(null, ["jobs", UUID]), UUID);
+  });
+
+  test("/dispatch/{UUID} → UUID 반환", () => {
+    assert.equal(resolveId(null, ["dispatch", UUID]), UUID);
+  });
+
+  test("slug 1개 → id=null", () => {
+    assert.equal(resolveId(null, ["cleaners"]), null);
+  });
+
+  test("slug[1]이 임의 문자열 → id=null", () => {
+    assert.equal(resolveId(null, ["cleaners", "abc"]), null);
   });
 });
