@@ -873,6 +873,393 @@ function WorkerApprovalPanel() {
   );
 }
 
+// ── 테스트 플로우 패널 ────────────────────────────────────────────────────────
+
+const FLOW_STEPS = [
+  { id: 1, icon: '👤', title: '청소자 등록',  sub: '본인 정보로 테스트 청소자 등록' },
+  { id: 2, icon: '🔄', title: 'iCal 동기화', sub: '파주201 예약 → 청소 잡 생성' },
+  { id: 3, icon: '📋', title: '잡 선택',      sub: 'PENDING 잡 목록에서 테스트할 잡 선택' },
+  { id: 4, icon: '📨', title: '알림 발송',    sub: '선택한 잡에 실제 SMS/FCM 발송' },
+  { id: 5, icon: '✅', title: '결과 확인',    sub: '발송 상태 + 거절 링크 테스트' },
+  { id: 6, icon: '🗑️', title: '테스트 정리',  sub: '잡 취소 + 청소자 비활성화' },
+];
+
+function StepBadge({ step, current, done }) {
+  const bg = done ? '#10b981' : step === current ? '#2563eb' : '#e2e8f0';
+  const color = (done || step === current) ? '#fff' : '#9ca3af';
+  return (
+    <div style={{
+      width: 28, height: 28, borderRadius: '50%', background: bg, color,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: 13, fontWeight: 700, flexShrink: 0,
+    }}>{done ? '✓' : step}</div>
+  );
+}
+
+function FlowCard({ step, current, done, children, title, sub, icon }) {
+  const isActive = step === current;
+  const border = isActive ? '2px solid #2563eb' : done ? '1.5px solid #10b981' : '1.5px solid #e2e8f0';
+  const bg = isActive ? '#fff' : done ? '#f0fdf4' : '#fafafa';
+  return (
+    <div style={{ border, borderRadius: 12, background: bg, marginBottom: 12, overflow: 'hidden' }}>
+      <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <StepBadge step={step} current={current} done={done} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#1a202c' }}>{icon} {title}</div>
+          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{sub}</div>
+        </div>
+        {done && !isActive && <span style={{ fontSize: 12, color: '#10b981', fontWeight: 600 }}>완료</span>}
+      </div>
+      {isActive && <div style={{ padding: '0 18px 18px', borderTop: '1px solid #e2e8f0' }}>{children}</div>}
+    </div>
+  );
+}
+
+const resultBox = {
+  background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8,
+  padding: '10px 14px', fontSize: 13, color: '#166534', marginTop: 12,
+};
+const errorBox = {
+  background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8,
+  padding: '10px 14px', fontSize: 13, color: '#991b1b', marginTop: 12,
+};
+const nextBtnStyle = {
+  marginTop: 14, border: '1.5px solid #2563eb', borderRadius: 8,
+  background: '#2563eb', color: '#fff', padding: '9px 20px',
+  fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+};
+const actionBtnStyle = {
+  border: '1.5px solid #4f46e5', borderRadius: 8, background: '#4f46e5',
+  color: '#fff', padding: '9px 20px', fontSize: 13, fontWeight: 700,
+  cursor: 'pointer', fontFamily: 'inherit', marginTop: 14,
+};
+const dangerBtnStyle = {
+  border: '1.5px solid #dc2626', borderRadius: 8, background: '#dc2626',
+  color: '#fff', padding: '9px 20px', fontSize: 13, fontWeight: 700,
+  cursor: 'pointer', fontFamily: 'inherit', marginTop: 14,
+};
+
+function TestFlowPanel() {
+  const [current, setCurrent] = useState(1);
+  const [done, setDone] = useState(new Set());
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  // 단계별 데이터
+  const [cleanerForm, setCleanerForm] = useState({ name: '테스트(나)', phone: '', email: 'nam5821@gmail.com', tier: 'VIP_1' });
+  const [cleanerId, setCleanerId] = useState(null);
+  const [syncResult, setSyncResult] = useState(null);
+  const [jobs, setJobs] = useState([]);
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [dispatchResult, setDispatchResult] = useState(null);
+  const [jobDetail, setJobDetail] = useState(null);
+  const [cleanupDone, setCleanupDone] = useState({ job: false, cleaner: false });
+
+  function markDone(step) { setDone(prev => new Set([...prev, step])); }
+  function go(step) { setCurrent(step); setErr(''); }
+
+  // Step 1: 청소자 등록
+  async function doRegister() {
+    if (!cleanerForm.phone) { setErr('전화번호를 입력하세요'); return; }
+    setLoading(true); setErr('');
+    try {
+      const res = await apiFetch('/api/cleaning/cleaners', {
+        method: 'POST', body: JSON.stringify(cleanerForm),
+      });
+      setCleanerId(res.id);
+      markDone(1); go(2);
+    } catch(e) { setErr(e.message); }
+    finally { setLoading(false); }
+  }
+
+  // Step 2: iCal 동기화
+  async function doSync() {
+    setLoading(true); setErr('');
+    try {
+      const res = await apiFetch('/api/cleaning/ical-sync', {
+        method: 'POST', body: JSON.stringify({ property_id: 'paju201' }),
+      });
+      setSyncResult(res);
+      // PENDING 잡 조회
+      const jobList = await apiFetch('/api/cleaning/jobs?status=PENDING');
+      setJobs(jobList);
+      markDone(2); go(3);
+    } catch(e) { setErr(e.message); }
+    finally { setLoading(false); }
+  }
+
+  // Step 3: 잡 선택
+  async function loadJobs() {
+    setLoading(true); setErr('');
+    try {
+      const jobList = await apiFetch('/api/cleaning/jobs');
+      setJobs(jobList.filter(j => !['ASSIGNED','COMPLETED','CANCELLED'].includes(j.status)));
+    } catch(e) { setErr(e.message); }
+    finally { setLoading(false); }
+  }
+  function selectJob(job) {
+    setSelectedJob(job);
+    markDone(3); go(4);
+  }
+
+  // Step 4: 알림 발송
+  async function doDispatch() {
+    if (!selectedJob) return;
+    setLoading(true); setErr('');
+    try {
+      const res = await apiFetch(`/api/cleaning/dispatch`, {
+        method: 'POST', body: JSON.stringify({ job_id: selectedJob.id }),
+      });
+      setDispatchResult(res);
+      markDone(4); go(5);
+    } catch(e) { setErr(e.message); }
+    finally { setLoading(false); }
+  }
+
+  // Step 5: 결과 확인
+  async function loadJobDetail() {
+    if (!selectedJob) return;
+    setLoading(true); setErr('');
+    try {
+      const res = await apiFetch(`/api/cleaning/jobs/${selectedJob.id}`);
+      setJobDetail(res);
+    } catch(e) { setErr(e.message); }
+    finally { setLoading(false); }
+  }
+
+  // Step 6: 정리
+  async function cancelJob() {
+    if (!selectedJob) return;
+    setLoading(true); setErr('');
+    try {
+      await apiFetch(`/api/cleaning/jobs?id=${selectedJob.id}`, {
+        method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }),
+      });
+      setCleanupDone(p => ({ ...p, job: true }));
+    } catch(e) { setErr(e.message); }
+    finally { setLoading(false); }
+  }
+  async function deactivateCleaner() {
+    if (!cleanerId) return;
+    setLoading(true); setErr('');
+    try {
+      await apiFetch(`/api/cleaning/cleaners/${cleanerId}`, { method: 'DELETE' });
+      setCleanupDone(p => ({ ...p, cleaner: true }));
+      if (cleanupDone.job || !selectedJob) { markDone(6); }
+    } catch(e) { setErr(e.message); }
+    finally { setLoading(false); }
+  }
+
+  const fmtDt = (ts) => {
+    if (!ts) return '-';
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  };
+
+  return (
+    <div>
+      <div style={{ marginBottom: 20, padding: '14px 18px', background: '#eff6ff', borderRadius: 10, border: '1px solid #bfdbfe' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e40af', marginBottom: 4 }}>청소 자동화 테스트 플로우</div>
+        <div style={{ fontSize: 12, color: '#3b82f6' }}>본인 정보로 전체 시나리오를 단계별 검증합니다. 각 단계 완료 후 다음 단계가 활성화됩니다.</div>
+      </div>
+
+      {/* Step 1 */}
+      <FlowCard step={1} current={current} done={done.has(1)} icon='👤' title='청소자 등록' sub='본인 정보로 테스트 청소자 등록'>
+        <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          {[
+            { label: '이름', key: 'name', placeholder: '홍길동' },
+            { label: '전화번호', key: 'phone', placeholder: '010-1234-5678' },
+            { label: '이메일', key: 'email', placeholder: 'you@gmail.com' },
+          ].map(f => (
+            <div key={f.key} style={f.key === 'email' ? { gridColumn: '1/-1' } : {}}>
+              <div style={labelStyle}>{f.label}</div>
+              <input value={cleanerForm[f.key]} onChange={e => setCleanerForm(p => ({ ...p, [f.key]: e.target.value }))}
+                placeholder={f.placeholder} style={inputStyle} />
+            </div>
+          ))}
+          <div>
+            <div style={labelStyle}>티어</div>
+            <select value={cleanerForm.tier} onChange={e => setCleanerForm(p => ({ ...p, tier: e.target.value }))} style={inputStyle}>
+              {TIERS.map(t => <option key={t} value={t}>{TIER_LABELS[t]}</option>)}
+            </select>
+          </div>
+        </div>
+        {err && current === 1 && <div style={errorBox}>{err}</div>}
+        <button onClick={doRegister} disabled={loading} style={actionBtnStyle}>
+          {loading ? '등록 중...' : '청소자 등록'}
+        </button>
+        {cleanerId && <div style={resultBox}>✅ 등록 완료 — ID: <code>{cleanerId}</code></div>}
+      </FlowCard>
+
+      {/* Step 2 */}
+      <FlowCard step={2} current={current} done={done.has(2)} icon='🔄' title='iCal 동기화' sub='파주201 예약 → 청소 잡 생성'>
+        <div style={{ marginTop: 14, fontSize: 13, color: '#4a5568' }}>
+          Vercel 서버가 Airbnb iCal을 직접 폴링하여 <code>cleaning_jobs</code>를 생성합니다.<br/>
+          <span style={{ color: '#dc2626', fontWeight: 600 }}>⚠️ 14일 이내 예약이 있으면 등록된 청소자(VIP_1)에게 즉시 알림이 발송됩니다.</span>
+        </div>
+        {err && current === 2 && <div style={errorBox}>{err}</div>}
+        <button onClick={doSync} disabled={loading} style={actionBtnStyle}>
+          {loading ? '동기화 중...' : '서버 iCal 동기화 실행'}
+        </button>
+        {syncResult && (
+          <div style={resultBox}>
+            ✅ 동기화 완료 — 신규 {syncResult.created}건 생성<br/>
+            {jobs.length > 0 && `PENDING 잡 ${jobs.length}건 조회됨 → 다음 단계에서 선택`}
+          </div>
+        )}
+      </FlowCard>
+
+      {/* Step 3 */}
+      <FlowCard step={3} current={current} done={done.has(3)} icon='📋' title='잡 선택' sub='발송할 청소 잡 하나 선택'>
+        <div style={{ marginTop: 14 }}>
+          <button onClick={loadJobs} disabled={loading} style={{ ...editBtnStyle, marginBottom: 10 }}>
+            {loading ? '...' : '🔄 목록 새로고침'}
+          </button>
+          {err && current === 3 && <div style={errorBox}>{err}</div>}
+          {jobs.length === 0 && <div style={{ fontSize: 13, color: '#9ca3af' }}>잡이 없습니다. 2단계를 먼저 실행하세요.</div>}
+          {jobs.map(job => {
+            const meta = STATUS_META[job.status] ?? { label: job.status, color: '#6b7280', bg: '#f3f4f6' };
+            const isSelected = selectedJob?.id === job.id;
+            return (
+              <div key={job.id} onClick={() => setSelectedJob(job)} style={{
+                border: `1.5px solid ${isSelected ? '#2563eb' : '#e2e8f0'}`,
+                borderRadius: 8, padding: '10px 14px', marginBottom: 8,
+                background: isSelected ? '#eff6ff' : '#fff', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 10,
+              }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{job.property_name ?? job.property_id}</div>
+                  <div style={{ fontSize: 12, color: '#6b7280', fontFamily: "'DM Mono', monospace" }}>
+                    청소 {fmtDt(job.cleaning_start_at)}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#9ca3af' }}>{job.source}</div>
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: meta.color, background: meta.bg, borderRadius: 6, padding: '3px 8px' }}>
+                  {meta.label}
+                </span>
+              </div>
+            );
+          })}
+          {selectedJob && (
+            <button onClick={() => { markDone(3); go(4); }} style={nextBtnStyle}>
+              선택 확정 → 알림 발송 단계로
+            </button>
+          )}
+        </div>
+      </FlowCard>
+
+      {/* Step 4 */}
+      <FlowCard step={4} current={current} done={done.has(4)} icon='📨' title='알림 발송' sub='선택한 잡에 실제 알림 발송'>
+        <div style={{ marginTop: 14 }}>
+          {selectedJob && (
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 4 }}>
+              <div><b>숙소:</b> {selectedJob.property_name ?? selectedJob.property_id}</div>
+              <div><b>청소 일시:</b> {fmtDt(selectedJob.cleaning_start_at)}</div>
+              <div><b>현재 상태:</b> {selectedJob.status}</div>
+            </div>
+          )}
+          <div style={{ fontSize: 12, color: '#dc2626', marginTop: 8 }}>
+            ⚠️ 등록된 VIP_1 청소자에게 실제 SMS/FCM이 발송됩니다.
+          </div>
+          {err && current === 4 && <div style={errorBox}>{err}</div>}
+          {selectedJob?.status !== 'PENDING'
+            ? <div style={{ ...resultBox, background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', marginTop: 12 }}>
+                이 잡은 이미 {selectedJob?.status} 상태입니다. 이미 발송됐거나 다른 상태입니다.
+                <button onClick={() => { markDone(4); go(5); }} style={{ ...nextBtnStyle, marginTop: 8, display: 'block' }}>
+                  5단계(결과 확인)로 바로 이동
+                </button>
+              </div>
+            : <button onClick={doDispatch} disabled={loading} style={actionBtnStyle}>
+                {loading ? '발송 중...' : '🚀 알림 발송 시작'}
+              </button>
+          }
+          {dispatchResult && <div style={resultBox}>✅ 발송 완료 — VIP_1 알림이 나갔습니다</div>}
+        </div>
+      </FlowCard>
+
+      {/* Step 5 */}
+      <FlowCard step={5} current={current} done={done.has(5)} icon='✅' title='결과 확인' sub='발송 상태 + 거절 링크 테스트'>
+        <div style={{ marginTop: 14 }}>
+          <button onClick={loadJobDetail} disabled={loading} style={{ ...editBtnStyle, marginBottom: 10 }}>
+            {loading ? '...' : '🔄 상태 새로고침'}
+          </button>
+          {err && current === 5 && <div style={errorBox}>{err}</div>}
+          {jobDetail && (
+            <div>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', fontSize: 13 }}>
+                <div><b>잡 상태:</b> <span style={{ color: STATUS_META[jobDetail.status]?.color ?? '#1a202c', fontWeight: 700 }}>
+                  {STATUS_META[jobDetail.status]?.label ?? jobDetail.status}
+                </span></div>
+              </div>
+              {(jobDetail.notifs ?? []).length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#4a5568', marginBottom: 6 }}>발송 내역</div>
+                  {jobDetail.notifs.map(n => (
+                    <div key={n.id} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', marginBottom: 6, fontSize: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span><b>{n.cleaner_name}</b> ({n.phone})</span>
+                        <span style={{ color: '#2563eb', fontWeight: 600 }}>{n.channel ?? 'SMS'}</span>
+                      </div>
+                      <div style={{ color: '#6b7280', marginTop: 4 }}>발송: {fmtDt(n.sent_at)}</div>
+                      {n.response && <div style={{ color: '#dc2626', marginTop: 2 }}>응답: {n.response}</div>}
+                      <div style={{ marginTop: 6 }}>
+                        <a href={`/api/d/${n.token}`} target="_blank" rel="noreferrer"
+                          style={{ fontSize: 11, color: '#7c3aed', fontFamily: "'DM Mono', monospace" }}>
+                          거절 링크 테스트 → /d/{n.token}
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <button onClick={() => { markDone(5); go(6); }} style={nextBtnStyle}>
+            6단계(정리)로 이동
+          </button>
+        </div>
+      </FlowCard>
+
+      {/* Step 6 */}
+      <FlowCard step={6} current={current} done={done.has(6)} icon='🗑️' title='테스트 정리' sub='잡 취소 + 청소자 비활성화'>
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 13, color: '#4a5568', marginBottom: 14 }}>
+            테스트 데이터를 정리합니다. 각 항목을 개별 처리할 수 있습니다.
+          </div>
+          {err && current === 6 && <div style={errorBox}>{err}</div>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 14px' }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>
+                잡 취소 {cleanupDone.job && <span style={{ color: '#10b981' }}>✓ 완료</span>}
+              </div>
+              <div style={{ fontSize: 12, color: '#6b7280', margin: '4px 0 8px' }}>
+                {selectedJob ? `${selectedJob.property_name ?? 'paju201'} 청소 잡 → CANCELLED` : '선택된 잡 없음'}
+              </div>
+              <button onClick={cancelJob} disabled={loading || cleanupDone.job || !selectedJob} style={dangerBtnStyle}>
+                잡 취소
+              </button>
+            </div>
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 14px' }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>
+                청소자 비활성화 {cleanupDone.cleaner && <span style={{ color: '#10b981' }}>✓ 완료</span>}
+              </div>
+              <div style={{ fontSize: 12, color: '#6b7280', margin: '4px 0 8px' }}>
+                {cleanerForm.name} ({cleanerForm.phone}) → active: false
+              </div>
+              <button onClick={deactivateCleaner} disabled={loading || cleanupDone.cleaner || !cleanerId} style={dangerBtnStyle}>
+                청소자 비활성화
+              </button>
+            </div>
+          </div>
+          {cleanupDone.job && cleanupDone.cleaner && (
+            <div style={resultBox}>🎉 모든 테스트 데이터 정리 완료!</div>
+          )}
+        </div>
+      </FlowCard>
+    </div>
+  );
+}
+
 // ── CleaningManager (기본 내보내기) ──────────────────────────────────────────
 
 const TABS = [
@@ -880,6 +1267,7 @@ const TABS = [
   { key: 'cleaners', label: '청소자' },
   { key: 'property', label: '숙소 설정' },
   { key: 'jobs',     label: '청소 일정' },
+  { key: 'test',     label: '🧪 테스트' },
 ];
 
 export default function CleaningManager({ syncConfig, liveProperty, onBack }) {
@@ -927,6 +1315,7 @@ export default function CleaningManager({ syncConfig, liveProperty, onBack }) {
         {tab === 'cleaners' && <CleanersPanel />}
         {tab === 'property' && <PropertyPanel syncConfig={syncConfig} liveProperty={liveProperty} />}
         {tab === 'jobs'     && <JobsPanel />}
+        {tab === 'test'     && <TestFlowPanel />}
       </div>
     </div>
   );
