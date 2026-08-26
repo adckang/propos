@@ -326,7 +326,7 @@ function PropertyPanel({ syncConfig, liveProperty }) {
 
     setSyncing(true);
     try {
-      const result = await apiFetch('/api/cleaning/jobs/sync', {
+      const result = await apiFetch('/api/cleaning/jobs', {
         method: 'POST',
         body: JSON.stringify({ property_id: form.property_id, checkouts }),
       });
@@ -555,7 +555,7 @@ function JobsPanel() {
   async function dispatch(jobId, e) {
     e.stopPropagation();
     try {
-      await apiFetch(`/api/cleaning/dispatch/${jobId}`, { method: 'POST' });
+      await apiFetch('/api/cleaning/dispatch', { method: 'POST', body: JSON.stringify({ job_id: jobId }) });
       Toast.show('발송 시작됨', 's');
       await load();
     } catch (e2) {

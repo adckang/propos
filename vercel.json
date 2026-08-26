@@ -16,6 +16,18 @@
       "destination": "/api/cleaning/d?token=:token&slug=d"
     },
     {
+      "source": "/api/cleaning/cleaners/:id",
+      "destination": "/api/cleaning/cleaners?id=:id&slug=cleaners"
+    },
+    {
+      "source": "/api/cleaning/jobs/:id",
+      "destination": "/api/cleaning/jobs?id=:id&slug=jobs"
+    },
+    {
+      "source": "/api/cleaning/dispatch/:id",
+      "destination": "/api/cleaning/dispatch?id=:id&slug=dispatch"
+    },
+    {
       "source": "/api/calendar/webhook",
       "destination": "/api/cleaning/calendar-webhook?slug=calendar-webhook"
     },
