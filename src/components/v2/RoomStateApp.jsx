@@ -471,11 +471,27 @@ export default function RoomStateApp({ onBack }) {
 
   // 마운트 시 Pi에서 숙소 설정 로드 — Pi가 source of truth, localStorage는 캐시
   useEffect(() => {
+    // localStorage → Postgres 백필 (기존 저장값이 청소 DB에 없을 때 자동 동기화)
+    const local = loadConfig();
+    if (local?.id && local?.airbnbIcalUrl) {
+      fetch('/api/cleaning/properties', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          property_id:             local.id,
+          name:                    local.name,
+          checkout_hour:           local.checkOutHour ?? 11,
+          cleaning_duration_hours: local.cleaningDurationHours ?? 2.5,
+          ical_url:                local.airbnbIcalUrl,
+          host_phone:              local.hostPhone ?? null,
+        }),
+      }).catch(() => {});
+    }
+
     fetchProperties().then(list => {
       const piCfg = list[0];
       if (!piCfg?.airbnbIcalUrl) return;
       // Pi 값과 로컬 캐시가 다르면 Pi 값으로 갱신
-      const local = loadConfig();
       if (JSON.stringify(piCfg) !== JSON.stringify(local)) {
         saveConfig(piCfg);
         setSyncConfig(piCfg);
