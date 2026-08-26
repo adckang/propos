@@ -413,6 +413,7 @@ export default async function handler(req, res) {
 
       await handleDailyPlan(db, nullRes);         ran.push("daily-plan");
       await handleWorkerHealthCheck(db, nullRes);  ran.push("worker-health-check");
+      await handleCleaningFollowup(db, nullRes);   ran.push("cleaning-followup");
 
       if (kstDay === 15) {
         await handleMonthlyClean(db, nullRes);     ran.push("monthly-cleaning");
@@ -446,6 +447,8 @@ export default async function handler(req, res) {
 
     // Vercel Hobby 크론: /api/cron/evening (UTC 13:00 = KST 22:00)
     if (action === "evening") {
+      const nullRes = { status: () => ({ json: () => {} }), json: () => {} };
+      await handleCleaningFollowup(db, nullRes);
       return await handleDailyResult(db, res);
     }
 

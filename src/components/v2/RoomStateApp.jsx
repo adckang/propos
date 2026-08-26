@@ -698,6 +698,24 @@ export default function RoomStateApp({ onBack }) {
       { areaName: form.name, district: form.district, devices: form.devices },
       form.watcherId ?? null,
     );
+    // Vercel 청소 DB에도 동기화 (iCal URL + 청소 설정)
+    if (withId.id && withId.airbnbIcalUrl) {
+      fetch('/api/cleaning/properties', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          property_id:             withId.id,
+          name:                    withId.name,
+          checkout_hour:           withId.checkOutHour ?? 11,
+          cleaning_duration_hours: withId.cleaningDurationHours ?? 2.5,
+          ical_url:                withId.airbnbIcalUrl,
+          host_phone:              withId.hostPhone ?? null,
+        }),
+      }).then(r => {
+        if (r.ok) Toast.show('청소 DB 동기화 완료', 's');
+        else r.json().then(e => Toast.show(`청소 DB 동기화 실패: ${e?.error ?? r.status}`, 'e')).catch(() => Toast.show('청소 DB 동기화 실패', 'e'));
+      }).catch(e => Toast.show(`청소 DB 동기화 실패: ${e.message}`, 'e'));
+    }
   };
 
   // 실 데이터 + 목업 데이터 병합 (실 데이터 맨 앞, HA 센서·기기·모니터링 상태 주입)

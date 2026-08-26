@@ -338,6 +338,21 @@ function PropertyPanel({ syncConfig, liveProperty }) {
     }
   }
 
+  async function handleServerSync() {
+    setSyncing(true);
+    try {
+      const result = await apiFetch('/api/cleaning/ical-sync', {
+        method: 'POST',
+        body: JSON.stringify({ property_id: propertyId }),
+      });
+      Toast.show(`서버 iCal 동기화 완료 — 신규 ${result.created}건 생성`, 's');
+    } catch (e) {
+      Toast.show('서버 동기화 실패: ' + e.message, 'e');
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   const reservations = liveProperty?.reservations ?? [];
   const today = new Date();
   const futureCount = reservations.filter(r => {
@@ -444,21 +459,55 @@ function PropertyPanel({ syncConfig, liveProperty }) {
           Airbnb 체크아웃 → 청소 일정 생성
         </div>
         <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16, lineHeight: 1.6 }}>
-          대시보드에서 파싱된 iCal 예약 데이터를 기반으로 청소 일정을 DB에 등록합니다.
           이미 등록된 일정은 건너뜁니다.
-          {futureCount > 0
-            ? <span style={{ color: '#2563eb', fontWeight: 600 }}> 동기화 가능: {futureCount}건</span>
-            : ' (iCal 연동 후 사용 가능)'}
         </div>
-        <button onClick={handleSync} disabled={syncing || !saved || !futureCount} style={{
-          border: `1.5px solid ${saved && futureCount ? '#059669' : '#e2e8f0'}`,
-          borderRadius: 8,
-          background: saved && futureCount ? (syncing ? '#6ee7b7' : '#059669') : '#f3f4f6',
-          color: saved && futureCount ? '#fff' : '#9ca3af',
-          padding: '9px 24px', fontSize: 13, fontWeight: 700,
-          cursor: syncing || !saved || !futureCount ? 'not-allowed' : 'pointer',
-          fontFamily: 'inherit',
-        }}>{syncing ? '동기화 중...' : `청소 일정 동기화 (${futureCount}건)`}</button>
+
+        {/* 방법 A: 서버 직접 iCal 폴링 (DB에 iCal URL 설정된 경우) */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
+            방법 A — 서버 직접 폴링
+            <span style={{ marginLeft: 6, fontWeight: 400, color: '#9ca3af' }}>
+              (DB에 iCal URL 저장된 경우 · 권장)
+            </span>
+          </div>
+          <button onClick={handleServerSync} disabled={syncing || !icalAlreadySet} style={{
+            border: `1.5px solid ${icalAlreadySet ? '#7c3aed' : '#e2e8f0'}`,
+            borderRadius: 8,
+            background: icalAlreadySet ? (syncing ? '#c4b5fd' : '#7c3aed') : '#f3f4f6',
+            color: icalAlreadySet ? '#fff' : '#9ca3af',
+            padding: '9px 24px', fontSize: 13, fontWeight: 700,
+            cursor: syncing || !icalAlreadySet ? 'not-allowed' : 'pointer',
+            fontFamily: 'inherit',
+          }}>
+            {syncing ? '동기화 중...' : '서버 직접 동기화'}
+          </button>
+          {!icalAlreadySet && (
+            <span style={{ marginLeft: 10, fontSize: 12, color: '#f59e0b' }}>
+              위 Airbnb iCal URL을 입력 후 설정 저장 필요
+            </span>
+          )}
+        </div>
+
+        {/* 방법 B: 대시보드 파싱 결과 기반 (기존 방식) */}
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
+            방법 B — 대시보드 예약 기반
+            <span style={{ marginLeft: 6, fontWeight: 400, color: '#9ca3af' }}>
+              {futureCount > 0
+                ? <span style={{ color: '#2563eb' }}>{futureCount}건 감지됨</span>
+                : '(대시보드에서 iCal 연동 후 사용 가능)'}
+            </span>
+          </div>
+          <button onClick={handleSync} disabled={syncing || !saved || !futureCount} style={{
+            border: `1.5px solid ${saved && futureCount ? '#059669' : '#e2e8f0'}`,
+            borderRadius: 8,
+            background: saved && futureCount ? (syncing ? '#6ee7b7' : '#059669') : '#f3f4f6',
+            color: saved && futureCount ? '#fff' : '#9ca3af',
+            padding: '9px 24px', fontSize: 13, fontWeight: 700,
+            cursor: syncing || !saved || !futureCount ? 'not-allowed' : 'pointer',
+            fontFamily: 'inherit',
+          }}>{syncing ? '동기화 중...' : `청소 일정 동기화 (${futureCount}건)`}</button>
+        </div>
       </div>
     </div>
   );

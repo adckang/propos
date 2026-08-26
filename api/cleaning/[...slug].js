@@ -402,9 +402,12 @@ async function handleGmailWebhook(req, res) {
 
 // ── 공통: 전체 숙소 iCal 재폴링 + 신규 예약 처리 ──────────────
 
-async function syncAllPropertiesIcal(db) {
+async function syncAllPropertiesIcal(db, filterPropertyId = null) {
   const { rows: properties } = await db.query(
-    `SELECT * FROM property_cleaning_config WHERE ical_url IS NOT NULL`
+    filterPropertyId
+      ? `SELECT * FROM property_cleaning_config WHERE ical_url IS NOT NULL AND property_id=$1`
+      : `SELECT * FROM property_cleaning_config WHERE ical_url IS NOT NULL`,
+    filterPropertyId ? [filterPropertyId] : []
   );
   if (!properties.length) return;
 
@@ -432,13 +435,19 @@ async function syncAllPropertiesIcal(db) {
       const diffDays = (cleaning_start_at.getTime() - now) / 86_400_000;
       const source = diffDays <= 14 ? "SHORT_NOTICE" : "MONTHLY_BATCH";
 
+      // MONTHLY_BATCH: dispatch_after = cleaning_start_at - 14 days (2주 전 발동)
+      // SHORT_NOTICE: dispatch_after = NOW() (default) → 즉시 advanceJob
+      const dispatchAfter = source === "MONTHLY_BATCH"
+        ? new Date(cleaning_start_at.getTime() - 14 * 86_400_000).toISOString()
+        : new Date(now).toISOString();
+
       const { rowCount } = await db.query(
         `INSERT INTO cleaning_jobs
-           (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source)
-         VALUES ($1,$2,$3,$4,$5,$6)
+           (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source,dispatch_after)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
          ON CONFLICT (property_id,checkout_at) DO NOTHING`,
         [prop.property_id, uid ?? null, cleaning_start_at.toISOString(),
-         cleaning_start_at.toISOString(), cleaning_end_at.toISOString(), source]
+         cleaning_start_at.toISOString(), cleaning_end_at.toISOString(), source, dispatchAfter]
       );
 
       if (rowCount > 0 && source === "SHORT_NOTICE") {
@@ -468,6 +477,37 @@ async function syncAllPropertiesIcal(db) {
       }
     }
   }
+}
+
+// ── iCal 수동 동기화 트리거 ───────────────────────────────────────
+
+async function handleIcalSync(req, res) {
+  if (req.method !== "POST") return res.status(405).end();
+  const b = await readBody(req);
+  const { property_id } = b;
+
+  if (property_id) {
+    const { rows: [prop] } = await db.query(
+      `SELECT * FROM property_cleaning_config WHERE property_id=$1`, [property_id]
+    );
+    if (!prop) return sendJson(res, 404, { error: "숙소 없음" });
+    if (!prop.ical_url) return sendJson(res, 400, { error: "ical_url 미설정 — 설정 저장 후 다시 시도하세요" });
+  }
+
+  // syncAllPropertiesIcal이 ical_url IS NOT NULL인 숙소만 처리
+  let created = 0;
+  const origQuery = db.query.bind(db);
+  const countingDb = {
+    ...db,
+    query: async (sql, params) => {
+      const result = await origQuery(sql, params);
+      if (sql.includes("INSERT INTO cleaning_jobs") && result.rowCount > 0) created += result.rowCount;
+      return result;
+    },
+  };
+
+  await syncAllPropertiesIcal(countingDb, property_id ?? null);
+  return sendJson(res, 200, { ok: true, property_id: property_id ?? "all", created });
 }
 
 // ── 부트스트랩: 현재 달(또는 지정 월) 블로커 일괄 생성 ────────────
@@ -640,6 +680,7 @@ export default async function handler(req, res) {
       if (b.status === "CANCELLED") return await cancelJob(req, res, id);
     }
     if (resource === "bootstrap") return await bootstrapBlockers(req, res);
+    if (resource === "ical-sync")    return await handleIcalSync(req, res);
     if (resource === "gmail-watch")  return await registerGmailWatch(req, res);
     if (resource === "c") {
       const propId = id ?? req.query?.property_id;
