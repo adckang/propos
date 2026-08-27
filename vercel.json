@@ -12,7 +12,15 @@
       "destination": "/api/cleaning/c?id=:id&slug=c"
     },
     {
+      "source": "/c/:id",
+      "destination": "/api/cleaning/c?id=:id&slug=c"
+    },
+    {
       "source": "/api/d/:token",
+      "destination": "/api/cleaning/d?token=:token&slug=d"
+    },
+    {
+      "source": "/d/:token",
       "destination": "/api/cleaning/d?token=:token&slug=d"
     },
     {
