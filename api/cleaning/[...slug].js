@@ -68,15 +68,29 @@ async function createCleaner(req, res) {
   if (!name || !phone || !email || !tier) return sendJson(res, 400, { error: "name, phone, email, tier 필수" });
   const validTiers = ["VIP_1", "VIP_2", "VIP_3", "BULK"];
   if (!validTiers.includes(tier)) return sendJson(res, 400, { error: `tier는 ${validTiers.join("/")} 중 하나` });
+  const normPhone = normalizePhone(phone);
+  const normEmail = email.toLowerCase().trim();
   try {
     const { rows } = await db.query(
       `INSERT INTO cleaners (name, phone, email, tier, notes) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [name, normalizePhone(phone), email.toLowerCase().trim(), tier, notes ?? null]
+      [name, normPhone, normEmail, tier, notes ?? null]
     );
     return sendJson(res, 201, rows[0]);
   } catch (e) {
-    if (e.code === "23505") return sendJson(res, 409, { error: "전화번호 또는 이메일 중복" });
-    throw e;
+    if (e.code !== "23505") throw e;
+    // 비활성 레코드와 충돌 → 재활성화 후 반환
+    const { rows: existing } = await db.query(
+      `SELECT id, active FROM cleaners WHERE phone=$1 OR email=$2 LIMIT 1`,
+      [normPhone, normEmail]
+    );
+    if (existing.length && !existing[0].active) {
+      const { rows: reactivated } = await db.query(
+        `UPDATE cleaners SET name=$1,phone=$2,email=$3,tier=$4,notes=$5,active=true WHERE id=$6 RETURNING *`,
+        [name, normPhone, normEmail, tier, notes ?? null, existing[0].id]
+      );
+      return sendJson(res, 200, reactivated[0]);
+    }
+    return sendJson(res, 409, { error: "전화번호 또는 이메일이 이미 활성 청소자와 중복됩니다" });
   }
 }
 

@@ -167,6 +167,19 @@ function CleanersPanel() {
     }
   }
 
+  async function activate(id) {
+    try {
+      await apiFetch(`/api/cleaning/cleaners/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: true }),
+      });
+      Toast.show('활성화 완료', 's');
+      await load();
+    } catch (e) {
+      Toast.show('활성화 실패: ' + e.message, 'e');
+    }
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -222,12 +235,15 @@ function CleanersPanel() {
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>{c.phone} · {c.email}</div>
                   </div>
-                  {!c.active && (
-                    <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, flexShrink: 0 }}>비활성</span>
-                  )}
                   <button onClick={() => startEdit(c)} style={editBtnStyle}>수정</button>
-                  {c.active && (
+                  {c.active ? (
                     <button onClick={() => deactivate(c.id)} style={deleteBtnStyle}>비활성화</button>
+                  ) : (
+                    <button onClick={() => activate(c.id)} style={{
+                      border: '1.5px solid #10b981', borderRadius: 7, background: '#10b981',
+                      color: '#fff', padding: '5px 12px', fontSize: 12, fontWeight: 600,
+                      cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
+                    }}>활성화</button>
                   )}
                 </div>
               )}
