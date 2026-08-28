@@ -893,9 +893,9 @@ function WorkerApprovalPanel() {
 
 const FLOW_STEPS = [
   { id: 1, icon: '👤', title: '청소자 등록',  sub: '본인 정보로 테스트 청소자 등록' },
-  { id: 2, icon: '🔄', title: 'iCal 동기화', sub: '파주201 예약 → 청소 잡 생성' },
+  { id: 2, icon: '🗓️', title: '잡 생성',     sub: '체크아웃 날짜 직접 입력 → PENDING 잡 생성' },
   { id: 3, icon: '📋', title: '잡 선택',      sub: 'PENDING 잡 목록에서 테스트할 잡 선택' },
-  { id: 4, icon: '📨', title: '알림 발송',    sub: '선택한 잡에 실제 SMS/FCM 발송' },
+  { id: 4, icon: '📨', title: '알림 발송',    sub: '선택한 잡에 실제 SMS/FCM 수동 발송' },
   { id: 5, icon: '✅', title: '결과 확인',    sub: '발송 상태 + 거절 링크 테스트' },
   { id: 6, icon: '🗑️', title: '테스트 정리',  sub: '잡 취소 + 청소자 비활성화' },
 ];
@@ -962,14 +962,31 @@ function TestFlowPanel() {
   const [err, setErr] = useState('');
 
   // 단계별 데이터
-  const [cleanerForm, setCleanerForm] = useState({ name: '테스트(나)', phone: '', email: 'nam5821@gmail.com', tier: 'VIP_1' });
+  const [cleanerForm, setCleanerForm] = useState({ name: '', phone: '', email: 'nam5821@gmail.com', tier: 'VIP_1' });
   const [cleanerId, setCleanerId] = useState(null);
-  const [syncResult, setSyncResult] = useState(null);
+
+  // Step 2: 수동 잡 생성
+  const defaultTestDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().slice(0, 10);
+  };
+  const minTestDate = new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10);
+  const [testDate, setTestDate] = useState(defaultTestDate);
+  const [testPropertyId, setTestPropertyId] = useState('paju201');
+  const [properties, setProperties] = useState([]);
+  const [createResult, setCreateResult] = useState(null);
+
   const [jobs, setJobs] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
   const [dispatchResult, setDispatchResult] = useState(null);
   const [jobDetail, setJobDetail] = useState(null);
   const [cleanupDone, setCleanupDone] = useState({ job: false, cleaner: false });
+
+  // 숙소 목록 초기 로드
+  useEffect(() => {
+    apiFetch('/api/cleaning/properties').then(setProperties).catch(() => {});
+  }, []);
 
   function markDone(step) { setDone(prev => new Set([...prev, step])); }
   function go(step) { setCurrent(step); setErr(''); }
@@ -977,6 +994,7 @@ function TestFlowPanel() {
   // Step 1: 청소자 등록
   async function doRegister() {
     if (!cleanerForm.phone) { setErr('전화번호를 입력하세요'); return; }
+    if (!cleanerForm.name)  { setErr('이름을 입력하세요'); return; }
     setLoading(true); setErr('');
     try {
       const res = await apiFetch('/api/cleaning/cleaners', {
@@ -988,15 +1006,22 @@ function TestFlowPanel() {
     finally { setLoading(false); }
   }
 
-  // Step 2: iCal 동기화
-  async function doSync() {
-    setLoading(true); setErr('');
+  // Step 2: 수동 잡 생성 (iCal 불필요, SHORT_NOTICE 즉시발송 방지)
+  async function doCreateJob() {
+    setLoading(true); setErr(''); setCreateResult(null);
     try {
-      const res = await apiFetch('/api/cleaning/ical-sync', {
-        method: 'POST', body: JSON.stringify({ property_id: 'paju201' }),
+      const res = await apiFetch('/api/cleaning/jobs', {
+        method: 'POST',
+        body: JSON.stringify({
+          property_id: testPropertyId,
+          checkouts: [{ date: testDate, uid: `test-${Date.now()}` }],
+        }),
       });
-      setSyncResult(res);
-      // PENDING 잡 조회
+      setCreateResult(res);
+      if (res.created === 0) {
+        setErr(`해당 날짜(${testDate})에 잡이 이미 존재합니다. 다른 날짜를 선택하세요.`);
+        return;
+      }
       const jobList = await apiFetch('/api/cleaning/jobs?status=PENDING');
       setJobs(jobList);
       markDone(2); go(3);
@@ -1013,27 +1038,26 @@ function TestFlowPanel() {
     } catch(e) { setErr(e.message); }
     finally { setLoading(false); }
   }
-  function selectJob(job) {
-    setSelectedJob(job);
-    markDone(3); go(4);
-  }
 
   // Step 4: 알림 발송
   async function doDispatch() {
     if (!selectedJob) return;
     setLoading(true); setErr('');
     try {
-      const res = await apiFetch(`/api/cleaning/dispatch`, {
+      const res = await apiFetch('/api/cleaning/dispatch', {
         method: 'POST', body: JSON.stringify({ job_id: selectedJob.id }),
       });
       setDispatchResult(res);
+      // 발송 후 잡 상세 즉시 로드 (5단계 미리보기)
+      const detail = await apiFetch(`/api/cleaning/jobs/${selectedJob.id}`);
+      setJobDetail(detail);
       markDone(4); go(5);
     } catch(e) { setErr(e.message); }
     finally { setLoading(false); }
   }
 
-  // Step 5: 결과 확인
-  async function loadJobDetail() {
+  // Step 5: 결과 확인 (새로고침)
+  async function refreshJobDetail() {
     if (!selectedJob) return;
     setLoading(true); setErr('');
     try {
@@ -1061,7 +1085,7 @@ function TestFlowPanel() {
     try {
       await apiFetch(`/api/cleaning/cleaners/${cleanerId}`, { method: 'DELETE' });
       setCleanupDone(p => ({ ...p, cleaner: true }));
-      if (cleanupDone.job || !selectedJob) { markDone(6); }
+      if (cleanupDone.job || !selectedJob) markDone(6);
     } catch(e) { setErr(e.message); }
     finally { setLoading(false); }
   }
@@ -1076,7 +1100,7 @@ function TestFlowPanel() {
     <div>
       <div style={{ marginBottom: 20, padding: '14px 18px', background: '#eff6ff', borderRadius: 10, border: '1px solid #bfdbfe' }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: '#1e40af', marginBottom: 4 }}>청소 자동화 테스트 플로우</div>
-        <div style={{ fontSize: 12, color: '#3b82f6' }}>본인 정보로 전체 시나리오를 단계별 검증합니다. 각 단계 완료 후 다음 단계가 활성화됩니다.</div>
+        <div style={{ fontSize: 12, color: '#3b82f6' }}>6단계로 청소 배정 전체 시나리오를 실데이터로 검증합니다. 각 단계 완료 후 다음 단계가 활성화됩니다.</div>
       </div>
 
       {/* Step 1 */}
@@ -1100,6 +1124,10 @@ function TestFlowPanel() {
             </select>
           </div>
         </div>
+        <div style={{ marginTop: 10, padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, fontSize: 12, color: '#92400e' }}>
+          💡 같은 티어에 기존 청소자가 있으면 <b>먼저 등록된 청소자</b>에게 우선 발송됩니다. 본인만 테스트하려면 해당 티어를 비워두세요.
+          {cleanerForm.tier !== 'BULK' && ' 비활성화 → 재활성화로 임시 제외 가능.'}
+        </div>
         {err && current === 1 && <div style={errorBox}>{err}</div>}
         <button onClick={doRegister} disabled={loading} style={actionBtnStyle}>
           {loading ? '등록 중...' : '청소자 등록'}
@@ -1108,21 +1136,39 @@ function TestFlowPanel() {
       </FlowCard>
 
       {/* Step 2 */}
-      <FlowCard step={2} current={current} done={done.has(2)} icon='🔄' title='iCal 동기화' sub='파주201 예약 → 청소 잡 생성'>
-        <div style={{ marginTop: 14, fontSize: 13, color: '#4a5568' }}>
-          Vercel 서버가 Airbnb iCal을 직접 폴링하여 <code>cleaning_jobs</code>를 생성합니다.<br/>
-          <span style={{ color: '#dc2626', fontWeight: 600 }}>⚠️ 14일 이내 예약이 있으면 등록된 청소자(VIP_1)에게 즉시 알림이 발송됩니다.</span>
-        </div>
-        {err && current === 2 && <div style={errorBox}>{err}</div>}
-        <button onClick={doSync} disabled={loading} style={actionBtnStyle}>
-          {loading ? '동기화 중...' : '서버 iCal 동기화 실행'}
-        </button>
-        {syncResult && (
-          <div style={resultBox}>
-            ✅ 동기화 완료 — 신규 {syncResult.created}건 생성<br/>
-            {jobs.length > 0 && `PENDING 잡 ${jobs.length}건 조회됨 → 다음 단계에서 선택`}
+      <FlowCard step={2} current={current} done={done.has(2)} icon='🗓️' title='잡 생성' sub='체크아웃 날짜 직접 입력 → PENDING 청소 잡 생성'>
+        <div style={{ marginTop: 14 }}>
+          <div style={{ padding: '8px 12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, fontSize: 12, color: '#166534', marginBottom: 14 }}>
+            ✅ iCal 동기화 대신 날짜를 직접 입력합니다. <b>15일 이후 날짜만 선택 가능</b>
+            (MONTHLY_BATCH → 즉시 알림 발송 없음, 4단계에서 수동 발송).
           </div>
-        )}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <div style={labelStyle}>숙소</div>
+              <select value={testPropertyId} onChange={e => setTestPropertyId(e.target.value)} style={inputStyle}>
+                {properties.length === 0
+                  ? <option value="paju201">파주201 (paju201)</option>
+                  : properties.map(p => <option key={p.property_id} value={p.property_id}>{p.name ?? p.property_id}</option>)
+                }
+              </select>
+            </div>
+            <div>
+              <div style={labelStyle}>체크아웃 날짜</div>
+              <input type="date" value={testDate} min={minTestDate}
+                onChange={e => setTestDate(e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+          {err && current === 2 && <div style={errorBox}>{err}</div>}
+          <button onClick={doCreateJob} disabled={loading} style={actionBtnStyle}>
+            {loading ? '생성 중...' : '🗓️ 테스트 잡 생성'}
+          </button>
+          {createResult && createResult.created > 0 && (
+            <div style={resultBox}>
+              ✅ PENDING 잡 생성 완료 — {createResult.created}건 (MONTHLY_BATCH)<br/>
+              <span style={{ fontSize: 11 }}>4단계 '알림 발송' 버튼 전까지 자동 발송 안 됩니다.</span>
+            </div>
+          )}
+        </div>
       </FlowCard>
 
       {/* Step 3 */}
@@ -1132,7 +1178,7 @@ function TestFlowPanel() {
             {loading ? '...' : '🔄 목록 새로고침'}
           </button>
           {err && current === 3 && <div style={errorBox}>{err}</div>}
-          {jobs.length === 0 && <div style={{ fontSize: 13, color: '#9ca3af' }}>잡이 없습니다. 2단계를 먼저 실행하세요.</div>}
+          {jobs.length === 0 && <div style={{ fontSize: 13, color: '#9ca3af' }}>잡이 없습니다. 2단계에서 잡을 먼저 생성하세요.</div>}
           {jobs.map(job => {
             const meta = STATUS_META[job.status] ?? { label: job.status, color: '#6b7280', bg: '#f3f4f6' };
             const isSelected = selectedJob?.id === job.id;
@@ -1165,72 +1211,83 @@ function TestFlowPanel() {
       </FlowCard>
 
       {/* Step 4 */}
-      <FlowCard step={4} current={current} done={done.has(4)} icon='📨' title='알림 발송' sub='선택한 잡에 실제 알림 발송'>
+      <FlowCard step={4} current={current} done={done.has(4)} icon='📨' title='알림 발송' sub='선택한 잡에 수동으로 SMS/FCM 발송'>
         <div style={{ marginTop: 14 }}>
           {selectedJob && (
-            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 4 }}>
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 8 }}>
               <div><b>숙소:</b> {selectedJob.property_name ?? selectedJob.property_id}</div>
               <div><b>청소 일시:</b> {fmtDt(selectedJob.cleaning_start_at)}</div>
-              <div><b>현재 상태:</b> {selectedJob.status}</div>
+              <div><b>현재 상태:</b> <span style={{ fontWeight: 700, color: STATUS_META[selectedJob.status]?.color }}>{STATUS_META[selectedJob.status]?.label ?? selectedJob.status}</span></div>
             </div>
           )}
-          <div style={{ fontSize: 12, color: '#dc2626', marginTop: 8 }}>
-            ⚠️ 등록된 VIP_1 청소자에게 실제 SMS/FCM이 발송됩니다.
-          </div>
           {err && current === 4 && <div style={errorBox}>{err}</div>}
           {selectedJob?.status !== 'PENDING'
-            ? <div style={{ ...resultBox, background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', marginTop: 12 }}>
-                이 잡은 이미 {selectedJob?.status} 상태입니다. 이미 발송됐거나 다른 상태입니다.
+            ? <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#92400e', marginTop: 4 }}>
+                이미 <b>{selectedJob?.status}</b> 상태입니다 — 이전에 발송됐거나 자동 발송된 상태입니다.
                 <button onClick={() => { markDone(4); go(5); }} style={{ ...nextBtnStyle, marginTop: 8, display: 'block' }}>
                   5단계(결과 확인)로 바로 이동
                 </button>
               </div>
-            : <button onClick={doDispatch} disabled={loading} style={actionBtnStyle}>
-                {loading ? '발송 중...' : '🚀 알림 발송 시작'}
-              </button>
+            : <>
+                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>
+                  VIP_1 → VIP_2 → VIP_3 → BULK 순서로 우선순위 조회 후 첫 번째 가용 청소자에게 발송합니다.
+                </div>
+                <button onClick={doDispatch} disabled={loading} style={actionBtnStyle}>
+                  {loading ? '발송 중...' : '🚀 알림 발송 시작'}
+                </button>
+              </>
           }
-          {dispatchResult && <div style={resultBox}>✅ 발송 완료 — VIP_1 알림이 나갔습니다</div>}
         </div>
       </FlowCard>
 
       {/* Step 5 */}
-      <FlowCard step={5} current={current} done={done.has(5)} icon='✅' title='결과 확인' sub='발송 상태 + 거절 링크 테스트'>
+      <FlowCard step={5} current={current} done={done.has(5)} icon='✅' title='결과 확인' sub='발송 채널 · 상태 · 거절 링크 확인'>
         <div style={{ marginTop: 14 }}>
-          <button onClick={loadJobDetail} disabled={loading} style={{ ...editBtnStyle, marginBottom: 10 }}>
+          <button onClick={refreshJobDetail} disabled={loading} style={{ ...editBtnStyle, marginBottom: 10 }}>
             {loading ? '...' : '🔄 상태 새로고침'}
           </button>
           {err && current === 5 && <div style={errorBox}>{err}</div>}
           {jobDetail && (
             <div>
-              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', fontSize: 13 }}>
-                <div><b>잡 상태:</b> <span style={{ color: STATUS_META[jobDetail.status]?.color ?? '#1a202c', fontWeight: 700 }}>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 10 }}>
+                <b>잡 상태:</b>{' '}
+                <span style={{ color: STATUS_META[jobDetail.status]?.color ?? '#1a202c', fontWeight: 700 }}>
                   {STATUS_META[jobDetail.status]?.label ?? jobDetail.status}
-                </span></div>
+                </span>
               </div>
-              {(jobDetail.notifs ?? []).length > 0 && (
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#4a5568', marginBottom: 6 }}>발송 내역</div>
-                  {jobDetail.notifs.map(n => (
-                    <div key={n.id} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', marginBottom: 6, fontSize: 12 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span><b>{n.cleaner_name}</b> ({n.phone})</span>
-                        <span style={{ color: '#2563eb', fontWeight: 600 }}>{n.channel ?? 'SMS'}</span>
+              {(jobDetail.notifs ?? []).length === 0
+                ? <div style={{ fontSize: 13, color: '#9ca3af' }}>발송 내역 없음 — 4단계에서 발송 후 새로고침하세요.</div>
+                : <>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#4a5568', marginBottom: 6 }}>발송 내역</div>
+                    {jobDetail.notifs.map(n => (
+                      <div key={n.id} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px', marginBottom: 8, fontSize: 12 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 700 }}>{n.cleaner_name} <span style={{ color: '#6b7280', fontWeight: 400 }}>({n.phone})</span></span>
+                          <span style={{ padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700,
+                            background: n.channel === 'FCM' ? '#eff6ff' : '#f0fdf4',
+                            color: n.channel === 'FCM' ? '#1d4ed8' : '#15803d',
+                            border: `1px solid ${n.channel === 'FCM' ? '#bfdbfe' : '#bbf7d0'}`,
+                          }}>{n.channel ?? 'SMS'}</span>
+                        </div>
+                        <div style={{ color: '#6b7280', marginTop: 4 }}>발송: {fmtDt(n.sent_at)}</div>
+                        {n.response
+                          ? <div style={{ color: '#dc2626', marginTop: 4, fontWeight: 600 }}>응답: {n.response}</div>
+                          : <div style={{ color: '#6b7280', marginTop: 4 }}>응답 대기 중</div>}
+                        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #f1f5f9' }}>
+                          <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>거절 링크 테스트:</div>
+                          <a href={`/api/d/${n.token}`} target="_blank" rel="noreferrer"
+                            style={{ fontSize: 11, color: '#7c3aed', fontFamily: "'DM Mono', monospace", wordBreak: 'break-all' }}>
+                            /api/d/{n.token}
+                          </a>
+                          <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 8 }}>(실제 SMS는 /d/{n.token})</span>
+                        </div>
                       </div>
-                      <div style={{ color: '#6b7280', marginTop: 4 }}>발송: {fmtDt(n.sent_at)}</div>
-                      {n.response && <div style={{ color: '#dc2626', marginTop: 2 }}>응답: {n.response}</div>}
-                      <div style={{ marginTop: 6 }}>
-                        <a href={`/api/d/${n.token}`} target="_blank" rel="noreferrer"
-                          style={{ fontSize: 11, color: '#7c3aed', fontFamily: "'DM Mono', monospace" }}>
-                          거절 링크 테스트 → /d/{n.token}
-                        </a>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </>
+              }
             </div>
           )}
-          <button onClick={() => { markDone(5); go(6); }} style={nextBtnStyle}>
+          <button onClick={() => { markDone(5); go(6); }} style={{ ...nextBtnStyle, marginTop: 14 }}>
             6단계(정리)로 이동
           </button>
         </div>
@@ -1239,9 +1296,6 @@ function TestFlowPanel() {
       {/* Step 6 */}
       <FlowCard step={6} current={current} done={done.has(6)} icon='🗑️' title='테스트 정리' sub='잡 취소 + 청소자 비활성화'>
         <div style={{ marginTop: 14 }}>
-          <div style={{ fontSize: 13, color: '#4a5568', marginBottom: 14 }}>
-            테스트 데이터를 정리합니다. 각 항목을 개별 처리할 수 있습니다.
-          </div>
           {err && current === 6 && <div style={errorBox}>{err}</div>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 14px' }}>
@@ -1249,11 +1303,14 @@ function TestFlowPanel() {
                 잡 취소 {cleanupDone.job && <span style={{ color: '#10b981' }}>✓ 완료</span>}
               </div>
               <div style={{ fontSize: 12, color: '#6b7280', margin: '4px 0 8px' }}>
-                {selectedJob ? `${selectedJob.property_name ?? 'paju201'} 청소 잡 → CANCELLED` : '선택된 잡 없음'}
+                {selectedJob
+                  ? `${selectedJob.property_name ?? testPropertyId} ${fmtDt(selectedJob.cleaning_start_at)} → CANCELLED`
+                  : '선택된 잡 없음 (3단계 건너뜀)'}
               </div>
-              <button onClick={cancelJob} disabled={loading || cleanupDone.job || !selectedJob} style={dangerBtnStyle}>
-                잡 취소
-              </button>
+              {cleanupDone.job
+                ? <div style={{ fontSize: 12, color: '#10b981' }}>✓ 취소 완료</div>
+                : <button onClick={cancelJob} disabled={loading || !selectedJob} style={dangerBtnStyle}>잡 취소</button>
+              }
             </div>
             <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 14px' }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>
@@ -1262,13 +1319,17 @@ function TestFlowPanel() {
               <div style={{ fontSize: 12, color: '#6b7280', margin: '4px 0 8px' }}>
                 {cleanerForm.name} ({cleanerForm.phone}) → active: false
               </div>
-              <button onClick={deactivateCleaner} disabled={loading || cleanupDone.cleaner || !cleanerId} style={dangerBtnStyle}>
-                청소자 비활성화
-              </button>
+              {cleanupDone.cleaner
+                ? <div style={{ fontSize: 12, color: '#10b981' }}>✓ 비활성화 완료</div>
+                : <button onClick={deactivateCleaner} disabled={loading || !cleanerId} style={dangerBtnStyle}>청소자 비활성화</button>
+              }
+            </div>
+            <div style={{ padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, color: '#6b7280' }}>
+              💡 잡 취소 시 Google Calendar 슬롯 재잠금은 <code>GOOGLE_REFRESH_TOKEN</code> 환경변수 설정 시 자동 처리됩니다. 미설정이면 잡만 DB에서 취소됩니다.
             </div>
           </div>
           {cleanupDone.job && cleanupDone.cleaner && (
-            <div style={resultBox}>🎉 모든 테스트 데이터 정리 완료!</div>
+            <div style={{ ...resultBox, marginTop: 14 }}>🎉 모든 테스트 데이터 정리 완료!</div>
           )}
         </div>
       </FlowCard>

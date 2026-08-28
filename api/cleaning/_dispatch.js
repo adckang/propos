@@ -160,7 +160,7 @@ export async function advanceJob(db, job) {
 /** 중복 발송 방지: 해당 날짜에 이미 해당 VIP가 다른 job의 NOTIFYING 상태인지 */
 async function getAvailableVip(db, job, tier) {
   const { rows: [cleaner] } = await db.query(
-    `SELECT * FROM cleaners WHERE tier=$1 AND active=true AND (fcm_token IS NOT NULL OR phone IS NOT NULL) LIMIT 1`,
+    `SELECT * FROM cleaners WHERE tier=$1 AND active=true AND (fcm_token IS NOT NULL OR phone IS NOT NULL) ORDER BY created_at ASC LIMIT 1`,
     [tier]
   );
   if (!cleaner) return null;
