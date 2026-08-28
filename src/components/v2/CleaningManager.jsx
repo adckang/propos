@@ -973,7 +973,7 @@ function TestFlowPanel() {
   };
   const minTestDate = new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10);
   const [testDate, setTestDate] = useState(defaultTestDate);
-  const [testPropertyId, setTestPropertyId] = useState('paju201');
+  const [testPropertyId, setTestPropertyId] = useState('prop_1786259455129');
   const [properties, setProperties] = useState([]);
   const [createResult, setCreateResult] = useState(null);
 
@@ -1147,7 +1147,7 @@ function TestFlowPanel() {
               <div style={labelStyle}>숙소</div>
               <select value={testPropertyId} onChange={e => setTestPropertyId(e.target.value)} style={inputStyle}>
                 {properties.length === 0
-                  ? <option value="paju201">파주201 (paju201)</option>
+                  ? <option value="prop_1786259455129">파주201</option>
                   : properties.map(p => <option key={p.property_id} value={p.property_id}>{p.name ?? p.property_id}</option>)
                 }
               </select>
