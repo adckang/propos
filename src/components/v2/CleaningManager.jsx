@@ -962,8 +962,12 @@ function TestFlowPanel() {
   const [err, setErr] = useState('');
 
   // 단계별 데이터
+  const [step1Mode, setStep1Mode] = useState('existing'); // 'existing' | 'new'
+  const [existingCleaners, setExistingCleaners] = useState([]);
+  const [selectedExistingId, setSelectedExistingId] = useState('');
   const [cleanerForm, setCleanerForm] = useState({ name: '', phone: '', email: 'nam5821@gmail.com', tier: 'VIP_1' });
   const [cleanerId, setCleanerId] = useState(null);
+  const [cleanerName, setCleanerName] = useState('');
 
   // Step 2: 수동 잡 생성
   const defaultTestDate = () => {
@@ -983,15 +987,32 @@ function TestFlowPanel() {
   const [jobDetail, setJobDetail] = useState(null);
   const [cleanupDone, setCleanupDone] = useState({ job: false, cleaner: false });
 
-  // 숙소 목록 초기 로드
+  // 숙소 목록 + 기존 청소자 초기 로드
   useEffect(() => {
     apiFetch('/api/cleaning/properties').then(setProperties).catch(() => {});
+    apiFetch('/api/cleaning/cleaners').then(list => {
+      setExistingCleaners(list.filter(c => c.active));
+      if (list.length > 0) {
+        const first = list.find(c => c.active) ?? list[0];
+        setSelectedExistingId(first.id);
+      }
+    }).catch(() => {});
   }, []);
 
   function markDone(step) { setDone(prev => new Set([...prev, step])); }
   function go(step) { setCurrent(step); setErr(''); }
 
-  // Step 1: 청소자 등록
+  // Step 1: 기존 청소자 선택
+  function doSelectExisting() {
+    const c = existingCleaners.find(x => x.id === selectedExistingId);
+    if (!c) { setErr('청소자를 선택해주세요'); return; }
+    setCleanerId(c.id);
+    setCleanerName(c.name ?? c.phone);
+    setErr('');
+    markDone(1); go(2);
+  }
+
+  // Step 1: 신규 청소자 등록
   async function doRegister() {
     if (!cleanerForm.phone) { setErr('전화번호를 입력하세요'); return; }
     if (!cleanerForm.name)  { setErr('이름을 입력하세요'); return; }
@@ -1001,6 +1022,7 @@ function TestFlowPanel() {
         method: 'POST', body: JSON.stringify(cleanerForm),
       });
       setCleanerId(res.id);
+      setCleanerName(cleanerForm.name);
       markDone(1); go(2);
     } catch(e) { setErr(e.message); }
     finally { setLoading(false); }
@@ -1104,35 +1126,78 @@ function TestFlowPanel() {
       </div>
 
       {/* Step 1 */}
-      <FlowCard step={1} current={current} done={done.has(1)} icon='👤' title='청소자 등록' sub='본인 정보로 테스트 청소자 등록'>
-        <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          {[
-            { label: '이름', key: 'name', placeholder: '홍길동' },
-            { label: '전화번호', key: 'phone', placeholder: '010-1234-5678' },
-            { label: '이메일', key: 'email', placeholder: 'you@gmail.com' },
-          ].map(f => (
-            <div key={f.key} style={f.key === 'email' ? { gridColumn: '1/-1' } : {}}>
-              <div style={labelStyle}>{f.label}</div>
-              <input value={cleanerForm[f.key]} onChange={e => setCleanerForm(p => ({ ...p, [f.key]: e.target.value }))}
-                placeholder={f.placeholder} style={inputStyle} />
-            </div>
+      <FlowCard step={1} current={current} done={done.has(1)} icon='👤' title='청소자 선택' sub='테스트에 사용할 청소자를 선택하거나 신규 등록하세요'>
+        {/* 모드 토글 */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 14, marginBottom: 16 }}>
+          {[{ v: 'existing', label: '기존 청소자 선택' }, { v: 'new', label: '신규 등록' }].map(({ v, label }) => (
+            <button key={v} onClick={() => { setStep1Mode(v); setErr(''); }}
+              style={{ flex: 1, padding: '8px 0', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                background: step1Mode === v ? '#2563eb' : '#fff',
+                color: step1Mode === v ? '#fff' : '#374151',
+                border: `1.5px solid ${step1Mode === v ? '#1d4ed8' : '#d1d5db'}` }}>
+              {label}
+            </button>
           ))}
+        </div>
+
+        {step1Mode === 'existing' ? (
           <div>
-            <div style={labelStyle}>티어</div>
-            <select value={cleanerForm.tier} onChange={e => setCleanerForm(p => ({ ...p, tier: e.target.value }))} style={inputStyle}>
-              {TIERS.map(t => <option key={t} value={t}>{TIER_LABELS[t]}</option>)}
-            </select>
+            {existingCleaners.length === 0
+              ? <div style={{ fontSize: 13, color: '#9ca3af', padding: '12px 0' }}>활성 청소자가 없습니다. 신규 등록 탭을 사용하세요.</div>
+              : <>
+                  <div style={labelStyle}>청소자</div>
+                  <select value={selectedExistingId} onChange={e => setSelectedExistingId(e.target.value)} style={{ ...inputStyle, marginBottom: 10 }}>
+                    {existingCleaners.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name ?? '(이름없음)'} · {c.phone} · {TIER_LABELS[c.tier] ?? c.tier}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedExistingId && (() => {
+                    const c = existingCleaners.find(x => x.id === selectedExistingId);
+                    return c ? (
+                      <div style={{ padding: '8px 12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, fontSize: 12, color: '#166534', marginBottom: 10 }}>
+                        이메일: {c.email ?? '미설정'} · 상태: {c.active ? '활성' : '비활성'}
+                      </div>
+                    ) : null;
+                  })()}
+                  {err && current === 1 && <div style={errorBox}>{err}</div>}
+                  <button onClick={doSelectExisting} style={actionBtnStyle}>이 청소자로 테스트 시작</button>
+                </>
+            }
           </div>
-        </div>
-        <div style={{ marginTop: 10, padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, fontSize: 12, color: '#92400e' }}>
-          💡 같은 티어에 기존 청소자가 있으면 <b>먼저 등록된 청소자</b>에게 우선 발송됩니다. 본인만 테스트하려면 해당 티어를 비워두세요.
-          {cleanerForm.tier !== 'BULK' && ' 비활성화 → 재활성화로 임시 제외 가능.'}
-        </div>
-        {err && current === 1 && <div style={errorBox}>{err}</div>}
-        <button onClick={doRegister} disabled={loading} style={actionBtnStyle}>
-          {loading ? '등록 중...' : '청소자 등록'}
-        </button>
-        {cleanerId && <div style={resultBox}>✅ 등록 완료 — ID: <code>{cleanerId}</code></div>}
+        ) : (
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {[
+                { label: '이름', key: 'name', placeholder: '홍길동' },
+                { label: '전화번호', key: 'phone', placeholder: '010-1234-5678' },
+                { label: '이메일', key: 'email', placeholder: 'you@gmail.com' },
+              ].map(f => (
+                <div key={f.key} style={f.key === 'email' ? { gridColumn: '1/-1' } : {}}>
+                  <div style={labelStyle}>{f.label}</div>
+                  <input value={cleanerForm[f.key]} onChange={e => setCleanerForm(p => ({ ...p, [f.key]: e.target.value }))}
+                    placeholder={f.placeholder} style={inputStyle} />
+                </div>
+              ))}
+              <div>
+                <div style={labelStyle}>티어</div>
+                <select value={cleanerForm.tier} onChange={e => setCleanerForm(p => ({ ...p, tier: e.target.value }))} style={inputStyle}>
+                  {TIERS.map(t => <option key={t} value={t}>{TIER_LABELS[t]}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ marginTop: 10, padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, fontSize: 12, color: '#92400e' }}>
+              💡 같은 티어에 기존 청소자가 있으면 <b>먼저 등록된 청소자</b>에게 우선 발송됩니다.
+              {cleanerForm.tier !== 'BULK' && ' 비활성화 → 재활성화로 임시 제외 가능.'}
+            </div>
+            {err && current === 1 && <div style={errorBox}>{err}</div>}
+            <button onClick={doRegister} disabled={loading} style={actionBtnStyle}>
+              {loading ? '등록 중...' : '청소자 등록'}
+            </button>
+          </div>
+        )}
+        {cleanerId && <div style={resultBox}>✅ 선택 완료 — {cleanerName} <code style={{ fontSize: 11, color: '#6b7280' }}>({cleanerId})</code></div>}
       </FlowCard>
 
       {/* Step 2 */}
@@ -1317,7 +1382,7 @@ function TestFlowPanel() {
                 청소자 비활성화 {cleanupDone.cleaner && <span style={{ color: '#10b981' }}>✓ 완료</span>}
               </div>
               <div style={{ fontSize: 12, color: '#6b7280', margin: '4px 0 8px' }}>
-                {cleanerForm.name} ({cleanerForm.phone}) → active: false
+                {cleanerName || cleanerForm.name} → active: false
               </div>
               {cleanupDone.cleaner
                 ? <div style={{ fontSize: 12, color: '#10b981' }}>✓ 비활성화 완료</div>
