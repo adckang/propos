@@ -41,6 +41,11 @@ export async function sendPush(fcmToken, { title, body, data = {} }) {
     return { success: true };
   } catch (err) {
     const code = err?.errorInfo?.code ?? err?.code ?? "UNKNOWN";
+    console.error("[push] FCM 발송 실패:", {
+      code,
+      message: err?.message,
+      errorInfo: err?.errorInfo,
+    });
     // FCM v1 오류 코드 정규화
     const errorCode = code.includes("registration-token-not-registered")
       ? "UNREGISTERED"
