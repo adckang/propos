@@ -142,6 +142,7 @@ export async function advanceJob(db, job) {
 
   const notif = await createNotif(db, { jobId: job.id, cleanerId: cleaner.id, tier });
   const calendarUrl = propCfg?.google_calendar_booking_url ?? `${BASE_URL}/c/${job.property_id}`;
+  console.log(`[dispatch] calendarUrl=${calendarUrl} (propCfg.url=${propCfg?.google_calendar_booking_url ?? "null"})`);
   const dt = fmtDate(job.cleaning_start_at);
   await notify(db, cleaner, {
     title: "[PROPOS] 청소 요청",

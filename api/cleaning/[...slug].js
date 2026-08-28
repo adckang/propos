@@ -127,7 +127,7 @@ async function upsertProperty(req, res) {
   const { rows } = await db.query(
     `INSERT INTO property_cleaning_config (property_id,name,checkout_hour,cleaning_duration_hours,google_calendar_id,google_calendar_booking_url,host_phone,ical_url,updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
-     ON CONFLICT (property_id) DO UPDATE SET name=$2,checkout_hour=$3,cleaning_duration_hours=$4,google_calendar_id=$5,google_calendar_booking_url=$6,host_phone=$7,ical_url=COALESCE($8,property_cleaning_config.ical_url),updated_at=NOW()
+     ON CONFLICT (property_id) DO UPDATE SET name=$2,checkout_hour=$3,cleaning_duration_hours=$4,google_calendar_id=COALESCE($5,property_cleaning_config.google_calendar_id),google_calendar_booking_url=COALESCE($6,property_cleaning_config.google_calendar_booking_url),host_phone=COALESCE($7,property_cleaning_config.host_phone),ical_url=COALESCE($8,property_cleaning_config.ical_url),updated_at=NOW()
      RETURNING *`,
     [property_id, name, checkout_hour ?? 11, cleaning_duration_hours ?? 2.5, google_calendar_id ?? null, google_calendar_booking_url ?? null, host_phone ?? null, ical_url ?? null]
   );
