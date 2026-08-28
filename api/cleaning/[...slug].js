@@ -692,6 +692,19 @@ export default async function handler(req, res) {
     if (resource === "jobs" && id && req.method === "PATCH") {
       const b = await readBody(req);
       if (b.status === "CANCELLED") return await cancelJob(req, res, id);
+      if (b.status === "PENDING" && b._test_reset) {
+        // 테스트 전용: 잡을 PENDING으로 초기화 + 발송 내역 삭제
+        await db.query(`DELETE FROM cleaning_notifs WHERE job_id=$1`, [id]);
+        const { rows } = await db.query(
+          `UPDATE cleaning_jobs
+           SET status='PENDING', assigned_cleaner_id=NULL,
+               dispatch_after=NOW(), updated_at=NOW()
+           WHERE id=$1 RETURNING id, status`,
+          [id]
+        );
+        if (!rows.length) return sendJson(res, 404, { error: "잡 없음" });
+        return sendJson(res, 200, { ok: true, job: rows[0] });
+      }
     }
     if (resource === "bootstrap") return await bootstrapBlockers(req, res);
     if (resource === "ical-sync")    return await handleIcalSync(req, res);

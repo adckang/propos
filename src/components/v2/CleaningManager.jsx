@@ -1061,6 +1061,24 @@ function TestFlowPanel() {
     finally { setLoading(false); }
   }
 
+  // Step 4: 잡 상태 초기화 (테스트 재발송용)
+  async function doResetJob() {
+    if (!selectedJob) return;
+    setLoading(true); setErr('');
+    try {
+      await apiFetch(`/api/cleaning/jobs/${selectedJob.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'PENDING', _test_reset: true }),
+      });
+      // 선택된 잡 상태 갱신
+      const updated = await apiFetch(`/api/cleaning/jobs/${selectedJob.id}`);
+      setSelectedJob(updated);
+      setDispatchResult(null);
+      setJobDetail(null);
+    } catch(e) { setErr(e.message); }
+    finally { setLoading(false); }
+  }
+
   // Step 4: 알림 발송
   async function doDispatch() {
     if (!selectedJob) return;
@@ -1295,10 +1313,17 @@ function TestFlowPanel() {
           {err && current === 4 && <div style={errorBox}>{err}</div>}
           {selectedJob?.status !== 'PENDING'
             ? <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#92400e', marginTop: 4 }}>
-                이미 <b>{selectedJob?.status}</b> 상태입니다 — 이전에 발송됐거나 자동 발송된 상태입니다.
-                <button onClick={() => { markDone(4); go(5); }} style={{ ...nextBtnStyle, marginTop: 8, display: 'block' }}>
-                  5단계(결과 확인)로 바로 이동
-                </button>
+                현재 <b>{STATUS_META[selectedJob?.status]?.label ?? selectedJob?.status}</b> 상태입니다.
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <button onClick={doResetJob} disabled={loading}
+                    style={{ flex: 1, padding: '9px 0', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                      background: '#fff', color: '#dc2626', border: '1.5px solid #fca5a5' }}>
+                    {loading ? '초기화 중...' : '🔄 PENDING 초기화 후 재발송'}
+                  </button>
+                  <button onClick={() => { markDone(4); go(5); }} style={{ ...nextBtnStyle, marginTop: 0, flex: 1 }}>
+                    결과만 확인 →
+                  </button>
+                </div>
               </div>
             : <>
                 <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>
