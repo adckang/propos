@@ -1224,9 +1224,16 @@ function TestFlowPanel() {
             </div>
           </div>
           {err && current === 2 && <div style={errorBox}>{err}</div>}
-          <button onClick={doCreateJob} disabled={loading} style={actionBtnStyle}>
-            {loading ? '생성 중...' : '🗓️ 테스트 잡 생성'}
-          </button>
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <button onClick={doCreateJob} disabled={loading} style={{ ...actionBtnStyle, flex: 1, marginTop: 0 }}>
+              {loading ? '생성 중...' : '🗓️ 테스트 잡 생성'}
+            </button>
+            <button onClick={() => { markDone(2); go(3); }}
+              style={{ padding: '10px 16px', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                background: '#fff', color: '#6b7280', border: '1.5px solid #d1d5db', whiteSpace: 'nowrap' }}>
+              기존 잡 사용 →
+            </button>
+          </div>
           {createResult && createResult.created > 0 && (
             <div style={resultBox}>
               ✅ PENDING 잡 생성 완료 — {createResult.created}건 (MONTHLY_BATCH)<br/>
