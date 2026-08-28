@@ -133,6 +133,38 @@ async function handleTokenUpdate(req, res) {
   return sendJson(res, 200, { ok: true });
 }
 
+/**
+ * GET  /api/workers/profile?fcm_token=...
+ * PATCH /api/workers/profile  { fcm_token, name, email }
+ */
+async function handleProfile(req, res) {
+  if (req.method === "GET") {
+    const fcm_token = req.query?.fcm_token;
+    if (!fcm_token) return sendJson(res, 400, { error: "fcm_token 필수" });
+    const { rows } = await db.query(
+      `SELECT id, name, phone, email, tier, active, fcm_status FROM cleaners WHERE fcm_token=$1`,
+      [fcm_token]
+    );
+    if (!rows.length) return sendJson(res, 404, { error: "등록되지 않은 토큰" });
+    return sendJson(res, 200, rows[0]);
+  }
+  if (req.method === "PATCH") {
+    const { fcm_token, name, email } = await readBody(req);
+    if (!fcm_token) return sendJson(res, 400, { error: "fcm_token 필수" });
+    const { rows } = await db.query(
+      `UPDATE cleaners
+       SET name  = COALESCE($2, name),
+           email = COALESCE($3, email)
+       WHERE fcm_token = $1
+       RETURNING id, name, phone, email, tier, active`,
+      [fcm_token, name ?? null, email ? email.toLowerCase().trim() : null]
+    );
+    if (!rows.length) return sendJson(res, 404, { error: "등록되지 않은 토큰" });
+    return sendJson(res, 200, { ok: true, worker: rows[0] });
+  }
+  return sendJson(res, 405, { error: "GET or PATCH only" });
+}
+
 export default async function handler(req, res) {
   const slug = parseSlug(req);
   const [resource] = slug;
@@ -141,6 +173,7 @@ export default async function handler(req, res) {
     if (resource === "register")  return await handleRegister(req, res);
     if (resource === "heartbeat") return await handleHeartbeat(req, res);
     if (resource === "token")     return await handleTokenUpdate(req, res);
+    if (resource === "profile")   return await handleProfile(req, res);
 
     return sendJson(res, 404, { error: "Not found" });
   } catch (err) {
