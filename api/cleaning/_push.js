@@ -34,7 +34,7 @@ export async function sendPush(fcmToken, { title, body, data = {} }) {
       ),
       android: {
         priority: "high",
-        notification: { channelId: "propos_jobs", sound: "default" },
+        notification: { sound: "default" },
       },
     });
 
