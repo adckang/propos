@@ -149,18 +149,25 @@ async function handleProfile(req, res) {
     return sendJson(res, 200, rows[0]);
   }
   if (req.method === "PATCH") {
-    const { fcm_token, name, email } = await readBody(req);
+    const { fcm_token, name, email, phone } = await readBody(req);
     if (!fcm_token) return sendJson(res, 400, { error: "fcm_token 필수" });
-    const { rows } = await db.query(
-      `UPDATE cleaners
-       SET name  = COALESCE($2, name),
-           email = COALESCE($3, email)
-       WHERE fcm_token = $1
-       RETURNING id, name, phone, email, tier, active`,
-      [fcm_token, name ?? null, email ? email.toLowerCase().trim() : null]
-    );
-    if (!rows.length) return sendJson(res, 404, { error: "등록되지 않은 토큰" });
-    return sendJson(res, 200, { ok: true, worker: rows[0] });
+    const normalizedPhone = phone ? normalizePhone(phone) : null;
+    try {
+      const { rows } = await db.query(
+        `UPDATE cleaners
+         SET name  = COALESCE($2, name),
+             email = COALESCE($3, email),
+             phone = COALESCE($4, phone)
+         WHERE fcm_token = $1
+         RETURNING id, name, phone, email, tier, active`,
+        [fcm_token, name ?? null, email ? email.toLowerCase().trim() : null, normalizedPhone]
+      );
+      if (!rows.length) return sendJson(res, 404, { error: "등록되지 않은 토큰" });
+      return sendJson(res, 200, { ok: true, worker: rows[0] });
+    } catch (err) {
+      if (err.code === "23505") return sendJson(res, 409, { error: "이미 사용 중인 전화번호입니다" });
+      throw err;
+    }
   }
   return sendJson(res, 405, { error: "GET or PATCH only" });
 }
