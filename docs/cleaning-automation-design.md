@@ -462,6 +462,20 @@ extendedProperties.shared["goo.createdByAvailId"] = "6l42efisiehi77mscb5qoh295f"
 현재 `bnb.paju@gmail.com` 계정의 `createdByAvailId`: `6l42efisiehi77mscb5qoh295f`
 → `api/cleaning/_calendar.js`의 `AVAIL_ID` 상수에 하드코딩됨.
 
+#### 파주201 Appointment Schedule 식별 정보 (2026-08-29 확정)
+
+| 항목 | 값 |
+|------|---|
+| 예약 링크 (외부 공유용) | `https://calendar.app.google/tbxyr1XbfZTToEDc7` |
+| 전체 Schedule ID | `AcZssZ3D-FLYSg2hqbga2_LD_DwwE9luYHQW8onCGj0BCwUf9vNtG8wuHbFgaHbaRdYk2sVUu_rdulYg` |
+| 인라인 삽입 URL | `https://calendar.google.com/calendar/appointments/schedules/{Schedule ID}?gv=true` |
+| 호스트 관리 뷰 URL | `https://calendar.app.google/gCuaeHdZUeCDwVUN7` |
+| 이전 URL (현재 미사용) | `https://calendar.app.google/Zy9kH7dAaiS5X3RR7` |
+
+> **URL이 두 개인 이유**: 이전 세션에서 설정한 `Zy9kH7dAaiS5X3RR7`와 이번에 공유 옵션에서 확인한 `tbxyr1XbfZTToEDc7`가 다름. Google은 Appointment Schedule마다 고유 URL을 발급하므로, 스케줄을 새로 만들었거나 다른 스케줄이 존재하는 것. 현재 embed 코드로 확인된 `tbxyr1XbfZTToEDc7`가 활성 스케줄.
+>
+> `gCuaeHdZUeCDwVUN7`는 오너 로그인 상태에서 보이는 관리 뷰 URL (외부 예약자에게는 노출 안 됨).
+
 ---
 
 ### 숙소당 초기 설정 (수동, 1회)
