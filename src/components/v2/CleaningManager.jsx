@@ -546,7 +546,8 @@ function JobsPanel() {
       const qs = statusFilter
         ? `?status=${encodeURIComponent(statusFilter)}`
         : '?limit=100';
-      setJobs(await apiFetch(`/api/cleaning/jobs${qs}`));
+      const raw = await apiFetch(`/api/cleaning/jobs${qs}`);
+      setJobs([...raw].sort((a, b) => new Date(a.cleaning_start_at) - new Date(b.cleaning_start_at)));
     } catch (e) {
       Toast.show('청소 일정 로드 실패: ' + e.message, 'e');
     } finally {
@@ -628,7 +629,7 @@ function JobsPanel() {
             const meta = STATUS_META[j.status] ?? { label: j.status, color: '#6b7280', bg: '#f3f4f6' };
             const startDate = new Date(j.cleaning_start_at);
             const dateStr = startDate.toLocaleDateString('ko-KR', {
-              month: 'numeric', day: 'numeric', weekday: 'short',
+              year: 'numeric', month: 'numeric', day: 'numeric', weekday: 'short',
             });
             const timeStr = startDate.toLocaleTimeString('ko-KR', {
               hour: '2-digit', minute: '2-digit',
@@ -1047,7 +1048,7 @@ function TestFlowPanel() {
         return;
       }
       const jobList = await apiFetch('/api/cleaning/jobs?status=PENDING');
-      setJobs(jobList);
+      setJobs([...jobList].sort((a, b) => new Date(a.cleaning_start_at) - new Date(b.cleaning_start_at)));
       markDone(2); go(3);
     } catch(e) { setErr(e.message); }
     finally { setLoading(false); }
@@ -1058,7 +1059,7 @@ function TestFlowPanel() {
     setLoading(true); setErr('');
     try {
       const jobList = await apiFetch('/api/cleaning/jobs');
-      setJobs(jobList.filter(j => !['ASSIGNED','COMPLETED','CANCELLED'].includes(j.status)));
+      setJobs([...jobList].filter(j => !['ASSIGNED','COMPLETED','CANCELLED'].includes(j.status)).sort((a, b) => new Date(a.cleaning_start_at) - new Date(b.cleaning_start_at)));
     } catch(e) { setErr(e.message); }
     finally { setLoading(false); }
   }
