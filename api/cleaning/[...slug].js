@@ -359,10 +359,10 @@ async function handleCalendarWebhook(req, res) {
     const { rows: [cleaner] } = await db.query(`SELECT * FROM cleaners WHERE email=$1`, [attendeeEmail]);
     const { rows: [job] } = await db.query(
       `SELECT * FROM cleaning_jobs WHERE property_id=$1
-       AND cleaning_start_at::date = $2::date
+       AND checkout_at::text LIKE $2
        AND status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED')
        LIMIT 1`,
-      [propCfg.property_id, eventDate]
+      [propCfg.property_id, `${eventDate}%`]
     );
     if (!job) continue;
     const { rows: updated } = await db.query(
@@ -806,10 +806,11 @@ async function handleCalendarScan(req, res) {
     if (date && eventDate !== date) continue;
     const { rows: [cleaner] } = await db.query(`SELECT * FROM cleaners WHERE email=$1`, [attendeeEmail]);
     const { rows: [job] } = await db.query(
-      `SELECT * FROM cleaning_jobs WHERE property_id=$1 AND cleaning_start_at::date=$2::date
+      `SELECT * FROM cleaning_jobs WHERE property_id=$1
+       AND checkout_at::text LIKE $2
        AND status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED')
        LIMIT 1`,
-      [propCfg.property_id, eventDate]
+      [propCfg.property_id, `${eventDate}%`]
     );
     if (!job) { results.push({ eventDate, attendeeEmail, result: "job 없음" }); continue; }
     const { rows: updated } = await db.query(
