@@ -537,7 +537,7 @@ async function handleIcalSync(req, res) {
 async function bootstrapBlockers(req, res) {
   if (req.method !== "POST") return res.status(405).end();
   const b = await readBody(req);
-  const { property_id, month } = b; // month: "YYYY-MM" (없으면 현재 달)
+  const { property_id, month, force } = b; // month: "YYYY-MM" (없으면 현재 달)
 
   const query = property_id
     ? `SELECT * FROM property_cleaning_config WHERE property_id=$1 AND google_calendar_id IS NOT NULL`
@@ -564,6 +564,15 @@ async function bootstrapBlockers(req, res) {
   let gToken;
   try { gToken = await getGoogleToken(); }
   catch (e) { return sendJson(res, 500, { error: `Google OAuth 실패: ${e.message}` }); }
+
+  // force: 기존 DB 레코드 삭제 후 재생성 (google_calendar_id 미설정 상태로 생성된 경우)
+  if (force && property_id) {
+    const monthPrefix = targetDates[0].slice(0, 7);
+    await db.query(
+      `DELETE FROM property_calendar_blockers WHERE property_id=$1 AND block_date::text LIKE $2`,
+      [property_id, `${monthPrefix}%`]
+    );
+  }
 
   let created = 0, skipped = 0;
   for (const prop of properties) {
