@@ -566,9 +566,19 @@ async function bootstrapBlockers(req, res) {
   try { gToken = await getGoogleToken(); }
   catch (e) { return sendJson(res, 500, { error: `Google OAuth 실패: ${e.message}` }); }
 
-  // force: 기존 DB 레코드 삭제 후 재생성 (google_calendar_id 미설정 상태로 생성된 경우)
+  // force: Google Calendar 이벤트 삭제 → DB 레코드 삭제 → 재생성
   if (force && property_id) {
     const monthPrefix = targetDates[0].slice(0, 7);
+    const { rows: oldBlockers } = await db.query(
+      `SELECT event_id, property_id FROM property_calendar_blockers
+       WHERE property_id=$1 AND block_date::text LIKE $2 AND event_id IS NOT NULL`,
+      [property_id, `${monthPrefix}%`]
+    );
+    for (const prop of properties) {
+      for (const b of oldBlockers) {
+        await deleteBlockerEvent(prop.google_calendar_id, b.event_id, gToken).catch(() => {});
+      }
+    }
     await db.query(
       `DELETE FROM property_calendar_blockers WHERE property_id=$1 AND block_date::text LIKE $2`,
       [property_id, `${monthPrefix}%`]
@@ -688,6 +698,54 @@ async function registerCalendarWatch(req, res) {
   return sendJson(res, 200, { ok: true, channelId: result.id, expiration: result.expiration, webhookUrl });
 }
 
+// ── 고아 블로커 이벤트 정리 ──────────────────────────────────────
+// DB에 없는 Google Calendar 블로커 이벤트(propos=blocker) 삭제.
+// force bootstrap 이전에 생성된 이벤트가 남아있을 때 사용.
+
+async function handleBlockerCleanup(req, res) {
+  if (req.method !== "POST") return res.status(405).end();
+  const { calendar_id, month } = await readBody(req);
+  if (!calendar_id) return sendJson(res, 400, { error: "calendar_id 필수" });
+  let gToken;
+  try { gToken = await getGoogleToken(); }
+  catch (e) { return sendJson(res, 500, { error: `Google OAuth 실패: ${e.message}` }); }
+
+  const ym = month && /^\d{4}-\d{2}$/.test(month) ? month : null;
+  const timeMin = ym ? `${ym}-01T00:00:00+09:00` : null;
+  const [y, m] = ym ? ym.split("-").map(Number) : [null, null];
+  const lastDay = ym ? new Date(Date.UTC(y, m, 0)).getUTCDate() : null;
+  const timeMax = ym ? `${ym}-${String(lastDay).padStart(2, "0")}T23:59:59+09:00` : null;
+
+  const params = new URLSearchParams({
+    privateExtendedProperty: "propos=blocker",
+    maxResults: "250",
+    singleEvents: "true",
+    ...(timeMin && { timeMin, timeMax }),
+  });
+
+  const r = await fetch(
+    `${CALENDAR_API}/calendars/${encodeURIComponent(calendar_id)}/events?${params}`,
+    { headers: { Authorization: `Bearer ${gToken}` } }
+  );
+  if (!r.ok) return sendJson(res, 502, { error: "이벤트 목록 조회 실패", detail: await r.text() });
+  const { items = [] } = await r.json();
+
+  // DB에 있는 event_id 목록 조회
+  const { rows: dbBlockers } = await db.query(
+    `SELECT event_id FROM property_calendar_blockers WHERE event_id IS NOT NULL`
+  );
+  const dbIds = new Set(dbBlockers.map((b) => b.event_id));
+
+  // DB에 없는 것 = 고아 이벤트 → 삭제
+  const orphans = items.filter((ev) => !dbIds.has(ev.id));
+  let deleted = 0;
+  for (const ev of orphans) {
+    await deleteBlockerEvent(calendar_id, ev.id, gToken).catch(() => {});
+    deleted++;
+  }
+  return sendJson(res, 200, { ok: true, scanned: items.length, deleted, dbTracked: items.length - orphans.length });
+}
+
 // ── Gmail Watch 등록 ─────────────────────────────────────────
 
 async function registerGmailWatch(req, res) {
@@ -762,6 +820,7 @@ export default async function handler(req, res) {
     if (resource === "ical-sync")    return await handleIcalSync(req, res);
     if (resource === "gmail-watch")      return await registerGmailWatch(req, res);
     if (resource === "calendar-watch")   return await registerCalendarWatch(req, res);
+    if (resource === "blocker-cleanup")  return await handleBlockerCleanup(req, res);
     if (resource === "c") {
       const propId = id ?? req.query?.property_id;
       if (propId) return await handleConfirmRedirect(req, res, propId);
