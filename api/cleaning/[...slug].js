@@ -751,6 +751,77 @@ async function handleBlockerCleanup(req, res) {
   return sendJson(res, 200, { ok: true, scanned: items.length, deleted, dbTracked: items.length - orphans.length });
 }
 
+// ── 캘린더 수동 스캔 (웹훅 미수신 시 복구용) ──────────────────────────
+// GET: 이벤트 목록만 반환 (디버그). POST: 매칭해서 ASSIGNED 업데이트.
+
+async function handleCalendarScan(req, res) {
+  const { calendar_id, date, hours = 72 } = req.method === "POST"
+    ? await readBody(req) : req.query ?? {};
+  if (!calendar_id) return sendJson(res, 400, { error: "calendar_id 필수" });
+  let gToken;
+  try { gToken = await getGoogleToken(); }
+  catch (e) { return sendJson(res, 500, { error: `Google OAuth 실패: ${e.message}` }); }
+
+  const since = new Date(Date.now() - Number(hours) * 3_600_000).toISOString();
+  const params = new URLSearchParams({
+    updatedMin: since, singleEvents: "true",
+    orderBy: "updated", showDeleted: "false", maxResults: "20",
+  });
+  const r = await fetch(
+    `${CALENDAR_API}/calendars/${encodeURIComponent(calendar_id)}/events?${params}`,
+    { headers: { Authorization: `Bearer ${gToken}` } }
+  );
+  if (!r.ok) return sendJson(res, 502, { error: "캘린더 조회 실패", detail: await r.text() });
+  const { items = [] } = await r.json();
+
+  const filtered = items.filter(
+    (ev) => ev.extendedProperties?.private?.propos !== "blocker" && ev.attendees?.length
+  );
+
+  if (req.method !== "POST") {
+    return sendJson(res, 200, { total: items.length, bookings: filtered.map((ev) => ({
+      id: ev.id, summary: ev.summary,
+      start: ev.start?.dateTime ?? ev.start?.date,
+      attendees: ev.attendees?.map((a) => a.email),
+      extPrivate: ev.extendedProperties?.private,
+    })) });
+  }
+
+  // POST: ASSIGNED 업데이트
+  const { rows: [propCfg] } = await db.query(
+    `SELECT * FROM property_cleaning_config WHERE google_calendar_id=$1`, [calendar_id]
+  );
+  if (!propCfg) return sendJson(res, 404, { error: "숙소 미등록" });
+
+  const results = [];
+  for (const evt of filtered) {
+    const attendeeEmail = evt.attendees[0].email.toLowerCase();
+    const eventDate = (evt.start?.dateTime ?? evt.start?.date ?? "").slice(0, 10);
+    if (date && eventDate !== date) continue;
+    const { rows: [cleaner] } = await db.query(`SELECT * FROM cleaners WHERE email=$1`, [attendeeEmail]);
+    const { rows: [job] } = await db.query(
+      `SELECT * FROM cleaning_jobs WHERE property_id=$1 AND cleaning_start_at::date=$2::date
+       AND status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED')
+       LIMIT 1`,
+      [propCfg.property_id, eventDate]
+    );
+    if (!job) { results.push({ eventDate, attendeeEmail, result: "job 없음" }); continue; }
+    const { rows: updated } = await db.query(
+      `UPDATE cleaning_jobs SET status='ASSIGNED',assigned_cleaner_id=$1,google_event_id=$2,updated_at=NOW()
+       WHERE id=$3 AND status!='ASSIGNED' RETURNING id`,
+      [cleaner?.id ?? null, evt.id, job.id]
+    );
+    if (updated.length) {
+      results.push({ eventDate, attendeeEmail, cleaner: cleaner?.name ?? "미등록", result: "ASSIGNED" });
+      if (!cleaner) await postSlack(`[PROPOS] ⚠️ 미등록 청소담당자: ${attendeeEmail}`);
+      else await postSlack(`[PROPOS] ✅ ${propCfg.name} ${eventDate} 청소 배정 (${cleaner.name})`);
+    } else {
+      results.push({ eventDate, attendeeEmail, result: "이미 ASSIGNED" });
+    }
+  }
+  return sendJson(res, 200, { ok: true, results });
+}
+
 // ── Gmail Watch 등록 ─────────────────────────────────────────
 
 async function registerGmailWatch(req, res) {
@@ -826,6 +897,7 @@ export default async function handler(req, res) {
     if (resource === "gmail-watch")      return await registerGmailWatch(req, res);
     if (resource === "calendar-watch")   return await registerCalendarWatch(req, res);
     if (resource === "blocker-cleanup")  return await handleBlockerCleanup(req, res);
+    if (resource === "calendar-scan")    return await handleCalendarScan(req, res);
     if (resource === "c") {
       const propId = id ?? req.query?.property_id;
       if (propId) return await handleConfirmRedirect(req, res, propId);
