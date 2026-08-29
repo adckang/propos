@@ -17,7 +17,7 @@ export async function getGoogleToken() {
     body: new URLSearchParams({
       client_id:     process.env.GOOGLE_CLIENT_ID,
       client_secret: process.env.GOOGLE_CLIENT_SECRET,
-      refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+      refresh_token: process.env.GOOGLE_CALENDAR_REFRESH_TOKEN ?? process.env.GOOGLE_REFRESH_TOKEN,
       grant_type:    "refresh_token",
     }),
   });

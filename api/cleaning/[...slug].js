@@ -575,6 +575,7 @@ async function bootstrapBlockers(req, res) {
   }
 
   let created = 0, skipped = 0;
+  const errors = [];
   for (const prop of properties) {
     for (const date of targetDates) {
       const { rows: existing } = await db.query(
@@ -596,11 +597,12 @@ async function bootstrapBlockers(req, res) {
         created++;
       } catch (e) {
         console.error(`[bootstrap] 블로커 생성 실패 (${prop.property_id}/${date}):`, e.message);
+        if (!errors.length) errors.push(e.message); // 첫 번째 에러만 응답에 포함
         skipped++;
       }
     }
   }
-  return sendJson(res, 200, { ok: true, created, skipped });
+  return sendJson(res, 200, { ok: !errors.length, created, skipped, ...(errors.length ? { firstError: errors[0] } : {}) });
 }
 
 // ── 예약 취소: 상태 CANCELLED + 블로커 재생성 ────────────────────
