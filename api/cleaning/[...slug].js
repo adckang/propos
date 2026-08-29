@@ -472,17 +472,18 @@ async function syncAllPropertiesIcal(db, filterPropertyId = null) {
          cleaning_start_at.toISOString(), cleaning_end_at.toISOString(), source, dispatchAfter]
       );
 
-      if (rowCount > 0 && source === "SHORT_NOTICE") {
-        // 블로커 삭제 → 슬롯 오픈
-        const { rows: blocker } = await db.query(
-          `DELETE FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2 RETURNING event_id`,
-          [prop.property_id, date]
+      // 체크아웃 날짜 = 항상 블로커 삭제 (job 신규 여부·source 무관)
+      const { rows: blocker } = await db.query(
+        `DELETE FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2 RETURNING event_id`,
+        [prop.property_id, date]
+      );
+      if (blocker.length && gToken && prop.google_calendar_id) {
+        await deleteBlockerEvent(prop.google_calendar_id, blocker[0].event_id, gToken).catch(
+          (e) => console.error(`[syncAllIcal] 블로커 삭제 실패 (${prop.property_id}/${date}):`, e.message)
         );
-        if (blocker.length && gToken && prop.google_calendar_id) {
-          await deleteBlockerEvent(prop.google_calendar_id, blocker[0].event_id, gToken).catch(
-            (e) => console.error(`[syncAllIcal] 블로커 삭제 실패 (${prop.property_id}/${date}):`, e.message)
-          );
-        }
+      }
+
+      if (rowCount > 0 && source === "SHORT_NOTICE") {
         // 즉시 발동 (followup 크론 대기 없이)
         const { rows: [newJob] } = await db.query(
           `SELECT * FROM cleaning_jobs WHERE property_id=$1 AND checkout_at=$2`,
