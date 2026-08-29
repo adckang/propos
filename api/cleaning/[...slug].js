@@ -885,6 +885,15 @@ export default async function handler(req, res) {
     if (resource === "jobs" && id && req.method === "PATCH") {
       const b = await readBody(req);
       if (b.status === "CANCELLED") return await cancelJob(req, res, id);
+      if (b.status === "ASSIGNED") {
+        const { rows } = await db.query(
+          `UPDATE cleaning_jobs SET status='ASSIGNED', assigned_cleaner_id=$1, google_event_id=$2, updated_at=NOW()
+           WHERE id=$3 AND status!='ASSIGNED' RETURNING id, status`,
+          [b.assigned_cleaner_id ?? null, b.google_event_id ?? null, id]
+        );
+        if (!rows.length) return sendJson(res, 409, { error: "이미 ASSIGNED 상태" });
+        return sendJson(res, 200, { ok: true, job: rows[0] });
+      }
       if (b.status === "PENDING" && b._test_reset) {
         // 테스트 전용: 잡을 PENDING으로 초기화 + 발송 내역 삭제
         await db.query(`DELETE FROM cleaning_notifs WHERE job_id=$1`, [id]);
