@@ -300,13 +300,15 @@ function PropertyPanel({ syncConfig, liveProperty }) {
   async function handleSave() {
     setLoading(true);
     try {
+      const nullIfEmpty = v => (v === '' || v == null) ? null : v;
       await apiFetch('/api/cleaning/properties', {
         method: 'POST',
         body: JSON.stringify({
           ...form,
-          google_calendar_id: form.google_calendar_id || null,
-          google_calendar_booking_url: form.google_calendar_booking_url || null,
-          ical_url: form.ical_url || null,
+          google_calendar_id: nullIfEmpty(form.google_calendar_id),
+          google_calendar_booking_url: nullIfEmpty(form.google_calendar_booking_url),
+          host_phone: nullIfEmpty(form.host_phone),
+          ical_url: nullIfEmpty(form.ical_url),
         }),
       });
       setSaved(true);
