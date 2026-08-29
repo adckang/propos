@@ -41,7 +41,7 @@ export async function createBlockerEvent(calendarId, date, startHour, durationHo
   // 이 속성이 있어야 Google Appointment Schedule에서 "이미 예약됨"으로 표시됨.
   const AVAIL_ID = "6l42efisiehi77mscb5qoh295f";
   const body = {
-    summary: "예약됨",
+    summary: "청소 예약 차단",
     start: { dateTime: `${date}T${pad(startHour)}:00:00+09:00` },
     end:   { dateTime: `${date}T${pad(endH)}:${pad(endM)}:00+09:00` },
     transparency: "opaque",
