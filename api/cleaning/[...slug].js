@@ -636,6 +636,38 @@ async function cancelJob(req, res, jobId) {
   return sendJson(res, 200, { ok: true, newBlockerEventId });
 }
 
+// ── Calendar Watch 등록 ─────────────────────────────────────
+
+async function registerCalendarWatch(req, res) {
+  if (req.method !== "POST") return res.status(405).end();
+  const body = await readBody(req);
+  const calendarId = body.calendar_id;
+  if (!calendarId) return sendJson(res, 400, { error: "calendar_id 필수" });
+  let token;
+  try { token = await getGoogleToken(); }
+  catch (e) { return sendJson(res, 500, { error: `Google OAuth 실패: ${e.message}` }); }
+  const webhookUrl = `${BASE_URL}/api/cleaning/calendar-webhook`;
+  const channelId = `propos-cal-${calendarId.replace(/[^a-z0-9]/gi, "-")}-${Date.now()}`;
+  const secret = process.env.GOOGLE_WEBHOOK_SECRET ?? "";
+  const r = await fetch(
+    `${CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events/watch`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        id: channelId,
+        type: "web_hook",
+        address: webhookUrl,
+        token: secret,
+        params: { ttl: "604800" }, // 7일
+      }),
+    }
+  );
+  const result = await r.json();
+  if (!r.ok) return sendJson(res, 502, { error: "Calendar Watch 등록 실패", detail: result });
+  return sendJson(res, 200, { ok: true, channelId: result.id, expiration: result.expiration, webhookUrl });
+}
+
 // ── Gmail Watch 등록 ─────────────────────────────────────────
 
 async function registerGmailWatch(req, res) {
@@ -708,7 +740,8 @@ export default async function handler(req, res) {
     }
     if (resource === "bootstrap") return await bootstrapBlockers(req, res);
     if (resource === "ical-sync")    return await handleIcalSync(req, res);
-    if (resource === "gmail-watch")  return await registerGmailWatch(req, res);
+    if (resource === "gmail-watch")      return await registerGmailWatch(req, res);
+    if (resource === "calendar-watch")   return await registerCalendarWatch(req, res);
     if (resource === "c") {
       const propId = id ?? req.query?.property_id;
       if (propId) return await handleConfirmRedirect(req, res, propId);
