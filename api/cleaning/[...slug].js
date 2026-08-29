@@ -762,11 +762,17 @@ async function handleCalendarScan(req, res) {
   try { gToken = await getGoogleToken(); }
   catch (e) { return sendJson(res, 500, { error: `Google OAuth 실패: ${e.message}` }); }
 
-  const since = new Date(Date.now() - Number(hours) * 3_600_000).toISOString();
-  const params = new URLSearchParams({
-    updatedMin: since, singleEvents: "true",
-    orderBy: "updated", showDeleted: "false", maxResults: "20",
-  });
+  // date 지정 시 해당 날짜 범위로 조회 (maxResults 제한 우회)
+  const params = date
+    ? new URLSearchParams({
+        timeMin: `${date}T00:00:00+09:00`,
+        timeMax: `${date}T23:59:59+09:00`,
+        singleEvents: "true", showDeleted: "false", maxResults: "50",
+      })
+    : new URLSearchParams({
+        updatedMin: new Date(Date.now() - Number(hours) * 3_600_000).toISOString(),
+        singleEvents: "true", orderBy: "updated", showDeleted: "false", maxResults: "50",
+      });
   const r = await fetch(
     `${CALENDAR_API}/calendars/${encodeURIComponent(calendar_id)}/events?${params}`,
     { headers: { Authorization: `Bearer ${gToken}` } }
