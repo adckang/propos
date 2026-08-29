@@ -37,13 +37,19 @@ export async function createBlockerEvent(calendarId, date, startHour, durationHo
   const totalMin = Math.round(durationHours * 60);
   const endH = Math.floor((startHour * 60 + totalMin) / 60);
   const endM = (startHour * 60 + totalMin) % 60;
+  // goo.createdByAvailId: bnb.paju@gmail.com 계정의 appointment calendar ID.
+  // 이 속성이 있어야 Google Appointment Schedule에서 "이미 예약됨"으로 표시됨.
+  const AVAIL_ID = "6l42efisiehi77mscb5qoh295f";
   const body = {
-    summary: "[PROPOS-BLOCK]",
+    summary: "예약됨",
     start: { dateTime: `${date}T${pad(startHour)}:00:00+09:00` },
     end:   { dateTime: `${date}T${pad(endH)}:${pad(endM)}:00+09:00` },
     transparency: "opaque",
     visibility: "private",
-    extendedProperties: { private: { propos: "blocker", property_id: propertyId } },
+    extendedProperties: {
+      private: { propos: "blocker", property_id: propertyId },
+      shared: { "goo.createdByAvailId": AVAIL_ID, "goo.createdBySet": "default_cita" },
+    },
   };
   const r = await fetch(
     `${CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events`,
