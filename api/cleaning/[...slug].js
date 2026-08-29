@@ -360,7 +360,7 @@ async function handleCalendarWebhook(req, res) {
     const { rows: [job] } = await db.query(
       `SELECT * FROM cleaning_jobs WHERE property_id=$1
        AND to_char(checkout_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') = $2
-       AND status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED')
+       AND status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED','ESCALATED')
        LIMIT 1`,
       [propCfg.property_id, eventDate]
     );
@@ -808,7 +808,7 @@ async function handleCalendarScan(req, res) {
     const { rows: [job] } = await db.query(
       `SELECT * FROM cleaning_jobs WHERE property_id=$1
        AND to_char(checkout_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') = $2
-       AND status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED')
+       AND status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED','ESCALATED')
        LIMIT 1`,
       [propCfg.property_id, eventDate]
     );
