@@ -349,15 +349,20 @@ async function handleCalendarWebhook(req, res) {
   );
   const events = (await evtRes.json()).items ?? [];
   for (const evt of events) {
-    if (evt.summary === "[PROPOS-BLOCK]") continue; // 블로커 이벤트 건너뜀
+    // propos=blocker 속성이 있으면 PROPOS 블로커 이벤트 → 건너뜀
+    if (evt.extendedProperties?.private?.propos === "blocker") continue;
     const attendeeEmail = evt.attendees?.[0]?.email?.toLowerCase();
     if (!attendeeEmail) continue;
+    // 예약 이벤트의 날짜로 해당 날짜 cleaning_job만 매칭
+    const eventDate = (evt.start?.dateTime ?? evt.start?.date ?? "").slice(0, 10);
+    if (!eventDate) continue;
     const { rows: [cleaner] } = await db.query(`SELECT * FROM cleaners WHERE email=$1`, [attendeeEmail]);
     const { rows: [job] } = await db.query(
       `SELECT * FROM cleaning_jobs WHERE property_id=$1
+       AND cleaning_start_at::date = $2::date
        AND status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED')
-       ORDER BY cleaning_start_at ASC LIMIT 1`,
-      [propCfg.property_id]
+       LIMIT 1`,
+      [propCfg.property_id, eventDate]
     );
     if (!job) continue;
     const { rows: updated } = await db.query(
