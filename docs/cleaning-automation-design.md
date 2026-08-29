@@ -1,6 +1,6 @@
 # 청소 자동화 시스템 설계
 
-> 작성: 2026-08-09 | 최종 확정: **2026-08-20** | 상태: **아키텍처 확정, 구현 진행 중**
+> 작성: 2026-08-09 | 최종 확정: **2026-08-29** | 상태: **아키텍처 확정, 구현 진행 중**
 > 수정/삭제 로직은 이 문서 범위 제외 — 별도 문서로 추후 수립
 
 ---
@@ -436,13 +436,31 @@ cleaning_jobs 상태 확인
 
 ### 핵심 원리
 
-구글 예약 캘린더(Appointment Schedule)는 **호스트 캘린더에 `transparency: opaque` 이벤트가 있으면 해당 시간을 자동으로 "예약 불가"로 표시**한다.
+구글 예약 캘린더(Appointment Schedule)는 호스트 캘린더에 opaque 이벤트가 있으면 슬롯을 차단한다. 단, **"예약 완료"로 표시되려면 `goo.createdByAvailId` 속성이 반드시 필요**하다.
 
-> 공식 근거 (Google Calendar 지원 문서):
-> *"Appointment times during events on your calendar that are set to Busy don't show on the booking page."*
-> *"Appointment Schedules will automatically block out any times that conflict with existing events."*
+| 이벤트 형태 | Appointment Schedule 표시 |
+|------------|-------------------------|
+| `transparency: opaque` (속성 없음) | 슬롯 자체는 차단 안 됨 (실제 테스트로 확인) |
+| `transparency: opaque` + `goo.createdByAvailId` 포함 | **"이미 예약됨"으로 슬롯 점유** ✅ |
 
-`events.insert` + `transparency: 'opaque'` = 해당 슬롯 차단. 표준 Calendar API 동작이며 비공식 우회가 아님.
+> **중요**: 공식 문서는 "opaque 이벤트면 차단된다"고 설명하지만, 실제 Gmail 계정의 Appointment Schedule은 `goo.createdByAvailId` 속성이 없는 이벤트는 슬롯을 점유하지 않는다. 2026-08-29 실제 테스트로 확인된 동작.
+
+#### `goo.createdByAvailId` 값 출처
+
+이 값은 **Google Appointment Schedule이 예약 이벤트를 생성할 때 자동으로 붙이는 내부 캘린더 식별자**다. Google Calendar API에 직접 조회하는 엔드포인트가 없다 (일반 Gmail 계정에서 `/v3/users/me/appointmentSchedules` 404 반환).
+
+**값을 얻는 방법**: 같은 Google 계정에서 Appointment Schedule을 통해 실제 예약이 한 건이라도 생성되면, 그 이벤트의 `extendedProperties.shared["goo.createdByAvailId"]`에서 추출 가능.
+
+```javascript
+// 예: bnb.paju@gmail.com 캘린더의 기존 예약 이벤트에서 확인
+// 동패동.아보쉘 청소일정 (최유정) — start: 2026-07-05T12:00:00+09:00
+extendedProperties.shared["goo.createdByAvailId"] = "6l42efisiehi77mscb5qoh295f"
+```
+
+이 값은 Appointment Schedule 단위가 아닌 **캘린더(Google 계정) 단위 ID**로, 같은 계정의 다른 숙소 Appointment Schedule에도 동일하게 사용된다. (파주201 Appointment Schedule에 동패동 ID를 적용해 정상 동작 실증.)
+
+현재 `bnb.paju@gmail.com` 계정의 `createdByAvailId`: `6l42efisiehi77mscb5qoh295f`
+→ `api/cleaning/_calendar.js`의 `AVAIL_ID` 상수에 하드코딩됨.
 
 ---
 
@@ -500,21 +518,31 @@ dispatch_after = NOW() → cleaning-followup 크론에서 즉시 알림 발송
 ### 블로커 이벤트 스펙
 
 ```javascript
+// api/cleaning/_calendar.js — createBlockerEvent()
+// ⚠️ goo.createdByAvailId 없으면 Appointment Schedule 슬롯 점유 안 됨 (2026-08-29 실증)
+const AVAIL_ID = "6l42efisiehi77mscb5qoh295f"; // bnb.paju@gmail.com 캘린더의 appointment 내부 ID
+
 await calendar.events.insert({
   calendarId: 'bnb.paju@gmail.com',
   requestBody: {
-    summary: '[PROPOS-BLOCK]',
+    summary: '예약됨',
     start: { dateTime: `${date}T${checkoutHour}:00:00+09:00` },
     end:   { dateTime: `${date}T${checkoutHour + duration}:00:00+09:00` },
-    transparency: 'opaque',       // 핵심: 예약 불가로 표시
+    transparency: 'opaque',
     visibility: 'private',
     extendedProperties: {
-      private: { propos: 'blocker', property_id: propertyId }
+      private: { propos: 'blocker', property_id: propertyId },
+      shared: {
+        'goo.createdByAvailId': AVAIL_ID,   // 슬롯 "예약 완료" 표시의 핵심
+        'goo.createdBySet': 'default_cita',
+      }
     }
   }
 });
-// 반환된 event.id → cleaning_jobs.google_blocker_event_id에 저장
+// 반환된 event.id → property_calendar_blockers.event_id에 저장
 ```
+
+> **신규 Google 계정(숙소) 추가 시**: 해당 계정으로 Appointment Schedule에서 예약이 1건이라도 생기면 그 이벤트의 `extendedProperties.shared["goo.createdByAvailId"]`를 확인 후 `AVAIL_ID`를 업데이트해야 한다. 계정마다 다를 수 있음.
 
 ---
 
@@ -690,5 +718,9 @@ Calendar API 블로커 이벤트 생성/삭제, Calendar Webhook 등록, Gmail W
 | `upsertProperty` ical_url 지원 추가 | 2026-08-23 | 서버 폴링(Gmail Webhook + 월간 배치)에 필요. COALESCE로 미전송 시 기존 값 유지 |
 | `PropertyPanel` UI — host_phone + ical_url 필드 추가 | 2026-08-23 | 숙소 설정 폼에서 직접 입력 가능. ical_url은 이미 설정된 경우 "(유지됨)" 표시 |
 | `migrate-cleaning-v2.sql` — google_event_id 컬럼 누락 수정 | 2026-08-23 | 기존 DB에서 Calendar Webhook ASSIGNED UPDATE 쿼리 실패 버그 수정 |
+| 블로커 이벤트 `goo.createdByAvailId` 추가 | 2026-08-29 | Appointment Schedule 슬롯 점유를 위한 필수 속성 발견 + 적용. 기존 `[PROPOS-BLOCK]` 이벤트 삭제 후 `예약됨` 형식으로 재생성. `AVAIL_ID = 6l42efisiehi77mscb5qoh295f` (bnb.paju@gmail.com 계정, 기존 예약 이벤트 extendedProperties에서 추출) |
+| bootstrapBlockers `force` 옵션 추가 | 2026-08-29 | DB 레코드 초기화 후 실제 캘린더에 재생성 가능 |
+| Calendar Watch 등록 엔드포인트 | 2026-08-29 | `POST /api/cleaning/calendar-watch` — 지정 캘린더에 webhook 등록. 파주201 등록 완료 (만료: 7일) |
+| 숙소 설정 저장 시 기존 값 보존 | 2026-08-29 | upsert COALESCE 전면 적용 (name/checkout_hour/cleaning_duration_hours 포함). handleSave에서 빈 문자열 null 변환 |
 | `JobsPanel` — 취소 버튼 추가 | 2026-08-23 | PENDING~ESCALATED 상태 잡에 취소 버튼 UI 추가. `PATCH /api/cleaning/jobs?id=` 호출 |
 | followup 크론 타이밍 테스트 | 2026-08-23 | s30에 1시간 리마인드, 3시간 에스컬레이션 타이밍 로직 검증 9개 테스트 추가 |
