@@ -57,11 +57,12 @@ describe("EVENT_TYPES — 값 정확성", () => {
 });
 
 describe("SOFT_EVENT_TYPES — Set 구성", () => {
-  test("soft 이벤트 3개를 포함한다", () => {
-    assert.equal(SOFT_EVENT_TYPES.size, 3);
+  test("soft 이벤트 4개를 포함한다 (vacancy_energy_alert 추가)", () => {
+    assert.equal(SOFT_EVENT_TYPES.size, 4);
     assert.ok(SOFT_EVENT_TYPES.has("checkout_confirmation_needed"));
     assert.ok(SOFT_EVENT_TYPES.has("early_checkin_suspected"));
     assert.ok(SOFT_EVENT_TYPES.has("no_show_suspected"));
+    assert.ok(SOFT_EVENT_TYPES.has("vacancy_energy_alert"));
   });
 
   test("상태 기계 이벤트는 포함하지 않는다", () => {

@@ -5,6 +5,16 @@ import { queryEvents, getLastKnownStateFromDB } from "../infrastructure/eventRep
 // content-guide.md 규칙 준수: 한 문장에 숫자 최대 2개, 내부 상태명 노출 금지
 
 /**
+ * SOFT 이벤트 요약 접미사. PAST 기간에서 noShowSuspected가 있을 때 덧붙임.
+ * 별도 문장으로 추가하여 "숫자 2개" 규칙 준수.
+ */
+function softSuffix(stats) {
+  const noShow = stats.noShowSuspected ?? 0;
+  if (noShow > 0) return ` 노쇼 의심 ${noShow}건 확인이 필요해요.`;
+  return "";
+}
+
+/**
  * 기간과 KPI 통계를 받아 운영자용 요약 문장을 생성한다.
  *
  * now 형태:   { occupied, preStayReady, vacant, cleaning, anomalyCount, total }
@@ -29,8 +39,10 @@ export function generateSummary(period, stats) {
     return `이번 주 체크인 ${stats.checkIns}건, 체크아웃 ${stats.checkOuts}건이에요.`;
   }
   if (period === "last_week") {
-    if (stats.anomalies > 0) return `지난주 체크인 ${stats.checkIns}건 완료, 이상감지 ${stats.anomalies}건이 있었어요.`;
-    return `지난주 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`;
+    const base = stats.anomalies > 0
+      ? `지난주 체크인 ${stats.checkIns}건 완료, 이상감지 ${stats.anomalies}건이 있었어요.`
+      : `지난주 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`;
+    return base + softSuffix(stats);
   }
   if (period === "next_week") {
     return stats.checkIns > 0 ? `다음 주 체크인 ${stats.checkIns}건 예정이에요.` : `다음 주 예약이 없어요.`;
@@ -51,8 +63,10 @@ export function generateSummary(period, stats) {
 
   // 일 단위
   if (period === "yesterday") {
-    if (stats.anomalies > 0) return `어제 체크인 ${stats.checkIns}건, 이상감지 ${stats.anomalies}건이 있었어요.`;
-    return `어제 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`;
+    const base = stats.anomalies > 0
+      ? `어제 체크인 ${stats.checkIns}건, 이상감지 ${stats.anomalies}건이 있었어요.`
+      : `어제 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`;
+    return base + softSuffix(stats);
   }
   if (period === "tomorrow") {
     return stats.checkIns > 0 ? `내일 체크인 ${stats.checkIns}건 예정이에요.` : `내일 예약된 체크인이 없어요.`;

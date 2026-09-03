@@ -27,6 +27,7 @@ export const SOFT_EVENT_TYPES = new Set([
   "checkout_confirmation_needed",
   "early_checkin_suspected",
   "no_show_suspected",
+  "vacancy_energy_alert",   // VACANT 상태 에너지낭비 — State Machine 외부. 안심지수 분모 미포함.
 ]);
 
 // 미구현 이벤트 (Zod 검증 통과시키되 파이프라인 처리 건너뜀)

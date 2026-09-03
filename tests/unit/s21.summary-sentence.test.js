@@ -300,3 +300,33 @@ describe("generateSummary — 시간 단위 (last_hour / next_hour)", () => {
     assert.ok(s.includes("없"), `'없음' 문구 없음: "${s}"`);
   });
 });
+
+describe("generateSummary — SOFT 이벤트 접미사", () => {
+  test("last_week, noShowSuspected=2 → 노쇼 언급 추가", () => {
+    const s = generateSummary("last_week", {
+      checkIns: 8, checkOuts: 7, anomalies: 0, energyWaste: 0,
+      noShowSuspected: 2,
+    });
+    assert.ok(s.includes("노쇼") || s.includes("2"), `노쇼 관련 없음: "${s}"`);
+    assert.ok(!hasInternalTerm(s), `내부 용어 노출됨: "${s}"`);
+  });
+
+  test("yesterday, noShowSuspected=1 → 노쇼 언급 추가", () => {
+    const s = generateSummary("yesterday", {
+      checkIns: 3, checkOuts: 3, anomalies: 0, energyWaste: 0,
+      noShowSuspected: 1,
+    });
+    assert.ok(s.includes("노쇼") || s.includes("1"), `노쇼 관련 없음: "${s}"`);
+  });
+
+  test("last_week, noShowSuspected=0 → 기존 문장과 동일 (접미사 없음)", () => {
+    const withoutSoft = generateSummary("last_week", {
+      checkIns: 5, checkOuts: 4, anomalies: 0, energyWaste: 0,
+    });
+    const withZeroSoft = generateSummary("last_week", {
+      checkIns: 5, checkOuts: 4, anomalies: 0, energyWaste: 0,
+      noShowSuspected: 0,
+    });
+    assert.equal(withoutSoft, withZeroSoft);
+  });
+});

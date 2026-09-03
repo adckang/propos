@@ -546,14 +546,18 @@ Slack 레포트의 텍스트 포맷은 `reporting-feature-design.md` 섹션 11�
 
 | # | 항목 | 현황 | 우선순위 |
 |---|------|------|---------|
-| 1 | `reportingDomain.js` KST 날짜 경계 수정 | 버그 C-2 | 즉시 |
-| 2 | `api/stats.js` VALID_PERIODS에 today/yesterday/tomorrow 추가 | 버그 C-1 | 즉시 |
-| 3 | `countCurrentStats` anomalyCount에 ENERGY_WASTE 포함 여부 통일 | 불일치 H-2 | Phase 2 |
-| 4 | `roomStateMockData.js`에서 CHECKIN_INQUIRY 제거 | 버그 H-1 | Phase 2 |
-| 5 | `vacancy_energy_alert` eventTypes.js 추가 | 설계 완료, 미구현 | Phase 2 |
-| 6 | Template-A 컴포넌트 (`ActivePanel.jsx`) 신규 작성 | 설계 완료, 미구현 | Phase 3 |
-| 7 | KPI Tiles 기간별 변형 구현 (섹션 11 기준) | 설계 완료, 미구현 | Phase 3 |
+| ~~1~~ | ~~`reportingDomain.js` KST 날짜 경계 수정~~ | ✅ 완료 (C-2) | ~~즉시~~ |
+| ~~2~~ | ~~`api/stats.js` VALID_PERIODS에 today/yesterday/tomorrow 추가~~ | ✅ 완료 (C-1) | ~~즉시~~ |
+| 3 | `countCurrentStats` anomalyCount에 ENERGY_WASTE 포함 여부 통일 | 보류 (H-2 rollback — 기존 테스트 명세 유지) | Phase 3 |
+| ~~4~~ | ~~`roomStateMockData.js`에서 CHECKIN_INQUIRY 제거~~ | ✅ 완료 (H-1) | ~~Phase 2~~ |
+| ~~5~~ | ~~`vacancy_energy_alert` eventTypes.js 추가~~ | ✅ 완료 | ~~Phase 2~~ |
+| ~~6~~ | ~~Template-A 컴포넌트 신규 작성~~ | ✅ 완료 (`ActiveHybridPanel.jsx`) | ~~Phase 3~~ |
+| ~~7~~ | ~~KPI Tiles 기간별 변형 구현 (섹션 11 기준)~~ | ✅ 완료 (ACTIVE/PAST/FUTURE 4타일) | ~~Phase 3~~ |
 | 8 | Single-Property Template-A 타임라인 컴포넌트 | 설계 완료, 미구현 | Phase 3 |
+| 9 | SOFT 이벤트 countPeriodEvents 집계 | ✅ 완료 (noShowSuspected 등 3개 필드) | ~~Phase 2~~ |
+| 10 | resolution(Auto/Manual/Pending) 데이터 연동 → 안심지수 계산 완성 | 미구현 (현재 "—" 표시) | Phase 3 |
+| 11 | EventMatrixPanel: SOFT 이벤트 섹션 | ✅ 완료 | ~~Phase 2~~ |
+| 12 | iCal 연동 후 Template-F 날짜별 테이블, Template-A [예정] 섹션 | 미구현 (placeholder) | Phase 3 |
 
 ---
 
