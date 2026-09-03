@@ -1,10 +1,9 @@
 /**
- * 기간별 KPI 타일 4개 (reporting-feature-design.md 섹션 3).
+ * 기간별 KPI 타일 4개 (report-architecture.md 섹션 11-3).
  *
- * now:                   입실중 / 입실준비 / 공실 / 청소중
- * this_week / this_month: 체크인 / 체크아웃 / 이상감지 / 에너지낭비
- * last_week / last_month: 체크인 / 체크아웃 / 이상감지 / 에너지낭비
- * next_week / next_month: 예정 체크인 / 예정 체크아웃 / 예약률(미구현) / 청소할당(미구현)
+ * ACTIVE (now/today/this_week/this_month): 체류중 / 입실전 / 청소중 / 공실
+ * PAST (yesterday/last_week/last_hour/last_month): 체크인 / 이상감지 / 에너지낭비 / 안심지수
+ * FUTURE (tomorrow/next_week/next_hour/next_month): 예정체크인 / 예정체크아웃 / 청소배정 / 미배정
  */
 
 function Tile({ label, value, sub, accent, warn = false, isMobile }) {
@@ -59,7 +58,7 @@ const PERIOD_TYPE = {
 };
 
 export default function KpiTiles({ period, stats, loading, isMobile = false }) {
-  const type = PERIOD_TYPE[period] ?? 'current';
+  const type = PERIOD_TYPE[period] ?? 'past';
 
   if (loading) {
     return (
@@ -94,48 +93,58 @@ export default function KpiTiles({ period, stats, loading, isMobile = false }) {
 }
 
 function buildTiles(type, stats, isMobile) {
+  // ACTIVE: 체류중 | 입실전 | 청소중 | 공실 (report-architecture.md 섹션 11-3)
   if (type === 'now') {
     const hasAnomaly = stats.anomalyCount > 0;
     return [
       {
-        label: '입실 중',
+        label: '체류 중',
         value: stats.occupied ?? 0,
         sub: hasAnomaly ? `이상 ${stats.anomalyCount}건` : null,
         accent: '#2563eb',
         warn: hasAnomaly,
       },
       {
-        label: '입실 준비',
+        label: '입실 전',
         value: stats.preStayReady ?? 0,
         accent: '#059669',
-      },
-      {
-        label: '공실',
-        value: stats.vacant ?? 0,
-        accent: '#6b7280',
       },
       {
         label: '청소 중',
         value: stats.cleaning ?? 0,
         accent: '#dc2626',
       },
+      {
+        label: '공실',
+        value: stats.vacant ?? 0,
+        accent: '#6b7280',
+      },
     ];
   }
 
-  if (type === 'current' || type === 'past') {
+  // PAST: 체크인 | 이상감지 | 에너지낭비 | 안심지수 (report-architecture.md 섹션 11-3)
+  if (type === 'past') {
+    const anomalies  = stats.anomalies ?? 0;
+    const safetyScore = anomalies === 0 ? 100 : null; // resolution 데이터 없으면 100% or null
     return [
-      { label: '체크인',    value: `${stats.checkIns ?? 0}건`,    accent: '#2563eb' },
-      { label: '체크아웃',  value: `${stats.checkOuts ?? 0}건`,   accent: '#059669' },
-      { label: '이상감지',  value: `${stats.anomalies ?? 0}건`,   accent: '#dc2626', warn: (stats.anomalies ?? 0) > 0 },
-      { label: '에너지 낭비', value: `${stats.energyWaste ?? 0}건`, accent: '#d97706' },
+      { label: '체크인',    value: `${stats.checkIns ?? 0}건`,  accent: '#2563eb' },
+      { label: '이상감지',  value: `${anomalies}건`,            accent: '#dc2626', warn: anomalies > 0 },
+      { label: '에너지낭비', value: `${stats.energyWaste ?? 0}건`, accent: '#d97706' },
+      {
+        label: '안심지수',
+        value: safetyScore !== null ? `${safetyScore}%` : '—',
+        sub: anomalies > 0 ? '미해결 확인 필요' : null,
+        accent: anomalies === 0 ? '#059669' : '#dc2626',
+        warn: anomalies > 0,
+      },
     ];
   }
 
-  // future
+  // FUTURE: 예정 체크인 | 예정 체크아웃 | 청소 배정 (report-architecture.md 섹션 11-3)
   return [
     { label: '예정 체크인',  value: `${stats.checkIns ?? 0}건`,  accent: '#7c3aed' },
     { label: '예정 체크아웃', value: `${stats.checkOuts ?? 0}건`, accent: '#7c3aed' },
-    { label: '예약률',  value: '—', sub: '준비 중',   accent: '#94a3b8' },
-    { label: '청소 할당', value: '—', sub: '준비 중', accent: '#94a3b8' },
+    { label: '청소 배정', value: '—', sub: '연동 후 표시', accent: '#94a3b8' },
+    { label: '미배정', value: '—', sub: '연동 후 표시', accent: '#94a3b8' },
   ];
 }

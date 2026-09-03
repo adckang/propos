@@ -121,11 +121,20 @@ export function countCurrentStats(properties) {
  * 기간 이벤트 목록에서 KPI를 집계한다.
  * anomalies = complaint_detected + energy_waste_detected
  * energyWaste = energy_waste_detected만
+ * softEvents = no_show_suspected + early_checkin_suspected + checkout_confirmation_needed
  * @param {Array<{ type: string }>} events
- * @returns {{ checkIns, checkOuts, anomalies, energyWaste }}
+ * @returns {{ checkIns, checkOuts, anomalies, energyWaste, noShowSuspected, earlyCheckinSuspected, checkoutConfirmationNeeded }}
  */
 export function countPeriodEvents(events) {
-  const result = { checkIns: 0, checkOuts: 0, anomalies: 0, energyWaste: 0 };
+  const result = {
+    checkIns: 0,
+    checkOuts: 0,
+    anomalies: 0,
+    energyWaste: 0,
+    noShowSuspected: 0,
+    earlyCheckinSuspected: 0,
+    checkoutConfirmationNeeded: 0,
+  };
 
   for (const { type } of events) {
     if (type === "check_in_detected") result.checkIns += 1;
@@ -134,7 +143,9 @@ export function countPeriodEvents(events) {
     else if (type === "energy_waste_detected") {
       result.energyWaste += 1;
       result.anomalies += 1;
-    }
+    } else if (type === "no_show_suspected") result.noShowSuspected += 1;
+    else if (type === "early_checkin_suspected") result.earlyCheckinSuspected += 1;
+    else if (type === "checkout_confirmation_needed") result.checkoutConfirmationNeeded += 1;
   }
 
   return result;

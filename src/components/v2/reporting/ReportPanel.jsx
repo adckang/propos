@@ -51,6 +51,15 @@ function LoadingRows() {
 function PanelContent({ tense, period, stats, loading, isMobile }) {
   if (loading) return <LoadingRows />;
 
+  if (!stats) {
+    return (
+      <div style={{ padding: '18px 20px', fontSize: 12, color: '#94a3b8', textAlign: 'center' }}>
+        데이터를 불러올 수 없어요
+        <div style={{ fontSize: 10, marginTop: 4, color: '#cbd5e1' }}>실제 배포 환경에서 확인 가능합니다</div>
+      </div>
+    );
+  }
+
   if (tense === 'past')   return <EventMatrixPanel   stats={stats} period={period} isMobile={isMobile} />;
   if (tense === 'active') return <ActiveHybridPanel  stats={stats} period={period} isMobile={isMobile} />;
   if (tense === 'future') return <SchedulePanel      stats={stats} period={period} isMobile={isMobile} />;

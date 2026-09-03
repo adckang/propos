@@ -165,5 +165,46 @@ describe("countPeriodEvents — 기간 이벤트 집계", () => {
     assert.equal(stats.checkOuts, 0);
     assert.equal(stats.anomalies, 0);
     assert.equal(stats.energyWaste, 0);
+    assert.equal(stats.noShowSuspected, 0);
+    assert.equal(stats.earlyCheckinSuspected, 0);
+    assert.equal(stats.checkoutConfirmationNeeded, 0);
+  });
+
+  test("no_show_suspected → noShowSuspected 카운트 (anomalies 미포함)", () => {
+    const events = [
+      { type: "no_show_suspected" },
+      { type: "no_show_suspected" },
+    ];
+    const stats = countPeriodEvents(events);
+    assert.equal(stats.noShowSuspected, 2);
+    assert.equal(stats.anomalies, 0);
+  });
+
+  test("early_checkin_suspected → earlyCheckinSuspected 카운트", () => {
+    const events = [{ type: "early_checkin_suspected" }];
+    const stats = countPeriodEvents(events);
+    assert.equal(stats.earlyCheckinSuspected, 1);
+    assert.equal(stats.anomalies, 0);
+  });
+
+  test("checkout_confirmation_needed → checkoutConfirmationNeeded 카운트", () => {
+    const events = [{ type: "checkout_confirmation_needed" }];
+    const stats = countPeriodEvents(events);
+    assert.equal(stats.checkoutConfirmationNeeded, 1);
+    assert.equal(stats.anomalies, 0);
+  });
+
+  test("SOFT + ANOMALY 혼합 — 각 카운터 독립적으로 집계", () => {
+    const events = [
+      { type: "complaint_detected" },
+      { type: "no_show_suspected" },
+      { type: "early_checkin_suspected" },
+      { type: "checkout_confirmation_needed" },
+    ];
+    const stats = countPeriodEvents(events);
+    assert.equal(stats.anomalies, 1);
+    assert.equal(stats.noShowSuspected, 1);
+    assert.equal(stats.earlyCheckinSuspected, 1);
+    assert.equal(stats.checkoutConfirmationNeeded, 1);
   });
 });

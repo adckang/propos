@@ -23,8 +23,9 @@ function SectionTitle({ children, accent = '#64748b' }) {
   );
 }
 
-function EventRow({ label, value, warn = false }) {
-  const isEmpty = !value && value !== 0;
+function EventRow({ label, value, warn = false, dimIfZero = false }) {
+  const isEmpty = value == null;
+  const isZero  = value === 0;
   return (
     <div style={{
       display: 'flex', alignItems: 'center',
@@ -33,7 +34,12 @@ function EventRow({ label, value, warn = false }) {
       <div style={{ flex: 1, fontSize: 12, color: '#4a5568', fontWeight: 500 }}>{label}</div>
       <div style={{
         fontSize: 13, fontWeight: 700,
-        color: isEmpty ? '#cbd5e1' : warn && value > 0 ? '#dc2626' : value === 0 ? '#94a3b8' : '#1a202c',
+        color: isEmpty
+          ? '#cbd5e1'
+          : warn && !isZero ? '#dc2626'
+          : isZero && dimIfZero ? '#94a3b8'
+          : isZero ? '#94a3b8'
+          : '#1a202c',
         fontFamily: "'DM Mono', monospace",
         minWidth: 36, textAlign: 'right',
       }}>
@@ -43,10 +49,11 @@ function EventRow({ label, value, warn = false }) {
   );
 }
 
-function SafetyScore({ anomalies, pending = 0 }) {
-  if (anomalies == null) return null;
-  const score = anomalies === 0 ? 100 : Math.round(((anomalies - pending) / anomalies) * 100);
-  const color = score >= 90 ? '#059669' : score >= 70 ? '#d97706' : '#dc2626';
+function SafetyScore({ complaints, energyWaste }) {
+  const anomalies = complaints + energyWaste;
+  // resolution 데이터 없으면 안심지수 계산 불가 → anomalies 있으면 "—" 표시
+  const score = anomalies === 0 ? 100 : null;
+  const color = score === 100 ? '#059669' : '#94a3b8';
 
   return (
     <div style={{
@@ -60,30 +67,31 @@ function SafetyScore({ anomalies, pending = 0 }) {
           안심지수
         </div>
         <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 1 }}>
-          이상감지 {anomalies}건 기준
+          {anomalies === 0 ? '이상감지 없음' : `민원 ${complaints}건 · 에너지낭비 ${energyWaste}건 (해결 데이터 연동 후 계산)`}
         </div>
       </div>
       <div style={{
         fontSize: 26, fontWeight: 800, color,
         fontFamily: "'DM Mono', monospace", lineHeight: 1,
       }}>
-        {score}%
+        {score !== null ? `${score}%` : '—'}
       </div>
     </div>
   );
 }
 
 export default function EventMatrixPanel({ stats, period, isMobile = false }) {
-  if (!stats) {
-    return (
-      <div style={{ padding: '20px', color: '#94a3b8', fontSize: 12, textAlign: 'center' }}>
-        데이터 불러오는 중...
-      </div>
-    );
-  }
+  if (!stats) return null;
 
   const periodLabel = PERIOD_LABELS[period] || period;
-  const hasAnomaly = (stats.anomalies ?? 0) > 0;
+  const complaints  = (stats.anomalies ?? 0) - (stats.energyWaste ?? 0);
+  const energyWaste = stats.energyWaste ?? 0;
+  const hasAnomaly  = (stats.anomalies ?? 0) > 0;
+
+  const softTotal =
+    (stats.noShowSuspected ?? 0) +
+    (stats.earlyCheckinSuspected ?? 0) +
+    (stats.checkoutConfirmationNeeded ?? 0);
 
   return (
     <div style={{ padding: isMobile ? '14px 12px' : '18px 20px' }}>
@@ -95,21 +103,31 @@ export default function EventMatrixPanel({ stats, period, isMobile = false }) {
       {/* 운영 이벤트 섹션 */}
       <div style={{ marginBottom: 16 }}>
         <SectionTitle>운영 이벤트</SectionTitle>
-        <EventRow label="체크인" value={stats.checkIns ?? 0} />
-        <EventRow label="체크아웃" value={stats.checkOuts ?? 0} />
+        <EventRow label="체크인" value={stats.checkIns ?? 0} dimIfZero />
+        <EventRow label="체크아웃" value={stats.checkOuts ?? 0} dimIfZero />
       </div>
 
       {/* 이상 감지 섹션 */}
-      <div style={{ marginBottom: 4 }}>
+      <div style={{ marginBottom: 16 }}>
         <SectionTitle accent={hasAnomaly ? '#dc2626' : '#64748b'}>
           이상 감지
         </SectionTitle>
-        <EventRow label="이상감지 (민원 + 에너지)" value={stats.anomalies ?? 0} warn />
-        <EventRow label="에너지낭비 감지 (OCCUPIED)" value={stats.energyWaste ?? 0} />
+        <EventRow label="민원 감지 (OCCUPIED)" value={complaints} warn dimIfZero />
+        <EventRow label="에너지낭비 감지 (입실중)" value={energyWaste} warn={energyWaste > 0} dimIfZero />
+      </div>
+
+      {/* SOFT 이벤트 섹션 */}
+      <div style={{ marginBottom: 4 }}>
+        <SectionTitle accent={softTotal > 0 ? '#d97706' : '#94a3b8'}>
+          소프트 알림
+        </SectionTitle>
+        <EventRow label="노쇼 의심" value={stats.noShowSuspected ?? 0} dimIfZero />
+        <EventRow label="얼리체크인 의심" value={stats.earlyCheckinSuspected ?? 0} dimIfZero />
+        <EventRow label="체크아웃 확인 필요" value={stats.checkoutConfirmationNeeded ?? 0} dimIfZero />
       </div>
 
       {/* 안심지수 */}
-      <SafetyScore anomalies={stats.anomalies ?? 0} />
+      <SafetyScore complaints={complaints} energyWaste={energyWaste} />
     </div>
   );
 }
