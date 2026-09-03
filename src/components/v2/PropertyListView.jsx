@@ -4,6 +4,8 @@ import { useMobile } from '../../hooks/useMobile';
 import { useReportingStats } from '../../hooks/useReportingStats';
 import ListViewFilter from './reporting/ListViewFilter';
 import SummaryBanner from './reporting/SummaryBanner';
+import KpiTiles from './reporting/KpiTiles';
+import ReportPanel from './reporting/ReportPanel';
 
 const PAST_DAYS   = 6;
 const FUTURE_DAYS = 14;
@@ -145,7 +147,17 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
     return 'today';
   }, [windowOffset, listMode]);
 
-  const { stats, summary, loading: statsLoading } = useReportingStats(statsPeriod, null);
+  // 기간 데이터 (Report Panel + SummaryBanner용)
+  const { stats: periodStats, summary, loading: periodLoading } = useReportingStats(statsPeriod, null);
+
+  // KPI Tiles용 live state — ACTIVE(this_week)는 별도로 'now' fetch 필요
+  // today/yesterday/tomorrow는 reportingService가 올바른 타입을 이미 반환함
+  const needsLiveFetch = statsPeriod === 'this_week' || statsPeriod === 'this_month';
+  const { stats: liveStats, loading: liveLoading } = useReportingStats(needsLiveFetch ? 'now' : null, null);
+  const kpiStats   = needsLiveFetch ? liveStats   : periodStats;
+  const kpiPeriod  = needsLiveFetch ? 'now'       : statsPeriod;
+  const kpiLoading = needsLiveFetch ? liveLoading : periodLoading;
+
   const { windowStart, windowEnd, windowMs, dayLabels, monthLabels } = useGanttWindow(windowOffset);
   const { now, nowLeft, timeStr } = useLiveNow(windowStart, windowMs);
 
@@ -241,7 +253,16 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
         })}
       </div>
 
-      {/* 타임라인 네비게이터 + 요약 배너 */}
+      {/* KPI 타일 — 상단 고정 (report-architecture.md 섹션 11: 기간별 변형) */}
+      <KpiTiles period={kpiPeriod} stats={kpiStats} loading={kpiLoading} isMobile={isMobile} />
+
+      {/* 요약 배너 — 1줄 요약 문장 */}
+      <SummaryBanner summary={summary} loading={periodLoading} isMobile={isMobile} />
+
+      {/* 레포트 패널 — 접기/펼치기 (Navigation-Drives-Content) */}
+      <ReportPanel period={statsPeriod} stats={periodStats} loading={periodLoading} isMobile={isMobile} />
+
+      {/* 타임라인 네비게이터 — 간트 바로 위 (UX: 제어 대상 가까이) */}
       <ListViewFilter
         windowOffset={windowOffset}
         onOffsetChange={setWindowOffset}
@@ -249,7 +270,6 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
         onModeChange={setListMode}
         isMobile={isMobile}
       />
-      <SummaryBanner summary={summary} loading={statsLoading} isMobile={isMobile} />
 
       {/* 간트 헤더 + 목록 래퍼 — 현재 시각 연속선 기준점 */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', minHeight: 0 }}>

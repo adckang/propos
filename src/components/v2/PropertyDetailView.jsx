@@ -6,6 +6,8 @@ import { useMobile } from '../../hooks/useMobile';
 import { useReportingStats } from '../../hooks/useReportingStats';
 import DetailViewFilter from './reporting/DetailViewFilter';
 import SummaryBanner from './reporting/SummaryBanner';
+import KpiTiles from './reporting/KpiTiles';
+import ReportPanel from './reporting/ReportPanel';
 
 const PAST_HOURS    = 7 * 24;      // 현재 시각 이전 7일 (168h)
 const FUTURE_HOURS  = 7 * 24;      // 현재 시각 이후 7일 (168h)
@@ -734,8 +736,14 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
         </div>
       </div>
 
-      {/* 요약 배너 — 현재 period 통계 요약 */}
+      {/* KPI 타일 — 기간별 변형 (섹션 11: today=live state, yesterday=이벤트, tomorrow=예정) */}
+      <KpiTiles period={statsPeriod} stats={stats} loading={statsLoading} isMobile={isMobile} />
+
+      {/* 요약 배너 — 1줄 요약 문장 */}
       <SummaryBanner summary={summary} loading={statsLoading} isMobile={isMobile} />
+
+      {/* 레포트 패널 — Navigation-Drives-Content (NOW tense는 IoT 카드가 담당) */}
+      <ReportPanel period={statsPeriod} stats={stats} loading={statsLoading} isMobile={isMobile} />
 
 
 {/* 본문: 타임라인(좁게) + 센서 패널(넓게) */}

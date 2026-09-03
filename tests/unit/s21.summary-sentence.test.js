@@ -199,3 +199,104 @@ describe("generateSummary — 다음 주 / 다음 달", () => {
     assert.ok(countNumbers(s) <= 2, `숫자 ${countNumbers(s)}개 초과: "${s}"`);
   });
 });
+
+describe("generateSummary — 일 단위 (yesterday / today / tomorrow)", () => {
+  test("yesterday, 이상 없음 → 체크인 건수 포함", () => {
+    const s = generateSummary("yesterday", {
+      checkIns: 3,
+      checkOuts: 3,
+      anomalies: 0,
+      energyWaste: 0,
+    });
+    assert.ok(s.length > 0);
+    assert.ok(!hasInternalTerm(s), `내부 용어 노출됨: "${s}"`);
+  });
+
+  test("yesterday, 이상 있음 → 이상 건수 포함", () => {
+    const s = generateSummary("yesterday", {
+      checkIns: 2,
+      checkOuts: 2,
+      anomalies: 1,
+      energyWaste: 0,
+    });
+    assert.ok(s.includes("1") || s.includes("이상"), `이상 관련 없음: "${s}"`);
+    assert.ok(countNumbers(s) <= 2, `숫자 ${countNumbers(s)}개 초과: "${s}"`);
+  });
+
+  test("today → 빈 문자열이 아닌 요약 반환 (today는 now 분기)", () => {
+    const s = generateSummary("today", {
+      occupied: 3,
+      preStayReady: 1,
+      vacant: 10,
+      cleaning: 1,
+      anomalyCount: 0,
+      total: 15,
+    });
+    assert.ok(s.length > 0);
+    assert.ok(!hasInternalTerm(s), `내부 용어 노출됨: "${s}"`);
+  });
+
+  test("tomorrow, checkIns=0 → 예약 없음 문장", () => {
+    const s = generateSummary("tomorrow", {
+      checkIns: 0,
+      checkOuts: 2,
+      anomalies: 0,
+      energyWaste: 0,
+    });
+    assert.ok(s.includes("없"), `'없음' 문구 없음: "${s}"`);
+  });
+
+  test("tomorrow, checkIns=2 → 예정 건수 포함", () => {
+    const s = generateSummary("tomorrow", {
+      checkIns: 2,
+      checkOuts: 1,
+      anomalies: 0,
+      energyWaste: 0,
+    });
+    assert.ok(s.includes("2"), `체크인 건수 없음: "${s}"`);
+    assert.ok(countNumbers(s) <= 2, `숫자 ${countNumbers(s)}개 초과: "${s}"`);
+  });
+});
+
+describe("generateSummary — 시간 단위 (last_hour / next_hour)", () => {
+  test("last_hour, 이벤트 있음 → 이벤트 건수 포함", () => {
+    const s = generateSummary("last_hour", {
+      checkIns: 1,
+      checkOuts: 2,
+      anomalies: 0,
+      energyWaste: 0,
+    });
+    assert.ok(s.length > 0);
+    assert.ok(!hasInternalTerm(s), `내부 용어 노출됨: "${s}"`);
+  });
+
+  test("last_hour, 이벤트 없음 → 없음 문장", () => {
+    const s = generateSummary("last_hour", {
+      checkIns: 0,
+      checkOuts: 0,
+      anomalies: 0,
+      energyWaste: 0,
+    });
+    assert.ok(s.includes("없"), `'없음' 문구 없음: "${s}"`);
+  });
+
+  test("next_hour, checkIns=1 → 예정 문장", () => {
+    const s = generateSummary("next_hour", {
+      checkIns: 1,
+      checkOuts: 0,
+      anomalies: 0,
+      energyWaste: 0,
+    });
+    assert.ok(s.includes("1") || s.includes("예정"), `예정 관련 없음: "${s}"`);
+  });
+
+  test("next_hour, checkIns=0 → 없음 문장", () => {
+    const s = generateSummary("next_hour", {
+      checkIns: 0,
+      checkOuts: 0,
+      anomalies: 0,
+      energyWaste: 0,
+    });
+    assert.ok(s.includes("없"), `'없음' 문구 없음: "${s}"`);
+  });
+});

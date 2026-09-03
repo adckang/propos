@@ -12,6 +12,12 @@ export function useReportingStats(period, propertyId = null) {
   const [state, setState] = useState({ stats: null, summary: '', loading: true, error: null });
 
   useEffect(() => {
+    // period null → 스킵 (조건부 fetching)
+    if (!period) {
+      setState({ stats: null, summary: '', loading: false, error: null });
+      return;
+    }
+
     let cancelled = false;
     // stats/summary는 유지 (stale-while-revalidating) — 깜빡임 방지
     setState(s => ({ ...s, loading: true, error: null }));

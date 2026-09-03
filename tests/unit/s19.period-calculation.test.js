@@ -93,6 +93,47 @@ describe("getPeriodRange — 월 단위", () => {
   });
 });
 
+describe("getPeriodRange — 일 단위 (KST 기준)", () => {
+  // REF = 2026-08-04T12:00:00Z → KST 2026-08-04 21:00 (같은 날)
+  test("'yesterday' → KST 기준 전날", () => {
+    const { from, to } = getPeriodRange("yesterday", REF);
+    assert.equal(kstDate(from), "2026-08-03");
+    assert.equal(kstDate(to),   "2026-08-03");
+  });
+
+  test("'today' → KST 기준 오늘", () => {
+    const { from, to } = getPeriodRange("today", REF);
+    assert.equal(kstDate(from), "2026-08-04");
+    assert.equal(kstDate(to),   "2026-08-04");
+  });
+
+  test("'tomorrow' → KST 기준 내일", () => {
+    const { from, to } = getPeriodRange("tomorrow", REF);
+    assert.equal(kstDate(from), "2026-08-05");
+    assert.equal(kstDate(to),   "2026-08-05");
+  });
+
+  test("KST 자정 직전 (UTC 14:59 = KST 23:59): 오늘", () => {
+    // UTC 2026-08-04 14:59 = KST 2026-08-04 23:59 → 아직 오늘
+    const late = new Date("2026-08-04T14:59:00Z");
+    const { from } = getPeriodRange("today", late);
+    assert.equal(kstDate(from), "2026-08-04");
+  });
+
+  test("KST 자정 직후 (UTC 15:00 = KST 00:00 다음날): 내일 기준 오늘", () => {
+    // UTC 2026-08-04 15:00 = KST 2026-08-05 00:00 → 하루 바뀜
+    const midnight = new Date("2026-08-04T15:00:00Z");
+    const { from } = getPeriodRange("today", midnight);
+    assert.equal(kstDate(from), "2026-08-05");
+  });
+
+  test("'last_hour' → 절대 시각 기준 (KST 보정 불필요)", () => {
+    const { from, to } = getPeriodRange("last_hour", REF);
+    const diffMs = to - from;
+    assert.equal(diffMs, 60 * 60 * 1000); // 정확히 1시간
+  });
+});
+
 describe("getPeriodRange — 오류 처리", () => {
   test("알 수 없는 period → Error throw", () => {
     assert.throws(
