@@ -41,9 +41,8 @@ export const STATE_META = {
     label: '입실전', color: '#48a88a', lightColor: '#7ac4ad',
     bg: '#ecf5f1', border: '#9dd4c4',
     subStates: {
-      CHECKIN_INQUIRY: { label: '체크인 예정시간 문의중' },
-      OPTIMIZING:      { label: '최적화중' },
-      OPTIMIZED:       { label: '최적화완료' },
+      OPTIMIZING: { label: '최적화중' },
+      OPTIMIZED:  { label: '최적화완료' },
     },
   },
   OCCUPIED: {
@@ -670,7 +669,6 @@ export const PROPERTIES = [
 export const SEGMENT_COLORS = {
   'VACANT/CLEANING_FINISHED':       '#c0cdd4',
   'VACANT/MAINTENANCE':             '#a8b8c4',
-  'PRE_STAY_READY/CHECKIN_INQUIRY': '#a0d4c4',
   'PRE_STAY_READY/OPTIMIZING':      '#7ac4ad',
   'PRE_STAY_READY/OPTIMIZED':       '#48a88a',
   'OCCUPIED/GOOD_CONDITION':        '#6898d0',

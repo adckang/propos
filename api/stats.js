@@ -9,6 +9,8 @@ import { getStatsForPeriod } from "../src/application/reportingService.js";
 
 const VALID_PERIODS = [
   "now",
+  "yesterday", "today", "tomorrow",
+  "last_hour", "next_hour",
   "this_week", "last_week", "next_week",
   "this_month", "last_month", "next_month",
 ];

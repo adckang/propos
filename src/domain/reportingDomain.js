@@ -6,31 +6,35 @@
  * @param {Date} referenceDate
  * @returns {{ from: Date, to: Date } | null}  null = 실시간(범위 없음)
  */
+// KST = UTC+9. 한국 호스트 기준 날짜 경계를 UTC로 변환하기 위한 오프셋.
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+/**
+ * KST 기준 날짜 컴포넌트(y/m/d)로부터 하루 범위의 UTC Date 쌍을 반환한다.
+ * KST 00:00 = UTC (y,m,d,00:00) - 9h
+ */
+function kstDayRange(y, m, d) {
+  return {
+    from: new Date(Date.UTC(y, m, d, 0, 0, 0, 0) - KST_OFFSET_MS),
+    to:   new Date(Date.UTC(y, m, d, 23, 59, 59, 999) - KST_OFFSET_MS),
+  };
+}
+
 export function getPeriodRange(period, referenceDate = new Date()) {
   if (period === "now") return null;
 
-  const y = referenceDate.getUTCFullYear();
-  const m = referenceDate.getUTCMonth();
-  const d = referenceDate.getUTCDate();
+  // KST 기준 날짜 컴포넌트 (UTC 날짜가 아닌 KST 날짜 기준으로 분기해야 함)
+  const kstRef = new Date(referenceDate.getTime() + KST_OFFSET_MS);
+  const y = kstRef.getUTCFullYear();
+  const m = kstRef.getUTCMonth();
+  const d = kstRef.getUTCDate();
 
   // 일 단위
-  if (period === "yesterday") {
-    const from = new Date(Date.UTC(y, m, d - 1, 0, 0, 0, 0));
-    const to   = new Date(Date.UTC(y, m, d - 1, 23, 59, 59, 999));
-    return { from, to };
-  }
-  if (period === "today") {
-    const from = new Date(Date.UTC(y, m, d, 0, 0, 0, 0));
-    const to   = new Date(Date.UTC(y, m, d, 23, 59, 59, 999));
-    return { from, to };
-  }
-  if (period === "tomorrow") {
-    const from = new Date(Date.UTC(y, m, d + 1, 0, 0, 0, 0));
-    const to   = new Date(Date.UTC(y, m, d + 1, 23, 59, 59, 999));
-    return { from, to };
-  }
+  if (period === "yesterday") return kstDayRange(y, m, d - 1);
+  if (period === "today")     return kstDayRange(y, m, d);
+  if (period === "tomorrow")  return kstDayRange(y, m, d + 1);
 
-  // 시간 단위
+  // 시간 단위 (절대 시각 기준 — KST 보정 불필요)
   if (period === "last_hour") {
     const to   = new Date(referenceDate);
     const from = new Date(to.getTime() - 60 * 60 * 1000);
@@ -42,23 +46,23 @@ export function getPeriodRange(period, referenceDate = new Date()) {
     return { from, to };
   }
 
-  // 주 단위
+  // 주 단위 (KST 기준 월요일 00:00 ~ 일요일 23:59)
   if (period === "this_week" || period === "last_week" || period === "next_week") {
-    const dow = referenceDate.getUTCDay();
+    const dow = kstRef.getUTCDay(); // KST 기준 요일
     const daysToMonday = dow === 0 ? 6 : dow - 1;
-    const thisMonday = new Date(Date.UTC(y, m, d - daysToMonday));
+    const mondayKstDate = d - daysToMonday;
 
     let weekOffset = 0;
     if (period === "last_week") weekOffset = -7;
     else if (period === "next_week") weekOffset = 7;
 
-    const from = new Date(thisMonday.getTime() + weekOffset * 86400000);
-    const to   = new Date(from.getTime() + 6 * 86400000);
-    to.setUTCHours(23, 59, 59, 999);
+    const fromDay = mondayKstDate + weekOffset;
+    const from = new Date(Date.UTC(y, m, fromDay, 0, 0, 0, 0) - KST_OFFSET_MS);
+    const to   = new Date(Date.UTC(y, m, fromDay + 6, 23, 59, 59, 999) - KST_OFFSET_MS);
     return { from, to };
   }
 
-  // 월 단위
+  // 월 단위 (KST 기준 월 1일 00:00 ~ 말일 23:59)
   if (period === "this_month" || period === "last_month" || period === "next_month") {
     let targetYear = y;
     let targetMonth = m;
@@ -71,8 +75,8 @@ export function getPeriodRange(period, referenceDate = new Date()) {
       if (targetMonth > 11) { targetMonth = 0; targetYear += 1; }
     }
 
-    const from = new Date(Date.UTC(targetYear, targetMonth, 1));
-    const to   = new Date(Date.UTC(targetYear, targetMonth + 1, 0, 23, 59, 59, 999));
+    const from = new Date(Date.UTC(targetYear, targetMonth, 1, 0, 0, 0, 0) - KST_OFFSET_MS);
+    const to   = new Date(Date.UTC(targetYear, targetMonth + 1, 0, 23, 59, 59, 999) - KST_OFFSET_MS);
     return { from, to };
   }
 
