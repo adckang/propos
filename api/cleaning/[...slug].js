@@ -3,6 +3,7 @@
  */
 
 import { Pool } from "pg";
+import { kv } from "@vercel/kv";
 import {
   advanceJob,
   getPropertyConfig,
@@ -832,6 +833,17 @@ async function handleCalendarScan(req, res) {
 // ── Gmail Watch 등록 ─────────────────────────────────────────
 
 async function registerGmailWatch(req, res) {
+  // GET: 저장된 만료일 반환
+  if (req.method === "GET") {
+    try {
+      const exp = await kv.get("gmail_watch_expiration");
+      if (!exp) return sendJson(res, 200, { ok: true, status: "unknown" });
+      const expired = Date.now() > Number(exp);
+      return sendJson(res, 200, { ok: true, status: expired ? "expired" : "active", expiration: exp });
+    } catch (e) {
+      return sendJson(res, 200, { ok: true, status: "unknown" });
+    }
+  }
   if (req.method !== "POST") return res.status(405).end();
   const topicName = process.env.GOOGLE_PUBSUB_TOPIC;
   if (!topicName) return sendJson(res, 500, { error: "GOOGLE_PUBSUB_TOPIC 환경변수 없음" });
@@ -845,6 +857,11 @@ async function registerGmailWatch(req, res) {
   });
   const result = await r.json();
   if (!r.ok) return sendJson(res, 502, { error: "Gmail Watch 등록 실패", detail: result });
+  // 만료일 KV에 저장 (7일 + 1시간 여유로 TTL 설정)
+  if (result.expiration) {
+    const ttlSec = Math.floor((Number(result.expiration) - Date.now()) / 1000) + 3600;
+    await kv.set("gmail_watch_expiration", result.expiration, { ex: ttlSec }).catch(() => {});
+  }
   return sendJson(res, 200, { ok: true, historyId: result.historyId, expiration: result.expiration });
 }
 

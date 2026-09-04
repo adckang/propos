@@ -371,6 +371,35 @@ function PropertyPanel({ syncConfig, liveProperty }) {
     }
   }
 
+  const [watchStatus, setWatchStatus] = useState(null);
+  const [watchLoading, setWatchLoading] = useState(false);
+
+  useEffect(() => {
+    apiFetch('/api/gmail/watch').then(res => {
+      if (res.status === 'unknown') return;
+      const exp = res.expiration ? new Date(Number(res.expiration)) : null;
+      const expStr = exp ? exp.toLocaleString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+      setWatchStatus({ ok: res.status === 'active', expiration: expStr, expired: res.status === 'expired' });
+    }).catch(() => {});
+  }, []);
+
+  async function handleRegisterWatch() {
+    setWatchLoading(true);
+    setWatchStatus(null);
+    try {
+      const result = await apiFetch('/api/gmail/watch', { method: 'POST' });
+      const exp = result.expiration ? new Date(Number(result.expiration)) : null;
+      const expStr = exp ? exp.toLocaleString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '알 수 없음';
+      setWatchStatus({ ok: true, expiration: expStr });
+      Toast.show(`Gmail Watch 등록 완료 — ${expStr}까지 유효`, 's');
+    } catch (e) {
+      setWatchStatus({ ok: false, error: e.message });
+      Toast.show('Gmail Watch 등록 실패: ' + e.message, 'e');
+    } finally {
+      setWatchLoading(false);
+    }
+  }
+
   const reservations = liveProperty?.reservations ?? [];
   const today = new Date();
   const futureCount = reservations.filter(r => {
@@ -378,13 +407,54 @@ function PropertyPanel({ syncConfig, liveProperty }) {
     return co && co > today;
   }).length;
 
+  const gmailWatchBlock = (
+    <div style={{ background: '#fff', borderRadius: 12, padding: 20, border: '1px solid #e2e8f0' }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: '#1a202c', marginBottom: 4 }}>
+        Gmail Watch 상태
+      </div>
+      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 14, lineHeight: 1.6 }}>
+        에어비앤비 예약 이메일 감지용. 7일마다 만료되며 매주 월요일 자동 갱신됩니다.
+        청소 일정이 자동 생성되지 않으면 아래에서 수동 재등록하세요.
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <button onClick={handleRegisterWatch} disabled={watchLoading} style={{
+          border: '1.5px solid #d97706',
+          borderRadius: 8,
+          background: watchLoading ? '#fde68a' : '#d97706',
+          color: '#fff',
+          padding: '9px 24px', fontSize: 13, fontWeight: 700,
+          cursor: watchLoading ? 'not-allowed' : 'pointer',
+          fontFamily: 'inherit',
+        }}>
+          {watchLoading ? '등록 중...' : 'Gmail Watch 재등록'}
+        </button>
+        {watchStatus && (
+          <span style={{
+            fontSize: 13,
+            color: watchStatus.expired ? '#dc2626' : watchStatus.ok ? '#059669' : '#dc2626',
+            fontWeight: 600,
+          }}>
+            {watchStatus.expired
+              ? '❌ 만료됨 — 재등록이 필요해요'
+              : watchStatus.ok
+                ? `✅ 정상 — ${watchStatus.expiration}까지 유효`
+                : `❌ 실패: ${watchStatus.error}`}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
   if (!propertyId) {
     return (
-      <div style={{
-        textAlign: 'center', color: '#6b7280', padding: 60,
-        background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0',
-      }}>
-        대시보드에서 캘린더 설정을 먼저 완료해주세요.
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {gmailWatchBlock}
+        <div style={{
+          textAlign: 'center', color: '#6b7280', padding: 60,
+          background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0',
+        }}>
+          대시보드에서 캘린더 설정을 먼저 완료해주세요.
+        </div>
       </div>
     );
   }
@@ -527,6 +597,8 @@ function PropertyPanel({ syncConfig, liveProperty }) {
           }}>{syncing ? '동기화 중...' : `청소 일정 동기화 (${futureCount}건)`}</button>
         </div>
       </div>
+
+      {gmailWatchBlock}
     </div>
   );
 }

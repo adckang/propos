@@ -433,6 +433,10 @@ export default async function handler(req, res) {
             });
             if (r.ok) {
               const w = await r.json();
+              if (w.expiration) {
+                const ttlSec = Math.floor((Number(w.expiration) - Date.now()) / 1000) + 3600;
+                await kv.set("gmail_watch_expiration", w.expiration, { ex: ttlSec }).catch(() => {});
+              }
               await postSlack(`[PROPOS] 📬 Gmail Watch 자동 갱신 완료 (만료: ${new Date(Number(w.expiration)).toISOString().slice(0, 10)})`);
               ran.push("gmail-watch-renewed");
             }
