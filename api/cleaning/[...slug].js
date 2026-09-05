@@ -13,6 +13,7 @@ import {
 } from "./_dispatch.js";
 import {
   getGoogleToken,
+  getGmailToken,
   createBlockerEvent,
   deleteBlockerEvent,
   getNextMonthDates,
@@ -264,8 +265,26 @@ async function dispatchJob(res, jobId) {
   const { rows: [job] } = await db.query(`SELECT * FROM cleaning_jobs WHERE id=$1`, [jobId]);
   if (!job) return sendJson(res, 404, { error: "일정 없음" });
   if (job.status !== "PENDING") return sendJson(res, 409, { error: `PENDING 상태가 아님 (현재: ${job.status})` });
-  await advanceJob(db, job);
+  await advanceJob(db, job, { deleteBlocker: makeBlockerDeleter() });
   return sendJson(res, 200, { ok: true });
+}
+
+function makeBlockerDeleter() {
+  return async (job) => {
+    const date = new Date(job.checkout_at).toISOString().slice(0, 10);
+    const { rows: [cfg] } = await db.query(
+      `SELECT google_calendar_id FROM property_cleaning_config WHERE property_id=$1`,
+      [job.property_id]
+    );
+    const { rows: blocker } = await db.query(
+      `DELETE FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2 RETURNING event_id`,
+      [job.property_id, date]
+    );
+    if (blocker.length && cfg?.google_calendar_id) {
+      const gTok = await getGoogleToken();
+      await deleteBlockerEvent(cfg.google_calendar_id, blocker[0].event_id, gTok);
+    }
+  };
 }
 
 async function handleConfirmRedirect(req, res, propertyId) {
@@ -402,7 +421,7 @@ async function handleGmailWebhook(req, res) {
   const { historyId } = payload;
   if (!historyId) return res.status(200).end();
   try {
-    const token = await getGoogleToken();
+    const token = await getGmailToken();
     const histRes = await fetch(
       `${GMAIL_API}/users/me/history?startHistoryId=${historyId}&historyTypes=messageAdded`,
       { headers: { Authorization: `Bearer ${token}` } }
@@ -848,7 +867,7 @@ async function registerGmailWatch(req, res) {
   const topicName = process.env.GOOGLE_PUBSUB_TOPIC;
   if (!topicName) return sendJson(res, 500, { error: "GOOGLE_PUBSUB_TOPIC 환경변수 없음" });
   let token;
-  try { token = await getGoogleToken(); }
+  try { token = await getGmailToken(); }
   catch (e) { return sendJson(res, 500, { error: `Google OAuth 실패: ${e.message}` }); }
   const r = await fetch(`${GMAIL_API}/users/me/watch`, {
     method: "POST",

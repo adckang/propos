@@ -7,6 +7,8 @@
 
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
 import { parseAllFutureCheckouts } from "../../api/cleaning/_calendar.js";
 
 // ============================================================
@@ -335,18 +337,209 @@ describe("Calendar Webhook 보안 — x-goog-channel-token 검증", () => {
   });
 });
 
+// ============================================================
+// Gmail/Calendar 토큰 분리 아키텍처
+// 오늘(2026-09-04) 발견된 버그: handleGmailWebhook·registerGmailWatch가
+// getGoogleToken()(Calendar용, bnb.paju)을 써서 nam5821 메일함 접근이 안 됐음.
+// 두 토큰은 계정·스코프가 다르며 절대 혼용 금지.
+// ============================================================
+
+describe("Gmail/Calendar 토큰 분리 아키텍처", () => {
+  // getGoogleToken → GOOGLE_CALENDAR_REFRESH_TOKEN (bnb.paju, calendar scope)
+  // getGmailToken  → GOOGLE_REFRESH_TOKEN          (nam5821,  mail.google.com scope)
+
+  function resolveCalendarRefreshToken(env) {
+    return env.GOOGLE_CALENDAR_REFRESH_TOKEN ?? env.GOOGLE_REFRESH_TOKEN;
+  }
+  function resolveGmailRefreshToken(env) {
+    return env.GOOGLE_REFRESH_TOKEN ?? env.GOOGLE_CALENDAR_REFRESH_TOKEN;
+  }
+
+  test("getGoogleToken은 GOOGLE_CALENDAR_REFRESH_TOKEN을 우선 사용", () => {
+    const env = { GOOGLE_CALENDAR_REFRESH_TOKEN: "cal-token", GOOGLE_REFRESH_TOKEN: "gmail-token" };
+    assert.equal(resolveCalendarRefreshToken(env), "cal-token");
+  });
+
+  test("getGmailToken은 GOOGLE_REFRESH_TOKEN을 우선 사용", () => {
+    const env = { GOOGLE_CALENDAR_REFRESH_TOKEN: "cal-token", GOOGLE_REFRESH_TOKEN: "gmail-token" };
+    assert.equal(resolveGmailRefreshToken(env), "gmail-token");
+  });
+
+  test("두 토큰이 모두 설정된 경우 서로 다른 값 반환 (혼용 금지)", () => {
+    const env = { GOOGLE_CALENDAR_REFRESH_TOKEN: "cal-token", GOOGLE_REFRESH_TOKEN: "gmail-token" };
+    assert.notEqual(resolveCalendarRefreshToken(env), resolveGmailRefreshToken(env));
+  });
+
+  test("GOOGLE_CALENDAR_REFRESH_TOKEN 미설정 시 getGoogleToken은 GOOGLE_REFRESH_TOKEN으로 폴백", () => {
+    const env = { GOOGLE_REFRESH_TOKEN: "gmail-token" };
+    assert.equal(resolveCalendarRefreshToken(env), "gmail-token");
+  });
+
+  test("GOOGLE_REFRESH_TOKEN 미설정 시 getGmailToken은 GOOGLE_CALENDAR_REFRESH_TOKEN으로 폴백", () => {
+    const env = { GOOGLE_CALENDAR_REFRESH_TOKEN: "cal-token" };
+    assert.equal(resolveGmailRefreshToken(env), "cal-token");
+  });
+
+  // 핵심 계약: Gmail 관련 함수는 반드시 getGmailToken 사용
+  // L2: 소스코드 grep으로 실제 코드 검증 (2026-09-04 버그에서 교훈)
+  test("handleGmailWebhook은 getGmailToken 사용 — 소스코드 확인", () => {
+    const slug = fileURLToPath(new URL("../../api/cleaning/[...slug].js", import.meta.url));
+    const src = readFileSync(slug, "utf8");
+
+    // handleGmailWebhook 함수 블록 추출 (async function handleGmailWebhook ~ 다음 async function)
+    const fnMatch = src.match(/async function handleGmailWebhook[\s\S]*?(?=\nasync function |\nexport default )/);
+    assert.ok(fnMatch, "handleGmailWebhook 함수를 찾을 수 없음");
+    const fnBody = fnMatch[0];
+
+    assert.ok(fnBody.includes("getGmailToken"), "handleGmailWebhook 내에 getGmailToken() 호출 필수");
+    assert.ok(!fnBody.includes("getGoogleToken()"), "handleGmailWebhook 내에 getGoogleToken() 호출 금지 (Calendar 토큰 혼용)");
+  });
+
+  test("registerGmailWatch는 getGmailToken 사용 — 소스코드 확인", () => {
+    const slug = fileURLToPath(new URL("../../api/cleaning/[...slug].js", import.meta.url));
+    const src = readFileSync(slug, "utf8");
+
+    const fnMatch = src.match(/async function registerGmailWatch[\s\S]*?(?=\nasync function |\nexport default )/);
+    assert.ok(fnMatch, "registerGmailWatch 함수를 찾을 수 없음");
+    const fnBody = fnMatch[0];
+
+    assert.ok(fnBody.includes("getGmailToken"), "registerGmailWatch 내에 getGmailToken() 호출 필수");
+    assert.ok(!fnBody.includes("getGoogleToken()"), "registerGmailWatch 내에 getGoogleToken() 호출 금지");
+  });
+
+  test("cron Gmail Watch 갱신은 getGmailToken 사용 — 소스코드 확인", () => {
+    const cronSlug = fileURLToPath(new URL("../../api/cron/[...slug].js", import.meta.url));
+    const src = readFileSync(cronSlug, "utf8");
+
+    // gmail_watch 또는 GmailWatch 갱신 블록에 getGmailToken 사용 여부
+    assert.ok(src.includes("getGmailToken"), "cron Gmail Watch 갱신은 getGmailToken 사용 필수");
+  });
+});
+
+// ============================================================
+// Gmail Webhook Pub/Sub 페이로드 파싱
+// ============================================================
+
+describe("Gmail Webhook — Pub/Sub 페이로드 파싱", () => {
+  function parseWebhookPayload(body) {
+    const b64 = body?.message?.data;
+    if (!b64) return null;
+    try {
+      const payload = JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
+      return payload.historyId ? payload : null;
+    } catch {
+      return null;
+    }
+  }
+
+  test("유효한 Pub/Sub 페이로드 → historyId 추출", () => {
+    const data = Buffer.from(JSON.stringify({ emailAddress: "nam5821@gmail.com", historyId: "12345" })).toString("base64");
+    const body = { message: { data, messageId: "msg-1" }, subscription: "projects/propos-worker/subscriptions/propos-gmail-push" };
+    const result = parseWebhookPayload(body);
+    assert.equal(result?.historyId, "12345");
+  });
+
+  test("message.data 없음 → null (웹훅 스킵)", () => {
+    assert.equal(parseWebhookPayload({ message: {} }), null);
+    assert.equal(parseWebhookPayload({}), null);
+  });
+
+  test("historyId 없는 JSON → null (웹훅 스킵)", () => {
+    const data = Buffer.from(JSON.stringify({ emailAddress: "nam5821@gmail.com" })).toString("base64");
+    assert.equal(parseWebhookPayload({ message: { data } }), null);
+  });
+
+  test("잘못된 base64 → null (웹훅 스킵)", () => {
+    assert.equal(parseWebhookPayload({ message: { data: "!!!invalid!!!" } }), null);
+  });
+
+  test("emailAddress 필드 포함 확인 (계정 식별용)", () => {
+    const data = Buffer.from(JSON.stringify({ emailAddress: "nam5821@gmail.com", historyId: "99999" })).toString("base64");
+    const result = parseWebhookPayload({ message: { data } });
+    assert.equal(result?.emailAddress, "nam5821@gmail.com");
+  });
+});
+
+// ============================================================
+// Gmail Webhook 전체 플로우 — mock 기반 통합 검증
+// ============================================================
+
+describe("Gmail Webhook 전체 플로우 (mock)", () => {
+  const RESERVATION_SUBJECTS = ["reservation confirmed", "예약 확정", "booking confirmed"];
+
+  // 웹훅 핸들러 핵심 로직 추출 (토큰 주입 가능한 형태)
+  async function simulateWebhookFlow({ historyId, mockMessages, token }) {
+    const called = { syncTriggered: false, tokenUsed: token };
+    const history = mockMessages.filter(() => true); // 모든 메시지 반환 가정
+    for (const msg of history) {
+      const subject = msg.subject ?? "";
+      if (RESERVATION_SUBJECTS.some((s) => subject.toLowerCase().includes(s))) {
+        called.syncTriggered = true;
+        break;
+      }
+    }
+    return called;
+  }
+
+  test("예약 확정 메일 감지 → iCal sync 트리거", async () => {
+    const result = await simulateWebhookFlow({
+      historyId: "2704452",
+      mockMessages: [{ subject: "예약 확정 - 지웅 박 님이 9월 6일에 체크인할 예정입니다" }],
+      token: "gmail-access-token",
+    });
+    assert.ok(result.syncTriggered);
+  });
+
+  test("관련 없는 메일 → sync 미트리거", async () => {
+    const result = await simulateWebhookFlow({
+      historyId: "2704500",
+      mockMessages: [{ subject: "LinkedIn: Someone wants to connect" }],
+      token: "gmail-access-token",
+    });
+    assert.ok(!result.syncTriggered);
+  });
+
+  test("빈 history → sync 미트리거", async () => {
+    const result = await simulateWebhookFlow({
+      historyId: "2704500",
+      mockMessages: [],
+      token: "gmail-access-token",
+    });
+    assert.ok(!result.syncTriggered);
+  });
+
+  test("여러 메일 중 하나만 예약 확정 → sync 트리거 (한 번만)", async () => {
+    const result = await simulateWebhookFlow({
+      historyId: "2704500",
+      mockMessages: [
+        { subject: "Payment received - Airbnb" },
+        { subject: "Reservation confirmed - Paju 201" },
+        { subject: "Your receipt from Airbnb" },
+      ],
+      token: "gmail-access-token",
+    });
+    assert.ok(result.syncTriggered);
+  });
+});
+
 describe("Google OAuth 환경변수 — refresh token 방식", () => {
-  // _calendar.js: GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET + GOOGLE_REFRESH_TOKEN
-  // 서비스 계정(GOOGLE_SERVICE_ACCOUNT_JSON)이 아닌 OAuth2 refresh token 방식 사용
-  const REQUIRED_OAUTH_VARS = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN"];
+  // getGoogleToken: GOOGLE_CALENDAR_REFRESH_TOKEN (bnb.paju, Calendar 전용)
+  // getGmailToken:  GOOGLE_REFRESH_TOKEN          (nam5821,  Gmail 전용)
+  const CALENDAR_TOKEN_VAR = "GOOGLE_CALENDAR_REFRESH_TOKEN"; // bnb.paju
+  const GMAIL_TOKEN_VAR    = "GOOGLE_REFRESH_TOKEN";          // nam5821
   const REQUIRED_WATCH_VARS = ["GOOGLE_PUBSUB_TOPIC"];
   const OPTIONAL_SECURITY_VARS = ["GOOGLE_WEBHOOK_SECRET", "CRON_SECRET"];
 
-  test("Calendar API 필수 env 3개 확인", () => {
-    assert.equal(REQUIRED_OAUTH_VARS.length, 3);
-    assert.ok(REQUIRED_OAUTH_VARS.includes("GOOGLE_CLIENT_ID"));
-    assert.ok(REQUIRED_OAUTH_VARS.includes("GOOGLE_CLIENT_SECRET"));
-    assert.ok(REQUIRED_OAUTH_VARS.includes("GOOGLE_REFRESH_TOKEN"));
+  test("Calendar 전용 env: GOOGLE_CALENDAR_REFRESH_TOKEN (bnb.paju)", () => {
+    assert.equal(CALENDAR_TOKEN_VAR, "GOOGLE_CALENDAR_REFRESH_TOKEN");
+  });
+
+  test("Gmail Watch 전용 env: GOOGLE_REFRESH_TOKEN (nam5821 호스트 계정)", () => {
+    assert.equal(GMAIL_TOKEN_VAR, "GOOGLE_REFRESH_TOKEN");
+  });
+
+  test("두 토큰은 서로 다른 계정·스코프 (혼용 금지)", () => {
+    assert.notEqual(CALENDAR_TOKEN_VAR, GMAIL_TOKEN_VAR);
   });
 
   test("Gmail Watch 필수 env 확인", () => {
@@ -354,14 +547,11 @@ describe("Google OAuth 환경변수 — refresh token 방식", () => {
   });
 
   test("보안 env는 선택사항 (미설정 시 검증 스킵)", () => {
-    // GOOGLE_WEBHOOK_SECRET: 없으면 webhook 검증 생략
-    // CRON_SECRET: 없으면 크론 인증 생략
     assert.equal(OPTIONAL_SECURITY_VARS.length, 2);
   });
 
   test("GOOGLE_SERVICE_ACCOUNT_JSON은 사용하지 않음 (refresh token 방식으로 구현)", () => {
-    // 설계 문서 오류: GOOGLE_SERVICE_ACCOUNT_JSON → 실제 구현은 OAuth2 refresh token
-    const unusedVars = ["GOOGLE_SERVICE_ACCOUNT_JSON"];
-    assert.ok(!REQUIRED_OAUTH_VARS.some(v => unusedVars.includes(v)));
+    const usedVars = [CALENDAR_TOKEN_VAR, GMAIL_TOKEN_VAR, "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"];
+    assert.ok(!usedVars.includes("GOOGLE_SERVICE_ACCOUNT_JSON"));
   });
 });

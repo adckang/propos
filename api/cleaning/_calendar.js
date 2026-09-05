@@ -8,24 +8,42 @@ const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 
 let _gToken = null, _gExpiry = 0;
+let _gmailToken = null, _gmailExpiry = 0;
 
-export async function getGoogleToken() {
-  if (_gToken && Date.now() < _gExpiry - 60_000) return _gToken;
+async function fetchGoogleToken(refreshToken) {
   const r = await fetch(GOOGLE_TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id:     process.env.GOOGLE_CLIENT_ID,
       client_secret: process.env.GOOGLE_CLIENT_SECRET,
-      refresh_token: process.env.GOOGLE_CALENDAR_REFRESH_TOKEN ?? process.env.GOOGLE_REFRESH_TOKEN,
+      refresh_token: refreshToken,
       grant_type:    "refresh_token",
     }),
   });
   const d = await r.json();
   if (!d.access_token) throw new Error(`Google OAuth 실패: ${JSON.stringify(d)}`);
-  _gToken = d.access_token;
-  _gExpiry = Date.now() + (d.expires_in ?? 3600) * 1000;
+  return { token: d.access_token, expiry: Date.now() + (d.expires_in ?? 3600) * 1000 };
+}
+
+// Calendar 전용 (bnb.paju — GOOGLE_CALENDAR_REFRESH_TOKEN)
+export async function getGoogleToken() {
+  if (_gToken && Date.now() < _gExpiry - 60_000) return _gToken;
+  const { token, expiry } = await fetchGoogleToken(
+    process.env.GOOGLE_CALENDAR_REFRESH_TOKEN ?? process.env.GOOGLE_REFRESH_TOKEN
+  );
+  _gToken = token; _gExpiry = expiry;
   return _gToken;
+}
+
+// Gmail Watch 전용 (nam5821 — GOOGLE_REFRESH_TOKEN)
+export async function getGmailToken() {
+  if (_gmailToken && Date.now() < _gmailExpiry - 60_000) return _gmailToken;
+  const { token, expiry } = await fetchGoogleToken(
+    process.env.GOOGLE_REFRESH_TOKEN ?? process.env.GOOGLE_CALENDAR_REFRESH_TOKEN
+  );
+  _gmailToken = token; _gmailExpiry = expiry;
+  return _gmailToken;
 }
 
 /**

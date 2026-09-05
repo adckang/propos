@@ -6,6 +6,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { selectChannel } from "../../api/cleaning/_notify.js";
+import { toE164 } from "../../api/cleaning/_sms.js";
 
 describe("NotificationService — 채널 선택", () => {
   test("fcm_status=active + fcm_token 있음 → FCM", () => {
@@ -315,5 +316,81 @@ describe("Integration Scenario — VIP_1 앱 미설치 시 SMS 발송", () => {
     const cleaner = { fcm_status: "uninstalled", fcm_token: null, phone: null };
     const result = simulateNotify(cleaner, { smsText: "SMS" });
     assert.equal(result.channel, "NONE");
+  });
+});
+
+// ============================================================
+// SMS 환경변수 미설정 시 channel=null (2026-09-04 운영 이슈)
+// PROPOS_SMS_GW_ID/PWD 미설정 → sendSms skip → resultChannel=NONE
+// → notify()가 channel DB 기록을 건너뜀 → cleaning_notifs.channel = null
+// ============================================================
+
+describe("SMS 환경변수 미설정 → channel DB 기록 없음", () => {
+  // _sms.js 핵심 로직 재현
+  function sendSmsWillSkip(gwId, gwPwd) {
+    return !gwId || !gwPwd; // 환경변수 없으면 return false (발송 skip)
+  }
+
+  // _notify.js 핵심 로직: channel 기록 조건
+  function willRecordChannel(notifId, resultChannel) {
+    return !!(notifId && resultChannel !== "NONE");
+  }
+
+  test("PROPOS_SMS_GW_ID 미설정 → SMS 발송 skip", () => {
+    assert.ok(sendSmsWillSkip(undefined, "pwd"), "gwId 없으면 skip");
+    assert.ok(sendSmsWillSkip("", "pwd"),        "gwId 빈 문자열도 skip");
+  });
+
+  test("PROPOS_SMS_GW_PWD 미설정 → SMS 발송 skip", () => {
+    assert.ok(sendSmsWillSkip("id", undefined), "gwPwd 없으면 skip");
+    assert.ok(sendSmsWillSkip("id", ""),        "gwPwd 빈 문자열도 skip");
+  });
+
+  test("양쪽 모두 설정 → SMS 발송 진행 (skip 안 함)", () => {
+    assert.ok(!sendSmsWillSkip("my-id", "my-pwd"), "둘 다 있으면 skip 안 함");
+  });
+
+  test("SMS skip → resultChannel=NONE → channel DB 기록 안 됨", () => {
+    // sendSms가 false 반환 → resultChannel = "NONE"
+    const resultChannel = "NONE";
+    const notifId = "test-notif-id";
+    assert.ok(!willRecordChannel(notifId, resultChannel),
+      "NONE이면 DB UPDATE 건너뜀 → cleaning_notifs.channel 컬럼 null 유지");
+  });
+
+  test("SMS 성공(resultChannel=SMS) → channel 기록됨", () => {
+    const resultChannel = "SMS";
+    const notifId = "test-notif-id";
+    assert.ok(willRecordChannel(notifId, resultChannel), "SMS 성공 시 channel 기록");
+  });
+
+  test("notifId 없이 호출 → channel 기록 안 됨 (advanceJob에서 notifId 누락 방지 필요)", () => {
+    const resultChannel = "SMS";
+    assert.ok(!willRecordChannel(undefined, resultChannel),
+      "notifId 미전달 시 channel 기록 불가 — notify() 호출 시 notifId 필수");
+    assert.ok(!willRecordChannel(null, resultChannel),
+      "notifId=null도 channel 기록 불가");
+  });
+});
+
+// ============================================================
+// L2 Contract — _sms.js toE164 번호 변환 (실제 함수 import)
+// ============================================================
+
+describe("L2 Contract — _sms.js toE164 번호 변환", () => {
+  test("010-XXXX-XXXX → +8210XXXXXXXX", () => {
+    assert.equal(toE164("010-1234-5678"), "+821012345678");
+  });
+
+  test("82로 시작 → 그대로 +82...", () => {
+    assert.equal(toE164("821012345678"), "+821012345678");
+  });
+
+  test("하이픈·공백 제거", () => {
+    assert.equal(toE164("010 1234 5678"), "+821012345678");
+  });
+
+  test("01012345678 (하이픈 없음) → +821012345678", () => {
+    assert.equal(toE164("01012345678"), "+821012345678");
   });
 });

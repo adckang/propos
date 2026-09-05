@@ -8,6 +8,8 @@ import assert from "node:assert/strict";
 
 // ── 테스트 대상 함수 직접 import ────────────────────────────
 // BASE_URL은 환경변수 없으면 'https://www.proposonline.com'
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
 import {
   buildSmsVip,
   buildSmsBulk,
@@ -438,19 +440,26 @@ describe("sendCompletionSmsToRest — FCM 전환 후 메시지 내용", () => {
 
 // ============================================================
 // CANCELLED 상태 — getAvailableVip / dispatchBulk 충돌 제외
+// L2: 소스코드 grep으로 실제 SQL 검증 (재구현 패턴 제거)
 // ============================================================
-describe("CANCELLED 상태 — 청소자 충돌 체크에서 제외 (SQL guard)", () => {
-  // getAvailableVip 충돌 체크 SQL: CANCELLED가 NOT IN에 포함돼야 함
-  // dispatchBulk 충돌 체크 SQL: 동일
+describe("CANCELLED 상태 — 청소자 충돌 체크에서 제외 (소스코드 확인)", () => {
+  const dispatchSrc = readFileSync(
+    fileURLToPath(new URL("../../api/cleaning/_dispatch.js", import.meta.url)),
+    "utf8"
+  );
 
-  test("getAvailableVip NOT IN 목록에 CANCELLED 포함", () => {
-    const sql = `j.status NOT IN ('ASSIGNED','COMPLETED','ESCALATED','CANCELLED')`;
-    assert.ok(sql.includes("'CANCELLED'"), "CANCELLED가 제외 목록에 없음 → 취소된 job에 묶인 청소자가 신규 배정 제외됨");
+  test("getAvailableVip NOT IN 목록에 CANCELLED 포함 — 소스코드 확인", () => {
+    // 취소된 job에 묶인 청소자가 신규 배정에서 누락되면 안 됨
+    const notInBlocks = [...dispatchSrc.matchAll(/status NOT IN \([^)]+\)/g)].map((m) => m[0]);
+    assert.ok(notInBlocks.length > 0, "status NOT IN 블록을 찾을 수 없음");
+    const hasCancel = notInBlocks.some((b) => b.includes("CANCELLED"));
+    assert.ok(hasCancel, "CANCELLED가 충돌 체크 NOT IN 목록에 없음 → 취소 job에 묶인 청소자 잘못 제외될 수 있음");
   });
 
-  test("dispatchBulk NOT IN 목록에 CANCELLED 포함", () => {
-    const sql = `j2.status NOT IN ('ASSIGNED','COMPLETED','ESCALATED','CANCELLED')`;
-    assert.ok(sql.includes("'CANCELLED'"), "dispatchBulk BULK 조회에서도 CANCELLED 제외 필요");
+  test("advanceJob이 createNotif 결과의 id를 notifId로 전달 — 소스코드 확인", () => {
+    // notifId 없으면 notify()가 channel DB 기록 건너뜀 → channel=null
+    assert.ok(dispatchSrc.includes("notifId: notif.id"),
+      "advanceJob이 notifId: notif.id를 notify()에 전달하지 않음 → channel 기록 누락");
   });
 });
 

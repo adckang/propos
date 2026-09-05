@@ -15,6 +15,7 @@ import {
 import { notify } from "../cleaning/_notify.js";
 import {
   getGoogleToken,
+  getGmailToken,
   createBlockerEvent,
   deleteBlockerEvent,
   getNextMonthDates,
@@ -33,6 +34,24 @@ const DASHBOARD_URL =
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+function makeCronBlockerDeleter(db) {
+  return async (job) => {
+    const date = new Date(job.checkout_at).toISOString().slice(0, 10);
+    const { rows: [cfg] } = await db.query(
+      `SELECT google_calendar_id FROM property_cleaning_config WHERE property_id=$1`,
+      [job.property_id]
+    );
+    const { rows: blocker } = await db.query(
+      `DELETE FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2 RETURNING event_id`,
+      [job.property_id, date]
+    );
+    if (blocker.length && cfg?.google_calendar_id) {
+      const gTok = await getGoogleToken();
+      await deleteBlockerEvent(cfg.google_calendar_id, blocker[0].event_id, gTok);
+    }
+  };
+}
 
 function kstDateString() {
   const kst = new Date(Date.now() + KST_OFFSET_MS);
@@ -242,7 +261,10 @@ async function handleCleaningFollowup(db, res) {
      ORDER BY dispatch_after ASC`
   );
   for (const job of readyJobs) {
-    try { await advanceJob(db, job); advanced++; }
+    try {
+      await advanceJob(db, job, { deleteBlocker: makeCronBlockerDeleter(db) });
+      advanced++;
+    }
     catch (e) { console.error(`[followup] PENDING advance 실패 (${job.id}):`, e.message); }
   }
 
@@ -425,7 +447,7 @@ export default async function handler(req, res) {
           const GMAIL_API = "https://gmail.googleapis.com/gmail/v1";
           const topicName = process.env.GOOGLE_PUBSUB_TOPIC;
           if (topicName) {
-            const gToken = await getGoogleToken();
+            const gToken = await getGmailToken();
             const r = await fetch(`${GMAIL_API}/users/me/watch`, {
               method: "POST",
               headers: { "Content-Type": "application/json", Authorization: `Bearer ${gToken}` },

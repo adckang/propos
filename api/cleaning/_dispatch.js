@@ -110,8 +110,11 @@ export async function postSlack(text) {
 
 // ── 핵심 dispatch 함수들 ────────────────────────────────────
 
-/** job 현재 상태에서 다음 VIP/BULK 단계로 전환하고 발송 */
-export async function advanceJob(db, job) {
+/**
+ * job 현재 상태에서 다음 VIP/BULK 단계로 전환하고 발송.
+ * @param {object} [opts.deleteBlocker] - PENDING → 첫 알림 전 블로커 삭제 콜백 (async fn(job))
+ */
+export async function advanceJob(db, job, { deleteBlocker } = {}) {
   const nextStatus = {
     PENDING:           "NOTIFYING_VIP_1",
     NOTIFYING_VIP_1:  "NOTIFYING_VIP_2",
@@ -120,6 +123,13 @@ export async function advanceJob(db, job) {
   }[job.status];
 
   if (!nextStatus) return; // NOTIFYING_BULK 이후는 followup 크론이 처리
+
+  // PENDING → 첫 단계 전환 시 블로커 삭제 (슬롯 오픈)
+  if (job.status === "PENDING" && typeof deleteBlocker === "function") {
+    await deleteBlocker(job).catch((e) =>
+      console.error(`[dispatch] 블로커 삭제 실패 (${job.property_id}):`, e.message)
+    );
+  }
 
   const propCfg = await getPropertyConfig(db, job.property_id);
   const propertyName = propCfg?.name ?? job.property_id;
