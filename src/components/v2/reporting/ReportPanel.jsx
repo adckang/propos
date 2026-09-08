@@ -12,7 +12,6 @@
  *   isMobile
  */
 
-import { useState } from 'react';
 import EventMatrixPanel from './EventMatrixPanel';
 import ActiveHybridPanel from './ActiveHybridPanel';
 import SchedulePanel from './SchedulePanel';
@@ -68,8 +67,6 @@ function PanelContent({ tense, period, stats, loading, isMobile }) {
 }
 
 export default function ReportPanel({ period, stats, loading, isMobile = false }) {
-  const [expanded, setExpanded] = useState(false);
-
   const tense    = PERIOD_TENSE[period] ?? 'active';
   const navLabel = PERIOD_NAV_LABEL[period] ?? period;
   const style    = TENSE_STYLE[tense];
@@ -79,51 +76,27 @@ export default function ReportPanel({ period, stats, loading, isMobile = false }
 
   return (
     <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0' }}>
-      {/* 접기/펼치기 토글 헤더 */}
-      <button
-        onClick={() => setExpanded(e => !e)}
-        style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          padding: isMobile ? '8px 12px' : '10px 20px',
-          background: expanded ? style.activeBg : '#fff',
-          border: 'none',
-          borderBottom: expanded ? `1px solid ${style.border}` : 'none',
-          cursor: 'pointer',
-          gap: 8,
-          fontFamily: "'DM Sans', sans-serif",
-          transition: 'background 0.15s',
-        }}
-      >
-        <span style={{ fontSize: 14 }}>{style.icon}</span>
-        <span style={{
-          fontSize: isMobile ? 11 : 12,
-          fontWeight: 700,
-          color: style.label,
-        }}>
+      {/* 기간 레이블 */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: isMobile ? '7px 12px' : '9px 20px',
+        background: style.activeBg,
+        borderBottom: `1px solid ${style.border}`,
+      }}>
+        <span style={{ fontSize: 13 }}>{style.icon}</span>
+        <span style={{ fontSize: isMobile ? 11 : 12, fontWeight: 700, color: style.label }}>
           {navLabel} 레포트
         </span>
-        <span style={{
-          marginLeft: 'auto',
-          display: 'flex', alignItems: 'center', gap: 4,
-          fontSize: 10, color: '#94a3b8', fontWeight: 600,
-        }}>
-          {expanded ? '접기' : '펼치기'}
-          <span style={{ fontSize: 11 }}>{expanded ? '▲' : '▼'}</span>
-        </span>
-      </button>
+      </div>
 
-      {/* 콘텐츠 영역 */}
-      {expanded && (
-        <PanelContent
-          tense={tense}
-          period={period}
-          stats={stats}
-          loading={loading}
-          isMobile={isMobile}
-        />
-      )}
+      {/* 콘텐츠 영역 — 항상 표시 */}
+      <PanelContent
+        tense={tense}
+        period={period}
+        stats={stats}
+        loading={loading}
+        isMobile={isMobile}
+      />
     </div>
   );
 }
