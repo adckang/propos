@@ -67,31 +67,35 @@ export default function DashboardView({ onSelectStatus, onBack, properties = PRO
         )}
       </div>
 
-      {/* 요약 배너 — 모바일: 5열 grid, PC: flex */}
-      <div data-testid="dashboard-summary" style={{
-        padding: isMobile ? '5px 12px' : '12px 20px',
-        background: '#fff', borderBottom: '1px solid #e2e8f0',
-        display: isMobile ? 'grid' : 'flex',
-        gridTemplateColumns: isMobile ? 'repeat(5, 1fr)' : undefined,
-        gap: isMobile ? 0 : 20,
-        justifyContent: isMobile ? undefined : 'flex-start',
-        alignItems: 'center',
-      }}>
-        <span style={{ fontSize: isMobile ? 10 : 13, color: '#4a5568', ...(isMobile ? { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 } : {}) }}>
-          {isMobile ? '전체' : '전체 '}<strong style={{ color: '#1a202c', fontFamily: isMobile ? "'DM Mono', monospace" : undefined, fontSize: isMobile ? 15 : undefined }}>{properties.length}</strong>{!isMobile && '개 숙소'}
-        </span>
-        <span style={{ fontSize: isMobile ? 10 : 13, color: '#4a5568', ...(isMobile ? { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 } : {}) }}>
-          {isMobile ? '청소' : '청소중 '}<strong data-testid="count-cleaning" style={{ color: '#dc2626', fontFamily: isMobile ? "'DM Mono', monospace" : undefined, fontSize: isMobile ? 15 : undefined }}>{counts['CLEANING']?.total || 0}</strong>
-        </span>
-        <span style={{ fontSize: isMobile ? 10 : 13, color: '#4a5568', ...(isMobile ? { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 } : {}) }}>
-          {isMobile ? '입실전' : '입실전 '}<strong data-testid="count-pre-stay-ready" style={{ color: '#059669', fontFamily: isMobile ? "'DM Mono', monospace" : undefined, fontSize: isMobile ? 15 : undefined }}>{counts['PRE_STAY_READY']?.total || 0}</strong>
-        </span>
-        <span style={{ fontSize: isMobile ? 10 : 13, color: '#4a5568', ...(isMobile ? { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 } : {}) }}>
-          {isMobile ? '체류' : '체류중 '}<strong data-testid="count-occupied" style={{ color: '#2563eb', fontFamily: isMobile ? "'DM Mono', monospace" : undefined, fontSize: isMobile ? 15 : undefined }}>{counts['OCCUPIED']?.total || 0}</strong>
-        </span>
-        <span style={{ fontSize: isMobile ? 10 : 13, color: '#4a5568', ...(isMobile ? { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 } : {}) }}>
-          {isMobile ? '공실' : '공실 '}<strong data-testid="count-vacant" style={{ color: '#6b7280', fontFamily: isMobile ? "'DM Mono', monospace" : undefined, fontSize: isMobile ? 15 : undefined }}>{counts['VACANT']?.total || 0}</strong>
-        </span>
+      {/* StatusFilterBar — ListView와 동일 스타일, 클릭 시 ListView 이동 */}
+      <div data-testid="dashboard-summary" style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: `${isMobile ? 7 : 10}px ${isMobile ? 12 : 20}px`, display: 'flex', gap: isMobile ? 4 : 8, overflowX: 'auto', flexWrap: 'nowrap' }}>
+        {[{ key: 'ALL', label: '전체', color: '#2563eb', testId: null },
+          ...ORDER.map(k => ({ key: k, label: STATE_META[k].label, color: STATE_META[k].color, testId: k === 'OCCUPIED' ? 'count-occupied' : k === 'CLEANING' ? 'count-cleaning' : null }))
+        ].map(({ key, label, color, testId }) => {
+          const cnt = key === 'ALL' ? properties.length : (counts[key]?.total || 0);
+          return (
+            <button
+              key={key}
+              data-testid={testId || undefined}
+              onClick={() => onSelectStatus(key === 'ALL' ? null : key)}
+              style={{
+                flexShrink: 0,
+                border: `1.5px solid ${color}`,
+                borderRadius: 20,
+                padding: isMobile ? '3px 7px' : '5px 14px',
+                background: '#fff',
+                color: color,
+                fontSize: isMobile ? 10 : 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                transition: 'all 0.15s',
+              }}
+            >
+              {label} {cnt}
+            </button>
+          );
+        })}
       </div>
 
       {/* 실시간 운영 요약 + 이번 달 레포트 */}
