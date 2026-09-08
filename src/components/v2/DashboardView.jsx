@@ -41,6 +41,8 @@ export default function DashboardView({ onSelectStatus, onBack, properties = PRO
   // ── 단일 JSX 트리 — isMobile로 크기/간격만 조정 ───────────────────────────────
   return (
     <div style={{ background: '#f0f4f8', minHeight: '100%', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
+      {/* 헤더 + StatusFilterBar — sticky wrapper */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 20 }}>
       {/* 헤더 */}
       <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: isMobile ? '10px 16px' : '14px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
         <button onClick={onBack} style={{ border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', padding: isMobile ? '5px 10px' : '6px 12px', fontSize: isMobile ? 12 : 13, color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
@@ -97,6 +99,7 @@ export default function DashboardView({ onSelectStatus, onBack, properties = PRO
           );
         })}
       </div>
+      </div>{/* /sticky wrapper */}
 
       {/* 실시간 운영 요약 + 이번 달 레포트 */}
       <SummaryBanner summary={nowSummary} isMobile={isMobile}>
