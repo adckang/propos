@@ -44,14 +44,23 @@ export default function SummaryBanner({ summary, loading, isMobile = false, chil
           <span style={{ flex: 1 }}>{summary}</span>
           {hasChildren && (
             <span style={{
-              fontSize: isMobile ? 11 : 13,
-              color: urgent ? '#dc2626' : '#059669',
-              opacity: 0.7,
-              transition: 'transform 0.2s ease',
-              display: 'inline-block',
-              transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+              display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0,
+              fontSize: isMobile ? 11 : 12,
+              fontWeight: 700,
+              color: urgent ? '#b91c1c' : '#047857',
+              background: urgent ? '#fee2e2' : '#dcfce7',
+              border: `1.5px solid ${urgent ? '#fca5a5' : '#86efac'}`,
+              borderRadius: 6,
+              padding: isMobile ? '2px 7px' : '3px 10px',
+              cursor: 'pointer',
             }}>
-              ▾
+              {expanded ? '닫기' : '자세히'}
+              <span style={{
+                fontSize: isMobile ? 13 : 15,
+                transition: 'transform 0.2s ease',
+                display: 'inline-block',
+                transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+              }}>▾</span>
             </span>
           )}
         </div>
