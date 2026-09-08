@@ -72,8 +72,24 @@ export default function ReportPanel({ period, stats, loading, isMobile = false }
   // NOW 기간(Template-C)은 DetailView에서 별도 처리. 여기서는 표시 안 함.
   if (tense === 'now') return null;
 
+  const navLabel = PERIOD_NAV_LABEL[period] ?? period;
+  const style    = TENSE_STYLE[tense];
+
   return (
     <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0' }}>
+      {/* 기간 레이블 — 위 제목 */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '9px 20px',
+        background: style?.activeBg ?? '#f8fafc',
+        borderBottom: `1px solid ${style?.border ?? '#e2e8f0'}`,
+      }}>
+        <span style={{ fontSize: 13 }}>{style?.icon}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: style?.label ?? '#475569' }}>
+          {navLabel} 레포트
+        </span>
+      </div>
+
       <PanelContent
         tense={tense}
         period={period}

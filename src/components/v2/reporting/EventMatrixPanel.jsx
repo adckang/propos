@@ -95,11 +95,6 @@ export default function EventMatrixPanel({ stats, period, isMobile = false }) {
 
   return (
     <div style={{ padding: isMobile ? '14px 12px' : '18px 20px' }}>
-      {/* 헤더 레이블 */}
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 14, letterSpacing: 0.3 }}>
-        {periodLabel} 이벤트 결과
-      </div>
-
       {/* 운영 이벤트 섹션 */}
       <div style={{ marginBottom: 16 }}>
         <SectionTitle>운영 이벤트</SectionTitle>

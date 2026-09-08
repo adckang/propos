@@ -19,11 +19,6 @@ export default function SchedulePanel({ stats, period, isMobile = false }) {
 
   return (
     <div style={{ padding: isMobile ? '14px 12px' : '18px 20px' }}>
-      {/* 헤더 */}
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 14, letterSpacing: 0.3 }}>
-        {periodLabel} 일정
-      </div>
-
       {/* 일정 없음 */}
       {noSchedule && (
         <div style={{

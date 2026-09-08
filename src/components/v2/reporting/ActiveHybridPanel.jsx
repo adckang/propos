@@ -63,11 +63,6 @@ export default function ActiveHybridPanel({ stats, period, isMobile = false }) {
 
   return (
     <div style={{ padding: isMobile ? '14px 12px' : '18px 20px' }}>
-      {/* 헤더 */}
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 14, letterSpacing: 0.3 }}>
-        {periodLabel} 현황
-      </div>
-
       {/* ── 완료 섹션 ── */}
       <div style={{ marginBottom: 16 }}>
         <SectionTitle color="#064e3b" suffix={timeStr}>완료</SectionTitle>
