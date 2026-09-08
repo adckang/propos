@@ -134,6 +134,26 @@ describe("getPeriodRange — 일 단위 (KST 기준)", () => {
   });
 });
 
+describe("getPeriodRange — 경계 연속성 (to + 1ms = next period from)", () => {
+  test("last_week.to + 1ms = this_week.from", () => {
+    const { to: lastTo } = getPeriodRange("last_week", REF);
+    const { from: thisFrom } = getPeriodRange("this_week", REF);
+    assert.equal(lastTo.getTime() + 1, thisFrom.getTime());
+  });
+
+  test("yesterday.to + 1ms = today.from", () => {
+    const { to: yestTo } = getPeriodRange("yesterday", REF);
+    const { from: todayFrom } = getPeriodRange("today", REF);
+    assert.equal(yestTo.getTime() + 1, todayFrom.getTime());
+  });
+
+  test("last_month.to + 1ms = this_month.from", () => {
+    const { to: lastTo } = getPeriodRange("last_month", REF);
+    const { from: thisFrom } = getPeriodRange("this_month", REF);
+    assert.equal(lastTo.getTime() + 1, thisFrom.getTime());
+  });
+});
+
 describe("getPeriodRange — 오류 처리", () => {
   test("알 수 없는 period → Error throw", () => {
     assert.throws(

@@ -301,6 +301,40 @@ describe("generateSummary — 시간 단위 (last_hour / next_hour)", () => {
   });
 });
 
+describe("generateSummary — content-guide 어조 금지어 (양호합니다 / 문제없습니다)", () => {
+  const FORBIDDEN = ['양호합니다', '문제없습니다'];
+
+  test("now, 이상 없음 → 금지어 미포함", () => {
+    const s = generateSummary("now", { occupied: 3, preStayReady: 1, vacant: 10, cleaning: 1, anomalyCount: 0, total: 15 });
+    for (const w of FORBIDDEN) assert.ok(!s.includes(w), `금지어 "${w}" 노출됨: "${s}"`);
+  });
+
+  test("this_week → 금지어 미포함", () => {
+    const s = generateSummary("this_week", { checkIns: 5, checkOuts: 4, anomalies: 0, energyWaste: 0 });
+    for (const w of FORBIDDEN) assert.ok(!s.includes(w), `금지어 "${w}" 노출됨: "${s}"`);
+  });
+
+  test("last_week → 금지어 미포함", () => {
+    const s = generateSummary("last_week", { checkIns: 8, checkOuts: 8, anomalies: 0, energyWaste: 0 });
+    for (const w of FORBIDDEN) assert.ok(!s.includes(w), `금지어 "${w}" 노출됨: "${s}"`);
+  });
+
+  test("next_week → 금지어 미포함", () => {
+    const s = generateSummary("next_week", { checkIns: 3, checkOuts: 4, anomalies: 0, energyWaste: 0 });
+    for (const w of FORBIDDEN) assert.ok(!s.includes(w), `금지어 "${w}" 노출됨: "${s}"`);
+  });
+
+  test("yesterday → 금지어 미포함", () => {
+    const s = generateSummary("yesterday", { checkIns: 2, checkOuts: 2, anomalies: 0, energyWaste: 0 });
+    for (const w of FORBIDDEN) assert.ok(!s.includes(w), `금지어 "${w}" 노출됨: "${s}"`);
+  });
+
+  test("tomorrow → 금지어 미포함", () => {
+    const s = generateSummary("tomorrow", { checkIns: 1, checkOuts: 0, anomalies: 0, energyWaste: 0 });
+    for (const w of FORBIDDEN) assert.ok(!s.includes(w), `금지어 "${w}" 노출됨: "${s}"`);
+  });
+});
+
 describe("generateSummary — SOFT 이벤트 접미사", () => {
   test("last_week, noShowSuspected=2 → 노쇼 언급 추가", () => {
     const s = generateSummary("last_week", {
