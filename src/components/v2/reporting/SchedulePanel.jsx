@@ -18,15 +18,14 @@ export default function SchedulePanel({ stats, period, isMobile = false }) {
   const noSchedule  = checkIns === 0 && checkOuts === 0;
 
   return (
-    <div style={{ padding: isMobile ? '14px 12px' : '18px 20px' }}>
+    <div style={{ padding: isMobile ? '12px 12px' : '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+
       {/* 일정 없음 */}
       {noSchedule && (
         <div style={{
           padding: '16px',
-          background: '#f8fafc',
-          border: '1.5px solid #e2e8f0',
-          borderRadius: 10,
-          fontSize: 12, color: '#94a3b8', textAlign: 'center',
+          background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: 10,
+          fontSize: 12, color: '#3b82f6', textAlign: 'center',
         }}>
           {periodLabel} 예약된 일정이 없어요
         </div>
@@ -34,7 +33,7 @@ export default function SchedulePanel({ stats, period, isMobile = false }) {
 
       {/* 일정 있음 — 카드 */}
       {!noSchedule && (
-        <div style={{ display: 'flex', gap: isMobile ? 8 : 10, marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: isMobile ? 8 : 10 }}>
           {checkIns > 0 && (
             <div style={{
               flex: 1, padding: isMobile ? '10px' : '12px 14px',
@@ -67,9 +66,7 @@ export default function SchedulePanel({ stats, period, isMobile = false }) {
       {/* 청소 배정 상태 — 캘린더 연동 후 */}
       <div style={{
         padding: '10px 12px',
-        background: '#fafafa',
-        border: '1px solid #e2e8f0',
-        borderRadius: 8,
+        background: '#fafafa', border: '1px solid #e2e8f0', borderRadius: 8,
         fontSize: 10, color: '#94a3b8', textAlign: 'center',
       }}>
         캘린더 연동 후 청소 배정 및 상세 일정이 표시됩니다

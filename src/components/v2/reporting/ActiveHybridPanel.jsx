@@ -4,114 +4,99 @@
  * report-architecture.md 섹션 4 Template-A 참조.
  *
  * [완료] + [예정] 두 섹션으로 구성.
- * [현재] 섹션 없음 — KPI Tiles가 해당 역할 담당.
+ * [현재] 섹션 없음 — StatusFilterBar가 해당 역할 담당.
  */
 
 const PERIOD_LABELS = {
   this_week: '이번 주',
-  today: '오늘',
+  today:     '오늘',
+  this_month: '이번 달',
 };
 
-function CompletionChip({ label, value, color, warn = false }) {
+const DAY_KR = ['일', '월', '화', '수', '목', '금', '토'];
+
+function SectionHeader({ label, sub, warn = false }) {
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      padding: '10px 14px',
-      background: warn && value > 0 ? '#fef2f2' : '#f8fafc',
-      border: `1.5px solid ${warn && value > 0 ? '#fca5a5' : '#e2e8f0'}`,
-      borderRadius: 10,
-      gap: 3, flex: 1, minWidth: 60,
+      display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+      marginBottom: 10,
     }}>
       <span style={{
-        fontSize: 20, fontWeight: 800, color,
-        fontFamily: "'DM Mono', monospace", lineHeight: 1,
+        fontSize: 10, fontWeight: 700,
+        color: warn ? '#dc2626' : '#059669',
+        letterSpacing: 0.5, textTransform: 'uppercase',
       }}>
-        {value ?? 0}
-      </span>
-      <span style={{ fontSize: 10, color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>
         {label}
       </span>
+      {sub && <span style={{ fontSize: 10, color: '#94a3b8' }}>{sub}</span>}
     </div>
   );
 }
 
-function SectionTitle({ children, color = '#064e3b', suffix }) {
+function StatRow({ label, value, warn = false }) {
+  const isZero = value === 0;
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      marginBottom: 8,
+      display: 'flex', alignItems: 'center',
+      padding: '5px 0', borderBottom: '1px solid #f1f5f9',
     }}>
-      <div style={{
-        fontSize: 9, fontWeight: 700, color,
-        letterSpacing: 1, textTransform: 'uppercase',
+      <span style={{ flex: 1, fontSize: 12, color: '#4a5568', fontWeight: 500 }}>{label}</span>
+      <span style={{
+        fontSize: 13, fontWeight: 700,
+        color: warn && !isZero ? '#dc2626' : isZero ? '#cbd5e1' : '#1a202c',
+        fontFamily: "'DM Mono', monospace",
       }}>
-        {children}
-      </div>
-      {suffix && (
-        <div style={{ fontSize: 10, color: '#94a3b8' }}>{suffix}</div>
-      )}
+        {value ?? 0}건
+      </span>
     </div>
   );
 }
 
 export default function ActiveHybridPanel({ stats, period, isMobile = false }) {
   const periodLabel = PERIOD_LABELS[period] || period;
-  const hasAnomaly = (stats?.anomalies ?? 0) > 0;
+  const hasAnomaly  = (stats?.anomalies ?? 0) > 0;
 
-  const now = new Date();
+  const now    = new Date();
   const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} 기준`;
+  const daySub  = period === 'this_week'
+    ? `${DAY_KR[now.getDay()]}요일까지 처리된 이벤트`
+    : `오늘 ${timeStr}까지 처리된 이벤트`;
 
   return (
-    <div style={{ padding: isMobile ? '14px 12px' : '18px 20px' }}>
-      {/* ── 완료 섹션 ── */}
-      <div style={{ marginBottom: 16 }}>
-        <SectionTitle color="#064e3b" suffix={timeStr}>완료</SectionTitle>
+    <div style={{ padding: isMobile ? '12px 12px' : '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
 
+      {/* ── 완료 섹션 ── */}
+      <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 14px' }}>
+        <SectionHeader label="완료" sub={daySub} warn={false} />
         {!stats ? (
-          <div style={{ height: 64, background: '#f1f5f9', borderRadius: 10 }} />
+          <div style={{ height: 52, background: '#dcfce7', borderRadius: 8 }} />
         ) : (
           <>
-            <div style={{ display: 'flex', gap: isMobile ? 6 : 8, flexWrap: 'wrap' }}>
-              <CompletionChip label="체크인" value={stats.checkIns} color="#2563eb" />
-              <CompletionChip label="체크아웃" value={stats.checkOuts} color="#059669" />
-              <CompletionChip
-                label="이상감지"
-                value={stats.anomalies}
-                color={hasAnomaly ? '#dc2626' : '#94a3b8'}
-                warn
-              />
-              <CompletionChip label="에너지낭비" value={stats.energyWaste} color="#d97706" />
-            </div>
-
+            <StatRow label="체크인" value={stats.checkIns} />
+            <StatRow label="체크아웃" value={stats.checkOuts} />
+            <StatRow label="이상감지" value={stats.anomalies} warn />
             {hasAnomaly && (
               <div style={{
-                marginTop: 8, padding: '7px 10px',
-                background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8,
+                marginTop: 8, padding: '6px 10px',
+                background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 7,
                 fontSize: 11, color: '#dc2626', fontWeight: 600,
               }}>
-                ⚠ 이상 {stats.anomalies}건 감지 — 안심지수 확인 필요
+                ⚠ 이상 {stats.anomalies}건 감지 — 자동처리 여부 확인 필요
               </div>
             )}
           </>
         )}
       </div>
 
-      {/* 구분선 */}
-      <div style={{ borderTop: '1px dashed #e2e8f0', marginBottom: 14 }} />
-
       {/* ── 예정 섹션 ── */}
-      <div>
-        <SectionTitle color="#1e3a5f">예정</SectionTitle>
+      <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 14px' }}>
+        <SectionHeader label="예정" sub="남은 일정" />
         <div style={{
-          padding: '12px',
-          background: '#f8fafc',
-          border: '1.5px solid #e2e8f0',
-          borderRadius: 10,
-          fontSize: 12, color: '#94a3b8', textAlign: 'center',
-          lineHeight: 1.5,
+          padding: '8px 10px',
+          background: '#dbeafe', border: '1px solid #bfdbfe', borderRadius: 7,
+          fontSize: 11, color: '#3b82f6', textAlign: 'center', lineHeight: 1.6,
         }}>
-          iCal 서버 연동 후 표시됩니다<br />
-          <span style={{ fontSize: 10 }}>체크인 예정 · 청소 배정 상태 확인 가능</span>
+          캘린더 연동 후 체크인 예정 · 청소 배정 현황이 표시됩니다
         </div>
       </div>
     </div>
