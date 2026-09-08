@@ -1,10 +1,14 @@
 import { PROPERTIES, STATE_META } from '../../data/roomStateMockData';
 import { useMobile } from '../../hooks/useMobile';
+import { useReportingStats } from '../../hooks/useReportingStats';
+import SummaryBanner from './reporting/SummaryBanner';
+import ReportPanel from './reporting/ReportPanel';
 
 const ORDER = ['CLEANING', 'PRE_STAY_READY', 'OCCUPIED', 'VACANT'];
 
 export default function DashboardView({ onSelectStatus, onBack, properties = PROPERTIES, syncBadge }) {
   const isMobile = useMobile();
+  const { stats: monthStats, summary: monthSummary, loading: monthLoading } = useReportingStats('this_month', null);
   const now = new Date();
   const timeStr = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
@@ -84,6 +88,11 @@ export default function DashboardView({ onSelectStatus, onBack, properties = PRO
           {isMobile ? '공실' : '공실 '}<strong data-testid="count-vacant" style={{ color: '#6b7280', fontFamily: isMobile ? "'DM Mono', monospace" : undefined, fontSize: isMobile ? 15 : undefined }}>{counts['VACANT']?.total || 0}</strong>
         </span>
       </div>
+
+      {/* 이번 달 요약 배너 + 레���트 패널 */}
+      <SummaryBanner summary={monthSummary} loading={monthLoading} isMobile={isMobile}>
+        <ReportPanel period="this_month" stats={monthStats} loading={monthLoading} isMobile={isMobile} />
+      </SummaryBanner>
 
       {/* 상태 카드 그리드 — 모바일/PC 모두 2열 */}
       <div data-testid="status-cards" style={{ padding: isMobile ? '10px 12px' : 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: isMobile ? 8 : 14, flex: 1 }}>
