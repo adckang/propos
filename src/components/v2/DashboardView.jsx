@@ -1,14 +1,11 @@
 import { PROPERTIES, STATE_META } from '../../data/roomStateMockData';
 import { useMobile } from '../../hooks/useMobile';
-import { useReportingStats } from '../../hooks/useReportingStats';
 import SummaryBanner from './reporting/SummaryBanner';
-import ReportPanel from './reporting/ReportPanel';
 
 const ORDER = ['CLEANING', 'PRE_STAY_READY', 'OCCUPIED', 'VACANT'];
 
 export default function DashboardView({ onSelectStatus, onBack, properties = PROPERTIES, syncBadge }) {
   const isMobile = useMobile();
-  const { stats: monthStats, summary: monthSummary, loading: monthLoading } = useReportingStats('this_month', null);
   const now = new Date();
   const timeStr = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
@@ -25,6 +22,10 @@ export default function DashboardView({ onSelectStatus, onBack, properties = PRO
   const urgentCount = (counts['OCCUPIED']?.subs['ISSUE_AND_ENERGY'] || 0)
     + (counts['OCCUPIED']?.subs['ISSUE_COMPLAINT'] || 0)
     + (counts['OCCUPIED']?.subs['ENERGY_WASTE'] || 0);
+
+  const nowSummary = urgentCount > 0
+    ? `현재 이상 징후 ${urgentCount}건이 확인됐어요. 바로 확인이 필요해요.`
+    : `현재 ${properties.length}개 숙소 정상 운영 중이에요.`;
 
   const unassignedCleaningCount = properties.reduce((n, p) => {
     const unassigned = (p.reservations || []).filter(
@@ -89,10 +90,8 @@ export default function DashboardView({ onSelectStatus, onBack, properties = PRO
         </span>
       </div>
 
-      {/* 이번 달 요약 배너 + 레���트 패널 */}
-      <SummaryBanner summary={monthSummary} loading={monthLoading} isMobile={isMobile}>
-        <ReportPanel period="this_month" stats={monthStats} loading={monthLoading} isMobile={isMobile} />
-      </SummaryBanner>
+      {/* 실시간 운영 요약 */}
+      <SummaryBanner summary={nowSummary} isMobile={isMobile} />
 
       {/* 상태 카드 그리드 — 모바일/PC 모두 2열 */}
       <div data-testid="status-cards" style={{ padding: isMobile ? '10px 12px' : 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: isMobile ? 8 : 14, flex: 1 }}>
