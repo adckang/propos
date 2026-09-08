@@ -64,7 +64,7 @@ export default function SchedulePanel({ stats, period, isMobile = false }) {
         </div>
       )}
 
-      {/* 청소 배정 상태 — 서버 연동 후 */}
+      {/* 청소 배정 상태 — 캘린더 연동 후 */}
       <div style={{
         padding: '10px 12px',
         background: '#fafafa',
@@ -72,7 +72,7 @@ export default function SchedulePanel({ stats, period, isMobile = false }) {
         borderRadius: 8,
         fontSize: 10, color: '#94a3b8', textAlign: 'center',
       }}>
-        청소 배정 상태 및 상세 일정 — 실제 배포 후 확인 가능합니다
+        캘린더 연동 후 청소 배정 및 상세 일정이 표시됩니다
       </div>
     </div>
   );

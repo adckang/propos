@@ -107,8 +107,8 @@ export default function EventMatrixPanel({ stats, period, isMobile = false }) {
         <SectionTitle accent={hasAnomaly ? '#dc2626' : '#64748b'}>
           이상 감지
         </SectionTitle>
-        <EventRow label="민원 감지 (OCCUPIED)" value={complaints} warn dimIfZero />
-        <EventRow label="에너지낭비 감지 (입실중)" value={energyWaste} warn={energyWaste > 0} dimIfZero />
+        <EventRow label="민원 감지" value={complaints} warn dimIfZero />
+        <EventRow label="에너지낭비 감지" value={energyWaste} warn={energyWaste > 0} dimIfZero />
       </div>
 
       {/* SOFT 이벤트 섹션 */}
