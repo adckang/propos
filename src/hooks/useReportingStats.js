@@ -1,5 +1,21 @@
 import { useState, useEffect } from 'react';
 
+/** 실데이터 없을 때 UI 확인용 데모 요약 문장 */
+const DEMO_SUMMARY = {
+  now:        '현재 정상 운영 중이에요.',
+  today:      '오늘 체크인 2건 완료됐어요.',
+  this_week:  '이번 주 이상 1건 자동 처리됐어요.',
+  this_month: '이번 달 23건 이상 없이 처리됐어요.',
+  yesterday:  '어제 체크인 3건, 이상 1건 자동 처리됐어요.',
+  last_week:  '지난주 체크인 11건 완료. 이상 2건 자동 처리됐어요.',
+  last_month: '지난달 체크인 38건 완료. 이상 4건 자동 처리됐어요.',
+  last_hour:  '지난 1시간 체크아웃 1건 완료됐어요.',
+  tomorrow:   '내일 체크인 2건, 체크아웃 3건 예정이에요.',
+  next_week:  '다음 주 체크인 7건, 체크아웃 6건 예정이에요.',
+  next_month: '다음 달 체크인 20건, 체크아웃 19건 예정이에요.',
+  next_hour:  '다음 1시간 내 체크인 예정이에요.',
+};
+
 /** 실데이터 없을 때 UI 확인용 데모 데이터 */
 const DEMO_STATS = {
   now:        { checkIns: 2, checkOuts: 1, anomalies: 0, energyWaste: 0, noShowSuspected: 0, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0 },
@@ -55,14 +71,17 @@ export function useReportingStats(period, propertyId = null) {
       .then(data => {
         if (cancelled) return;
         const real = data.stats ?? null;
-        const stats = isEmptyStats(real) ? (DEMO_STATS[period] ?? null) : real;
-        setState({ stats, summary: data.summary ?? '', loading: false, error: null });
+        const useDemo = isEmptyStats(real);
+        const stats   = useDemo ? (DEMO_STATS[period] ?? null) : real;
+        const summary = (data.summary || '') || (useDemo ? (DEMO_SUMMARY[period] ?? '') : '');
+        setState({ stats, summary, loading: false, error: null });
       })
       .catch(err => {
         if (cancelled) return;
         // API 실패 시 데모 데이터 fallback
-        const stats = DEMO_STATS[period] ?? null;
-        setState(s => ({ ...s, stats: s.stats ?? stats, loading: false, error: err.message }));
+        const stats   = DEMO_STATS[period] ?? null;
+        const summary = DEMO_SUMMARY[period] ?? '';
+        setState(s => ({ ...s, stats: s.stats ?? stats, summary: s.summary || summary, loading: false, error: err.message }));
       });
 
     return () => { cancelled = true; };

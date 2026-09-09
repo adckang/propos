@@ -60,6 +60,8 @@ export default function ActiveHybridPanel({ stats, period, isMobile = false }) {
   const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} 기준`;
   const daySub  = period === 'this_week'
     ? `${DAY_KR[now.getDay()]}요일까지 처리된 이벤트`
+    : period === 'this_month'
+    ? `이번 달 ${now.getDate()}일까지 처리된 이벤트`
     : `오늘 ${timeStr}까지 처리된 이벤트`;
 
   return (

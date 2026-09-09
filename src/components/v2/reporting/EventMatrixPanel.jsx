@@ -81,7 +81,7 @@ export default function EventMatrixPanel({ stats, period, isMobile = false }) {
   if (!stats) return null;
 
   const periodLabel = PERIOD_LABELS[period] || period;
-  const complaints  = (stats.anomalies ?? 0) - (stats.energyWaste ?? 0);
+  const complaints  = Math.max(0, (stats.anomalies ?? 0) - (stats.energyWaste ?? 0));
   const energyWaste = stats.energyWaste ?? 0;
   const hasAnomaly  = (stats.anomalies ?? 0) > 0;
 

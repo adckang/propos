@@ -21,9 +21,12 @@ export default function SummaryBanner({ summary, loading, isMobile = false, chil
   const urgent = summary ? isUrgent(summary) : false;
   const hasChildren = Boolean(children);
 
+  // summary 없이 children만 있어도 expand 버튼은 보여줘야 함
+  const showRow = Boolean(summary) || hasChildren;
+
   return (
     <div>
-      {summary && (
+      {showRow && (
         <div
           onClick={hasChildren ? () => setExpanded(v => !v) : undefined}
           style={{
@@ -40,8 +43,8 @@ export default function SummaryBanner({ summary, loading, isMobile = false, chil
             userSelect: 'none',
           }}
         >
-          <span style={{ fontSize: isMobile ? 13 : 15 }}>{urgent ? '⚠' : '✓'}</span>
-          <span style={{ flex: 1 }}>{summary}</span>
+          {summary && <span style={{ fontSize: isMobile ? 13 : 15 }}>{urgent ? '⚠' : '✓'}</span>}
+          <span style={{ flex: 1 }}>{summary || '운영 현황'}</span>
           {hasChildren && (
             <span style={{
               display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0,
