@@ -14,6 +14,8 @@ describe("EVENT_TYPES — 값 정확성", () => {
     assert.equal(EVENT_TYPES.CLEANING_FINISHED, "cleaning_finished");
     assert.equal(EVENT_TYPES.ENERGY_WASTE_DETECTED, "energy_waste_detected");
     assert.equal(EVENT_TYPES.ENERGY_WASTE_RESOLVED, "energy_waste_resolved");
+    assert.equal(EVENT_TYPES.VACANT_ENERGY_WASTE_DETECTED, "vacant_energy_waste_detected");
+    assert.equal(EVENT_TYPES.VACANT_ENERGY_WASTE_RESOLVED, "vacant_energy_waste_resolved");
     assert.equal(EVENT_TYPES.COMPLAINT_DETECTED, "complaint_detected");
     assert.equal(EVENT_TYPES.COMPLAINT_RESOLVED, "complaint_resolved");
     assert.equal(
@@ -57,18 +59,27 @@ describe("EVENT_TYPES — 값 정확성", () => {
 });
 
 describe("SOFT_EVENT_TYPES — Set 구성", () => {
-  test("soft 이벤트 4개를 포함한다 (vacancy_energy_alert 추가)", () => {
-    assert.equal(SOFT_EVENT_TYPES.size, 4);
+  test("soft 이벤트 3개를 포함한다", () => {
+    assert.equal(SOFT_EVENT_TYPES.size, 3);
     assert.ok(SOFT_EVENT_TYPES.has("checkout_confirmation_needed"));
     assert.ok(SOFT_EVENT_TYPES.has("early_checkin_suspected"));
     assert.ok(SOFT_EVENT_TYPES.has("no_show_suspected"));
-    assert.ok(SOFT_EVENT_TYPES.has("vacancy_energy_alert"));
   });
 
   test("상태 기계 이벤트는 포함하지 않는다", () => {
     assert.ok(!SOFT_EVENT_TYPES.has("check_in_detected"));
     assert.ok(!SOFT_EVENT_TYPES.has("check_out_detected"));
     assert.ok(!SOFT_EVENT_TYPES.has("cleaning_started"));
+  });
+
+  test("vacant_energy_waste_* 는 SOFT가 아닌 상태 기계 이벤트다", () => {
+    assert.ok(!SOFT_EVENT_TYPES.has("vacant_energy_waste_detected"));
+    assert.ok(!SOFT_EVENT_TYPES.has("vacant_energy_waste_resolved"));
+  });
+
+  test("vacant_energy_waste_* 는 UNIMPLEMENTED가 아니다", () => {
+    assert.ok(!UNIMPLEMENTED_EVENT_TYPES.has("vacant_energy_waste_detected"));
+    assert.ok(!UNIMPLEMENTED_EVENT_TYPES.has("vacant_energy_waste_resolved"));
   });
 });
 

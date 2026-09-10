@@ -1,6 +1,6 @@
 # Room State Machine
 > PROPOS 숙소 상태 전환 규칙 정본
-> 버전: v2.2 | 업데이트: 2026-07-12
+> 버전: v2.3 | 업데이트: 2026-09-10
 
 ---
 
@@ -19,7 +19,8 @@
 
 | Main Status      | Sub-Status              | 한국어           | 비고       |
 |------------------|-------------------------|------------------|------------|
-| VACANT           | CLEANING_FINISHED       | 공실 / 청소완료  | 초기 상태  |
+| VACANT           | CLEANING_FINISHED       | 공실 / 청소완료  | 초기 상태. 에너지 정상 기준선. |
+| VACANT           | ENERGY_WASTE            | 공실 / 에너지낭비 | 공실 중 과다 에너지 감지 시 진입 |
 | VACANT           | MAINTENANCE             | 공실 / 기타정비  | 글로벌 이벤트로 진입 |
 | PRE_STAY_READY   | OPTIMIZING              | 입실전 / 최적화중 |           |
 | PRE_STAY_READY   | OPTIMIZED               | 입실전 / 최적화완료 |         |
@@ -55,8 +56,10 @@
 | `reservation_cancelled` | 예약 취소됨 — VACANT 기간에만 발생. 체크인 당일 취소 불가 원칙. |
 | `optimization_finished` | 숙소 최적화 완료 |
 | `check_in_detected` | 체크인 감지 |
-| `energy_waste_detected` | 에너지 낭비 감지 |
-| `energy_waste_resolved` | 에너지 낭비 해소됨 |
+| `energy_waste_detected` | 에너지 낭비 감지 (OCCUPIED 전용) |
+| `energy_waste_resolved` | 에너지 낭비 해소됨 (OCCUPIED 전용) |
+| `vacant_energy_waste_detected` | 공실 중 에너지 과다사용 감지 (VACANT 전용) |
+| `vacant_energy_waste_resolved` | 공실 중 에너지낭비 자동 절전처리 완료 (VACANT 전용) |
 | `complaint_detected` | 민원 / 위험 이벤트 감지 |
 | `complaint_resolved` | 민원 / 위험 해소됨 |
 | `check_out_detected` | 체크아웃 감지 — **OCCUPIED 4개 Sub-Status 공통** (`OCCUPIED_COMMON`) |
@@ -85,13 +88,28 @@
 ### A. VACANT / 공실
 
 ```
-VACANT / CLEANING_FINISHED
+VACANT / CLEANING_FINISHED   ← 에너지 정상 기준 상태 (= GOOD_CONDITION for VACANT)
   -- checkin_prep_time_reached -->
 PRE_STAY_READY / OPTIMIZING
 
 VACANT / CLEANING_FINISHED
   -- reservation_cancelled -->
 VACANT / CLEANING_FINISHED  (상태 유지, 비즈니스 레이어에서 처리)
+
+VACANT / CLEANING_FINISHED
+  -- vacant_energy_waste_detected -->
+VACANT / ENERGY_WASTE
+
+VACANT / ENERGY_WASTE
+  -- vacant_energy_waste_resolved -->
+VACANT / CLEANING_FINISHED  (자동 절전처리 완료 → 정상 복귀)
+
+VACANT / ENERGY_WASTE
+  -- checkin_prep_time_reached -->
+PRE_STAY_READY / OPTIMIZING  (에너지낭비 상태에서도 체크인 준비 진입 허용)
+
+> **설계 원칙:** VACANT/MAINTENANCE 상태에서는 `vacant_energy_waste_detected`가 유효하지 않다
+> (isValidTransition = false). 정비 중 에너지 사용은 정상 운영으로 간주한다.
 
 VACANT / MAINTENANCE
   -- checkin_prep_time_reached -->
@@ -203,8 +221,11 @@ VACANT / CLEANING_FINISHED
 |---|---|---|---|---|
 | 1 | VACANT/CLEANING_FINISHED | checkin_prep_time_reached | PRE_STAY_READY/OPTIMIZING | |
 | 2 | VACANT/CLEANING_FINISHED | reservation_cancelled | VACANT/CLEANING_FINISHED | (자기전환, 비즈니스 레이어 처리) |
-| 3 | VACANT/MAINTENANCE | maintenance_finished | VACANT/CLEANING_FINISHED | ← (G3으로 커버, 중복 제거) |
-| 4 | VACANT/MAINTENANCE | checkin_prep_time_reached | PRE_STAY_READY/OPTIMIZING | ✓ 운영자 알림 |
+| 3 | VACANT/CLEANING_FINISHED | vacant_energy_waste_detected | VACANT/ENERGY_WASTE | |
+| 4 | VACANT/ENERGY_WASTE | vacant_energy_waste_resolved | VACANT/CLEANING_FINISHED | 자동 절전처리 완료 |
+| 5 | VACANT/ENERGY_WASTE | checkin_prep_time_reached | PRE_STAY_READY/OPTIMIZING | |
+| 6 | VACANT/MAINTENANCE | maintenance_finished | VACANT/CLEANING_FINISHED | ← (G3으로 커버, 중복 제거) |
+| 7 | VACANT/MAINTENANCE | checkin_prep_time_reached | PRE_STAY_READY/OPTIMIZING | ✓ 운영자 알림 |
 | 5 | PRE_STAY_READY/OPTIMIZING | optimization_finished | PRE_STAY_READY/OPTIMIZED | |
 | 6 | PRE_STAY_READY/OPTIMIZED | check_in_detected | OCCUPIED/GOOD_CONDITION | |
 | 7 | OCCUPIED/GOOD_CONDITION | energy_waste_detected | OCCUPIED/ENERGY_WASTE | |
@@ -218,7 +239,7 @@ VACANT / CLEANING_FINISHED
 | 15 | CLEANING/CLEANING_PENDING | cleaning_started | CLEANING/CLEANING_IN_PROGRESS | |
 | 16 | CLEANING/CLEANING_IN_PROGRESS | cleaning_finished | VACANT/CLEANING_FINISHED | |
 
-**전환 수:** 글로벌 3 + OCCUPIED 공통 1×4 + 상태별 16 = 총 23개 논리 전환 (중복 제거 후)
+**전환 수:** 글로벌 3 + OCCUPIED 공통 1×4 + 상태별 18 = 총 25개 논리 전환 (중복 제거 후)
 
 ---
 
@@ -323,6 +344,7 @@ IoT 센서 / 외부 시스템
 | checkin_prep_time_reached | 10분 |
 | check_in_detected / check_out_detected | 5분 |
 | energy_waste_* / complaint_* | 2분 |
+| vacant_energy_waste_* | 2분 |
 | cleaning_* / maintenance_* | 10분 |
 | reservation_cancelled | 30분 |
 

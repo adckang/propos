@@ -90,6 +90,12 @@ export default function EventMatrixPanel({ stats, period, isMobile = false }) {
     (stats.earlyCheckinSuspected ?? 0) +
     (stats.checkoutConfirmationNeeded ?? 0);
 
+  const vacantWaste    = stats.vacantEnergyWaste ?? 0;
+  const vacantResolved = stats.vacantEnergyResolved ?? 0;
+  // PAST 기간이면 항상 표시 — 0건이면 "이상 없음" 긍정 피드백
+  const isPastPeriod = ['last_week', 'last_month', 'yesterday', 'last_hour'].includes(period);
+  const showVacantEnergy = isPastPeriod;
+
   return (
     <div style={{ padding: isMobile ? '12px 12px' : '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
 
@@ -122,6 +128,40 @@ export default function EventMatrixPanel({ stats, period, isMobile = false }) {
         <EventRow label="얼리체크인 의심" value={stats.earlyCheckinSuspected ?? 0} dimIfZero />
         <EventRow label="체크아웃 확인 필요" value={stats.checkoutConfirmationNeeded ?? 0} dimIfZero />
       </div>
+
+      {/* 공실 에너지 — PAST 기간 항상 표시 (0건이면 이상 없음 피드백) */}
+      {showVacantEnergy && (
+        <div style={{
+          background: vacantWaste > vacantResolved ? '#fffbeb' : '#f0fdf4',
+          border: `1px solid ${vacantWaste > vacantResolved ? '#fde68a' : '#bbf7d0'}`,
+          borderRadius: 10, padding: '12px 14px',
+        }}>
+          <SectionTitle accent={vacantWaste > vacantResolved ? '#d97706' : '#059669'}>공실 에너지</SectionTitle>
+          <EventRow label="에너지낭비 감지" value={vacantWaste} warn={vacantWaste > 0} dimIfZero />
+          <EventRow label="자동 절전처리"   value={vacantResolved} dimIfZero />
+          <div style={{
+            marginTop: 8, padding: '5px 10px',
+            background: vacantWaste === 0
+              ? '#dcfce7'
+              : vacantWaste === vacantResolved ? '#dcfce7' : '#fef9c3',
+            border: `1px solid ${vacantWaste === 0
+              ? '#86efac'
+              : vacantWaste === vacantResolved ? '#86efac' : '#fde047'}`,
+            borderRadius: 6, fontSize: 11,
+            color: vacantWaste === 0
+              ? '#15803d'
+              : vacantWaste === vacantResolved ? '#15803d' : '#92400e',
+            fontWeight: 600,
+          }}>
+            {vacantWaste === 0
+              ? '공실 에너지낭비 없음 — 절전 정상'
+              : vacantWaste === vacantResolved
+                ? `${vacantWaste}건 발생 · 전건 자동 절전처리`
+                : `${vacantWaste}건 발생 · ${vacantResolved}건 자동 절전처리 (${vacantWaste - vacantResolved}건 미처리)`
+            }
+          </div>
+        </div>
+      )}
 
       {/* 안심지수 */}
       <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 14px' }}>

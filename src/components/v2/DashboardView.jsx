@@ -29,7 +29,8 @@ export default function DashboardView({ onSelectStatus, onBack, properties = PRO
     ? `현재 이상 징후 ${urgentCount}건이 확인됐어요. 바로 확인이 필요해요.`
     : `현재 ${properties.length}개 숙소 정상 운영 중이에요.`;
 
-  const { stats: monthStats, loading: monthLoading } = useReportingStats('this_month', null);
+  const { stats: monthStats,     loading: monthLoading,     summary: monthSummary     } = useReportingStats('this_month',  null);
+  const { stats: lastMonthStats, loading: lastMonthLoading, summary: lastMonthSummary } = useReportingStats('last_month',  null);
 
   const unassignedCleaningCount = properties.reduce((n, p) => {
     const unassigned = (p.reservations || []).filter(
@@ -104,6 +105,11 @@ export default function DashboardView({ onSelectStatus, onBack, properties = PRO
       {/* 실시간 운영 요약 + 이번 달 레포트 */}
       <SummaryBanner summary={nowSummary} isMobile={isMobile}>
         <ReportPanel period="this_month" stats={monthStats} loading={monthLoading} isMobile={isMobile} />
+      </SummaryBanner>
+
+      {/* 지난달 레포트 */}
+      <SummaryBanner summary={lastMonthSummary} isMobile={isMobile}>
+        <ReportPanel period="last_month" stats={lastMonthStats} loading={lastMonthLoading} isMobile={isMobile} />
       </SummaryBanner>
 
       {/* 상태 카드 그리드 — 모바일/PC 모두 2열 */}

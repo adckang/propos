@@ -63,6 +63,23 @@ describe("countCurrentStats — 실시간 KPI 집계", () => {
     assert.equal(stats.vacant, 2);
   });
 
+  test("VACANT/ENERGY_WASTE → vacant + vacantEnergyWaste 카운트", () => {
+    const props = [
+      { mainStatus: "VACANT", subStatus: "CLEANING_FINISHED" },
+      { mainStatus: "VACANT", subStatus: "ENERGY_WASTE" },
+      { mainStatus: "VACANT", subStatus: "ENERGY_WASTE" },
+    ];
+    const stats = countCurrentStats(props);
+    assert.equal(stats.vacant, 3);
+    assert.equal(stats.vacantEnergyWaste, 2);
+  });
+
+  test("VACANT/CLEANING_FINISHED는 vacantEnergyWaste에 포함 안 됨", () => {
+    const props = [{ mainStatus: "VACANT", subStatus: "CLEANING_FINISHED" }];
+    const stats = countCurrentStats(props);
+    assert.equal(stats.vacantEnergyWaste, 0);
+  });
+
   test("CLEANING/* → cleaning 카운트", () => {
     const props = [
       { mainStatus: "CLEANING", subStatus: "CLEANING_PENDING" },
@@ -168,6 +185,44 @@ describe("countPeriodEvents — 기간 이벤트 집계", () => {
     assert.equal(stats.noShowSuspected, 0);
     assert.equal(stats.earlyCheckinSuspected, 0);
     assert.equal(stats.checkoutConfirmationNeeded, 0);
+    assert.equal(stats.vacantEnergyWaste, 0);
+    assert.equal(stats.vacantEnergyResolved, 0);
+  });
+
+  test("vacant_energy_waste_detected → vacantEnergyWaste 카운트 (anomalies 미포함)", () => {
+    const events = [
+      { type: "vacant_energy_waste_detected" },
+      { type: "vacant_energy_waste_detected" },
+      { type: "vacant_energy_waste_detected" },
+    ];
+    const stats = countPeriodEvents(events);
+    assert.equal(stats.vacantEnergyWaste, 3);
+    assert.equal(stats.anomalies, 0); // 공실 에너지낭비는 anomalies에 포함하지 않음
+    assert.equal(stats.energyWaste, 0);
+  });
+
+  test("vacant_energy_waste_resolved → vacantEnergyResolved 카운트", () => {
+    const events = [
+      { type: "vacant_energy_waste_detected" },
+      { type: "vacant_energy_waste_detected" },
+      { type: "vacant_energy_waste_resolved" },
+    ];
+    const stats = countPeriodEvents(events);
+    assert.equal(stats.vacantEnergyWaste, 2);
+    assert.equal(stats.vacantEnergyResolved, 1);
+  });
+
+  test("vacant_energy_waste_* 와 OCCUPIED energy_waste_* 는 독립 집계", () => {
+    const events = [
+      { type: "energy_waste_detected" },       // OCCUPIED
+      { type: "vacant_energy_waste_detected" }, // VACANT
+      { type: "vacant_energy_waste_resolved" },
+    ];
+    const stats = countPeriodEvents(events);
+    assert.equal(stats.energyWaste, 1);         // OCCUPIED만
+    assert.equal(stats.anomalies, 1);           // OCCUPIED만
+    assert.equal(stats.vacantEnergyWaste, 1);
+    assert.equal(stats.vacantEnergyResolved, 1);
   });
 
   test("no_show_suspected → noShowSuspected 카운트 (anomalies 미포함)", () => {

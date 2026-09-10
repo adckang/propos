@@ -19,6 +19,7 @@ import {
 const s = (main, sub) => ({ mainStatus: main, subStatus: sub });
 
 const VACANT_CF   = s('VACANT',        'CLEANING_FINISHED');
+const VACANT_EW   = s('VACANT',        'ENERGY_WASTE');
 const VACANT_MN   = s('VACANT',        'MAINTENANCE');
 const PRE_OPTG    = s('PRE_STAY_READY','OPTIMIZING');
 const PRE_OPTD    = s('PRE_STAY_READY','OPTIMIZED');
@@ -49,6 +50,18 @@ describe('getNextRoomState — 상태별 전환', () => {
   });
   test('T02 VACANT/CLEANING_FINISHED + reservation_cancelled → VACANT/CLEANING_FINISHED (자기전환)', () => {
     assert.deepEqual(getNextRoomState(VACANT_CF, 'reservation_cancelled'), VACANT_CF);
+  });
+  test('T-VEW1 VACANT/CLEANING_FINISHED + vacant_energy_waste_detected → VACANT/ENERGY_WASTE', () => {
+    assert.deepEqual(getNextRoomState(VACANT_CF, 'vacant_energy_waste_detected'), VACANT_EW);
+  });
+  test('T-VEW2 VACANT/ENERGY_WASTE + vacant_energy_waste_resolved → VACANT/CLEANING_FINISHED', () => {
+    assert.deepEqual(getNextRoomState(VACANT_EW, 'vacant_energy_waste_resolved'), VACANT_CF);
+  });
+  test('T-VEW3 VACANT/ENERGY_WASTE + checkin_prep_time_reached → PRE_STAY_READY/OPTIMIZING', () => {
+    assert.deepEqual(getNextRoomState(VACANT_EW, 'checkin_prep_time_reached'), PRE_OPTG);
+  });
+  test('T-VEW4 VACANT/ENERGY_WASTE + vacant_energy_waste_detected → throw (자기루프 없음)', () => {
+    assert.throws(() => getNextRoomState(VACANT_EW, 'vacant_energy_waste_detected'), /invalid transition/);
   });
   test('T03 VACANT/MAINTENANCE + checkin_prep_time_reached → PRE_STAY_READY/OPTIMIZING', () => {
     assert.deepEqual(getNextRoomState(VACANT_MN, 'checkin_prep_time_reached'), PRE_OPTG);
@@ -325,6 +338,16 @@ describe('isValidTransition', () => {
     assert.equal(isValidTransition(PRE_OPTD,  'reservation_cancelled'), false);
     assert.equal(isValidTransition(OCC_GOOD,  'reservation_cancelled'), false);
   });
+  test('T-VEW5 vacant_energy_waste_detected는 CLEANING_FINISHED에서만 true', () => {
+    assert.equal(isValidTransition(VACANT_CF, 'vacant_energy_waste_detected'), true);
+    assert.equal(isValidTransition(VACANT_EW, 'vacant_energy_waste_detected'), false); // 이미 에너지낭비 상태
+    assert.equal(isValidTransition(VACANT_MN, 'vacant_energy_waste_detected'), false); // 정비중 — 유효하지 않음
+    assert.equal(isValidTransition(OCC_GOOD,  'vacant_energy_waste_detected'), false); // 입실중
+  });
+  test('T-VEW6 vacant_energy_waste_resolved는 ENERGY_WASTE에서만 true', () => {
+    assert.equal(isValidTransition(VACANT_EW, 'vacant_energy_waste_resolved'), true);
+    assert.equal(isValidTransition(VACANT_CF, 'vacant_energy_waste_resolved'), false);
+  });
 });
 
 // ============================================================
@@ -334,13 +357,21 @@ describe('getAvailableEvents', () => {
 
   test('VACANT/CLEANING_FINISHED — 상태별 + 글로벌 포함', () => {
     const events = getAvailableEvents(VACANT_CF);
-    // 상태별: checkin_prep_time_reached, reservation_cancelled
+    // 상태별: checkin_prep_time_reached, reservation_cancelled, vacant_energy_waste_detected
     // 글로벌: maintenance_required, maintenance_started, maintenance_finished
     assert.ok(events.includes('checkin_prep_time_reached'));
     assert.ok(events.includes('reservation_cancelled'));
+    assert.ok(events.includes('vacant_energy_waste_detected')); // T-VEW8
     assert.ok(events.includes('maintenance_required'));
     assert.ok(events.includes('maintenance_started'));
     assert.ok(events.includes('maintenance_finished'));
+  });
+  test('T-VEW8 VACANT/ENERGY_WASTE — vacant_energy_waste_resolved + checkin_prep_time_reached + 글로벌 포함', () => {
+    const events = getAvailableEvents(VACANT_EW);
+    assert.ok(events.includes('vacant_energy_waste_resolved'));
+    assert.ok(events.includes('checkin_prep_time_reached'));
+    assert.ok(events.includes('maintenance_required'));
+    assert.ok(!events.includes('vacant_energy_waste_detected')); // 이미 에너지낭비 상태 — 재감지 불가
   });
   test('OCCUPIED/ISSUE_AND_ENERGY — 상태별 3개 + 글로벌 3개', () => {
     const events = getAvailableEvents(OCC_IAE);

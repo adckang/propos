@@ -94,6 +94,7 @@ export function countCurrentStats(properties) {
     occupied: 0,
     preStayReady: 0,
     vacant: 0,
+    vacantEnergyWaste: 0,
     cleaning: 0,
     anomalyCount: 0,
     total: properties.length,
@@ -109,6 +110,7 @@ export function countCurrentStats(properties) {
       result.preStayReady += 1;
     } else if (mainStatus === "VACANT") {
       result.vacant += 1;
+      if (subStatus === "ENERGY_WASTE") result.vacantEnergyWaste += 1;
     } else if (mainStatus === "CLEANING") {
       result.cleaning += 1;
     }
@@ -134,6 +136,9 @@ export function countPeriodEvents(events) {
     noShowSuspected: 0,
     earlyCheckinSuspected: 0,
     checkoutConfirmationNeeded: 0,
+    // 공실 중 에너지 추적 (VACANT/ENERGY_WASTE 관련)
+    vacantEnergyWaste: 0,
+    vacantEnergyResolved: 0,
   };
 
   for (const { type } of events) {
@@ -143,7 +148,9 @@ export function countPeriodEvents(events) {
     else if (type === "energy_waste_detected") {
       result.energyWaste += 1;
       result.anomalies += 1;
-    } else if (type === "no_show_suspected") result.noShowSuspected += 1;
+    } else if (type === "vacant_energy_waste_detected") result.vacantEnergyWaste += 1;
+    else if (type === "vacant_energy_waste_resolved") result.vacantEnergyResolved += 1;
+    else if (type === "no_show_suspected") result.noShowSuspected += 1;
     else if (type === "early_checkin_suspected") result.earlyCheckinSuspected += 1;
     else if (type === "checkout_confirmation_needed") result.checkoutConfirmationNeeded += 1;
   }

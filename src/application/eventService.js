@@ -64,10 +64,12 @@ async function _updateRoomStateCache(kv, event) {
     check_out_detected: { mainStatus: "CLEANING", subStatus: "CLEANING_PENDING" },
     cleaning_started: { mainStatus: "CLEANING", subStatus: "CLEANING_IN_PROGRESS" },
     cleaning_finished: { mainStatus: "VACANT", subStatus: "CLEANING_FINISHED" },
-    energy_waste_detected: null,   // subStatus만 변경 → 즉시 캐시 무효화 (delRoomState)
+    energy_waste_detected: null,         // subStatus만 변경 → 즉시 캐시 무효화 (delRoomState)
     energy_waste_resolved: null,
     complaint_detected: null,
     complaint_resolved: null,
+    vacant_energy_waste_detected: null,  // VACANT/ENERGY_WASTE 진입 → 즉시 무효화
+    vacant_energy_waste_resolved: null,
   };
 
   const next = STATE_MAP[event.type];

@@ -41,9 +41,15 @@ const OCCUPIED_COMMON = {
  */
 const TRANSITIONS = {
   'VACANT/CLEANING_FINISHED': {
-    checkin_prep_time_reached: { mainStatus: 'PRE_STAY_READY', subStatus: 'OPTIMIZING' },
+    checkin_prep_time_reached:      { mainStatus: 'PRE_STAY_READY', subStatus: 'OPTIMIZING' },
     // reservation_cancelled: 자기전환 — 비즈니스 레이어에서 처리
-    reservation_cancelled:     { mainStatus: 'VACANT',         subStatus: 'CLEANING_FINISHED' },
+    reservation_cancelled:          { mainStatus: 'VACANT',         subStatus: 'CLEANING_FINISHED' },
+    vacant_energy_waste_detected:   { mainStatus: 'VACANT',         subStatus: 'ENERGY_WASTE' },
+  },
+  // 공실 중 에너지 과다사용 감지 상태. 자동 절전처리 완료 시 CLEANING_FINISHED 복귀.
+  'VACANT/ENERGY_WASTE': {
+    vacant_energy_waste_resolved:   { mainStatus: 'VACANT',         subStatus: 'CLEANING_FINISHED' },
+    checkin_prep_time_reached:      { mainStatus: 'PRE_STAY_READY', subStatus: 'OPTIMIZING' },
   },
   'VACANT/MAINTENANCE': {
     checkin_prep_time_reached: { mainStatus: 'PRE_STAY_READY', subStatus: 'OPTIMIZING' },

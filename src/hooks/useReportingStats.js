@@ -2,34 +2,74 @@ import { useState, useEffect } from 'react';
 
 /** 실데이터 없을 때 UI 확인용 데모 요약 문장 */
 const DEMO_SUMMARY = {
-  now:        '현재 정상 운영 중이에요.',
-  today:      '오늘 체크인 2건 완료됐어요.',
-  this_week:  '이번 주 이상 1건 자동 처리됐어요.',
-  this_month: '이번 달 23건 이상 없이 처리됐어요.',
-  yesterday:  '어제 체크인 3건, 이상 1건 자동 처리됐어요.',
+  now:        '현재 전체 숙소 정상 운영 중이에요.',
+  today:      '오늘 체크인 3건, 체크아웃 4건 완료됐어요.',
+  this_week:  '이번 주 이상감지 1건이 자동 처리됐어요.',
+  this_month: '이번 달 체크인 23건, 이상감지 2건 자동 처리됐어요.',
+  yesterday:  '어제 체크인 3건 완료. 이상 1건 자동 처리됐어요.',
   last_week:  '지난주 체크인 11건 완료. 이상 2건 자동 처리됐어요.',
   last_month: '지난달 체크인 38건 완료. 이상 4건 자동 처리됐어요.',
   last_hour:  '지난 1시간 체크아웃 1건 완료됐어요.',
   tomorrow:   '내일 체크인 2건, 체크아웃 3건 예정이에요.',
   next_week:  '다음 주 체크인 7건, 체크아웃 6건 예정이에요.',
   next_month: '다음 달 체크인 20건, 체크아웃 19건 예정이에요.',
-  next_hour:  '다음 1시간 내 체크인 예정이에요.',
+  next_hour:  '1시간 내 체크인 1건 예정이에요.',
 };
 
 /** 실데이터 없을 때 UI 확인용 데모 데이터 */
 const DEMO_STATS = {
-  now:        { checkIns: 2, checkOuts: 1, anomalies: 0, energyWaste: 0, noShowSuspected: 0, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0 },
-  today:      { checkIns: 2, checkOuts: 3, anomalies: 0, energyWaste: 0, noShowSuspected: 0, earlyCheckinSuspected: 1, checkoutConfirmationNeeded: 0 },
-  this_week:  { checkIns: 9, checkOuts: 8, anomalies: 1, energyWaste: 1, noShowSuspected: 0, earlyCheckinSuspected: 2, checkoutConfirmationNeeded: 1 },
-  this_month: { checkIns: 23, checkOuts: 21, anomalies: 2, energyWaste: 1, noShowSuspected: 1, earlyCheckinSuspected: 3, checkoutConfirmationNeeded: 1 },
-  yesterday:  { checkIns: 3, checkOuts: 4, anomalies: 1, energyWaste: 0, noShowSuspected: 0, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 1 },
-  last_week:  { checkIns: 11, checkOuts: 10, anomalies: 2, energyWaste: 2, noShowSuspected: 1, earlyCheckinSuspected: 1, checkoutConfirmationNeeded: 0 },
-  last_month: { checkIns: 38, checkOuts: 37, anomalies: 4, energyWaste: 3, noShowSuspected: 2, earlyCheckinSuspected: 4, checkoutConfirmationNeeded: 2 },
-  last_hour:  { checkIns: 0, checkOuts: 1, anomalies: 0, energyWaste: 0, noShowSuspected: 0, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0 },
-  tomorrow:   { checkIns: 2, checkOuts: 3, anomalies: 0, energyWaste: 0, noShowSuspected: 0, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0 },
-  next_week:  { checkIns: 7, checkOuts: 6, anomalies: 0, energyWaste: 0, noShowSuspected: 0, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0 },
-  next_month: { checkIns: 20, checkOuts: 19, anomalies: 0, energyWaste: 0, noShowSuspected: 0, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0 },
-  next_hour:  { checkIns: 1, checkOuts: 0, anomalies: 0, energyWaste: 0, noShowSuspected: 0, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0 },
+  now: {
+    checkIns: 3, checkOuts: 2, anomalies: 0, energyWaste: 0,
+    noShowSuspected: 0, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0,
+  },
+  today: {
+    checkIns: 3, checkOuts: 4, anomalies: 0, energyWaste: 0,
+    noShowSuspected: 0, earlyCheckinSuspected: 1, checkoutConfirmationNeeded: 1,
+  },
+  this_week: {
+    checkIns: 9, checkOuts: 8, anomalies: 1, energyWaste: 1,
+    noShowSuspected: 0, earlyCheckinSuspected: 2, checkoutConfirmationNeeded: 1,
+  },
+  this_month: {
+    checkIns: 23, checkOuts: 21, anomalies: 2, energyWaste: 1,
+    noShowSuspected: 1, earlyCheckinSuspected: 3, checkoutConfirmationNeeded: 2,
+  },
+  yesterday: {
+    checkIns: 3, checkOuts: 4, anomalies: 1, energyWaste: 1,
+    noShowSuspected: 0, earlyCheckinSuspected: 1, checkoutConfirmationNeeded: 1,
+    vacantEnergyWaste: 2, vacantEnergyResolved: 2,
+  },
+  last_week: {
+    checkIns: 11, checkOuts: 10, anomalies: 2, energyWaste: 2,
+    noShowSuspected: 1, earlyCheckinSuspected: 2, checkoutConfirmationNeeded: 1,
+    vacantEnergyWaste: 3, vacantEnergyResolved: 3,
+  },
+  last_month: {
+    checkIns: 38, checkOuts: 37, anomalies: 4, energyWaste: 3,
+    noShowSuspected: 2, earlyCheckinSuspected: 4, checkoutConfirmationNeeded: 2,
+    vacantEnergyWaste: 11, vacantEnergyResolved: 10,
+  },
+  last_hour: {
+    checkIns: 0, checkOuts: 1, anomalies: 0, energyWaste: 0,
+    noShowSuspected: 0, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0,
+    vacantEnergyWaste: 1, vacantEnergyResolved: 1,
+  },
+  tomorrow: {
+    checkIns: 2, checkOuts: 3, anomalies: 0, energyWaste: 0,
+    noShowSuspected: 0, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0,
+  },
+  next_week: {
+    checkIns: 7, checkOuts: 6, anomalies: 0, energyWaste: 0,
+    noShowSuspected: 0, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0,
+  },
+  next_month: {
+    checkIns: 20, checkOuts: 19, anomalies: 0, energyWaste: 0,
+    noShowSuspected: 0, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0,
+  },
+  next_hour: {
+    checkIns: 1, checkOuts: 0, anomalies: 0, energyWaste: 0,
+    noShowSuspected: 0, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0,
+  },
 };
 
 function isEmptyStats(stats) {
