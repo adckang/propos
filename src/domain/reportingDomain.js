@@ -124,8 +124,16 @@ export function countCurrentStats(properties) {
  * anomalies = complaint_detected + energy_waste_detected
  * energyWaste = energy_waste_detected만
  * softEvents = no_show_suspected + early_checkin_suspected + checkout_confirmation_needed
+ *
+ * 7개 운영 지표용 추가 필드:
+ *   preStayAttempts    — checkin_prep_time_reached (입실 준비 시작)
+ *   preStayOptimized   — optimization_finished (최적화 완료)
+ *   cleaningFinished   — cleaning_finished (청소 완료, 지표 4~6 분모)
+ *   cleaningOnTime     — 3시간 이내 완료 건수 (API 레이어에서 주입)
+ *   cleaningAssigned   — 할당된 cleaning_job 수 (API 레이어에서 주입)
+ *   cleaningCreated    — 생성된 cleaning_job 수 (API 레이어에서 주입, 임시 = checkOuts)
+ *
  * @param {Array<{ type: string }>} events
- * @returns {{ checkIns, checkOuts, anomalies, energyWaste, noShowSuspected, earlyCheckinSuspected, checkoutConfirmationNeeded }}
  */
 export function countPeriodEvents(events) {
   const result = {
@@ -136,9 +144,15 @@ export function countPeriodEvents(events) {
     noShowSuspected: 0,
     earlyCheckinSuspected: 0,
     checkoutConfirmationNeeded: 0,
-    // 공실 중 에너지 추적 (VACANT/ENERGY_WASTE 관련)
     vacantEnergyWaste: 0,
     vacantEnergyResolved: 0,
+    // 7개 운영 지표
+    preStayAttempts: 0,
+    preStayOptimized: 0,
+    cleaningFinished: 0,
+    cleaningOnTime: 0,    // API 레이어 주입 — 이벤트 쌍 시간차 계산 필요
+    cleaningAssigned: 0,  // API 레이어 주입 — cleaning_jobs 테이블
+    cleaningCreated: 0,   // API 레이어 주입 — cleaning_jobs 테이블 (임시: checkOuts)
   };
 
   for (const { type } of events) {
@@ -153,6 +167,10 @@ export function countPeriodEvents(events) {
     else if (type === "no_show_suspected") result.noShowSuspected += 1;
     else if (type === "early_checkin_suspected") result.earlyCheckinSuspected += 1;
     else if (type === "checkout_confirmation_needed") result.checkoutConfirmationNeeded += 1;
+    // 7개 운영 지표
+    else if (type === "checkin_prep_time_reached") result.preStayAttempts += 1;
+    else if (type === "optimization_finished") result.preStayOptimized += 1;
+    else if (type === "cleaning_finished") result.cleaningFinished += 1;
   }
 
   return result;

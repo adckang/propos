@@ -37,22 +37,38 @@ const DEMO_STATS = {
   yesterday: {
     checkIns: 3, checkOuts: 4, anomalies: 1, energyWaste: 1,
     noShowSuspected: 0, earlyCheckinSuspected: 1, checkoutConfirmationNeeded: 1,
-    vacantEnergyWaste: 2, vacantEnergyResolved: 2,
+    vacantEnergyWaste: 1, vacantEnergyResolved: 1,
+    // 7개 운영 지표
+    preStayAttempts: 3,  preStayOptimized: 3,   // 입실전 최적화 100%
+    cleaningFinished: 4, cleaningOnTime: 4,      // 청소 시간 준수 100%
+    cleaningAssigned: 4, cleaningCreated: 4,     // 할당 성공 100%
   },
   last_week: {
     checkIns: 11, checkOuts: 10, anomalies: 2, energyWaste: 2,
     noShowSuspected: 1, earlyCheckinSuspected: 2, checkoutConfirmationNeeded: 1,
     vacantEnergyWaste: 3, vacantEnergyResolved: 3,
+    // 7개 운영 지표
+    preStayAttempts: 10, preStayOptimized: 9,   // 입실전 최적화 90%
+    cleaningFinished: 10, cleaningOnTime: 8,    // 청소 시간 준수 80%
+    cleaningAssigned: 10, cleaningCreated: 10,  // 할당 성공 100%
   },
   last_month: {
     checkIns: 38, checkOuts: 37, anomalies: 4, energyWaste: 3,
     noShowSuspected: 2, earlyCheckinSuspected: 4, checkoutConfirmationNeeded: 2,
-    vacantEnergyWaste: 11, vacantEnergyResolved: 10,
+    vacantEnergyWaste: 5, vacantEnergyResolved: 5,
+    // 7개 운영 지표
+    preStayAttempts: 37, preStayOptimized: 34,  // 입실전 최적화 92%
+    cleaningFinished: 37, cleaningOnTime: 31,   // 청소 시간 준수 84%
+    cleaningAssigned: 36, cleaningCreated: 37,  // 할당 성공 97%
   },
   last_hour: {
     checkIns: 0, checkOuts: 1, anomalies: 0, energyWaste: 0,
     noShowSuspected: 0, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0,
-    vacantEnergyWaste: 1, vacantEnergyResolved: 1,
+    vacantEnergyWaste: 0, vacantEnergyResolved: 0,
+    // 7개 운영 지표
+    preStayAttempts: 0, preStayOptimized: 0,
+    cleaningFinished: 1, cleaningOnTime: 1,
+    cleaningAssigned: 1, cleaningCreated: 1,
   },
   tomorrow: {
     checkIns: 2, checkOuts: 3, anomalies: 0, energyWaste: 0,

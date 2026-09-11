@@ -187,6 +187,13 @@ describe("countPeriodEvents — 기간 이벤트 집계", () => {
     assert.equal(stats.checkoutConfirmationNeeded, 0);
     assert.equal(stats.vacantEnergyWaste, 0);
     assert.equal(stats.vacantEnergyResolved, 0);
+    // 7개 운영 지표
+    assert.equal(stats.preStayAttempts, 0);
+    assert.equal(stats.preStayOptimized, 0);
+    assert.equal(stats.cleaningFinished, 0);
+    assert.equal(stats.cleaningOnTime, 0);
+    assert.equal(stats.cleaningAssigned, 0);
+    assert.equal(stats.cleaningCreated, 0);
   });
 
   test("vacant_energy_waste_detected → vacantEnergyWaste 카운트 (anomalies 미포함)", () => {
@@ -261,5 +268,83 @@ describe("countPeriodEvents — 기간 이벤트 집계", () => {
     assert.equal(stats.noShowSuspected, 1);
     assert.equal(stats.earlyCheckinSuspected, 1);
     assert.equal(stats.checkoutConfirmationNeeded, 1);
+  });
+});
+
+describe("countPeriodEvents — 7개 운영 지표 집계", () => {
+  test("checkin_prep_time_reached → preStayAttempts 카운트", () => {
+    const events = [
+      { type: "checkin_prep_time_reached" },
+      { type: "checkin_prep_time_reached" },
+      { type: "checkin_prep_time_reached" },
+    ];
+    const stats = countPeriodEvents(events);
+    assert.equal(stats.preStayAttempts, 3);
+    assert.equal(stats.preStayOptimized, 0);
+    assert.equal(stats.anomalies, 0);
+  });
+
+  test("optimization_finished → preStayOptimized 카운트", () => {
+    const events = [
+      { type: "checkin_prep_time_reached" },
+      { type: "checkin_prep_time_reached" },
+      { type: "optimization_finished" },
+    ];
+    const stats = countPeriodEvents(events);
+    assert.equal(stats.preStayAttempts, 2);
+    assert.equal(stats.preStayOptimized, 1);
+  });
+
+  test("cleaning_finished → cleaningFinished 카운트 (anomalies 미포함)", () => {
+    const events = [
+      { type: "cleaning_finished" },
+      { type: "cleaning_finished" },
+      { type: "cleaning_finished" },
+      { type: "cleaning_finished" },
+    ];
+    const stats = countPeriodEvents(events);
+    assert.equal(stats.cleaningFinished, 4);
+    assert.equal(stats.anomalies, 0);
+    assert.equal(stats.checkOuts, 0);
+  });
+
+  test("cleaningOnTime / cleaningAssigned / cleaningCreated 기본값 0 (API 레이어 주입)", () => {
+    const stats = countPeriodEvents([{ type: "cleaning_finished" }]);
+    assert.equal(stats.cleaningOnTime, 0);
+    assert.equal(stats.cleaningAssigned, 0);
+    assert.equal(stats.cleaningCreated, 0);
+  });
+
+  test("7개 지표 이벤트 혼합 — 독립 집계", () => {
+    const events = [
+      { type: "check_out_detected" },
+      { type: "check_out_detected" },
+      { type: "checkin_prep_time_reached" },
+      { type: "checkin_prep_time_reached" },
+      { type: "optimization_finished" },
+      { type: "cleaning_finished" },
+      { type: "cleaning_finished" },
+      { type: "vacant_energy_waste_detected" },
+    ];
+    const stats = countPeriodEvents(events);
+    assert.equal(stats.checkOuts, 2);
+    assert.equal(stats.preStayAttempts, 2);
+    assert.equal(stats.preStayOptimized, 1);
+    assert.equal(stats.cleaningFinished, 2);
+    assert.equal(stats.vacantEnergyWaste, 1);
+    // API 레이어 주입 필드는 여전히 0
+    assert.equal(stats.cleaningOnTime, 0);
+    assert.equal(stats.cleaningAssigned, 0);
+    assert.equal(stats.cleaningCreated, 0);
+  });
+
+  test("지표 간 독립성 — 한 이벤트가 복수 카운터에 중복 집계되지 않음", () => {
+    const events = [{ type: "optimization_finished" }];
+    const stats = countPeriodEvents(events);
+    assert.equal(stats.preStayOptimized, 1);
+    assert.equal(stats.preStayAttempts, 0);  // 별도 이벤트
+    assert.equal(stats.cleaningFinished, 0);
+    assert.equal(stats.anomalies, 0);
+    assert.equal(stats.checkIns, 0);
   });
 });
