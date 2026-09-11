@@ -60,13 +60,7 @@ function MetricRow({ label, numerator, denominator, noData = false, isLast = fal
       borderBottom: isLast ? 'none' : '1px solid #f1f5f9',
     }}>
       {/* 지표명 */}
-      <div style={{ flex: 1, fontSize: 12, color: '#4a5568', fontWeight: 500 }}>
-        {noData && (
-          <span style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600,
-            background: '#f1f5f9', borderRadius: 3, padding: '1px 4px', marginRight: 5 }}>
-            준비중
-          </span>
-        )}
+      <div style={{ flex: 1, fontSize: 12, color: noData ? '#94a3b8' : '#4a5568', fontWeight: 500 }}>
         {label}
       </div>
 
