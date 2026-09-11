@@ -12,6 +12,7 @@
  *   isMobile
  */
 
+import { useState } from 'react';
 import EventMatrixPanel from './EventMatrixPanel';
 import ActiveHybridPanel from './ActiveHybridPanel';
 import SchedulePanel from './SchedulePanel';
@@ -66,8 +67,12 @@ function PanelContent({ tense, period, stats, loading, isMobile }) {
   return null;
 }
 
+// ACTIVE 기간은 기본 열림, 나머지는 기본 닫힘
+const DEFAULT_OPEN = new Set(['today', 'this_week', 'this_month']);
+
 export default function ReportPanel({ period, stats, loading, isMobile = false }) {
   const tense = PERIOD_TENSE[period] ?? 'active';
+  const [isOpen, setIsOpen] = useState(DEFAULT_OPEN.has(period));
 
   // NOW 기간(Template-C)은 DetailView에서 별도 처리. 여기서는 표시 안 함.
   if (tense === 'now') return null;
@@ -77,26 +82,41 @@ export default function ReportPanel({ period, stats, loading, isMobile = false }
 
   return (
     <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0' }}>
-      {/* 기간 레이블 — 위 제목 */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        padding: '9px 20px',
-        background: style?.activeBg ?? '#f8fafc',
-        borderBottom: `1px solid ${style?.border ?? '#e2e8f0'}`,
-      }}>
+      {/* 헤더 — 클릭으로 접기/펼치기 */}
+      <button
+        onClick={() => setIsOpen(o => !o)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 6,
+          padding: '9px 20px',
+          background: style?.activeBg ?? '#f8fafc',
+          borderBottom: isOpen ? `1px solid ${style?.border ?? '#e2e8f0'}` : 'none',
+          border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+          textAlign: 'left',
+        }}
+      >
         <span style={{ fontSize: 13 }}>{style?.icon}</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: style?.label ?? '#475569' }}>
+        <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: style?.label ?? '#475569' }}>
           {navLabel} 레포트
         </span>
-      </div>
+        <span style={{
+          fontSize: 10, color: style?.label ?? '#475569',
+          transition: 'transform 0.2s',
+          display: 'inline-block',
+          transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+        }}>
+          ▼
+        </span>
+      </button>
 
-      <PanelContent
-        tense={tense}
-        period={period}
-        stats={stats}
-        loading={loading}
-        isMobile={isMobile}
-      />
+      {isOpen && (
+        <PanelContent
+          tense={tense}
+          period={period}
+          stats={stats}
+          loading={loading}
+          isMobile={isMobile}
+        />
+      )}
     </div>
   );
 }
