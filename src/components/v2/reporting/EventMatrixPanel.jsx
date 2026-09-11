@@ -13,12 +13,6 @@
  *   7. 청소 스케줄 할당 성공률    — cleaningAssigned / cleaningCreated
  */
 
-const PERIOD_LABELS = {
-  last_week:  '지난주',
-  yesterday:  '어제',
-  last_hour:  '지난 1시간',
-  last_month: '지난달',
-};
 
 /** 달성률에 따른 텍스트 색상 */
 function pctColor(pct) {
@@ -207,7 +201,7 @@ export default function EventMatrixPanel({ stats, period, isMobile = false }) {
           </div>
           <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 2 }}>
             {measurable.length > 0
-              ? `측정가능 ${measurable.length}개 지표 평균 · 보안 3개 지표 연동 후 포함`
+              ? `측정가능 ${measurable.length}개 지표 평균 · ${METRICS.filter(m => m.noData).length}개 지표 연동 후 포함`
               : '측정가능 지표 없음'}
           </div>
         </div>
