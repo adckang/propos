@@ -42,6 +42,9 @@ const DEMO_STATS = {
     preStayAttempts: 3,  preStayOptimized: 3,   // 입실전 최적화 100%
     cleaningFinished: 4, cleaningOnTime: 4,      // 청소 시간 준수 100%
     cleaningAssigned: 4, cleaningCreated: 4,     // 할당 성공 100%
+    postCheckoutEnergyWaste: 0,    // 퇴실후 절전 위반 0건 → 100%
+    postCheckoutSecurityBreach: 0, // 퇴실후 보안 위반 0건 → 100%
+    postCleaningSecurityBreach: 0, // 청소후 보안 위반 0건 → 100%
   },
   last_week: {
     checkIns: 11, checkOuts: 10, anomalies: 2, energyWaste: 2,
@@ -51,6 +54,9 @@ const DEMO_STATS = {
     preStayAttempts: 10, preStayOptimized: 9,   // 입실전 최적화 90%
     cleaningFinished: 10, cleaningOnTime: 8,    // 청소 시간 준수 80%
     cleaningAssigned: 10, cleaningCreated: 10,  // 할당 성공 100%
+    postCheckoutEnergyWaste: 2,    // 퇴실후 절전 위반 2건 → 8/10건 80%
+    postCheckoutSecurityBreach: 1, // 퇴실후 보안 위반 1건 → 9/10건 90%
+    postCleaningSecurityBreach: 1, // 청소후 보안 위반 1건 → 9/10건 90%
   },
   last_month: {
     checkIns: 38, checkOuts: 37, anomalies: 4, energyWaste: 3,
@@ -60,6 +66,9 @@ const DEMO_STATS = {
     preStayAttempts: 37, preStayOptimized: 34,  // 입실전 최적화 92%
     cleaningFinished: 37, cleaningOnTime: 31,   // 청소 시간 준수 84%
     cleaningAssigned: 36, cleaningCreated: 37,  // 할당 성공 97%
+    postCheckoutEnergyWaste: 5,    // 퇴실후 절전 위반 5건 → 32/37건 86%
+    postCheckoutSecurityBreach: 3, // 퇴실후 보안 위반 3건 → 34/37건 92%
+    postCleaningSecurityBreach: 4, // 청소후 보안 위반 4건 → 33/37건 89%
   },
   last_hour: {
     checkIns: 0, checkOuts: 1, anomalies: 0, energyWaste: 0,
@@ -69,6 +78,9 @@ const DEMO_STATS = {
     preStayAttempts: 0, preStayOptimized: 0,
     cleaningFinished: 1, cleaningOnTime: 1,
     cleaningAssigned: 1, cleaningCreated: 1,
+    postCheckoutEnergyWaste: 0,
+    postCheckoutSecurityBreach: 0,
+    postCleaningSecurityBreach: 0,
   },
   tomorrow: {
     checkIns: 2, checkOuts: 3, anomalies: 0, energyWaste: 0,

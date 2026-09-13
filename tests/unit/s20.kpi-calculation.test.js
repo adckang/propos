@@ -194,6 +194,10 @@ describe("countPeriodEvents — 기간 이벤트 집계", () => {
     assert.equal(stats.cleaningOnTime, 0);
     assert.equal(stats.cleaningAssigned, 0);
     assert.equal(stats.cleaningCreated, 0);
+    // HA 센서 기반 (지표 2, 3, 5)
+    assert.equal(stats.postCheckoutEnergyWaste, 0);
+    assert.equal(stats.postCheckoutSecurityBreach, 0);
+    assert.equal(stats.postCleaningSecurityBreach, 0);
   });
 
   test("vacant_energy_waste_detected → vacantEnergyWaste 카운트 (anomalies 미포함)", () => {
@@ -346,5 +350,62 @@ describe("countPeriodEvents — 7개 운영 지표 집계", () => {
     assert.equal(stats.cleaningFinished, 0);
     assert.equal(stats.anomalies, 0);
     assert.equal(stats.checkIns, 0);
+  });
+});
+
+describe("countPeriodEvents — HA 센서 기반 지표 (지표 2, 3, 5)", () => {
+  test("post_checkout_energy_waste_detected → postCheckoutEnergyWaste (anomalies 미포함)", () => {
+    const events = [
+      { type: "post_checkout_energy_waste_detected" },
+      { type: "post_checkout_energy_waste_detected" },
+    ];
+    const stats = countPeriodEvents(events);
+    assert.equal(stats.postCheckoutEnergyWaste, 2);
+    assert.equal(stats.anomalies, 0);
+    assert.equal(stats.energyWaste, 0);
+    assert.equal(stats.vacantEnergyWaste, 0);
+  });
+
+  test("post_checkout_security_breach_detected → postCheckoutSecurityBreach (anomalies 미포함)", () => {
+    const events = [
+      { type: "post_checkout_security_breach_detected" },
+    ];
+    const stats = countPeriodEvents(events);
+    assert.equal(stats.postCheckoutSecurityBreach, 1);
+    assert.equal(stats.anomalies, 0);
+    assert.equal(stats.postCheckoutEnergyWaste, 0);
+  });
+
+  test("post_cleaning_security_breach_detected → postCleaningSecurityBreach (anomalies 미포함)", () => {
+    const events = [
+      { type: "post_cleaning_security_breach_detected" },
+      { type: "post_cleaning_security_breach_detected" },
+      { type: "post_cleaning_security_breach_detected" },
+    ];
+    const stats = countPeriodEvents(events);
+    assert.equal(stats.postCleaningSecurityBreach, 3);
+    assert.equal(stats.anomalies, 0);
+    assert.equal(stats.postCheckoutSecurityBreach, 0);
+  });
+
+  test("HA 센서 이벤트 3종 독립 집계 + 기존 이벤트와 간섭 없음", () => {
+    const events = [
+      { type: "check_out_detected" },
+      { type: "check_out_detected" },
+      { type: "cleaning_finished" },
+      { type: "cleaning_finished" },
+      { type: "post_checkout_energy_waste_detected" },
+      { type: "post_checkout_security_breach_detected" },
+      { type: "post_cleaning_security_breach_detected" },
+      { type: "vacant_energy_waste_detected" },
+    ];
+    const stats = countPeriodEvents(events);
+    assert.equal(stats.checkOuts, 2);
+    assert.equal(stats.cleaningFinished, 2);
+    assert.equal(stats.vacantEnergyWaste, 1);
+    assert.equal(stats.postCheckoutEnergyWaste, 1);
+    assert.equal(stats.postCheckoutSecurityBreach, 1);
+    assert.equal(stats.postCleaningSecurityBreach, 1);
+    assert.equal(stats.anomalies, 0);
   });
 });

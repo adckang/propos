@@ -133,6 +133,11 @@ export function countCurrentStats(properties) {
  *   cleaningAssigned   — 할당된 cleaning_job 수 (API 레이어에서 주입)
  *   cleaningCreated    — 생성된 cleaning_job 수 (API 레이어에서 주입, 임시 = checkOuts)
  *
+ * HA 센서 기반 감지 이벤트 (퇴실 후 / 청소 완료 후):
+ *   postCheckoutEnergyWaste   — post_checkout_energy_waste_detected (퇴실 후 조명/냉난방 감지)
+ *   postCheckoutSecurityBreach — post_checkout_security_breach_detected (퇴실 후 문/창문/재실센서)
+ *   postCleaningSecurityBreach — post_cleaning_security_breach_detected (청소 완료 후 보안 침해)
+ *
  * @param {Array<{ type: string }>} events
  */
 export function countPeriodEvents(events) {
@@ -153,6 +158,10 @@ export function countPeriodEvents(events) {
     cleaningOnTime: 0,    // API 레이어 주입 — 이벤트 쌍 시간차 계산 필요
     cleaningAssigned: 0,  // API 레이어 주입 — cleaning_jobs 테이블
     cleaningCreated: 0,   // API 레이어 주입 — cleaning_jobs 테이블 (임시: checkOuts)
+    // HA 센서 기반 (지표 2, 3, 5)
+    postCheckoutEnergyWaste:    0,  // 퇴실 후 절전 위반 건수 (지표 2 역산 분자)
+    postCheckoutSecurityBreach: 0,  // 퇴실 후 보안 위반 건수 (지표 3 역산 분자)
+    postCleaningSecurityBreach: 0,  // 청소 완료 후 보안 위반 건수 (지표 5 역산 분자)
   };
 
   for (const { type } of events) {
@@ -171,6 +180,10 @@ export function countPeriodEvents(events) {
     else if (type === "checkin_prep_time_reached") result.preStayAttempts += 1;
     else if (type === "optimization_finished") result.preStayOptimized += 1;
     else if (type === "cleaning_finished") result.cleaningFinished += 1;
+    // HA 센서 기반 (지표 2, 3, 5)
+    else if (type === "post_checkout_energy_waste_detected")    result.postCheckoutEnergyWaste += 1;
+    else if (type === "post_checkout_security_breach_detected") result.postCheckoutSecurityBreach += 1;
+    else if (type === "post_cleaning_security_breach_detected") result.postCleaningSecurityBreach += 1;
   }
 
   return result;

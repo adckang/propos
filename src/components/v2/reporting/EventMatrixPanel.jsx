@@ -5,10 +5,10 @@
  *
  * 지표 정의:
  *   1. 입실전 숙소 최적화율       — preStayOptimized / preStayAttempts
- *   2. 퇴실후 청소전 절전 적용률  — 측정 준비 중 (CLEANING 기간 이벤트 미수집)
- *   3. 퇴실후 청소전 보안 적용률  — 측정 준비 중 (보안 이벤트 미수집)
+ *   2. 퇴실후 청소전 절전 적용률  — (checkOuts - postCheckoutEnergyWaste) / checkOuts
+ *   3. 퇴실후 청소전 보안 적용률  — (checkOuts - postCheckoutSecurityBreach) / checkOuts
  *   4. 청소후 공실중 절전 적용률  — (cleaningFinished - vacantEnergyWaste) / cleaningFinished
- *   5. 청소후 공실중 보안 적용률  — 측정 준비 중 (보안 이벤트 미수집)
+ *   5. 청소후 공실중 보안 적용률  — (cleaningFinished - postCleaningSecurityBreach) / cleaningFinished
  *   6. 청소 시작~완료 시간 준수율 — cleaningOnTime / cleaningFinished  (기준: 3시간)
  *   7. 청소 스케줄 할당 성공률    — cleaningAssigned / cleaningCreated
  */
@@ -91,12 +91,18 @@ function MetricRow({ label, numerator, denominator, noData = false, isLast = fal
 export default function EventMatrixPanel({ stats, period, isMobile = false }) {
   if (!stats) return null;
 
-  const checkOuts         = stats.checkOuts         ?? 0;
-  const cleaningFinished  = stats.cleaningFinished   ?? checkOuts;
-  const vacantEnergyWaste = stats.vacantEnergyWaste  ?? 0;
+  const checkOuts                  = stats.checkOuts                  ?? 0;
+  const cleaningFinished           = stats.cleaningFinished            ?? checkOuts;
+  const vacantEnergyWaste          = stats.vacantEnergyWaste           ?? 0;
+  const postCheckoutEnergyWaste    = stats.postCheckoutEnergyWaste     ?? 0;
+  const postCheckoutSecurityBreach = stats.postCheckoutSecurityBreach  ?? 0;
+  const postCleaningSecurityBreach = stats.postCleaningSecurityBreach  ?? 0;
 
-  // 지표 4: 청소후 공실중 절전 = 에너지낭비 없이 유지된 구간 수 / 청소 완료 건수
-  const vacantEnergySavingOk = Math.max(0, cleaningFinished - vacantEnergyWaste);
+  // 역산 패턴: 위반 건수를 분모에서 빼면 적용률 달성 건수
+  const vacantEnergySavingOk       = Math.max(0, cleaningFinished - vacantEnergyWaste);
+  const postCheckoutEnergyOk       = Math.max(0, checkOuts - postCheckoutEnergyWaste);
+  const postCheckoutSecurityOk     = Math.max(0, checkOuts - postCheckoutSecurityBreach);
+  const postCleaningSecurityOk     = Math.max(0, cleaningFinished - postCleaningSecurityBreach);
 
   const METRICS = [
     {
@@ -105,12 +111,14 @@ export default function EventMatrixPanel({ stats, period, isMobile = false }) {
       denominator: stats.preStayAttempts  ?? 0,
     },
     {
-      label:  '퇴실후 청소전 절전 적용률',
-      noData: true,
+      label:       '퇴실후 청소전 절전 적용률',
+      numerator:   postCheckoutEnergyOk,
+      denominator: checkOuts,
     },
     {
-      label:  '퇴실후 청소전 보안 적용률',
-      noData: true,
+      label:       '퇴실후 청소전 보안 적용률',
+      numerator:   postCheckoutSecurityOk,
+      denominator: checkOuts,
     },
     {
       label:       '청소후 공실중 절전 적용률',
@@ -118,8 +126,9 @@ export default function EventMatrixPanel({ stats, period, isMobile = false }) {
       denominator: cleaningFinished,
     },
     {
-      label:  '청소후 공실중 보안 적용률',
-      noData: true,
+      label:       '청소후 공실중 보안 적용률',
+      numerator:   postCleaningSecurityOk,
+      denominator: cleaningFinished,
     },
     {
       label:       '청소 시작~완료 시간 준수율',

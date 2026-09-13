@@ -9,6 +9,11 @@ export const EVENT_TYPES = Object.freeze({
   // VACANT 기간 전용 — OCCUPIED 에너지낭비와 구분
   VACANT_ENERGY_WASTE_DETECTED: "vacant_energy_waste_detected",
   VACANT_ENERGY_WASTE_RESOLVED: "vacant_energy_waste_resolved",
+  // 퇴실 직후 (CLEANING 전) — HA 센서 기반 감지
+  POST_CHECKOUT_ENERGY_WASTE_DETECTED:    "post_checkout_energy_waste_detected",    // 퇴실 후 조명/냉난방 켜진 상태 감지
+  POST_CHECKOUT_SECURITY_BREACH_DETECTED: "post_checkout_security_breach_detected", // 퇴실 후 문/창문/재실센서 감지
+  // 청소 완료 후 공실 기간 — HA 센서 기반 감지
+  POST_CLEANING_SECURITY_BREACH_DETECTED: "post_cleaning_security_breach_detected", // 청소 완료 후 보안 침해 감지
   COMPLAINT_DETECTED: "complaint_detected",
   COMPLAINT_RESOLVED: "complaint_resolved",
   CHECKIN_PREP_TIME_REACHED: "checkin_prep_time_reached",
