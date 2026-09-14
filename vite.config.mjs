@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
+import eruda from "vite-plugin-eruda";
 import { handleNodeHaRequest } from "./server/haApiHandlers.js";
 import { handleNodeIcalRequest } from "./server/icalApiHandlers.js";
 import { startWatcher, getMonitoringState, setMonitoringConfig, setRoomState } from "./server/occupancyWatcher.js";
@@ -70,12 +71,51 @@ function apiProxyPlugin(env) {
         await handleCameraSnapshot(req, res);
         return;
       }
+      // dev 전용 /api/stats/drilldown 스텁
+      if (req.url?.startsWith("/api/stats/drilldown") && req.method === "GET") {
+        const url    = new URL(req.url, "http://localhost");
+        const metric = url.searchParams.get("metric") ?? "";
+        const period = url.searchParams.get("period") ?? "";
+        const DEMO_ITEMS = {
+          cleaning_time:          [
+            { property_id: "room-101", occurred_at: new Date("2026-09-08T14:30:00Z"), detail: { duration_hours: 3.8, started_at: new Date("2026-09-08T10:40:00Z"), finished_at: new Date("2026-09-08T14:30:00Z") } },
+            { property_id: "room-305", occurred_at: new Date("2026-09-07T18:10:00Z"), detail: { duration_hours: 4.2, started_at: new Date("2026-09-07T14:00:00Z"), finished_at: new Date("2026-09-07T18:10:00Z") } },
+          ],
+          post_checkout_energy:   [
+            { property_id: "room-203", occurred_at: new Date("2026-09-08T11:00:00Z"), detail: {} },
+            { property_id: "room-102", occurred_at: new Date("2026-09-06T09:30:00Z"), detail: {} },
+          ],
+          post_checkout_security: [
+            { property_id: "room-401", occurred_at: new Date("2026-09-09T16:00:00Z"), detail: {} },
+          ],
+          vacant_energy:          [
+            { property_id: "room-202", occurred_at: new Date("2026-09-07T20:00:00Z"), detail: {} },
+            { property_id: "room-303", occurred_at: new Date("2026-09-08T08:00:00Z"), detail: {} },
+            { property_id: "room-104", occurred_at: new Date("2026-09-09T12:00:00Z"), detail: {} },
+          ],
+          post_cleaning_security: [
+            { property_id: "room-205", occurred_at: new Date("2026-09-08T15:00:00Z"), detail: {} },
+          ],
+          pre_stay_optimization:  [],
+        };
+        const items = DEMO_ITEMS[metric] ?? [];
+        sendJson(res, 200, { metric, period, failCount: items.length, items });
+        return;
+      }
       // dev 전용 /api/stats 스텁 — 실제 DB 없이 레포트 UI 확인용
       if (req.url?.startsWith("/api/stats") && req.method === "GET") {
         const url = new URL(req.url, "http://localhost");
         const period = url.searchParams.get("period") ?? "now";
         const NOW_STATS = { occupied: 7, preStayReady: 0, vacant: 10, cleaning: 3, anomalyCount: 2, total: 20 };
-        const PAST_STATS = { checkIns: 14, checkOuts: 12, anomalies: 3, energyWaste: 1, noShowSuspected: 1, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0 };
+        const PAST_STATS = {
+          checkIns: 14, checkOuts: 12, anomalies: 3, energyWaste: 1,
+          noShowSuspected: 1, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0,
+          vacantEnergyWaste: 3, vacantEnergyResolved: 3,
+          preStayAttempts: 12, preStayOptimized: 11,
+          cleaningFinished: 12, cleaningOnTime: 10,
+          cleaningAssigned: 12, cleaningCreated: 12,
+          postCheckoutEnergyWaste: 2, postCheckoutSecurityBreach: 1, postCleaningSecurityBreach: 1,
+        };
         const FUTURE_STATS = { checkIns: 8, checkOuts: 6, anomalies: 0, energyWaste: 0, noShowSuspected: 0, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0 };
         const PERIOD_SUMMARY = {
           now: "현재 2개 숙소 이상 징후가 확인됐어요. 바로 확인이 필요해요.",
@@ -131,7 +171,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
-    plugins: [react(), apiProxyPlugin(env)],
+    plugins: [react(), apiProxyPlugin(env), ...(mode === 'development' ? [eruda()] : [])],
     // host:true → 0.0.0.0 바인딩 (VSCode 터널/네트워크 접속 허용)
     // strictPort → 포트 점유 시 다른 포트로 튀지 않음
     server: {

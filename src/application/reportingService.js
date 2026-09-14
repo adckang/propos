@@ -1,4 +1,9 @@
 import { getPeriodRange, countCurrentStats, countPeriodEvents } from "../domain/reportingDomain.js";
+import {
+  detectCleaningTimeFailures,
+  detectEventTypeFailures,
+  detectPreStayOptimizationFailures,
+} from "../domain/metricDrilldownDomain.js";
 import { getRoomState, setRoomState } from "../infrastructure/kvStore.js";
 import { queryEvents, getLastKnownStateFromDB } from "../infrastructure/eventRepository.js";
 
@@ -132,4 +137,33 @@ export async function getStatsForPeriod(period, { db, kv, propertyId = null }) {
     stats,
     summary,
   };
+}
+
+// metric key → 감지 함수 매핑
+const METRIC_DETECTORS = {
+  cleaning_time:          (events) => detectCleaningTimeFailures(events),
+  post_checkout_energy:   (events) => detectEventTypeFailures(events, "post_checkout_energy_waste_detected"),
+  post_checkout_security: (events) => detectEventTypeFailures(events, "post_checkout_security_breach_detected"),
+  vacant_energy:          (events) => detectEventTypeFailures(events, "vacant_energy_waste_detected"),
+  post_cleaning_security: (events) => detectEventTypeFailures(events, "post_cleaning_security_breach_detected"),
+  pre_stay_optimization:  (events) => detectPreStayOptimizationFailures(events),
+};
+
+/**
+ * 특정 지표의 실패 건 목록을 반환한다.
+ *
+ * @param {string} metric  — METRIC_DETECTORS 키 중 하나
+ * @param {string} period  — getPeriodRange가 처리할 수 있는 기간 키
+ * @param {{ db: object }} deps
+ * @returns {Promise<{ metric, period, failCount, items }>}
+ */
+export async function getDrilldownForMetric(metric, period, { db }) {
+  const detect = METRIC_DETECTORS[metric];
+  if (!detect) throw new Error(`unknown metric: "${metric}"`);
+
+  const range  = getPeriodRange(period);
+  const events = await queryEvents(db, range);
+  const items  = detect(events);
+
+  return { metric, period, failCount: items.length, items };
 }

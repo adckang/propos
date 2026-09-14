@@ -48,7 +48,7 @@ function LoadingRows() {
   );
 }
 
-function PanelContent({ tense, period, stats, loading, isMobile }) {
+function PanelContent({ tense, period, stats, loading, isMobile, onSelectRoom }) {
   if (loading) return <LoadingRows />;
 
   if (!stats) {
@@ -60,7 +60,7 @@ function PanelContent({ tense, period, stats, loading, isMobile }) {
     );
   }
 
-  if (tense === 'past')   return <EventMatrixPanel   stats={stats} period={period} isMobile={isMobile} />;
+  if (tense === 'past')   return <EventMatrixPanel   stats={stats} period={period} isMobile={isMobile} onSelectRoom={onSelectRoom} />;
   if (tense === 'active') return <ActiveHybridPanel  stats={stats} period={period} isMobile={isMobile} />;
   if (tense === 'future') return <SchedulePanel      stats={stats} period={period} isMobile={isMobile} />;
 
@@ -70,7 +70,7 @@ function PanelContent({ tense, period, stats, loading, isMobile }) {
 // ACTIVE 기간은 기본 열림, 나머지는 기본 닫힘
 const DEFAULT_OPEN = new Set(['today', 'this_week', 'this_month']);
 
-export default function ReportPanel({ period, stats, loading, isMobile = false }) {
+export default function ReportPanel({ period, stats, loading, isMobile = false, onSelectRoom }) {
   const tense = PERIOD_TENSE[period] ?? 'active';
   const [isOpen, setIsOpen] = useState(DEFAULT_OPEN.has(period));
 
@@ -115,6 +115,7 @@ export default function ReportPanel({ period, stats, loading, isMobile = false }
           stats={stats}
           loading={loading}
           isMobile={isMobile}
+          onSelectRoom={onSelectRoom}
         />
       )}
     </div>

@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import DrilldownSheet from './DrilldownSheet';
+
 /**
  * Template-P — 7개 운영 지표 (건수 / 달성률)
  * 적용: PAST 기간 (last_week / yesterday / last_hour / last_month)
@@ -30,13 +33,14 @@ function pctBg(pct) {
 
 /**
  * 개별 운영 지표 행
- * @param {string}  label       - 지표명
- * @param {number}  numerator   - 달성 건수
- * @param {number}  denominator - 전체 건수
- * @param {boolean} noData      - true면 "준비 중" 표시
- * @param {boolean} isLast      - 마지막 행이면 border-bottom 없음
+ * @param {string}   label       - 지표명
+ * @param {number}   numerator   - 달성 건수
+ * @param {number}   denominator - 전체 건수
+ * @param {boolean}  noData      - true면 "준비 중" 표시
+ * @param {boolean}  isLast      - 마지막 행이면 border-bottom 없음
+ * @param {Function} onDrilldown - 탭 시 드릴다운 콜백 (실패 건 있을 때만)
  */
-function MetricRow({ label, numerator, denominator, noData = false, isLast = false }) {
+function MetricRow({ label, numerator, denominator, noData = false, isLast = false, onDrilldown }) {
   const isEmpty = !noData && (denominator == null || denominator === 0);
 
   let countText = '—';
@@ -53,12 +57,11 @@ function MetricRow({ label, numerator, denominator, noData = false, isLast = fal
     ratioBg    = pctBg(pct);
   }
 
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center',
-      padding: '9px 0',
-      borderBottom: isLast ? 'none' : '1px solid #f1f5f9',
-    }}>
+  const failCount = (!noData && !isEmpty && pct !== null) ? (denominator - numerator) : 0;
+  const tappable  = failCount > 0 && !!onDrilldown;
+
+  const rowContent = (
+    <>
       {/* 지표명 */}
       <div style={{ flex: 1, fontSize: 12, color: noData ? '#94a3b8' : '#4a5568', fontWeight: 500 }}>
         {label}
@@ -84,11 +87,50 @@ function MetricRow({ label, numerator, denominator, noData = false, isLast = fal
       }}>
         {ratioText}
       </div>
-    </div>
+
+      {/* 드릴다운 화살표 */}
+      {tappable && (
+        <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 6 }}>›</span>
+      )}
+    </>
   );
+
+  const baseStyle = {
+    display: 'flex', alignItems: 'center',
+    padding: '9px 0',
+    borderBottom: isLast ? 'none' : '1px solid #f1f5f9',
+  };
+
+  if (tappable) {
+    return (
+      <button
+        onClick={onDrilldown}
+        style={{
+          ...baseStyle, width: '100%', background: 'none',
+          border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+        }}
+      >
+        {rowContent}
+      </button>
+    );
+  }
+
+  return <div style={baseStyle}>{rowContent}</div>;
 }
 
-export default function EventMatrixPanel({ stats, period, isMobile = false }) {
+// 지표 index → drilldown metric 키 매핑 (없으면 null = 드릴다운 없음)
+const METRIC_KEYS = [
+  'pre_stay_optimization',   // 0: 입실전 숙소 최적화율
+  'post_checkout_energy',    // 1: 퇴실후 절전
+  'post_checkout_security',  // 2: 퇴실후 보안
+  'vacant_energy',           // 3: 청소후 공실중 절전
+  'post_cleaning_security',  // 4: 청소후 공실중 보안
+  'cleaning_time',           // 5: 청소 시간 준수율
+  null,                      // 6: 청소 스케줄 할당 (cleaning_jobs 테이블 기반 — 미지원)
+];
+
+export default function EventMatrixPanel({ stats, period, isMobile = false, onSelectRoom }) {
+  const [drilldown, setDrilldown] = useState(null); // { metricKey, label }
   if (!stats) return null;
 
   const checkOuts                  = stats.checkOuts                  ?? 0;
@@ -188,9 +230,21 @@ export default function EventMatrixPanel({ stats, period, isMobile = false }) {
             key={i}
             {...m}
             isLast={i === METRICS.length - 1}
+            onDrilldown={METRIC_KEYS[i] ? () => setDrilldown({ metricKey: METRIC_KEYS[i], label: m.label }) : undefined}
           />
         ))}
       </div>
+
+      {/* 드릴다운 바텀 시트 */}
+      {drilldown && (
+        <DrilldownSheet
+          metric={drilldown.metricKey}
+          metricLabel={drilldown.label}
+          period={period}
+          onClose={() => setDrilldown(null)}
+          onSelectRoom={onSelectRoom}
+        />
+      )}
 
       {/* 안심지수 */}
       <div style={{
