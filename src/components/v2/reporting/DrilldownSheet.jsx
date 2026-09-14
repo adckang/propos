@@ -31,8 +31,9 @@ function formatDate(raw) {
 
 function formatDetail(metric, detail) {
   if (metric === 'cleaning_time' && detail?.duration_hours != null) {
-    const h = Math.floor(detail.duration_hours);
-    const m = Math.round((detail.duration_hours - h) * 60);
+    const totalMin = Math.round(detail.duration_hours * 60);
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
     return `${h}시간 ${m}분 소요`;
   }
   return null;
@@ -77,15 +78,17 @@ function FailItem({ item, metric, onSelect }) {
 export default function DrilldownSheet({ metric, metricLabel, period, onClose, onSelectRoom }) {
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(false);
 
   useEffect(() => {
     if (!metric || !period) return;
     setLoading(true);
     setData(null);
+    setError(false);
     fetch(`/api/stats/drilldown?period=${period}&metric=${metric}`)
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(d => { setData(d); setLoading(false); })
-      .catch(() => { setData({ items: [], failCount: 0 }); setLoading(false); });
+      .catch(() => { setError(true); setLoading(false); });
   }, [metric, period]);
 
   const title = METRIC_LABELS[metric] ?? metricLabel;
@@ -146,7 +149,15 @@ export default function DrilldownSheet({ metric, metricLabel, period, onClose, o
             </div>
           )}
 
-          {!loading && data?.items?.length === 0 && (
+          {!loading && error && (
+            <div style={{ padding: 32, textAlign: 'center' }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>⚠️</div>
+              <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>데이터를 불러오지 못했어요</div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>잠시 후 다시 시도해주세요</div>
+            </div>
+          )}
+
+          {!loading && !error && data?.items?.length === 0 && (
             <div style={{ padding: 32, textAlign: 'center' }}>
               <div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>
               <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>실패 건 없음</div>
@@ -154,7 +165,7 @@ export default function DrilldownSheet({ metric, metricLabel, period, onClose, o
             </div>
           )}
 
-          {!loading && data?.items?.map((item, i) => (
+          {!loading && !error && data?.items?.map((item, i) => (
             <FailItem
               key={i}
               item={item}
