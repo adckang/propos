@@ -788,6 +788,7 @@ export default function RoomStateApp({ onBack }) {
     currentView = (
       <DashboardView
         onSelectStatus={(status) => { setListFilter(status); setView('list'); }}
+        onSelectProperty={(p) => { setSelectedPropertyId(p.id); setView('detail'); }}
         onBack={onBack}
         properties={mergedProperties}
         syncBadge={

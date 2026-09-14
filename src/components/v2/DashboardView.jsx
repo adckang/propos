@@ -6,7 +6,7 @@ import ReportPanel from './reporting/ReportPanel';
 
 const ORDER = ['CLEANING', 'PRE_STAY_READY', 'OCCUPIED', 'VACANT'];
 
-export default function DashboardView({ onSelectStatus, onBack, properties = PROPERTIES, syncBadge }) {
+export default function DashboardView({ onSelectStatus, onSelectProperty, onBack, properties = PROPERTIES, syncBadge }) {
   const isMobile = useMobile();
   const now = new Date();
   const timeStr = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
@@ -104,12 +104,16 @@ export default function DashboardView({ onSelectStatus, onBack, properties = PRO
 
       {/* 실시간 운영 요약 + 이번 달 레포트 */}
       <SummaryBanner summary={nowSummary} isMobile={isMobile}>
-        <ReportPanel period="this_month" stats={monthStats} loading={monthLoading} isMobile={isMobile} />
+        <ReportPanel period="this_month" stats={monthStats} loading={monthLoading} isMobile={isMobile}
+          onSelectRoom={(propertyId) => { const p = properties.find(x => x.id === propertyId); if (p) onSelectProperty?.(p); }}
+        />
       </SummaryBanner>
 
       {/* 지난달 레포트 */}
       <SummaryBanner summary={lastMonthSummary} isMobile={isMobile}>
-        <ReportPanel period="last_month" stats={lastMonthStats} loading={lastMonthLoading} isMobile={isMobile} />
+        <ReportPanel period="last_month" stats={lastMonthStats} loading={lastMonthLoading} isMobile={isMobile}
+          onSelectRoom={(propertyId) => { const p = properties.find(x => x.id === propertyId); if (p) onSelectProperty?.(p); }}
+        />
       </SummaryBanner>
 
       {/* 상태 카드 그리드 — 모바일/PC 모두 2열 */}
