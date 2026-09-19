@@ -12,6 +12,11 @@ src/config/propos.config.local.json
 .vercel
 data/monitoring-state.json
 data/monitoring-config.json
+# 비밀키·운영 데이터 — 절대 커밋 금지 (Google/Firebase 자격증명, 숙소 달력 주소가 들어가는 설정)
+data/google-services.json
+data/propos-worker-firebase-adminsdk-*.json
+data/properties-config.json
+data/snapshotLog.json
 Claude-Code-Usage-Monitor/
 src/components/backup/
 "src/components/IntroScene copy.jsx"
