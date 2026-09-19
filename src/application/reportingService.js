@@ -1,11 +1,12 @@
 import { getPeriodRange, countCurrentStats, countPeriodEvents } from "../domain/reportingDomain.js";
+import { describePeriod } from "../domain/periodDomain.js";
 import {
   detectCleaningTimeFailures,
   detectEventTypeFailures,
   detectPreStayOptimizationFailures,
 } from "../domain/metricDrilldownDomain.js";
-import { getRoomState, setRoomState } from "../infrastructure/kvStore.js";
-import { queryEvents, getLastKnownStateFromDB } from "../infrastructure/eventRepository.js";
+import { queryEvents, getLastKnownStatesFromDB } from "../infrastructure/eventRepository.js";
+import { queryCleaningJobCounts } from "../infrastructure/cleaningJobRepository.js";
 
 // content-guide.md 규칙 준수: 한 문장에 숫자 최대 2개, 내부 상태명 노출 금지
 
@@ -86,50 +87,70 @@ export function generateSummary(period, stats) {
     return stats.checkIns > 0 ? `1시간 내 체크인 ${stats.checkIns}건 예정이에요.` : `1시간 내 예정된 이벤트가 없어요.`;
   }
 
+  // 몇 주·며칠 뒤/전 (weeks_ahead_2, days_ago_3 …) — "2주 전 …", "3일 뒤 …"
+  const d = describePeriod(period);
+  if (d && (d.unit === "week" || d.unit === "day") && d.tense !== "active") {
+    if (d.tense === "past") {
+      const base = stats.anomalies > 0
+        ? `${d.label} 체크인 ${stats.checkIns}건 완료, 이상감지 ${stats.anomalies}건이 있었어요.`
+        : `${d.label} 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`;
+      return base + softSuffix(stats);
+    }
+    return stats.checkIns > 0 ? `${d.label} 체크인 ${stats.checkIns}건 예정이에요.` : `${d.label} 예약이 없어요.`;
+  }
+
   return "";
 }
 
 /**
+ * countPeriodEvents가 0으로 둔 청소 지표 6·7을 채운다 (report-architecture 지표 표).
+ *   cleaningOnTime  = 청소 완료 - 3시간 초과 건 (드릴다운 실패 목록과 같은 기준. 시작 이벤트가 없는 완료는 감점하지 않음)
+ *   cleaningCreated / cleaningAssigned = cleaning_jobs (체크아웃이 이미 지난 건만). 조회 실패 시 null → 화면 "해당 없음"
+ */
+async function injectCleaningMetrics(stats, { db, events, range, propertyIds, period, now }) {
+  stats.cleaningOnTime = Math.max(0, stats.cleaningFinished - detectCleaningTimeFailures(events).length);
+
+  if (describePeriod(period)?.tense === "future") return;
+
+  const to = new Date(Math.min(range.to.getTime(), now.getTime()));
+  try {
+    const jobs = await queryCleaningJobCounts(db, { from: range.from, to }, propertyIds);
+    stats.cleaningCreated  = jobs.created;
+    stats.cleaningAssigned = jobs.assigned;
+  } catch (err) {
+    console.error("[reportingService] cleaning_jobs 집계 실패:", err?.message ?? err);
+    stats.cleaningCreated  = null;
+    stats.cleaningAssigned = null;
+  }
+}
+
+// 미래 기간은 이벤트가 없어 청소 잡 집계(지표 7)가 의미 없음 — 예정 현황은 클라이언트(iCal)·/api/cleaning/stats가 담당
+
+/**
  * 기간별 KPI를 조회한다.
- * now: KV 룸 상태 기반 실시간 집계
+ * now/today: 이벤트 기록으로 계산한 현재 상태 집계 (propertyIds 지정 시 그 숙소들만)
  * 나머지: DB 이벤트 기반 기간 집계
  *
  * @param {string} period
- * @param {{ db: object, kv: object, propertyId?: string }} deps
+ * @param {{ db: object, propertyIds?: string[]|null, now?: Date }} deps  (kv 는 더 이상 쓰지 않음 — 호출부 호환용으로 넘겨도 무시)
  * @returns {Promise<{ period, stats, summary, range? }>}
  */
-export async function getStatsForPeriod(period, { db, kv, propertyId = null }) {
-  // today = 오늘 실시간 상태 (now와 동일 — KV 기반)
+export async function getStatsForPeriod(period, { db, propertyIds = null, now = new Date() }) {
+  // today = 오늘 실시간 상태 (now와 동일)
   if (period === "now" || period === "today") {
-    let properties = [];
-
-    if (propertyId) {
-      let state = await getRoomState(kv, propertyId);
-      if (!state) {
-        // KV TTL 만료 → DB에서 마지막 상태를 읽어 캐시 재적재
-        state = await getLastKnownStateFromDB(db, propertyId);
-        if (state) await setRoomState(kv, propertyId, state);
-      }
-      if (state) properties = [state];
-    } else {
-      const keys = await kv.keys("state:*");
-      const states = await Promise.all(
-        keys.map((key) => {
-          const id = key.replace("state:", "");
-          return getRoomState(kv, id);
-        })
-      );
-      properties = states.filter(Boolean);
-    }
-
-    const stats = countCurrentStats(properties);
+    // 현재 상태는 이벤트 기록(DB)에서 직접 계산한다. 임시 저장소(KV)는 5분이면 지워져 숙소가 통째로 빠지고,
+    // 민원·에너지 낭비 같은 세부 상태도 담지 못했다. propertyIds 지정 시 그 숙소들만 (중복 ID는 1회), [] → 전부 0.
+    const ids = Array.isArray(propertyIds) ? [...new Set(propertyIds)] : null;
+    const states = await getLastKnownStatesFromDB(db, ids);
+    const stats = countCurrentStats([...states.values()]);
     const summary = generateSummary(period, stats);
     return { period, stats, summary };
   }
 
   const range = getPeriodRange(period);
-  const events = await queryEvents(db, range, propertyId);
+  const events = await queryEvents(db, range, propertyIds);
   const stats = countPeriodEvents(events);
+  await injectCleaningMetrics(stats, { db, events, range, propertyIds, period, now });
   const summary = generateSummary(period, stats);
   return {
     period,

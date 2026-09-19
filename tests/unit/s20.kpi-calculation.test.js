@@ -26,7 +26,7 @@ describe("countCurrentStats — 실시간 KPI 집계", () => {
     assert.equal(stats.cleaning, 0);
   });
 
-  test("ISSUE_COMPLAINT + ISSUE_AND_ENERGY → anomalyCount (민원 관련만)", () => {
+  test("체류중 이상 서브상태(민원·복합·에너지낭비) → anomalyCount (report-architecture §6-1)", () => {
     const props = [
       { mainStatus: "OCCUPIED", subStatus: "GOOD_CONDITION" },
       { mainStatus: "OCCUPIED", subStatus: "ENERGY_WASTE" },
@@ -34,14 +34,20 @@ describe("countCurrentStats — 실시간 KPI 집계", () => {
       { mainStatus: "OCCUPIED", subStatus: "ISSUE_AND_ENERGY" },
     ];
     const stats = countCurrentStats(props);
-    assert.equal(stats.anomalyCount, 2); // ISSUE_COMPLAINT + ISSUE_AND_ENERGY만
+    assert.equal(stats.anomalyCount, 3); // GOOD_CONDITION 제외 전부
   });
 
-  test("ENERGY_WASTE만 있는 숙소는 anomalyCount에 포함 안 됨", () => {
+  test("체류중 ENERGY_WASTE도 anomalyCount에 포함 (리스트 긴급 표시·getOccupancyIssues와 동일 기준)", () => {
     const props = [{ mainStatus: "OCCUPIED", subStatus: "ENERGY_WASTE" }];
     const stats = countCurrentStats(props);
-    assert.equal(stats.anomalyCount, 0);
+    assert.equal(stats.anomalyCount, 1);
     assert.equal(stats.occupied, 1);
+  });
+
+  test("공실(VACANT) 에너지낭비는 anomalyCount가 아니라 vacantEnergyWaste 별도 카운터", () => {
+    const stats = countCurrentStats([{ mainStatus: "VACANT", subStatus: "ENERGY_WASTE" }]);
+    assert.equal(stats.anomalyCount, 0);
+    assert.equal(stats.vacantEnergyWaste, 1);
   });
 
   test("PRE_STAY_READY/* → preStayReady 카운트", () => {

@@ -4,8 +4,9 @@
  */
 
 import { Pool } from "pg";
-import { kv } from "@vercel/kv";
 import { getStatsForPeriod } from "../src/application/reportingService.js";
+import { parsePropertyIds } from "../src/application/statsQueryParser.js";
+import { parseOffsetPeriod } from "../src/domain/periodDomain.js";
 
 const VALID_PERIODS = [
   "now",
@@ -20,18 +21,20 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
-  const { period = "now", property_id } = req.query;
+  const { period = "now" } = req.query;
 
-  if (!VALID_PERIODS.includes(period)) {
+  // 표준 기간 이름 + 몇 주/며칠 뒤·전 (weeks_ahead_2, days_ago_3 …)
+  if (!VALID_PERIODS.includes(period) && !parseOffsetPeriod(period)) {
     return res.status(400).json({ error: `invalid period: ${period}` });
   }
+
+  const propertyIds = parsePropertyIds(req.query);
 
   const db = new Pool({ connectionString: process.env.POSTGRES_URL });
   try {
     const result = await getStatsForPeriod(period, {
       db,
-      kv,
-      propertyId: property_id || null,
+      propertyIds,
     });
     return res.status(200).json(result);
   } catch (err) {

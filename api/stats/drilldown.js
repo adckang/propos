@@ -13,10 +13,18 @@
 
 import { Pool } from "pg";
 import { getDrilldownForMetric } from "../../src/application/reportingService.js";
+import { describePeriod } from "../../src/domain/periodDomain.js";
 
 const VALID_PERIODS = [
   "yesterday", "last_hour", "last_week", "last_month",
 ];
+
+// 과거 주/일 기간(2주 전, 3일 전 …)의 실패 목록도 볼 수 있어야 한다
+function isValidPeriod(period) {
+  if (VALID_PERIODS.includes(period)) return true;
+  const d = describePeriod(period);
+  return Boolean(d && d.tense === "past" && (d.unit === "week" || d.unit === "day"));
+}
 
 const VALID_METRICS = [
   "cleaning_time",
@@ -36,7 +44,7 @@ export default async function handler(req, res) {
 
   if (!period) return res.status(400).json({ error: "period is required" });
   if (!metric) return res.status(400).json({ error: "metric is required" });
-  if (!VALID_PERIODS.includes(period)) return res.status(400).json({ error: `invalid period: ${period}` });
+  if (!isValidPeriod(period)) return res.status(400).json({ error: `invalid period: ${period}` });
   if (!VALID_METRICS.includes(metric)) return res.status(400).json({ error: `invalid metric: ${metric}` });
 
   const db = new Pool({ connectionString: process.env.POSTGRES_URL });

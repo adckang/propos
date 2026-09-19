@@ -19,6 +19,10 @@ import {
   getNextMonthDates,
   parseAllFutureCheckouts,
 } from "./_calendar.js";
+import { notify } from "./_notify.js";
+import { periodToRemainingRange } from "../../src/domain/periodDomain.js";
+import { validatePropertyName } from "../../src/domain/propertyIdentityDomain.js";
+import { renamePropertyId, PropertyRenameError } from "../../src/infrastructure/propertyRenameRepository.js";
 
 const db = new Pool({ connectionString: process.env.POSTGRES_URL });
 
@@ -122,10 +126,49 @@ async function listProperties(res) {
   return sendJson(res, 200, rows);
 }
 
+// 이전한 숙소의 KV 캐시(상태·일별 리포트)는 이전 이름 키로 남아 있으므로 정리 — 새 이름으로 재생성된다
+async function clearPropertyCache(propertyId) {
+  try {
+    await kv.del(`state:${propertyId}`);
+    const keys = await kv.keys(`report:daily:${propertyId}:*`);
+    await Promise.all(keys.map((k) => kv.del(k)));
+  } catch (e) {
+    console.error("[properties] KV 캐시 정리 실패:", e.message);
+  }
+}
+
 async function upsertProperty(req, res) {
   const b = await readBody(req);
-  const { property_id, name, checkout_hour, cleaning_duration_hours, google_calendar_id, google_calendar_booking_url, host_phone, ical_url } = b;
+  const { property_id, name, previous_property_id, dry_run, checkout_hour, cleaning_duration_hours, google_calendar_id, google_calendar_booking_url, host_phone, ical_url } = b;
   if (!property_id || !name) return sendJson(res, 400, { error: "property_id, name 필수" });
+  const nameCheck = validatePropertyName(name);
+  if (!nameCheck.ok) return sendJson(res, 400, { error: nameCheck.reason });
+
+  // 식별자 = 이름 (D-016): 같은 이름을 다른 property_id 가 쓰면 중복 등록 — 이전 트랜잭션 전에 검사
+  const selfIds = [property_id, previous_property_id].filter(Boolean);
+  const { rows: dup } = await db.query(
+    `SELECT property_id FROM property_cleaning_config WHERE name = $1 AND property_id <> ALL($2::text[]) LIMIT 1`,
+    [name, selfIds]
+  );
+  if (dup.length) return sendJson(res, 409, { error: `이미 같은 이름의 숙소가 있어요 (${dup[0].property_id})`, code: "NAME_TAKEN" });
+
+  // 이름이 바뀌었거나 레거시 id(prop_…)면 이력을 새 이름으로 함께 이전 (전체 트랜잭션, 재실행 안전)
+  let migration = null;
+  if (previous_property_id && previous_property_id !== property_id) {
+    try {
+      migration = await renamePropertyId(db, previous_property_id, property_id, { dryRun: dry_run === true });
+    } catch (err) {
+      if (err instanceof PropertyRenameError) {
+        return sendJson(res, err.code === "INVALID" ? 400 : 409, { error: err.message, code: err.code });
+      }
+      throw err;
+    }
+    if (dry_run === true) return sendJson(res, 200, migration);
+    if (!migration.alreadyMigrated) await clearPropertyCache(previous_property_id);
+  } else if (dry_run === true) {
+    return sendJson(res, 400, { error: "dry_run 은 previous_property_id 와 함께 사용해요" });
+  }
+
   const { rows } = await db.query(
     `INSERT INTO property_cleaning_config (property_id,name,checkout_hour,cleaning_duration_hours,google_calendar_id,google_calendar_booking_url,host_phone,ical_url,updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
@@ -141,7 +184,7 @@ async function upsertProperty(req, res) {
      RETURNING *`,
     [property_id, name ?? null, checkout_hour ?? null, cleaning_duration_hours ?? null, google_calendar_id ?? null, google_calendar_booking_url ?? null, host_phone ?? null, ical_url ?? null]
   );
-  return sendJson(res, 200, rows[0]);
+  return sendJson(res, 200, migration && !migration.alreadyMigrated ? { ...rows[0], migrated: migration.moved } : rows[0]);
 }
 
 async function runFollowupChecks() {
@@ -344,6 +387,77 @@ async function handleDecline(req, res, token) {
   return respond(200, "거절 처리 완료", "거절 처리됐습니다. 감사합니다.");
 }
 
+// ── 청소 배정 통계 ───────────────────────────────────────────────────────────
+// 레포트 [예정] 섹션(FutureMatrixPanel)의 청소 배정 4분류·드릴다운에 사용
+
+async function getCleaningStats(req, res) {
+  if (req.method !== "GET") return res.status(405).end();
+  const period    = req.query?.period;
+  const withItems = req.query?.items === "true";
+  // 예정 구간: 미래 기간은 전체, 진행 중 기간(this_week/this_month)은 지금 ~ 기간 끝
+  const range     = periodToRemainingRange(period);
+  if (!range) return sendJson(res, 400, { error: `지원하지 않는 period: ${period}` });
+
+  // 선택 숙소 필터 — null=전체, 배열=부분 선택
+  const rawIds = req.query?.property_ids ?? "";
+  const filterIds = rawIds ? rawIds.split(",").map(s => s.trim()).filter(Boolean) : null;
+
+  // 기본 필터 조건 (날짜 범위 + 선택 숙소)
+  let baseWhere = "checkout_at >= $1 AND checkout_at < $2";
+  const baseVals = [range.from.toISOString(), range.to.toISOString()];
+  if (filterIds) {
+    baseWhere += ` AND property_id = ANY($3::text[])`;
+    baseVals.push(filterIds);
+  }
+
+  const { rows } = await db.query(
+    `SELECT
+       COUNT(*) FILTER (WHERE status NOT IN ('CANCELLED'))          AS total,
+       COUNT(*) FILTER (WHERE status IN ('ASSIGNED','COMPLETED'))   AS assigned,
+       COUNT(*) FILTER (WHERE status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED')) AS requesting,
+       COUNT(*) FILTER (WHERE status = 'ESCALATED')                 AS failed,
+       COUNT(*) FILTER (WHERE status = 'CANCELLED')                 AS needs_request
+     FROM cleaning_jobs
+     WHERE ${baseWhere}`,
+    baseVals
+  );
+  const total        = parseInt(rows[0].total,        10);
+  const assigned     = parseInt(rows[0].assigned,     10);
+  const requesting   = parseInt(rows[0].requesting,   10);
+  const failed       = parseInt(rows[0].failed,       10);
+  const needsRequest = parseInt(rows[0].needs_request, 10);
+
+  if (!withItems) {
+    return sendJson(res, 200, { total, assigned, requesting, failed, needsRequest, unassigned: total - assigned });
+  }
+
+  // items=true: 드릴다운용 개별 잡 목록 포함
+  const [failedResult, needsRequestResult] = await Promise.all([
+    db.query(
+      `SELECT j.property_id, j.checkout_at, p.name AS property_name
+       FROM cleaning_jobs j
+       LEFT JOIN property_cleaning_config p ON p.property_id = j.property_id
+       WHERE ${baseWhere} AND j.status = 'ESCALATED'
+       ORDER BY j.checkout_at`,
+      baseVals
+    ),
+    db.query(
+      `SELECT j.property_id, j.checkout_at, p.name AS property_name
+       FROM cleaning_jobs j
+       LEFT JOIN property_cleaning_config p ON p.property_id = j.property_id
+       WHERE ${baseWhere} AND j.status = 'CANCELLED'
+       ORDER BY j.checkout_at`,
+      baseVals
+    ),
+  ]);
+
+  return sendJson(res, 200, {
+    total, assigned, requesting, failed, needsRequest, unassigned: total - assigned,
+    failedItems:      failedResult.rows,
+    needsRequestItems: needsRequestResult.rows,
+  });
+}
+
 async function handleCalendarWebhook(req, res) {
   if (req.method !== "POST") return res.status(405).end();
   const webhookSecret = process.env.GOOGLE_WEBHOOK_SECRET;
@@ -361,10 +475,10 @@ async function handleCalendarWebhook(req, res) {
   );
   if (!propCfg) return res.status(200).end();
   // updatedMin: 최근 30분 이내에 생성/수정된 이벤트만 — 신규 예약 감지용
+  // timeMin 제거: 청소 종료 후 Webhook 지연 도착 시 이벤트 누락 방지 (BUG-003 fix)
   const since = new Date(Date.now() - 30 * 60_000).toISOString();
-  const timeMin = new Date().toISOString(); // 과거 완료 건 제외
   const evtRes = await fetch(
-    `${CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events?updatedMin=${since}&timeMin=${timeMin}&singleEvents=true&orderBy=updated&showDeleted=false&maxResults=10`,
+    `${CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events?updatedMin=${since}&singleEvents=true&orderBy=updated&showDeleted=false&maxResults=10`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
   const events = (await evtRes.json()).items ?? [];
@@ -497,15 +611,17 @@ async function syncAllPropertiesIcal(db, filterPropertyId = null) {
          cleaning_start_at.toISOString(), cleaning_end_at.toISOString(), source, dispatchAfter]
       );
 
-      // 체크아웃 날짜 = 항상 블로커 삭제 (job 신규 여부·source 무관)
-      const { rows: blocker } = await db.query(
-        `DELETE FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2 RETURNING event_id`,
-        [prop.property_id, date]
-      );
-      if (blocker.length && gToken && prop.google_calendar_id) {
-        await deleteBlockerEvent(prop.google_calendar_id, blocker[0].event_id, gToken).catch(
-          (e) => console.error(`[syncAllIcal] 블로커 삭제 실패 (${prop.property_id}/${date}):`, e.message)
+      // SHORT_NOTICE만 즉시 블로커 삭제 (MONTHLY_BATCH는 dispatch_after 도달 시 makeCronBlockerDeleter가 처리)
+      if (source === "SHORT_NOTICE") {
+        const { rows: blocker } = await db.query(
+          `DELETE FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2 RETURNING event_id`,
+          [prop.property_id, date]
         );
+        if (blocker.length && gToken && prop.google_calendar_id) {
+          await deleteBlockerEvent(prop.google_calendar_id, blocker[0].event_id, gToken).catch(
+            (e) => console.error(`[syncAllIcal] 블로커 삭제 실패 (${prop.property_id}/${date}):`, e.message)
+          );
+        }
       }
 
       if (rowCount > 0 && source === "SHORT_NOTICE") {
@@ -661,6 +777,40 @@ async function cancelJob(req, res, jobId) {
     [jobId]
   );
   if (!updated.length) return sendJson(res, 409, { error: "업데이트 실패" });
+
+  // 알림 받은 청소자들에게 취소 알림 발송 (GAP-003 fix)
+  const { rows: cancelNotifs } = await db.query(
+    `SELECT n.*, c.phone, c.fcm_token, c.fcm_status FROM cleaning_notifs n
+     JOIN cleaners c ON c.id = n.cleaner_id
+     WHERE n.job_id = $1 AND n.response IS NULL`,
+    [jobId]
+  );
+  if (cancelNotifs.length) {
+    const cfg = await getPropertyConfig(db, job.property_id);
+    const propName = cfg?.name ?? job.property_id;
+    const date = new Date(job.cleaning_start_at).toISOString().slice(0, 10);
+    for (const n of cancelNotifs) {
+      await notify(db, { id: n.cleaner_id, fcm_token: n.fcm_token, fcm_status: n.fcm_status, phone: n.phone }, {
+        title: "[PROPOS] 청소 일정 취소",
+        body: `${propName} ${date} 청소가 취소됐습니다`,
+        data: {},
+        smsText: `[PROPOS] ${propName} ${date} 청소 일정이 취소됐습니다.`,
+      }).catch((e) => console.error(`[cancelJob] 취소 알림 실패 (${n.cleaner_id}):`, e.message));
+    }
+  }
+
+  // ASSIGNED 상태 취소 시 청소자 구글 캘린더 이벤트 삭제 (GAP-003 fix)
+  if (job.status === "ASSIGNED" && job.google_event_id && job.google_calendar_id) {
+    try {
+      const gTok = await getGoogleToken();
+      await fetch(
+        `${CALENDAR_API}/calendars/${encodeURIComponent(job.google_calendar_id)}/events/${job.google_event_id}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${gTok}` } }
+      );
+    } catch (e) {
+      console.error(`[cancelJob] 캘린더 이벤트 삭제 실패 (${jobId}):`, e.message);
+    }
+  }
 
   // 블로커 재생성 → 슬롯 다시 잠금
   let newBlockerEventId = null;
@@ -928,6 +1078,12 @@ export default async function handler(req, res) {
           [b.assigned_cleaner_id ?? null, b.google_event_id ?? null, id]
         );
         if (!rows.length) return sendJson(res, 409, { error: "이미 ASSIGNED 상태" });
+        // 배정 완료 알림 발송 (GAP-004 fix)
+        if (b.assigned_cleaner_id) {
+          await sendCompletionSmsToRest(db, id, b.assigned_cleaner_id).catch((e) =>
+            console.error(`[PATCH ASSIGNED] 완료 알림 실패:`, e.message)
+          );
+        }
         return sendJson(res, 200, { ok: true, job: rows[0] });
       }
       if (b.status === "PENDING" && b._test_reset) {
@@ -944,6 +1100,7 @@ export default async function handler(req, res) {
         return sendJson(res, 200, { ok: true, job: rows[0] });
       }
     }
+    if (resource === "stats")     return await getCleaningStats(req, res);
     if (resource === "bootstrap") return await bootstrapBlockers(req, res);
     if (resource === "ical-sync")    return await handleIcalSync(req, res);
     if (resource === "gmail-watch")      return await registerGmailWatch(req, res);

@@ -67,7 +67,7 @@ export const STATE_META = {
 
 // ── 숙소 목록 (총 20개) ────────────────────────────────────────────────────────
 
-export const PROPERTIES = [
+const RAW_PROPERTIES = [
 
   // ══════════════════════════════════════════════════════════════════════
   //  OCCUPIED — 체류중 (7개)
@@ -664,6 +664,17 @@ export const PROPERTIES = [
       outdoorTemp: 29, doorOpen: false, motionDetected: false, smokeDetected: false },
   },
 ];
+
+// 실데이터(buildLiveProperty)와 같은 계약: reservations[] 는 "현재 체류를 포함한" 전체 예약 목록.
+// 목업은 현재/다음 예약을 reservation 에 따로 두므로 목록에 없으면 합쳐 준다
+// (futureWeekDomain 의 이번주·다음주 점유·체크아웃 집계는 reservations[] 만 본다).
+// 간트(addResCycles)는 checkIn > cursor 인 예약만 쓰므로 표시는 변하지 않는다.
+const sameStay = (a, b) => a.checkIn.getTime() === b.checkIn.getTime() && a.checkOut.getTime() === b.checkOut.getTime();
+export const PROPERTIES = RAW_PROPERTIES.map(p => {
+  const list = p.reservations ?? [];
+  if (!p.reservation || list.some(r => sameStay(r, p.reservation))) return p;
+  return { ...p, reservations: [p.reservation, ...list].sort((a, b) => a.checkIn - b.checkIn) };
+});
 
 // ── Detail View 서브 상태별 색상 ──────────────────────────────────────────────
 export const SEGMENT_COLORS = {

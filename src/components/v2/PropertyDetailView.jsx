@@ -6,8 +6,9 @@ import { useMobile } from '../../hooks/useMobile';
 import { useReportingStats } from '../../hooks/useReportingStats';
 import DetailViewFilter from './reporting/DetailViewFilter';
 import SummaryBanner from './reporting/SummaryBanner';
-import KpiTiles from './reporting/KpiTiles';
 import ReportPanel from './reporting/ReportPanel';
+import { futureSummaryFor } from '../../domain/futureWeekDomain.js';
+import { periodForOffset } from '../../domain/periodDomain.js';
 
 const PAST_HOURS    = 7 * 24;      // 현재 시각 이전 7일 (168h)
 const FUTURE_HOURS  = 7 * 24;      // 현재 시각 이후 7일 (168h)
@@ -564,15 +565,15 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
   const [scrollVersion, setScrollVersion] = useState(0);        // 같은 버튼 재클릭 시 강제 스크롤
 
   // 뷰포트 위치 → 통계 기간 자동 도출
-  const statsPeriod = useMemo(() => {
-    if (tlMode === 'hour') return hourPeriod;
-    if (dayOffset === -1) return 'yesterday';
-    if (dayOffset === 0)  return 'today';
-    if (dayOffset === 1)  return 'tomorrow';
-    return dayOffset < 0 ? 'last_week' : 'next_week';
-  }, [tlMode, dayOffset, hourPeriod]);
+  // 일 모드는 타임라인이 가리키는 그 날 (2일 뒤면 2일 뒤 레포트)
+  const statsPeriod = useMemo(
+    () => tlMode === 'hour' ? hourPeriod : periodForOffset('day', dayOffset),
+    [tlMode, dayOffset, hourPeriod],
+  );
 
-  const { stats, summary, loading: statsLoading } = useReportingStats(statsPeriod, property.id);
+  const { stats, summary, loading: statsLoading } = useReportingStats(statsPeriod, [property.id]);
+  // 미래 기간 요약은 이 숙소의 예약(iCal) 기준 — 서버 요약은 이벤트 기반이라 미래엔 항상 "예약 없음"
+  const displaySummary = futureSummaryFor(statsPeriod, [property]) || summary;
 
   const [lightboxSnap, setLightboxSnap] = useState(null);
 
@@ -702,48 +703,46 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
           </div>
         </div>
 
-        {/* 상태 필터 탭 — 모바일: 시각 인디케이터만 (클릭 없음), PC: 탭 클릭 → 해당 구간 이동 */}
-        <div style={{ display: 'flex', gap: isMobile ? 5 : 8, overflowX: isMobile ? 'hidden' : 'auto', flexWrap: 'nowrap' }}>
-          {(['CLEANING', 'PRE_STAY_READY', 'OCCUPIED', 'VACANT']).map(key => { const meta = STATE_META[key]; if (!meta) return null;
-            const active = presentMainStatuses.has(key);
-            return (
-              <button
-                key={key}
-                onClick={() => !isMobile && active && scrollToState(key)}
-                disabled={!active}
-                style={{
-                  flexShrink: 0,
-                  border: `1.5px solid ${active ? meta.color : '#e2e8f0'}`,
-                  borderRadius: 20,
-                  padding: isMobile ? '3px 9px' : '4px 13px',
-                  background: active ? meta.bg : '#f9fafb',
-                  color: active ? meta.color : '#c8d5e0',
-                  fontSize: isMobile ? 11 : 12, fontWeight: 600,
-                  cursor: (!isMobile && active) ? 'pointer' : 'default',
-                  fontFamily: 'inherit',
-                  transition: 'all 0.15s',
-                }}
-              >
-                {meta.label}
-              </button>
-            );
-          })}
-          {!isMobile && (
-            <span style={{ fontSize: 11, color: '#a0aec0', alignSelf: 'center', marginLeft: 4, flexShrink: 0 }}>
-              탭 클릭 → 해당 구간
-            </span>
-          )}
-        </div>
       </div>
 
-      {/* KPI 타일 — 기간별 변형 (섹션 11: today=live state, yesterday=이벤트, tomorrow=예정) */}
-      <KpiTiles period={statsPeriod} stats={stats} loading={statsLoading} isMobile={isMobile} />
+      {/* StatusFilterBar — 상태 탭 (Header 밖 독립) */}
+      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: isMobile ? '6px 12px' : '8px 20px', display: 'flex', gap: isMobile ? 5 : 8, overflowX: isMobile ? 'hidden' : 'auto', flexWrap: 'nowrap' }}>
+        {(['CLEANING', 'PRE_STAY_READY', 'OCCUPIED', 'VACANT']).map(key => { const meta = STATE_META[key]; if (!meta) return null;
+          const active = presentMainStatuses.has(key);
+          return (
+            <button
+              key={key}
+              onClick={() => !isMobile && active && scrollToState(key)}
+              disabled={!active}
+              style={{
+                flexShrink: 0,
+                border: `1.5px solid ${active ? meta.color : '#e2e8f0'}`,
+                borderRadius: 20,
+                padding: isMobile ? '3px 9px' : '4px 13px',
+                background: active ? meta.bg : '#f9fafb',
+                color: active ? meta.color : '#c8d5e0',
+                fontSize: isMobile ? 11 : 12, fontWeight: 600,
+                cursor: (!isMobile && active) ? 'pointer' : 'default',
+                fontFamily: 'inherit',
+                transition: 'all 0.15s',
+              }}
+            >
+              {meta.label}
+            </button>
+          );
+        })}
+        {!isMobile && (
+          <span style={{ fontSize: 11, color: '#a0aec0', alignSelf: 'center', marginLeft: 4, flexShrink: 0 }}>
+            탭 클릭 → 해당 구간
+          </span>
+        )}
+      </div>
 
-      {/* 요약 배너 — 1줄 요약 문장 */}
-      <SummaryBanner summary={summary} loading={statsLoading} isMobile={isMobile} />
-
-      {/* 레포트 패널 — Navigation-Drives-Content (NOW tense는 IoT 카드가 담당) */}
-      <ReportPanel period={statsPeriod} stats={stats} loading={statsLoading} isMobile={isMobile} />
+      {/* 요약 배너 + 레포트 패널 */}
+      <SummaryBanner summary={displaySummary} loading={statsLoading} isMobile={isMobile}>
+        <ReportPanel period={statsPeriod} stats={stats} loading={statsLoading} isMobile={isMobile}
+          properties={[property]} propertyIds={[property.id]} />
+      </SummaryBanner>
 
 
 {/* 본문: 타임라인(좁게) + 센서 패널(넓게) */}

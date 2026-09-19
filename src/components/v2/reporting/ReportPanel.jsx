@@ -6,7 +6,7 @@
  * 접기/펼치기 가능.
  *
  * Props:
- *   period   — 현재 기간 키 (this_week / last_week / next_week / today / ...)
+ *   period   — 현재 기간 키 (this_week / last_week / next_week / today / weeks_ahead_2 / days_ago_3 / ...)
  *   stats    — useReportingStats 결과 stats 객체
  *   loading  — 로딩 여부
  *   isMobile
@@ -15,22 +15,9 @@
 import { useState } from 'react';
 import EventMatrixPanel from './EventMatrixPanel';
 import ActiveHybridPanel from './ActiveHybridPanel';
-import SchedulePanel from './SchedulePanel';
-
-// period → tense 매핑 (report-architecture.md 섹션 2 Axis-2)
-const PERIOD_TENSE = {
-  now:        'now',
-  today:      'active',   this_week:  'active',   this_month:  'active',
-  yesterday:  'past',     last_week:  'past',      last_hour:   'past',     last_month:  'past',
-  tomorrow:   'future',   next_week:  'future',    next_hour:   'future',   next_month:  'future',
-};
-
-const PERIOD_NAV_LABEL = {
-  now:        '지금',
-  today:      '오늘',       this_week:  '이번 주',    this_month:  '이번 달',
-  yesterday:  '어제',       last_week:  '지난주',     last_hour:   '지난 1시간', last_month: '지난달',
-  tomorrow:   '내일',       next_week:  '다음 주',    next_hour:   '다음 예정', next_month: '다음 달',
-};
+import FutureMatrixPanel from './FutureMatrixPanel';
+import TodayStatusPanel from './TodayStatusPanel';
+import { describePeriod, periodRangeLabel } from '../../../domain/periodDomain.js';
 
 const TENSE_STYLE = {
   past:   { bg: '#f8fafc', border: '#e2e8f0',  activeBg: '#f1f5f9',  label: '#475569', icon: '📋' },
@@ -48,36 +35,39 @@ function LoadingRows() {
   );
 }
 
-function PanelContent({ tense, period, stats, loading, isMobile, onSelectRoom }) {
+function PanelContent({ tense, period, stats, loading, isMobile, onSelectRoom, properties, propertyIds }) {
   if (loading) return <LoadingRows />;
 
   if (!stats) {
     return (
       <div style={{ padding: '18px 20px', fontSize: 12, color: '#94a3b8', textAlign: 'center' }}>
         데이터를 불러올 수 없어요
-        <div style={{ fontSize: 10, marginTop: 4, color: '#cbd5e1' }}>실제 배포 환경에서 확인 가능합니다</div>
+        <div style={{ fontSize: 10, marginTop: 4, color: '#cbd5e1' }}>잠시 후 다시 시도해 주세요</div>
       </div>
     );
   }
 
-  if (tense === 'past')   return <EventMatrixPanel   stats={stats} period={period} isMobile={isMobile} onSelectRoom={onSelectRoom} />;
-  if (tense === 'active') return <ActiveHybridPanel  stats={stats} period={period} isMobile={isMobile} />;
-  if (tense === 'future') return <SchedulePanel      stats={stats} period={period} isMobile={isMobile} />;
+  if (tense === 'past')   return <EventMatrixPanel  stats={stats} period={period} isMobile={isMobile} onSelectRoom={onSelectRoom} />;
+  if (tense === 'active' && period === 'today') return <TodayStatusPanel stats={stats} isMobile={isMobile} />;
+  if (tense === 'active') return <ActiveHybridPanel stats={stats} period={period} isMobile={isMobile} properties={properties} propertyIds={propertyIds} onSelectRoom={onSelectRoom} />;
+  if (tense === 'future') return <FutureMatrixPanel stats={stats} period={period} isMobile={isMobile} properties={properties} propertyIds={propertyIds} onSelectRoom={onSelectRoom} />;
 
   return null;
 }
 
-// ACTIVE 기간은 기본 열림, 나머지는 기본 닫힘
-const DEFAULT_OPEN = new Set(['today', 'this_week', 'this_month']);
-
-export default function ReportPanel({ period, stats, loading, isMobile = false, onSelectRoom }) {
-  const tense = PERIOD_TENSE[period] ?? 'active';
-  const [isOpen, setIsOpen] = useState(DEFAULT_OPEN.has(period));
+export default function ReportPanel({ period, stats, loading, isMobile = false, onSelectRoom, properties = [], propertyIds = null }) {
+  // 시제·표시 이름은 기간 규칙(periodDomain)에서 — 지난주/다음 주/2주 뒤/3일 전 …
+  const desc  = describePeriod(period);
+  const tense = desc?.tense ?? 'active';
+  // ACTIVE 기간은 기본 열림, 나머지는 기본 닫힘
+  const [isOpen, setIsOpen] = useState(tense === 'active');
 
   // NOW 기간(Template-C)은 DetailView에서 별도 처리. 여기서는 표시 안 함.
   if (tense === 'now') return null;
 
-  const navLabel = PERIOD_NAV_LABEL[period] ?? period;
+  const navLabel = desc?.label ?? period;
+  // "2주 뒤"·"3일 전"처럼 몇 번째 주/날인지 헷갈릴 수 있는 제목에는 날짜 범위를 함께 표시
+  const rangeText = desc && Math.abs(desc.offset) >= 2 ? periodRangeLabel(period) : '';
   const style    = TENSE_STYLE[tense];
 
   return (
@@ -89,14 +79,15 @@ export default function ReportPanel({ period, stats, loading, isMobile = false, 
           width: '100%', display: 'flex', alignItems: 'center', gap: 6,
           padding: '9px 20px',
           background: style?.activeBg ?? '#f8fafc',
+          border: 'none',
           borderBottom: isOpen ? `1px solid ${style?.border ?? '#e2e8f0'}` : 'none',
-          border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+          cursor: 'pointer', fontFamily: 'inherit',
           textAlign: 'left',
         }}
       >
         <span style={{ fontSize: 13 }}>{style?.icon}</span>
         <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: style?.label ?? '#475569' }}>
-          {navLabel} 레포트
+          {navLabel} 레포트{rangeText ? ` · ${rangeText}` : ''}
         </span>
         <span style={{
           fontSize: 10, color: style?.label ?? '#475569',
@@ -116,6 +107,8 @@ export default function ReportPanel({ period, stats, loading, isMobile = false, 
           loading={loading}
           isMobile={isMobile}
           onSelectRoom={onSelectRoom}
+          properties={properties}
+          propertyIds={propertyIds}
         />
       )}
     </div>

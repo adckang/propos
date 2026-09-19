@@ -55,7 +55,7 @@ export async function processEvent(event, { db, kv, notify }) {
   return { status: "inserted", id };
 }
 
-// 이벤트 타입에 따라 KV 룸 상태 캐시를 갱신한다.
+// 이벤트 타입에 따라 KV 룸 상태 캐시를 갱신한다. (참고: 현재 상태 레포트는 이 캐시를 읽지 않고 이벤트 기록에서 직접 계산한다 — 정리 후보)
 // 상태 기계 전이는 room-state-machine.md 기준이지만
 // 여기서는 캐시만 갱신 — 정확한 전이 로직은 occupancyWatcher에 있음.
 async function _updateRoomStateCache(kv, event) {

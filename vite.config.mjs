@@ -6,6 +6,9 @@ import { handleNodeIcalRequest } from "./server/icalApiHandlers.js";
 import { startWatcher, getMonitoringState, setMonitoringConfig, setRoomState } from "./server/occupancyWatcher.js";
 import { getHaBaseUrl, getHaToken } from "./server/haProxy.js";
 import { fetchWeather } from "./server/weatherService.js";
+import { PROPERTIES as MOCK_PROPERTIES } from "./src/data/roomStateMockData.js";
+import { countCurrentStats } from "./src/domain/reportingDomain.js";
+import { describePeriod } from "./src/domain/periodDomain.js";
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -39,6 +42,22 @@ async function handleCameraSnapshot(req, res) {
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.end(buf);
   } catch { res.statusCode = 502; res.end(); }
+}
+
+// dev 스텁 공통 — 선택 숙소별로 값을 결정적으로 분배해 부분집합 합 == 개별 합이 되게 한다.
+// (선택 수 비례 반올림은 소수 선택에서 0으로 붕괴하고 합산되지 않아 UI 검증을 오도함)
+// 합계 n을 N개 숙소에 나눌 때 Σ floor((n + k) / N), k=0..N-1 == n 이므로 전체 선택 = 기존 총합.
+function makeStubScope(selectedIds) {
+  const N = MOCK_PROPERTIES.length;
+  const rooms = MOCK_PROPERTIES
+    .map((p, idx) => ({ p, idx }))
+    .filter(({ p }) => !selectedIds || selectedIds.includes(p.id));
+  const keyOffset = (key) => [...String(key)].reduce((a, c) => a + c.charCodeAt(0), 0) % N;
+  const share = (n, idx, off) => Math.floor((n + (N - 1 - ((idx + off) % N))) / N);
+  const sc = (n, off = 0) => rooms.reduce((sum, { idx }) => sum + share(n, idx, off), 0);
+  const scaleAll = (base) => Object.fromEntries(Object.entries(base).map(([k, v]) => [k, sc(v, keyOffset(k))]));
+  const holders = (n, off = 0) => rooms.filter(({ idx }) => share(n, idx, off) > 0).map(({ p }) => p);
+  return { rooms, sc, scaleAll, holders, keyOffset };
 }
 
 function apiProxyPlugin(env) {
@@ -106,8 +125,16 @@ function apiProxyPlugin(env) {
       if (req.url?.startsWith("/api/stats") && req.method === "GET") {
         const url = new URL(req.url, "http://localhost");
         const period = url.searchParams.get("period") ?? "now";
-        const NOW_STATS = { occupied: 7, preStayReady: 0, vacant: 10, cleaning: 3, anomalyCount: 2, total: 20 };
-        const PAST_STATS = {
+
+        // property_ids 파싱 — 선택 숙소 필터. 숙소별 결정적 분배라 부분집합 합 == 개별 합
+        const rawIds = url.searchParams.get("property_ids") ?? "";
+        const selectedIds = rawIds ? rawIds.split(",").map(s => s.trim()).filter(Boolean) : null;
+        const { rooms, sc, scaleAll } = makeStubScope(selectedIds);
+
+        // now/today: 목업 숙소의 실제 currentState 에서 계산 → 리스트 칩(체류중/청소중/입실전/공실)과 항상 일치
+        const NOW_STATS = countCurrentStats(rooms.map(({ p }) => p.currentState));
+
+        const PAST_STATS = scaleAll({
           checkIns: 14, checkOuts: 12, anomalies: 3, energyWaste: 1,
           noShowSuspected: 1, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0,
           vacantEnergyWaste: 3, vacantEnergyResolved: 3,
@@ -115,26 +142,85 @@ function apiProxyPlugin(env) {
           cleaningFinished: 12, cleaningOnTime: 10,
           cleaningAssigned: 12, cleaningCreated: 12,
           postCheckoutEnergyWaste: 2, postCheckoutSecurityBreach: 1, postCleaningSecurityBreach: 1,
-        };
-        const FUTURE_STATS = { checkIns: 8, checkOuts: 6, anomalies: 0, energyWaste: 0, noShowSuspected: 0, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0 };
+        });
+
+        const FUTURE_STATS = scaleAll({
+          checkIns: 8, checkOuts: 6, anomalies: 0, energyWaste: 0,
+          noShowSuspected: 0, earlyCheckinSuspected: 0, checkoutConfirmationNeeded: 0,
+        });
+
+        // ACTIVE_STATS: this_week / this_month — 과거 지표 + 남은 체크인(checkIns = 미래분)
+        const ACTIVE_STATS = scaleAll({
+          checkOuts: 6, preStayAttempts: 8, preStayOptimized: 7,
+          cleaningFinished: 6, cleaningOnTime: 5,
+          cleaningAssigned: 5, cleaningCreated: 6,
+          vacantEnergyWaste: 1, postCheckoutEnergyWaste: 1,
+          postCheckoutSecurityBreach: 0, postCleaningSecurityBreach: 0,
+          checkIns: 5,  // 이번 주 남은 체크인 예정 수 (FutureMatrixPanel용)
+        });
+
+        const selLabel = selectedIds ? `${selectedIds.length}개 숙소` : "전체 숙소";
         const PERIOD_SUMMARY = {
-          now: "현재 2개 숙소 이상 징후가 확인됐어요. 바로 확인이 필요해요.",
-          today: "현재 2개 숙소 이상 징후가 확인됐어요. 바로 확인이 필요해요.",
-          this_week: "이번 주 이상감지 3건이 있어요.",
-          last_week: "지난주 체크인 14건 완료, 이상감지 3건이 있었어요.",
-          yesterday: "어제 체크인 2건, 이상감지 1건이 있었어요.",
-          last_hour: "지난 1시간 이벤트 3건이 있었어요.",
-          this_month: "이번 달 이상감지 3건이 있어요.",
-          last_month: "지난달 체크인 14건 완료, 이상감지 3건이 있었어요.",
-          next_week: "다음 주 체크인 8건 예정이에요.",
-          tomorrow: "내일 체크인 8건 예정이에요.",
-          next_hour: "1시간 내 체크인 1건 예정이에요.",
+          now:       `현재 ${selLabel} 중 ${NOW_STATS.anomalyCount}개 이상 징후가 확인됐어요.`,
+          today:     `현재 ${selLabel} 중 ${NOW_STATS.anomalyCount}개 이상 징후가 확인됐어요.`,
+          this_week: `이번 주 ${selLabel} 이상감지 ${sc(3)}건이 있어요.`,
+          last_week: `지난주 ${selLabel} 체크인 ${sc(14)}건 완료, 이상감지 ${sc(3)}건이 있었어요.`,
+          yesterday: `어제 ${selLabel} 체크인 ${sc(2)}건, 이상감지 ${sc(1)}건이 있었어요.`,
+          last_hour: `지난 1시간 ${selLabel} 이벤트 ${sc(3)}건이 있었어요.`,
+          this_month:`이번 달 ${selLabel} 이상감지 ${sc(3)}건이 있어요.`,
+          last_month:`지난달 ${selLabel} 체크인 ${sc(14)}건 완료, 이상감지 ${sc(3)}건이 있었어요.`,
+          next_week: `다음 주 ${selLabel} 체크인 ${sc(8)}건 예정이에요.`,
+          tomorrow:  `내일 ${selLabel} 체크인 ${sc(8)}건 예정이에요.`,
+          next_hour: `1시간 내 ${selLabel} 체크인 ${sc(1)}건 예정이에요.`,
         };
-        // now/today → KV 기반 live state (NOW_STATS). 나머지 ACTIVE/PAST/FUTURE → event format.
-        const isLive = ["now", "today"].includes(period);
-        const isFuture = ["next_week", "next_month", "tomorrow", "next_hour"].includes(period);
-        const stats = isLive ? NOW_STATS : isFuture ? FUTURE_STATS : PAST_STATS;
-        sendJson(res, 200, { period, stats, summary: PERIOD_SUMMARY[period] ?? "" });
+
+        // now/today → 현재 상태 집계 (NOW_STATS). 나머지는 기간 시제(과거/진행/미래)로 고른다.
+        // 몇 주·며칠 뒤/전(weeks_ahead_2 등)도 같은 규칙 — 스텁은 기간별로 값을 바꾸지 않는다.
+        const desc     = describePeriod(period);
+        const isLive   = ["now", "today"].includes(period);
+        const isActive = desc?.tense === "active" && !isLive;
+        const isFuture = desc?.tense === "future";
+        const stats = isLive ? NOW_STATS : isActive ? ACTIVE_STATS : isFuture ? FUTURE_STATS : PAST_STATS;
+        let summary = PERIOD_SUMMARY[period];
+        if (summary === undefined && desc) {
+          summary = isFuture
+            ? `${desc.label} ${selLabel} 체크인 ${stats.checkIns}건 예정이에요.`
+            : `${desc.label} ${selLabel} 체크인 ${stats.checkIns}건 완료, 이상감지 ${stats.anomalies}건이 있었어요.`;
+        }
+        sendJson(res, 200, { period, stats, summary: summary ?? "" });
+        return;
+      }
+      if (req.url?.startsWith("/api/cleaning/stats") && req.method === "GET") {
+        // dev 전용 스텁 — 청소 배정 4분류 (실제 DB 없이 레포트 UI 확인용)
+        // 목업 숙소별로 분배 → 선택 숙소 합 == 개별 합, 드릴다운 목록 개수 == 표시 건수
+        const csUrl      = new URL(req.url, "http://localhost");
+        const withItems  = csUrl.searchParams.get("items") === "true";
+        const rawIds     = csUrl.searchParams.get("property_ids") ?? "";
+        const selectedIds = rawIds ? rawIds.split(",").map(s => s.trim()).filter(Boolean) : null;
+        const { sc, holders } = makeStubScope(selectedIds);
+        const OFF = { assigned: 2, requesting: 3, failed: 5, needsRequest: 11 }; // 항목마다 다른 숙소가 걸리도록
+        const assigned = sc(4, OFF.assigned), requesting = sc(2, OFF.requesting), failed = sc(1, OFF.failed);
+        // 실제 API와 동일: total = 취소 제외 잡 수 = 배정완료 + 요청중 + 실패, needsRequest는 CANCELLED 별도
+        const base = { total: assigned + requesting + failed, assigned, requesting, failed, needsRequest: sc(1, OFF.needsRequest) };
+        base.unassigned = base.total - base.assigned;
+        if (!withItems) { sendJson(res, 200, base); return; }
+        const toItem = (p) => ({
+          property_id: p.id,
+          property_name: p.name,
+          checkout_at: (p.reservation?.checkOut ?? new Date(Date.now() + 86_400_000)).toISOString(),
+        });
+        sendJson(res, 200, {
+          ...base,
+          failedItems:       holders(1, OFF.failed).map(toItem),
+          needsRequestItems: holders(1, OFF.needsRequest).map(toItem),
+        });
+        return;
+      }
+      if (req.url?.startsWith("/api/cleaning/properties") && req.method === "POST") {
+        // dev 전용 스텁 — 숙소 등록/이전 (실제 DB 없음). previous_property_id 가 오면 이전 성공으로 응답
+        const body = await readBody(req);
+        if (!body.property_id || !body.name) { sendJson(res, 400, { error: "property_id, name 필수" }); return; }
+        sendJson(res, 200, { ...body, ...(body.previous_property_id ? { migrated: {} } : {}) });
         return;
       }
       if (req.url?.startsWith("/api/weather") && req.method === "GET") {

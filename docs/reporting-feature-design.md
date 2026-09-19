@@ -1,4 +1,4 @@
-# PROPOS Reporting Feature 설계
+claude# PROPOS Reporting Feature 설계
 > 버전: v1.2 | 작성: 2026-08-04 | 업데이트: 2026-09-02
 > 구현 기준 문서 — 이 파일과 data-storage-design.md를 축으로 삼아 reporting 코드를 작성·수정한다.
 > 저장소 설계: `data-storage-design.md` / 이벤트 감지: `event-detection-design.md` / 상태 기계: `room-state-machine.md`
@@ -421,7 +421,7 @@ async function processEvent(event, { insertEvent, updateEventStatus }) { ... }
 ### GET /api/stats 파라미터
 
 ```
-?period=now|this_week|last_week|next_week|this_month|last_month|next_month
+?period=now|this_week|last_week|next_week|this_month|last_month|next_month|weeks_ahead_N|weeks_ago_N|days_ahead_N|days_ago_N
 &property_id=paju201   (생략 시 전체 숙소)
 ```
 

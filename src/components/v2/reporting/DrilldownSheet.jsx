@@ -75,12 +75,36 @@ function FailItem({ item, metric, onSelect }) {
   );
 }
 
-export default function DrilldownSheet({ metric, metricLabel, period, onClose, onSelectRoom }) {
+/**
+ * DrilldownSheet — 두 가지 모드로 사용:
+ *   1. async 모드 (기존):  metric + period 제공 → /api/stats/drilldown 에서 fetch
+ *   2. static 모드 (신규): staticItems 제공 → fetch 없이 items 직접 렌더링
+ *
+ * static 모드 추가 props:
+ *   staticItems    — 직접 넘길 아이템 배열
+ *   renderItem     — (item, i) => ReactNode  (제공 안 하면 FailItem 사용)
+ *   staticLoading  — 외부 로딩 상태
+ *   staticError    — 외부 에러 상태
+ *   emptyMessage   — 아이템 없을 때 메시지 (기본 '실패 건 없음')
+ *   emptyIcon      — 아이템 없을 때 아이콘 (기본 '✅')
+ */
+export default function DrilldownSheet({
+  // async 모드
+  metric, metricLabel, period, onSelectRoom,
+  // static 모드
+  staticItems, renderItem, staticLoading = false, staticError = false,
+  emptyMessage = '실패 건 없음', emptyIcon = '✅',
+  // 공통
+  onClose,
+}) {
+  const isStatic = staticItems !== undefined;
+
   const [data,    setData]    = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isStatic);
   const [error,   setError]   = useState(false);
 
   useEffect(() => {
+    if (isStatic) return;
     if (!metric || !period) return;
     setLoading(true);
     setData(null);
@@ -89,9 +113,15 @@ export default function DrilldownSheet({ metric, metricLabel, period, onClose, o
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(d => { setData(d); setLoading(false); })
       .catch(() => { setError(true); setLoading(false); });
-  }, [metric, period]);
+  }, [metric, period, isStatic]);
 
-  const title = METRIC_LABELS[metric] ?? metricLabel;
+  const title = isStatic
+    ? (metricLabel ?? '')
+    : (METRIC_LABELS[metric] ?? metricLabel);
+
+  const activeLoading = isStatic ? staticLoading : loading;
+  const activeError   = isStatic ? staticError   : error;
+  const activeItems   = isStatic ? (staticItems ?? []) : (data?.items ?? []);
 
   return (
     <>
@@ -124,7 +154,7 @@ export default function DrilldownSheet({ metric, metricLabel, period, onClose, o
         }}>
           <div>
             <div style={{ fontSize: 15, fontWeight: 700, color: '#1e293b' }}>{title}</div>
-            {data && (
+            {!isStatic && data && (
               <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
                 실패 {data.failCount}건
               </div>
@@ -143,13 +173,13 @@ export default function DrilldownSheet({ metric, metricLabel, period, onClose, o
 
         {/* 목록 */}
         <div style={{ overflowY: 'auto', flex: 1 }}>
-          {loading && (
+          {activeLoading && (
             <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: '#94a3b8' }}>
               불러오는 중…
             </div>
           )}
 
-          {!loading && error && (
+          {!activeLoading && activeError && (
             <div style={{ padding: 32, textAlign: 'center' }}>
               <div style={{ fontSize: 28, marginBottom: 8 }}>⚠️</div>
               <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>데이터를 불러오지 못했어요</div>
@@ -157,25 +187,31 @@ export default function DrilldownSheet({ metric, metricLabel, period, onClose, o
             </div>
           )}
 
-          {!loading && !error && data?.items?.length === 0 && (
+          {!activeLoading && !activeError && activeItems.length === 0 && (
             <div style={{ padding: 32, textAlign: 'center' }}>
-              <div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>
-              <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>실패 건 없음</div>
-              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>모든 건이 기준을 통과했어요</div>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>{emptyIcon}</div>
+              <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>{emptyMessage}</div>
+              {!isStatic && (
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>모든 건이 기준을 통과했어요</div>
+              )}
             </div>
           )}
 
-          {!loading && !error && data?.items?.map((item, i) => (
-            <FailItem
-              key={i}
-              item={item}
-              metric={metric}
-              onSelect={(propertyId) => {
-                onClose();
-                onSelectRoom?.(propertyId);
-              }}
-            />
-          ))}
+          {!activeLoading && !activeError && activeItems.map((item, i) =>
+            renderItem
+              ? renderItem(item, i)
+              : (
+                <FailItem
+                  key={i}
+                  item={item}
+                  metric={metric}
+                  onSelect={(propertyId) => {
+                    onClose();
+                    onSelectRoom?.(propertyId);
+                  }}
+                />
+              )
+          )}
         </div>
       </div>
     </>

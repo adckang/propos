@@ -1,5 +1,7 @@
 // 모든 함수는 순수 함수 — 외부 의존 없음
 
+import { parseOffsetPeriod, periodToDateRange } from "./periodDomain.js";
+
 /**
  * 기간 키를 날짜 범위로 변환한다.
  * @param {string} period
@@ -80,8 +82,24 @@ export function getPeriodRange(period, referenceDate = new Date()) {
     return { from, to };
   }
 
+  // 주·일 오프셋 기간 (weeks_ago_2, days_ahead_3 …) — periodDomain 의 [from, to) 를 포함 구간(to - 1ms)으로
+  if (parseOffsetPeriod(period)) {
+    const r = periodToDateRange(period, referenceDate.getTime());
+    return { from: r.from, to: new Date(r.to.getTime() - 1) };
+  }
+
   throw new Error(`unknown period: "${period}"`);
 }
+
+/**
+ * 체류중(OCCUPIED) 숙소의 "이상" 서브 상태. 현재 레포트·리스트 긴급 표시·체류중 이상 감지가
+ * 모두 이 정의를 공유한다 (report-architecture §6-1: 체류 중 민원·에너지낭비는 이상, 공실 에너지낭비는 별도 카운터).
+ */
+export const OCCUPIED_ISSUE_SUB_STATUSES = new Set([
+  "ISSUE_COMPLAINT",
+  "ISSUE_AND_ENERGY",
+  "ENERGY_WASTE",
+]);
 
 /**
  * 실시간 숙소 목록에서 현재 상태 KPI를 집계한다.
@@ -103,9 +121,7 @@ export function countCurrentStats(properties) {
   for (const { mainStatus, subStatus } of properties) {
     if (mainStatus === "OCCUPIED") {
       result.occupied += 1;
-      if (subStatus === "ISSUE_COMPLAINT" || subStatus === "ISSUE_AND_ENERGY") {
-        result.anomalyCount += 1;
-      }
+      if (OCCUPIED_ISSUE_SUB_STATUSES.has(subStatus)) result.anomalyCount += 1;
     } else if (mainStatus === "PRE_STAY_READY") {
       result.preStayReady += 1;
     } else if (mainStatus === "VACANT") {
@@ -130,8 +146,8 @@ export function countCurrentStats(properties) {
  *   preStayOptimized   — optimization_finished (최적화 완료)
  *   cleaningFinished   — cleaning_finished (청소 완료, 지표 4~6 분모)
  *   cleaningOnTime     — 3시간 이내 완료 건수 (API 레이어에서 주입)
- *   cleaningAssigned   — 할당된 cleaning_job 수 (API 레이어에서 주입)
- *   cleaningCreated    — 생성된 cleaning_job 수 (API 레이어에서 주입, 임시 = checkOuts)
+ *   cleaningAssigned   — 할당된 cleaning_job 수 (reportingService.getStatsForPeriod가 주입)
+ *   cleaningCreated    — 생성된 cleaning_job 수 (CANCELLED 제외, reportingService가 주입)
  *
  * HA 센서 기반 감지 이벤트 (퇴실 후 / 청소 완료 후):
  *   postCheckoutEnergyWaste   — post_checkout_energy_waste_detected (퇴실 후 조명/냉난방 감지)
@@ -155,9 +171,9 @@ export function countPeriodEvents(events) {
     preStayAttempts: 0,
     preStayOptimized: 0,
     cleaningFinished: 0,
-    cleaningOnTime: 0,    // API 레이어 주입 — 이벤트 쌍 시간차 계산 필요
+    cleaningOnTime: 0,    // API 레이어 주입 — 이벤트 쌍 시간차 계산 필요 (청소 완료 − 3시간 초과 건)
     cleaningAssigned: 0,  // API 레이어 주입 — cleaning_jobs 테이블
-    cleaningCreated: 0,   // API 레이어 주입 — cleaning_jobs 테이블 (임시: checkOuts)
+    cleaningCreated: 0,   // API 레이어 주입 — cleaning_jobs 테이블
     // HA 센서 기반 (지표 2, 3, 5)
     postCheckoutEnergyWaste:    0,  // 퇴실 후 절전 위반 건수 (지표 2 역산 분자)
     postCheckoutSecurityBreach: 0,  // 퇴실 후 보안 위반 건수 (지표 3 역산 분자)

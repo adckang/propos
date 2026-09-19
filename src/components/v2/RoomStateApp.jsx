@@ -11,6 +11,7 @@ import { OccupancyMonitor } from '../../application/occupancyMonitor';
 import { getNextRoomState, isValidTransition, INITIAL_STATE } from '../../domain/room-state/roomStateDomain';
 import { DEVICE_ROLE } from '../../domain/device-control/deviceRoles';
 import Toast from '../../utils/toast';
+import { canonicalPropertyId, planPropertyIdentity, validatePropertyName } from '../../domain/propertyIdentityDomain';
 
 // 기기 역할 한국어 레이블
 const DEVICE_ROLE_LABELS = {
@@ -110,6 +111,28 @@ async function putProperties(list) {
       body: JSON.stringify(list),
     });
   } catch { /* Pi 미연결 시 무시 — localStorage 캐시 유지 */ }
+}
+
+// Vercel 청소 DB에 숙소 등록/갱신. 식별자 = 이름 (D-016) —
+// previousId 가 있으면 서버가 이전 식별자(레거시 prop_… 또는 변경 전 이름)의 이력을 새 이름으로 함께 이전한다.
+function registerProperty(cfg, previousId = null) {
+  return fetch('/api/cleaning/properties', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      property_id:             cfg.id,
+      name:                    cfg.name,
+      checkout_hour:           cfg.checkOutHour ?? 11,
+      cleaning_duration_hours: cfg.cleaningDurationHours ?? 2.5,
+      ical_url:                cfg.airbnbIcalUrl,
+      host_phone:              cfg.hostPhone ?? null,
+      ...(previousId ? { previous_property_id: previousId } : {}),
+    }),
+  });
+}
+
+async function errorMessageOf(res) {
+  try { return (await res.json())?.error ?? String(res.status); } catch { return String(res.status); }
 }
 
 // ── 설정 모달 ─────────────────────────────────────────────────────────────────
@@ -441,7 +464,7 @@ export default function RoomStateApp({ onBack }) {
       }
 
       const template = {
-        id:                   'LIVE_001',
+        id:                   canonicalPropertyId(cfg), // 식별자 = ListView에 표시되는 숙소 이름 (D-016)
         name:                 cfg.name || '내 숙소',
         district:             cfg.district || '',
         watcherId:            cfg.watcherId ?? null,
@@ -471,32 +494,35 @@ export default function RoomStateApp({ onBack }) {
 
   // 마운트 시 Pi에서 숙소 설정 로드 — Pi가 source of truth, localStorage는 캐시
   useEffect(() => {
-    // localStorage → Postgres 백필 (기존 저장값이 청소 DB에 없을 때 자동 동기화)
     const local = loadConfig();
-    if (local?.id && local?.airbnbIcalUrl) {
-      fetch('/api/cleaning/properties', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          property_id:             local.id,
-          name:                    local.name,
-          checkout_hour:           local.checkOutHour ?? 11,
-          cleaning_duration_hours: local.cleaningDurationHours ?? 2.5,
-          ical_url:                local.airbnbIcalUrl,
-          host_phone:              local.hostPhone ?? null,
-        }),
-      }).catch(() => {});
-    }
+    let cancelled = false;
+    (async () => {
+      const list  = await fetchProperties();
+      const piCfg = list[0]?.airbnbIcalUrl ? list[0] : null;
+      let cfg = piCfg ?? local;
+      if (!cfg || cancelled) return;
 
-    fetchProperties().then(list => {
-      const piCfg = list[0];
-      if (!piCfg?.airbnbIcalUrl) return;
-      // Pi 값과 로컬 캐시가 다르면 Pi 값으로 갱신
-      if (JSON.stringify(piCfg) !== JSON.stringify(local)) {
-        saveConfig(piCfg);
-        setSyncConfig(piCfg);
+      // 청소 DB 백필 + 식별자 정규화 (D-016). 저장된 id 가 이름과 다르면(레거시 prop_…)
+      // 서버가 이력을 새 이름으로 이전한 뒤에만 정규 설정으로 바꾼다 — 실패하면 기존 설정 유지.
+      if (cfg.airbnbIcalUrl) {
+        const plan = planPropertyIdentity(cfg);
+        const res  = await registerProperty(plan.config, plan.previousId).catch(() => null);
+        if (res?.ok && plan.previousId) {
+          cfg = plan.config;
+          putProperties([cfg]);
+        } else if (res && !res.ok && plan.previousId) {
+          Toast.show(`숙소 이름 이전 실패: ${await errorMessageOf(res)}`, 'w');
+        }
       }
-    });
+
+      // Pi/이전 결과가 로컬 캐시와 다르면 갱신
+      if (cancelled) return;
+      if (JSON.stringify(cfg) !== JSON.stringify(local)) {
+        saveConfig(cfg);
+        setSyncConfig(cfg);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 마운트 + 설정 변경 시 싱크, 이후 15분 주기
@@ -700,38 +726,40 @@ export default function RoomStateApp({ onBack }) {
     Toast.show('입실 준비 시작 — HA 씬 실행 중', 'i');
   }, [monitorState.mainStatus]);
 
-  const handleSaveSettings = (form) => {
-    saveConfig(form);           // localStorage 캐시
-    setSyncConfig(form);
-    setShowSettings(false);
-    // Pi 파일에 영구 저장 (source of truth)
-    const id = form.id ?? `prop_${Date.now()}`;
-    const withId = { ...form, id };
-    putProperties([withId]);
-    saveConfig(withId);
-    // Pi 워처에도 설정 전달 (areaName + district + devices)
-    postMonitoringConfig(
-      { areaName: form.name, district: form.district, devices: form.devices },
-      form.watcherId ?? null,
-    );
-    // Vercel 청소 DB에도 동기화 (iCal URL + 청소 설정)
-    if (withId.id && withId.airbnbIcalUrl) {
-      fetch('/api/cleaning/properties', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          property_id:             withId.id,
-          name:                    withId.name,
-          checkout_hour:           withId.checkOutHour ?? 11,
-          cleaning_duration_hours: withId.cleaningDurationHours ?? 2.5,
-          ical_url:                withId.airbnbIcalUrl,
-          host_phone:              withId.hostPhone ?? null,
-        }),
-      }).then(r => {
-        if (r.ok) Toast.show('청소 DB 동기화 완료', 's');
-        else r.json().then(e => Toast.show(`청소 DB 동기화 실패: ${e?.error ?? r.status}`, 'e')).catch(() => Toast.show('청소 DB 동기화 실패', 'e'));
-      }).catch(e => Toast.show(`청소 DB 동기화 실패: ${e.message}`, 'e'));
+  const handleSaveSettings = async (form) => {
+    // 이름은 곧 ID (D-016) — 쉼표 등 키로 쓸 수 없는 이름은 저장하지 않는다
+    const nameCheck = validatePropertyName(form.name);
+    if (!nameCheck.ok) { Toast.show(nameCheck.reason, 'e'); return; }
+
+    // form.id = 변경 전 식별자(레거시 prop_… 또는 이전 이름). 다르면 서버가 이력을 새 이름으로 함께 이전
+    const plan   = planPropertyIdentity(form);
+    const withId = plan.config;
+
+    // 청소 DB 등록/이전을 먼저 — 이름 변경이 거절되면(같은 이름 존재 등) 설정을 바꾸지 않는다
+    if (withId.airbnbIcalUrl || plan.previousId) {
+      try {
+        const res = await registerProperty(withId, plan.previousId);
+        if (res.ok) {
+          Toast.show(plan.previousId ? '숙소 이름 변경 — 이력을 새 이름으로 이전했어요' : '청소 DB 동기화 완료', 's');
+        } else {
+          Toast.show(`청소 DB 동기화 실패: ${await errorMessageOf(res)}`, 'e');
+          if (plan.previousId) return;
+        }
+      } catch (e) {
+        Toast.show(`청소 DB 동기화 실패: ${e.message}`, 'e');
+        if (plan.previousId) return;
+      }
     }
+
+    saveConfig(withId);           // localStorage 캐시
+    setSyncConfig(withId);
+    setShowSettings(false);
+    putProperties([withId]);      // Pi 파일에 영구 저장 (source of truth)
+    // Pi 워처에도 설정 전달 (areaName + district + devices) — 이벤트 property_id 도 이 이름으로 쌓인다
+    postMonitoringConfig(
+      { areaName: withId.name, district: withId.district, devices: withId.devices },
+      withId.watcherId ?? null,
+    );
   };
 
   // 실 데이터 + 목업 데이터 병합 (실 데이터 맨 앞, HA 센서·기기·모니터링 상태 주입)

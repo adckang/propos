@@ -46,7 +46,7 @@ function Tile({ label, value, sub, accent, warn = false, isMobile }) {
 const PERIOD_TYPE = {
   // 실시간 / ACTIVE → live state 카운트 (report-architecture.md 섹션 11)
   now:        'now',
-  today:      'now',        // API가 KV 기반으로 live state 반환
+  today:      'now',        // API가 이벤트 기록으로 계산한 현재 상태 반환
   this_week:  'now',        // KPI용으로 live stats 별도 전달 필요 (PropertyListView 참조)
   this_month: 'now',
   // 과거

@@ -12,6 +12,26 @@
 - **월 단위**: 현재 UI 범위 외. API는 구현됨(`last_month` 등). 향후 별도 월 캘린더 뷰로 구현.
 - **버린 대안**: 단일 타임라인에 모든 필터 나열 → 현재/과거/미래 맥락이 섞여 혼란
 
+## [D-016] 숙소 식별자 = ListView에 표시되는 숙소 이름 (2026-09-19 확정)
+- **결정**: `property_id`는 숙소 리스트에 표시되는 이름(예: `파주 201`). 화면(`liveProperty.id`), 청소 DB(`property_cleaning_config`·`cleaning_jobs`·`property_calendar_blockers`), 이벤트(Pi 워처 `areaName`)가 같은 이름을 키로 쓴다.
+  - 이름을 바꾸면 키가 바뀌므로 서버가 이력을 새 이름으로 **한 트랜잭션**에서 이전한다 (`POST /api/cleaning/properties`의 `previous_property_id` → `renamePropertyId`). 대상 이름이 이미 다른 숙소로 등록돼 있으면 409, 아무것도 옮기지 않는다.
+  - 레거시 `prop_<시각>` id는 앱 첫 로드 때 같은 경로로 자동 이전 (재실행 안전). 수동 확인·실행용 SQL: `scripts/migrate-property-id-to-name.sql`.
+  - 이름 규칙: 쉼표 불가(`property_ids` 구분자와 충돌), 제어문자 불가, 60자 이하, 중복 불가.
+- **이유**: 이벤트가 이미 `areaName`(=이름)으로 쌓이고 HA 영역 조회도 같은 이름을 쓴다. 화면 `LIVE_001` / 청소 DB `prop_<시각>` / 이벤트 이름이 제각각이라 숙소를 선택하면 서버가 0을 돌려주던 문제(R10)를 없앤다.
+- **버린 대안**: 바뀌지 않는 별도 ID(`prop_<시각>`) 유지 + 이름은 표시용 — 이름 변경에는 안전하지만 이벤트 키(areaName)·HA 연동까지 바꿔야 해서 채택하지 않음 (사용자 결정).
+- **주의**: 이름 = HA 영역 이름이므로 이름을 바꾸면 HA 영역도 같은 이름이어야 한다 (기존과 동일). 목업 숙소 ID(`P001`…)는 서버에 데이터가 없어 유지.
+- **구현**: `src/domain/propertyIdentityDomain.js`, `src/infrastructure/propertyRenameRepository.js`, `api/cleaning/[...slug].js`(upsertProperty), `RoomStateApp.jsx`. 테스트: `tests/unit/s47.property-identity.test.js`.
+- **재검토 시점**: 실숙소가 여러 개가 되어 이름 변경·중복이 잦아질 때.
+
+## [D-017] 레포트 기간은 타임라인 위치를 그대로 따른다 + 취소된 청소는 재배정 요청 (2026-09-19 확정)
+- **결정 1 — 기간**: ListView에서 타임라인을 2주 뒤로 넘기면 "다음 주" 레포트가 아니라 **2주 뒤 주**의 정보를 보여준다. 주 모드는 가장 가까운 주(…, 2주 전, 지난주, 이번 주, 다음 주, 2주 뒤, …), 일 모드는 그 날(…, 어제, 오늘, 내일, 2일 뒤, …). 숙소 상세(일 모드)도 그 날 그대로.
+  - 기존 이름(`last_week`·`next_week`·`tomorrow` 등)은 그대로 두고, 그 밖의 오프셋만 `weeks_ahead_2`·`weeks_ago_3`·`days_ahead_2`·`days_ago_5`로 표기 (`periodForOffset` / `parseOffsetPeriod`).
+  - 제목은 "2주 뒤 레포트 · 9/28~10/4"처럼 날짜 범위를 함께 표시 (몇 번째 주인지 헷갈리지 않게).
+- **결정 2 — 청소 취소**: 청소가 취소(CANCELLED)되면 다시 배정을 요청해야 하므로 미래 레포트의 **"배정 요청 필요"**로 센다 ("배정 요청중"·"배정 실패"와 섞지 않음).
+- **이유**: 화면이 보고 있는 시점과 레포트 시점이 어긋나면(2주 뒤를 보는데 다음 주 숫자) 운영자가 잘못된 정보로 판단한다. 취소된 청소를 무시하면 청소자 없이 퇴실일을 맞게 된다.
+- **버린 대안**: 지난주/이번 주/다음 주 3단계로 뭉개기(±4일 임계값) — 2주 이상 넘기면 틀린 기간이 표시됨.
+- **구현**: `src/domain/periodDomain.js`(기간 규칙), `reportingDomain.getPeriodRange`, `reportingService`(요약·미래 판정), `api/stats`·`api/stats/drilldown`(기간 허용), `PropertyListView`·`PropertyDetailView`·`ReportPanel`. 테스트: `tests/unit/s49.period-offsets.test.js`.
+
 ## [D-004] alert() → Toast 교체
 - **결정**: `window.Toast` 전역 객체로 모든 alert 대체
 - **이유**: 보안 감사 지적 + UX 개선. textContent로 XSS 차단.
@@ -27,6 +47,7 @@
 - **결정**: Jest/Vitest 대신 `node:test` (Node.js 22 내장)
 - **이유**: 의존성 없음. CI에서 `npm test`로 바로 실행.
 - **실행**: `npm test` → `node --test tests/unit/*.test.js tests/functional/*.test.js`
+- **저장 폴더 격리 (2026-09-19)**: 감시 프로그램(`server/occupancyWatcher.js`)·숙소 저장소(`server/propertiesStore.js`)는 `PROPOS_DATA_DIR`로 저장 폴더를 바꾼다. 이 모듈을 쓰는 테스트는 `tests/helpers/isolateDataDir.js`를 **가장 먼저** import 한다 — 안 그러면 테스트가 실제 `data/monitoring-*.json`(운영 중 감시 기록)을 덮어쓴다. `tests/unit/s50.test-data-isolation.test.js`가 강제한다.
 
 ## [D-008] Vite + src 단일 소스 오브 트루스
 - **결정**: Vite 빌드 시스템 채택. `src/`가 정본. `dist/`는 빌드 산출물.

@@ -5,6 +5,9 @@ import { useReportingStats } from '../../hooks/useReportingStats';
 import ListViewFilter from './reporting/ListViewFilter';
 import SummaryBanner from './reporting/SummaryBanner';
 import ReportPanel from './reporting/ReportPanel';
+import { deriveSelectionScope, toggleAllSelection, syncSelectionWithProperties } from '../../domain/selectionScopeDomain.js';
+import { futureSummaryFor } from '../../domain/futureWeekDomain.js';
+import { periodForOffset } from '../../domain/periodDomain.js';
 
 const PAST_DAYS   = 6;
 const FUTURE_DAYS = 14;
@@ -133,22 +136,53 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
   const [filter, setFilter] = useState(initialFilter || FILTER_ALL);
   const [windowOffset, setWindowOffset] = useState(0); // 일 단위 스크롤 오프셋
   const [listMode, setListMode] = useState('week');    // 'week' | 'day'
+  // 체크박스 선택 Set — 초기값: 전체 숙소 선택
+  const [selectedRooms, setSelectedRooms] = useState(() => new Set(properties.map(p => p.id)));
 
-  // 현재 뷰포트 위치 → 통계 기간 자동 도출
-  const statsPeriod = useMemo(() => {
-    if (listMode === 'week') {
-      if (windowOffset <= -4) return 'last_week';
-      if (windowOffset >= 4)  return 'next_week';
-      return 'this_week';
-    }
-    if (windowOffset < 0) return 'yesterday';
-    if (windowOffset > 0) return 'tomorrow';
-    return 'today';
-  }, [windowOffset, listMode]);
+  // 이전에 한 번도 본 적 없는 숙소만 자동 선택 (liveProperty iCal 동기화 대응)
+  // 이미 알고 있던 숙소를 사용자가 해제한 경우는 되살리지 않음 (selectionScopeDomain)
+  const knownIdsRef = useRef(new Set(properties.map(p => p.id)));
+  useEffect(() => {
+    const currentIds = properties.map(p => p.id);
+    const prevKnown  = knownIdsRef.current;
+    knownIdsRef.current = new Set(currentIds);
+    setSelectedRooms(prev => syncSelectionWithProperties(prev, prevKnown, currentIds));
+  }, [properties]);
+
+  // 타임라인이 가리키는 위치를 그대로 따르는 통계 기간 — 주 모드: 가장 가까운 주(2주 뒤면 2주 뒤 주), 일 모드: 그 날
+  const statsPeriod = useMemo(
+    () => listMode === 'week'
+      ? periodForOffset('week', Math.round(windowOffset / 7))
+      : periodForOffset('day', windowOffset),
+    [windowOffset, listMode],
+  );
+
+  // 선택 범위 — mode: none/partial/all, propertyIds: 없음=[] · 부분=배열 · 전체=null(필터 없음)
+  const allIds = properties.map(p => p.id);
+  const scope  = deriveSelectionScope(selectedRooms, allIds);
+  const noSelection   = scope.mode === 'none';
+  const allSelected   = scope.mode === 'all';
+  const allCheckState = scope.mode;
+  const statsPropertyIds = scope.propertyIds;
+
+  // ALL 토글 핸들러 — partial/none → 전체선택, all → 전체해제
+  function toggleAll() {
+    setSelectedRooms(toggleAllSelection(scope.mode, allIds));
+  }
+
+  // 레포트/요약에 쓰는 숙소 — 전체 선택이면 전부, 일부면 선택한 숙소만
+  const scopedProperties = allSelected ? properties : properties.filter(p => selectedRooms.has(p.id));
 
   // 기간 데이터 (Report Panel + SummaryBanner용)
-  const { stats: periodStats, summary, loading: periodLoading } = useReportingStats(statsPeriod, null);
+  // noSelection이면 period=null → 훅이 fetch 스킵
+  const { stats: periodStats, summary, loading: periodLoading } = useReportingStats(
+    noSelection ? null : statsPeriod,
+    statsPropertyIds,
+  );
 
+
+  // 미래 기간 요약은 예약(iCal) 기준으로 클라이언트에서 계산 — 서버 요약은 이벤트 기반이라 미래엔 항상 "예약 없음"
+  const displaySummary = futureSummaryFor(statsPeriod, scopedProperties) || summary;
 
   const { windowStart, windowEnd, windowMs, dayLabels, monthLabels } = useGanttWindow(windowOffset);
   const { now, nowLeft, timeStr } = useLiveNow(windowStart, windowMs);
@@ -167,13 +201,14 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
   });
 
   const PAD         = isMobile ? 12 : 20;
+  const CB_W        = isMobile ? 28 : 32;   // 체크박스 컬럼 너비
   const NAME_W      = isMobile ? 86 : 140;
   const BADGE_W     = isMobile ? 80 : 110;
   const STRIP_W     = 4;
   const GANTT_H     = isMobile ? 44 : 72;   // 간트 헤더 높이
   const ROW_GANTT_H = isMobile ? 26 : 40;   // 숙소 행 간트 바 높이
-  // 고정 열 너비: 모바일 2행 레이아웃은 스트립만, PC는 스트립+이름+배지
-  const fixedLeft   = isMobile ? PAD + STRIP_W : PAD + STRIP_W + NAME_W + BADGE_W;
+  // 고정 열 너비: 모바일 2행 레이아웃은 스트립+CB, PC는 CB+스트립+이름+배지
+  const fixedLeft   = isMobile ? PAD + CB_W + STRIP_W : PAD + CB_W + STRIP_W + NAME_W + BADGE_W;
 
   // ── 간트 드래그-to-스크롤 (헤더 + 각 숙소 행 공용) ────────────────────────────
   // didDragRef: pointerup 이후 click 이벤트까지 살아있어야 하므로 ref 사용
@@ -206,13 +241,13 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
 
   // ── 단일 JSX 트리 — isMobile로 크기/간격만 조정 ───────────────────────────────
   return (
-    <div style={{ background: '#f0f4f8', minHeight: '100%', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
+    <div style={{ background: '#f0f4f8', minHeight: '100%', flexShrink: 0, fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
       {/* 최소 헤더 — 뒤로가기 + LIVE 인디케이터 */}
       <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: isMobile ? '7px 12px' : '9px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={onBack} style={{ border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', padding: isMobile ? '4px 9px' : '5px 11px', fontSize: isMobile ? 12 : 13, color: '#4a5568', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
           ← 대시보드
         </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: isMobile ? 10 : 11, fontFamily: "'DM Mono', monospace", color: '#059669', fontWeight: 700, whiteSpace: 'nowrap' }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#059669', display: 'inline-block', flexShrink: 0 }} />
             {`LIVE ${now.getMonth()+1}/${now.getDate()} ${now.getHours() < 12 ? 'AM' : 'PM'} ${(now.getHours()%12||12).toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`}
@@ -246,15 +281,52 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
       </div>
 
       {/* 요약 배너 + 레포트 패널 */}
-      <SummaryBanner summary={summary} loading={periodLoading} isMobile={isMobile}>
-        <ReportPanel
-          period={statsPeriod} stats={periodStats} loading={periodLoading} isMobile={isMobile}
-          onSelectRoom={(propertyId) => {
-            const prop = properties.find(p => p.id === propertyId);
-            if (prop) onSelectProperty?.(prop);
-          }}
-        />
-      </SummaryBanner>
+      {noSelection ? (
+        <div style={{
+          padding: isMobile ? '9px 12px' : '10px 20px',
+          background: '#f8fafc', borderBottom: '1px solid #e2e8f0',
+          fontSize: isMobile ? 12 : 13, color: '#94a3b8',
+          textAlign: 'center', fontWeight: 500,
+        }}>
+          숙소를 선택해주세요
+        </div>
+      ) : (
+        <SummaryBanner summary={displaySummary} loading={periodLoading} isMobile={isMobile}>
+          {/* 레포트 패널 상단 — 선택 숙소 수 소형 표기 */}
+          <div style={{
+            padding: isMobile ? '4px 12px' : '4px 20px',
+            background: '#f8fafc', borderBottom: '1px solid #e2e8f0',
+            display: 'flex', alignItems: 'center', gap: 5,
+          }}>
+            <span style={{
+              fontSize: 10, color: allSelected ? '#94a3b8' : '#2563eb',
+              fontFamily: "'DM Mono', monospace", fontWeight: 600,
+            }}>
+              {allSelected
+                ? `전체 ${properties.length}개 숙소`
+                : `${scope.selectedCount} / ${scope.totalCount}개 선택`}
+            </span>
+            {!allSelected && (
+              <span style={{
+                fontSize: 9, background: '#dbeafe', color: '#1d4ed8',
+                border: '1px solid #bfdbfe', borderRadius: 4,
+                padding: '1px 5px', fontWeight: 700,
+              }}>
+                선택 레포트
+              </span>
+            )}
+          </div>
+          <ReportPanel
+            period={statsPeriod} stats={periodStats} loading={periodLoading} isMobile={isMobile}
+            properties={scopedProperties}
+            propertyIds={statsPropertyIds}
+            onSelectRoom={(propertyId) => {
+              const prop = properties.find(p => p.id === propertyId);
+              if (prop) onSelectProperty?.(prop);
+            }}
+          />
+        </SummaryBanner>
+      )}
 
       {/* 타임라인 네비게이터 — 간트 바로 위 (UX: 제어 대상 가까이) */}
       <ListViewFilter
@@ -266,7 +338,7 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
       />
 
       {/* 간트 헤더 + 목록 래퍼 — 현재 시각 연속선 기준점 */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', minHeight: 0 }}>
+      <div style={{ flex: '1 0 auto', display: 'flex', flexDirection: 'column', position: 'relative' }}>
 
         {/* 현재 시각 연속 수직선 — 헤더~목록 전체 관통 */}
         <div style={{
@@ -277,8 +349,37 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
           transition: isDragging ? 'none' : 'left 0.25s ease',
         }} />
 
-      {/* 간트 헤더 — 모바일: 스트립 너비만 고정, PC: 스트립+이름+배지 */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: `0 ${PAD}px`, display: 'flex' }}>
+      {/* 간트 헤더 — 모바일: CB+스트립 너비만 고정, PC: CB+스트립+이름+배지 */}
+      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: `0 ${PAD}px`, display: 'flex', position: 'sticky', top: 0, zIndex: 15 }}>
+        {/* ALL 체크박스 — 3단계: all/partial/none */}
+        <div
+          style={{
+            width: CB_W, flexShrink: 0,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end',
+            paddingBottom: 5, gap: 2, cursor: 'pointer', userSelect: 'none',
+          }}
+          onClick={toggleAll}
+        >
+          <div style={{
+            width: 16, height: 16, borderRadius: 4,
+            border: `1.5px solid ${allCheckState === 'none' ? '#cbd5e1' : allCheckState === 'partial' ? '#94a3b8' : '#22c55e'}`,
+            background: allCheckState === 'all' ? '#22c55e' : allCheckState === 'partial' ? '#f1f5f9' : '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.15s',
+          }}>
+            {allCheckState === 'all' && (
+              <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                <path d="M1 4L3.5 6.5L9 1" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+            {allCheckState === 'partial' && (
+              <div style={{ width: 8, height: 2, background: '#64748b', borderRadius: 1 }} />
+            )}
+          </div>
+          <span style={{ fontSize: 7, color: '#94a3b8', fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.3 }}>
+            ALL
+          </span>
+        </div>
         <div style={{ width: isMobile ? STRIP_W : STRIP_W + NAME_W, flexShrink: 0, padding: isMobile ? undefined : '8px 0 8px 8px', fontSize: 11, color: '#a0aec0', fontWeight: 600, letterSpacing: 0.5, display: 'flex', alignItems: 'flex-end' }}>
           {!isMobile && '숙소'}
         </div>
@@ -388,13 +489,15 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
       </div>
 
       {/* 숙소 목록 */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: `8px ${PAD}px` }}>
+      <div style={{ flex: '1 0 auto', padding: `8px ${PAD}px` }}>
         {sorted.map((prop) => {
           const meta     = STATE_META[prop.currentState.mainStatus];
           const subLabel = meta.subStates[prop.currentState.subStatus]?.label || prop.currentState.subStatus;
           const subColor = SEGMENT_COLORS[`${prop.currentState.mainStatus}/${prop.currentState.subStatus}`] || meta.color;
           const isUrgent = prop.currentState.mainStatus === 'OCCUPIED' &&
             ['ISSUE_AND_ENERGY', 'ISSUE_COMPLAINT', 'ENERGY_WASTE'].includes(prop.currentState.subStatus);
+
+          const isChecked = selectedRooms.has(prop.id);
 
           return (
             <div
@@ -406,26 +509,63 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
               }}
               style={{
                 display: isMobile ? 'grid' : 'flex',
-                gridTemplateColumns: isMobile ? `${STRIP_W}px 1fr ${BADGE_W}px` : undefined,
+                gridTemplateColumns: isMobile ? `${CB_W}px ${STRIP_W}px 1fr ${BADGE_W}px` : undefined,
                 gridTemplateRows: isMobile ? 'auto auto' : undefined,
                 alignItems: isMobile ? 'stretch' : 'center',
-                background: '#fff', borderRadius: 10, marginBottom: 6,
-                border: `1.5px solid ${isUrgent ? meta.color : '#e2e8f0'}`,
+                background: isChecked ? '#f0fdf4' : '#fff',
+                borderRadius: 10, marginBottom: 6,
+                border: `1.5px solid ${isChecked ? '#86efac' : isUrgent ? meta.color : '#e2e8f0'}`,
                 cursor: 'pointer', overflow: 'hidden',
+                transition: 'background 0.1s, border-color 0.1s',
               }}
             >
-              {/* 색상 스트립 — 모바일: grid 1열 양쪽 행 span */}
+              {/* 체크박스 — 모바일: grid 양쪽 행 span */}
+              <div
+                style={{
+                  gridRow: isMobile ? '1 / 3' : undefined,
+                  gridColumn: isMobile ? '1' : undefined,
+                  width: isMobile ? undefined : CB_W,
+                  flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedRooms(prev => {
+                    const next = new Set(prev);
+                    if (next.has(prop.id)) next.delete(prop.id);
+                    else next.add(prop.id);
+                    return next;
+                  });
+                }}
+              >
+                <div style={{
+                  width: 16, height: 16,
+                  borderRadius: 4,
+                  border: `1.5px solid ${isChecked ? '#22c55e' : '#cbd5e1'}`,
+                  background: isChecked ? '#22c55e' : '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 0.1s',
+                  flexShrink: 0,
+                }}>
+                  {isChecked && (
+                    <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                      <path d="M1 4L3.5 6.5L9 1" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+              </div>
+
+              {/* 색상 스트립 — 모바일: grid 2열 양쪽 행 span */}
               <div style={{
                 gridRow: isMobile ? '1 / 3' : undefined,
-                gridColumn: isMobile ? '1' : undefined,
+                gridColumn: isMobile ? '2' : undefined,
                 width: isMobile ? undefined : STRIP_W,
                 alignSelf: 'stretch', background: meta.color, flexShrink: 0,
               }} />
 
-              {/* 숙소명 — 모바일: grid 1행 2열 */}
+              {/* 숙소명 — 모바일: grid 1행 3열 */}
               <div style={{
                 gridRow: isMobile ? '1' : undefined,
-                gridColumn: isMobile ? '2' : undefined,
+                gridColumn: isMobile ? '3' : undefined,
                 width: isMobile ? undefined : NAME_W,
                 flexShrink: isMobile ? undefined : 0,
                 padding: isMobile ? '5px 8px' : '10px 10px',
@@ -437,10 +577,10 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
                 {!isMobile && <div style={{ fontSize: 10, color: '#a0aec0' }}>{prop.district}</div>}
               </div>
 
-              {/* 상태 배지 — 모바일: grid 1행 3열 */}
+              {/* 상태 배지 — 모바일: grid 1행 4열 */}
               <div style={{
                 gridRow: isMobile ? '1' : undefined,
-                gridColumn: isMobile ? '3' : undefined,
+                gridColumn: isMobile ? '4' : undefined,
                 width: isMobile ? undefined : BADGE_W,
                 flexShrink: 0,
                 padding: isMobile ? '4px 5px' : '0 6px',
@@ -459,7 +599,7 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
               <div
                 style={{
                   gridRow: isMobile ? '2' : undefined,
-                  gridColumn: isMobile ? '2 / 4' : undefined,
+                  gridColumn: isMobile ? '3 / 5' : undefined,
                   flex: isMobile ? undefined : 1,
                   position: 'relative', height: ROW_GANTT_H, overflow: 'hidden',
                   cursor: isDragging ? 'grabbing' : 'grab',

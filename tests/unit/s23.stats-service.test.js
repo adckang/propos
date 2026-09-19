@@ -1,6 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { getStatsForPeriod } from "../../src/application/reportingService.js";
+import { makeStateDb } from "../helpers/stateEventsFixtures.js";
 
 // Mock KV — 3개 숙소 상태
 const mockKvMulti = {
@@ -26,9 +27,18 @@ const mockDb = {
   }),
 };
 
+// 현재 상태는 이벤트 기록(DB)에서 계산한다 — 임시 저장소(KV)는 호출되면 실패하는 가짜로 넘겨 "안 쓴다"를 증명
+const forbiddenKv = new Proxy({}, { get: () => () => { throw new Error("현재 상태 계산이 임시 저장소(KV)를 건드림"); } });
+
 describe("getStatsForPeriod — now (실시간)", () => {
+  const HISTORIES = {
+    paju201: ["check_in_detected"],                       // 체류중
+    paju202: ["cleaning_finished"],                       // 공실
+    paju203: ["check_out_detected", "cleaning_started"],  // 청소 중
+  };
+
   test("전체 숙소 집계 — occupied/vacant/cleaning 카운트", async () => {
-    const result = await getStatsForPeriod("now", { db: mockDb, kv: mockKvMulti });
+    const result = await getStatsForPeriod("now", { db: makeStateDb(HISTORIES), kv: forbiddenKv });
     assert.equal(result.period, "now");
     assert.equal(result.stats.occupied, 1);
     assert.equal(result.stats.vacant, 1);
@@ -37,32 +47,22 @@ describe("getStatsForPeriod — now (실시간)", () => {
     assert.ok(result.summary.length > 0);
   });
 
-  test("단일 숙소 (propertyId 지정) — 해당 숙소 상태만 반환", async () => {
-    const singleKv = {
-      get: async () => ({ mainStatus: "OCCUPIED", subStatus: "ISSUE_COMPLAINT" }),
-    };
-    const result = await getStatsForPeriod("now", {
-      db: mockDb,
-      kv: singleKv,
-      propertyId: "paju201",
-    });
+  test("단일 숙소 (propertyIds 지정) — 해당 숙소 상태만 반환", async () => {
+    const db = makeStateDb({ paju201: ["check_in_detected", "complaint_detected"], paju202: ["cleaning_finished"] });
+    const result = await getStatsForPeriod("now", { db, kv: forbiddenKv, propertyIds: ["paju201"] });
     assert.equal(result.stats.occupied, 1);
     assert.equal(result.stats.anomalyCount, 1);
     assert.equal(result.stats.total, 1);
   });
 
-  test("KV에 상태 없는 숙소 → 빈 집계 (에러 없음)", async () => {
-    const emptyKv = {
-      keys: async () => [],
-      get: async () => null,
-    };
-    const result = await getStatsForPeriod("now", { db: mockDb, kv: emptyKv });
+  test("기록이 없는 숙소들 → 빈 집계 (에러 없음)", async () => {
+    const result = await getStatsForPeriod("now", { db: makeStateDb({}), kv: forbiddenKv });
     assert.equal(result.stats.total, 0);
     assert.ok(result.summary.length > 0);
   });
 
   test("period 필드가 결과에 포함됨", async () => {
-    const result = await getStatsForPeriod("now", { db: mockDb, kv: mockKvMulti });
+    const result = await getStatsForPeriod("now", { db: makeStateDb(HISTORIES), kv: forbiddenKv });
     assert.equal(result.period, "now");
     assert.ok(!result.range, "now 는 range 없어야 함");
   });
@@ -93,50 +93,41 @@ describe("getStatsForPeriod — 기간 이벤트", () => {
     assert.ok(result.summary.length > 0);
   });
 
-  test("KV 미스 단일 숙소 → DB 폴백으로 상태 복원", async () => {
-    let setCalled = false;
-    const missKv = {
-      get: async () => null,
-      set: async () => { setCalled = true; },
-    };
-    const stateDb = {
-      // getLastKnownStateFromDB: check_in_detected 반환
-      query: async () => ({ rows: [{ type: "check_in_detected" }] }),
-    };
+  test("체크인한 손님이 계속 머무는 숙소 — 임시 저장소가 비어 있어도 체류중으로 복원", async () => {
     const result = await getStatsForPeriod("now", {
-      db: stateDb,
-      kv: missKv,
-      propertyId: "paju201",
+      db: makeStateDb({ paju201: ["check_in_detected"] }),
+      kv: forbiddenKv,
+      propertyIds: ["paju201"],
     });
     assert.equal(result.stats.occupied, 1);
     assert.equal(result.stats.total, 1);
-    assert.ok(setCalled, "KV 재캐시 set 호출 확인");
   });
 
-  test("KV 미스 + DB에도 없는 숙소 → total 0 (에러 없음)", async () => {
-    const missKv = { get: async () => null, set: async () => {} };
-    const emptyDb = { query: async () => ({ rows: [] }) };
+  test("기록에 없는 숙소 → total 0 (에러 없음)", async () => {
     const result = await getStatsForPeriod("now", {
-      db: emptyDb,
-      kv: missKv,
-      propertyId: "unknown999",
+      db: makeStateDb({ paju201: ["check_in_detected"] }),
+      kv: forbiddenKv,
+      propertyIds: ["unknown999"],
     });
     assert.equal(result.stats.total, 0);
   });
 
-  test("property_id 지정 시 DB 쿼리 호출됨", async () => {
-    let queriedPropertyId = null;
+  test("propertyIds 지정 시 DB 쿼리 ANY 배열로 호출됨 (이벤트·청소 잡 모두)", async () => {
+    const calls = [];
     const capturingDb = {
       query: async (sql, params) => {
-        queriedPropertyId = params?.[0];
+        calls.push({ sql, params });
         return { rows: [] };
       },
     };
     await getStatsForPeriod("last_week", {
       db: capturingDb,
       kv: mockKvMulti,
-      propertyId: "paju201",
+      propertyIds: ["paju201"],
     });
-    assert.equal(queriedPropertyId, "paju201");
+    const eventsCall = calls.find(c => /FROM events/.test(c.sql));
+    const jobsCall   = calls.find(c => /FROM cleaning_jobs/.test(c.sql));
+    assert.deepEqual(eventsCall.params[0], ["paju201"]);
+    assert.deepEqual(jobsCall.params[2], ["paju201"]);
   });
 });

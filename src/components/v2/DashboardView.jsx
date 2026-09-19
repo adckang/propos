@@ -105,6 +105,7 @@ export default function DashboardView({ onSelectStatus, onSelectProperty, onBack
       {/* 실시간 운영 요약 + 이번 달 레포트 */}
       <SummaryBanner summary={nowSummary} isMobile={isMobile}>
         <ReportPanel period="this_month" stats={monthStats} loading={monthLoading} isMobile={isMobile}
+          properties={properties}
           onSelectRoom={(propertyId) => { const p = properties.find(x => x.id === propertyId); if (p) onSelectProperty?.(p); }}
         />
       </SummaryBanner>

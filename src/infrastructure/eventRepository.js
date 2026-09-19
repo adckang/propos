@@ -7,6 +7,8 @@
  * 테스트 사용: 테스트에서 mock db 객체를 주입.
  */
 
+import { ANCHOR_EVENT_TYPES, FOLLOW_EVENT_TYPES, deriveRoomState } from "../domain/roomStateFromEventsDomain.js";
+
 /**
  * 이벤트를 Postgres에 삽입한다.
  * UNIQUE(property_id, type, device_time) 중복이면 무시 (ON CONFLICT DO NOTHING).
@@ -51,59 +53,80 @@ export async function updateEventStatus(db, id, status, notifiedAt = null) {
   );
 }
 
-// KV 미스 폴백에서 사용하는 상태 전이 이벤트 목록
-const _ROOM_STATE_EVENTS = [
-  "check_in_detected",
-  "check_out_detected",
-  "cleaning_started",
-  "cleaning_finished",
-];
-const _ROOM_STATE_MAP = {
-  check_in_detected: { mainStatus: "OCCUPIED", subStatus: "GOOD_CONDITION" },
-  check_out_detected: { mainStatus: "CLEANING", subStatus: "CLEANING_PENDING" },
-  cleaning_started: { mainStatus: "CLEANING", subStatus: "CLEANING_IN_PROGRESS" },
-  cleaning_finished: { mainStatus: "VACANT", subStatus: "CLEANING_FINISHED" },
-};
-
 /**
- * KV 캐시 미스 시 DB에서 마지막 알려진 룸 상태를 읽는다.
- * subStatus 전용 이벤트(energy_waste_*, complaint_*)는 제외 — 메인 상태만 복원.
+ * 이벤트 기록으로 숙소들의 "지금 상태"를 계산한다 (현재 상태 레포트의 원천).
+ *
+ * 숙소마다 마지막 "큰 상태 변화"(체크인·체크아웃·청소 시작·청소 완료)를 찾고, 그 뒤의 세부 이벤트
+ * (민원·에너지 낭비·입실 준비)를 상태 규칙에 순서대로 적용한다 — roomStateFromEventsDomain.
+ * 임시 저장소(KV)와 달리 시간이 지나도 사라지지 않으며 체류 중 이상·입실 준비 같은 세부 상태도 담는다.
+ * 기록이 하나도 없는 숙소는 결과에 없다 (상태를 알 수 없음).
+ *
  * @param {object} db
- * @param {string} propertyId
- * @returns {Promise<{ mainStatus: string, subStatus: string }|null>}
+ * @param {string[]|null} propertyIds - null=기록이 있는 모든 숙소, []=DB 호출 없이 빈 결과, [...]=그 숙소들만
+ * @returns {Promise<Map<string, { mainStatus: string, subStatus: string }>>}
  */
-export async function getLastKnownStateFromDB(db, propertyId) {
-  const result = await db.query(
-    `SELECT type FROM events
-     WHERE property_id = $1
-       AND type = ANY($2)
-     ORDER BY device_time DESC LIMIT 1`,
-    [propertyId, _ROOM_STATE_EVENTS]
+export async function getLastKnownStatesFromDB(db, propertyIds = null) {
+  if (Array.isArray(propertyIds) && propertyIds.length === 0) return new Map();
+
+  const { rows } = await db.query(
+    `WITH last_anchor AS (
+       SELECT DISTINCT ON (property_id)
+              property_id, type AS anchor_type, device_time AS anchor_time
+         FROM events
+        WHERE type = ANY($1::text[])
+          AND ($2::text[] IS NULL OR property_id = ANY($2::text[]))
+        ORDER BY property_id, device_time DESC
+     )
+     SELECT a.property_id, a.anchor_type, f.type AS follow_type
+       FROM last_anchor a
+       LEFT JOIN events f
+         ON f.property_id = a.property_id
+        AND f.type = ANY($3::text[])
+        AND f.device_time > a.anchor_time
+      ORDER BY a.property_id, f.device_time, f.server_time`,
+    [ANCHOR_EVENT_TYPES, Array.isArray(propertyIds) ? propertyIds : null, FOLLOW_EVENT_TYPES]
   );
-  if (result.rows.length === 0) return null;
-  return _ROOM_STATE_MAP[result.rows[0].type] ?? null;
+
+  const byProperty = new Map();
+  for (const { property_id, anchor_type, follow_type } of rows) {
+    if (!byProperty.has(property_id)) byProperty.set(property_id, { anchor: anchor_type, follows: [] });
+    if (follow_type) byProperty.get(property_id).follows.push(follow_type);
+  }
+
+  const states = new Map();
+  for (const [id, { anchor, follows }] of byProperty) {
+    const state = deriveRoomState(anchor, follows);
+    if (state) states.set(id, state);
+  }
+  return states;
 }
 
 /**
- * 기간 내 특정 숙소(또는 전체)의 이벤트를 조회한다.
+ * 기간 내 특정 숙소(들) 또는 전체의 이벤트를 조회한다.
  * @param {object} db
  * @param {{ from: Date, to: Date }} range
- * @param {string|null} propertyId - null이면 전체
+ * @param {string[]|null} propertyIds - null=전체, []=빈 결과(DB 호출 없음), [...]= ANY 필터
  * @returns {Promise<object[]>}
  */
-export async function queryEvents(db, range, propertyId = null) {
-  if (propertyId) {
+export async function queryEvents(db, range, propertyIds = null) {
+  // 빈 배열 = 선택된 숙소 없음 → DB 호출 없이 빈 결과
+  if (Array.isArray(propertyIds) && propertyIds.length === 0) {
+    return [];
+  }
+
+  if (Array.isArray(propertyIds) && propertyIds.length > 0) {
     const result = await db.query(
       `SELECT * FROM events
-       WHERE property_id = $1
+       WHERE property_id = ANY($1::text[])
          AND device_time >= $2
          AND device_time <= $3
        ORDER BY device_time DESC`,
-      [propertyId, range.from, range.to]
+      [propertyIds, range.from, range.to]
     );
     return result.rows;
   }
 
+  // null = 전체 조회
   const result = await db.query(
     `SELECT * FROM events
      WHERE device_time >= $1
