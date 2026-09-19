@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = join(__dir, '..', 'data');
+const DATA_DIR = process.env.PROPOS_DATA_DIR || join(__dir, '..', 'data');
 const PROPERTIES_FILE = join(DATA_DIR, 'properties-config.json');
 
 function ensureDataDir() {

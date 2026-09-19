@@ -10,6 +10,7 @@
  * TC-OW-006: 과거 checkIn → 캘린더 이벤트 무시
  */
 
+import '../helpers/isolateDataDir.js'; // 감시 프로그램이 실제 data/ 를 덮어쓰지 않도록 (반드시 첫 import)
 import { describe, test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 

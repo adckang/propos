@@ -31,7 +31,8 @@ import {
 } from '../src/domain/room-state/roomStateDomain.js';
 
 const __dir    = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = join(__dir, '..', 'data');
+// 테스트는 PROPOS_DATA_DIR 로 임시 폴더를 지정해 실제 운영 기록(data/)을 덮어쓰지 않는다
+const DATA_DIR = process.env.PROPOS_DATA_DIR || join(__dir, '..', 'data');
 const STATE_FILE        = join(DATA_DIR, 'monitoring-state.json');
 const CONFIG_FILE       = join(DATA_DIR, 'monitoring-config.json');
 const SNAPSHOT_LOG_FILE = join(DATA_DIR, 'snapshotLog.json');
