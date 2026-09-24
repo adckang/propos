@@ -63,6 +63,18 @@ export function toKstDateKey(raw) {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * 날짜 키(YYYY-MM-DD)가 오늘(KST)로부터 며칠 뒤인지. 캘린더 칸에서 "그 날짜로 이동" 할 때 쓴다
+ * (ListView의 windowOffset과 같은 단위 — 일 수).
+ */
+export function kstDayOffsetFromToday(dateKey, now = new Date()) {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  if (!y || !m || !d) return 0;
+  const targetDay = kstDayIndex(new Date(Date.UTC(y, m - 1, d)));
+  const todayDay = kstDayIndex(now);
+  return targetDay - todayDay;
+}
+
 function findResolution(eventsAsc, event, resolutionType) {
   const detectedAt = asDate(event.device_time)?.getTime();
   if (detectedAt == null) return null;
@@ -149,7 +161,12 @@ export function groupIssueItemsByKstDate(items = []) {
   return days;
 }
 
-/** 다음달 예약·점유·청소 예정값을 날짜별로 묶는다. */
+/**
+ * 다음달 예약·점유·청소 예정값을 날짜별로 묶는다.
+ *
+ * 각 날짜에는 숙소 ID 목록도 함께 담는다 — 캘린더 칸에서 "체류 N"·"입실 N" 등을 눌렀을 때
+ * 어느 숙소들인지 보여주려면 개수만으로는 부족하다. 숙소 순서(원래 properties 순서)는 유지한다.
+ */
 export function buildFutureCalendarDays(properties = [], range, cleaningItems = []) {
   if (!range?.from || !range?.to) return {};
   const from = asDate(range.from);
@@ -158,14 +175,18 @@ export function buildFutureCalendarDays(properties = [], range, cleaningItems = 
   const toDay = kstDayIndex(to);
   if (fromDay == null || toDay == null || toDay <= fromDay) return {};
 
+  const allIds = properties.map(p => p.id);
   const days = {};
   for (let day = fromDay; day < toDay; day++) {
     days[dateKeyFromKstDay(day)] = {
       checkIns: 0,
       checkOuts: 0,
-      occupiedPropertyIds: new Set(),
+      checkInPropertyIds: [],
+      checkOutPropertyIds: [],
+      occupiedPropertyIds: new Set(), // 최종적으로 배열로 바뀜 (아래 마무리 루프)
       occupiedRooms: 0,
       vacantRooms: properties.length,
+      vacantPropertyIds: [],
       cleaningItems: [],
     };
   }
@@ -178,11 +199,11 @@ export function buildFutureCalendarDays(properties = [], range, cleaningItems = 
 
       if (checkIn >= from && checkIn < to) {
         const key = toKstDateKey(checkIn);
-        if (days[key]) days[key].checkIns += 1;
+        if (days[key]) { days[key].checkIns += 1; days[key].checkInPropertyIds.push(property.id); }
       }
       if (checkOut >= from && checkOut < to) {
         const key = toKstDateKey(checkOut);
-        if (days[key]) days[key].checkOuts += 1;
+        if (days[key]) { days[key].checkOuts += 1; days[key].checkOutPropertyIds.push(property.id); }
       }
 
       const occupiedFrom = Math.max(fromDay, kstDayIndex(checkIn));
@@ -199,11 +220,48 @@ export function buildFutureCalendarDays(properties = [], range, cleaningItems = 
   }
 
   for (const day of Object.values(days)) {
-    day.occupiedRooms = day.occupiedPropertyIds.size;
-    day.vacantRooms = Math.max(0, properties.length - day.occupiedRooms);
-    delete day.occupiedPropertyIds;
+    const occupiedSet = day.occupiedPropertyIds;
+    day.occupiedRooms = occupiedSet.size;
+    day.vacantRooms = Math.max(0, properties.length - occupiedSet.size);
+    // Set → 배열, properties 원래 순서로 (표시 순서를 ListView와 맞춘다)
+    day.occupiedPropertyIds = allIds.filter(id => occupiedSet.has(id));
+    day.vacantPropertyIds   = allIds.filter(id => !occupiedSet.has(id));
   }
   return days;
+}
+
+// 서버 SQL(api/cleaning/[...slug].js)과 같은 분류 — "아직 자동으로 진행 중"인 상태들
+const REQUESTING_CLEANING_STATUSES = new Set([
+  'PENDING', 'NOTIFYING_VIP_1', 'NOTIFYING_VIP_2', 'NOTIFYING_VIP_3',
+  'NOTIFYING_BULK', 'BULK_REMINDED',
+]);
+
+/**
+ * 하루치 청소 아이템을 배정완료/배정요청중/수동배정필요/청소계획없음으로 나눈다.
+ * FutureMatrixPanel(D-019)과 같은 규칙 — 수동배정 필요 = 배정 실패(ESCALATED) + 배정 요청 필요(CANCELLED).
+ *
+ * "청소계획없음"(noJob) — 그날 체크아웃하는 숙소(checkOutPropertyIds)인데 청소 잡 자체가 없는 것.
+ * 이걸 빼면 "퇴실 6건인데 배정완료 1건"처럼 나머지 5건이 어디에도 안 잡히는 문제가 생긴다(사용자 지적).
+ * 잡이 아직 하나도 안 만들어졌을 수 있어서(예: MONTHLY_BATCH 발동 전) 배지 숫자(퇴실 수)와
+ * 항상 맞아떨어지게 하려면 이 셋째 분류가 반드시 필요하다.
+ *
+ * @param {object[]} cleaningItems       하루치 cleaningItems (status, property_id 포함)
+ * @param {string[]} [checkOutPropertyIds]  그날 체크아웃하는 숙소 ID (buildFutureCalendarDays 결과)
+ * @returns {{ assigned: object[], requesting: object[], manual: object[], noJob: string[] }}
+ */
+export function classifyDayCleaningItems(cleaningItems = [], checkOutPropertyIds = []) {
+  const assigned = [];
+  const requesting = [];
+  const manual = [];
+  const coveredIds = new Set();
+  for (const item of cleaningItems) {
+    coveredIds.add(item.property_id);
+    if (item.status === 'ASSIGNED' || item.status === 'COMPLETED') assigned.push(item);
+    else if (REQUESTING_CLEANING_STATUSES.has(item.status)) requesting.push(item);
+    else if (item.status === 'ESCALATED' || item.status === 'CANCELLED') manual.push(item);
+  }
+  const noJob = checkOutPropertyIds.filter(id => !coveredIds.has(id));
+  return { assigned, requesting, manual, noJob };
 }
 
 /** 단일 숙소의 다음달 예약을 달력 막대로 그릴 구간. */

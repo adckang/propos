@@ -48,6 +48,17 @@ export function countWeekCheckOuts(properties, weekStart, weekEnd) {
   return count;
 }
 
+/** 숙소 하나의 구간 내 체류 박수 (예약-구간 겹치는 일수, 구간 전체 박수를 넘지 않게 자름) */
+function roomNightsOf(property, wsDay, weDay, weekDays) {
+  let roomNights = 0;
+  for (const r of (property.reservations ?? [])) {
+    const ciDay = dayOf(r.checkIn);
+    const coDay = dayOf(r.checkOut);
+    roomNights += Math.max(0, Math.min(coDay, weDay) - Math.max(ciDay, wsDay));
+  }
+  return Math.min(roomNights, weekDays); // 주 최대 박수 초과 방지
+}
+
 /**
  * 주간 공실/체류 예측
  *
@@ -67,14 +78,7 @@ export function getOccupancyForecast(properties, weekStart, weekEnd) {
   let occupiedNights = 0;
 
   for (const p of properties) {
-    let roomNights = 0;
-    for (const r of (p.reservations ?? [])) {
-      const ciDay = dayOf(r.checkIn);
-      const coDay = dayOf(r.checkOut);
-      const overlap = Math.max(0, Math.min(coDay, weDay) - Math.max(ciDay, wsDay));
-      roomNights += overlap;
-    }
-    roomNights = Math.min(roomNights, weekDays); // 주 최대 박수 초과 방지
+    const roomNights = roomNightsOf(p, wsDay, weDay, weekDays);
     if (roomNights > 0) occupiedRooms++;
     else vacantRooms++;
     occupiedNights += roomNights;
@@ -86,6 +90,31 @@ export function getOccupancyForecast(properties, weekStart, weekEnd) {
   const vacancyRate   = totalNights > 0 ? vacantNights  / totalNights : 0;
 
   return { occupiedRooms, vacantRooms, occupiedNights, vacantNights, totalNights, occupancyRate, vacancyRate };
+}
+
+/**
+ * 숙소별 공실률 — "공실률 높은 숙소 순" 목록에 쓴다. 정렬은 하지 않고 그대로 반환(화면에서 정렬).
+ *
+ * @returns {{ property_id, property_name, occupiedNights, vacantNights, totalNights, vacancyRate }[]}
+ */
+export function getPropertyVacancyRates(properties, weekStart, weekEnd) {
+  const wsDay = dayOf(weekStart);
+  const weDay = dayOf(weekEnd);
+  const weekDays = weDay - wsDay;
+
+  return properties.map(p => {
+    const occupiedNights = roomNightsOf(p, wsDay, weDay, weekDays);
+    const vacantNights = Math.max(0, weekDays - occupiedNights);
+    const vacancyRate = weekDays > 0 ? vacantNights / weekDays : 0;
+    return {
+      property_id: p.id,
+      property_name: p.name,
+      occupiedNights,
+      vacantNights,
+      totalNights: weekDays,
+      vacancyRate,
+    };
+  });
 }
 
 // 청소 배정 완료 상태 (캘린더 우선, DB 보조)

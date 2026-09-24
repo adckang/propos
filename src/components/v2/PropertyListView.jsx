@@ -131,11 +131,20 @@ function GanttBar({ seg, windowStart, windowMs, isDragging }) {
 }
 
 
-export default function PropertyListView({ initialFilter, onSelectProperty, onBack, properties = PROPERTIES }) {
+export default function PropertyListView({
+  initialFilter, initialDayOffset = null, initialOccupantIds = null,
+  onSelectProperty, onBack, properties = PROPERTIES,
+}) {
   const isMobile = useMobile();
   const [filter, setFilter] = useState(initialFilter || FILTER_ALL);
-  const [windowOffset, setWindowOffset] = useState(0); // 일 단위 스크롤 오프셋
-  const [listMode, setListMode] = useState('week');    // 'week' | 'day'
+  // 대시보드 캘린더의 "체류/공실" 클릭 → 그 날짜(일 단위 오프셋)로 타임라인을 옮겨서 연다
+  const [windowOffset, setWindowOffset] = useState(initialDayOffset ?? 0); // 일 단위 스크롤 오프셋
+  const [listMode, setListMode] = useState(initialDayOffset != null ? 'day' : 'week'); // 'week' | 'day'
+  // 그 날짜 기준 체류/공실 숙소 ID — mount 시점 한 번만 고정(캘린더가 계산한 값). 이후 타임라인을 드래그해도
+  // 이 값 자체는 안 바뀌지만, OCCUPIED/VACANT 칩을 계속 누르고 있는 동안은 "그 날짜의" 체류/공실을 보여준다.
+  const [dayOccupantIds] = useState(() => initialOccupantIds
+    ? { OCCUPIED: new Set(initialOccupantIds.occupied ?? []), VACANT: new Set(initialOccupantIds.vacant ?? []) }
+    : null);
   // 체크박스 선택 Set — 초기값: 전체 숙소 선택
   const [selectedRooms, setSelectedRooms] = useState(() => new Set(properties.map(p => p.id)));
 
@@ -187,9 +196,10 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
   const { windowStart, windowEnd, windowMs, dayLabels, monthLabels } = useGanttWindow(windowOffset);
   const { now, nowLeft, timeStr } = useLiveNow(windowStart, windowMs);
 
-  const filtered = properties.filter(p =>
-    filter === FILTER_ALL || p.currentState.mainStatus === filter
-  );
+  const filtered = properties.filter(p => {
+    if (dayOccupantIds && (filter === 'OCCUPIED' || filter === 'VACANT')) return dayOccupantIds[filter].has(p.id);
+    return filter === FILTER_ALL || p.currentState.mainStatus === filter;
+  });
 
   const sortOrder  = { OCCUPIED: 0, PRE_STAY_READY: 1, CLEANING: 2, VACANT: 3 };
   const subUrgency = { ISSUE_AND_ENERGY: 0, ISSUE_COMPLAINT: 1, ENERGY_WASTE: 2, GOOD_CONDITION: 3 };
@@ -262,7 +272,11 @@ export default function PropertyListView({ initialFilter, onSelectProperty, onBa
       <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: `${isMobile ? 7 : 10}px ${PAD}px`, display: 'flex', gap: isMobile ? 4 : 8, overflowX: 'hidden', flexWrap: 'nowrap' }}>
         {[FILTER_ALL, ...ORDER].map(key => {
           const meta   = key === FILTER_ALL ? null : STATE_META[key];
-          const cnt    = key === FILTER_ALL ? properties.length : properties.filter(p => p.currentState.mainStatus === key).length;
+          const cnt    = key === FILTER_ALL
+            ? properties.length
+            : dayOccupantIds && (key === 'OCCUPIED' || key === 'VACANT')
+              ? dayOccupantIds[key].size
+              : properties.filter(p => p.currentState.mainStatus === key).length;
           const active = filter === key;
           return (
             <button key={key} onClick={() => setFilter(key)} style={{

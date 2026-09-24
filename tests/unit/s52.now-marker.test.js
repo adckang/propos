@@ -114,11 +114,11 @@ describe('MonthlyCalendar — "지금" 표시 배선', () => {
     assert.equal((src.match(/<NowCellMarker/g) ?? []).length, 1, '오늘 칸 한 곳에서만 사용');
   });
 
-  test('오늘 칸은 표식 자리만큼 날짜 숫자·문제 배지를 아래로 내린다 (겹치지 않게)', () => {
-    assert.match(src, /nowShift = isToday \? nowStripHeight\(isMobile\) : 0/);
-    assert.match(src, /\$\{5 \+ nowShift\}px 4px 5px/);
-    assert.match(src, /\$\{7 \+ nowShift\}px 7px 7px/);
-    assert.match(src, /top: \(isMobile \? 23 : 29\) \+ nowShift/);
+  test('오늘 칸이어도 날짜 숫자·문제 배지를 아래로 밀지 않는다 (사용자 요청 2026-09-24 — 겹쳐도 되니 밀리지 않게)', () => {
+    // 표식 자리를 비우려고 padding/top 에 더하던 nowShift 는 모두 제거됨
+    assert.ok(!/nowShift/.test(src), 'nowShift 로 날짜·배지를 밀어내는 코드가 남아 있음');
+    assert.match(src, /padding: isMobile \? '5px 4px 5px' : '7px 7px 7px'/);
+    assert.match(src, /top: isMobile \? 23 : 29,/);
   });
 
   test('오늘 날짜는 진하고 굵게 (리스트 화면의 오늘 표시와 같은 #1a202c / 700)', () => {

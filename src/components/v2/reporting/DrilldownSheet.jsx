@@ -38,13 +38,14 @@ const METRIC_LABELS = {
  *   staticError    — 외부 에러 상태
  *   emptyMessage   — 아이템 없을 때 메시지 (기본 '실패 건 없음')
  *   emptyIcon      — 아이템 없을 때 아이콘 (기본 '✅')
+ *   footer         — 목록 스크롤 영역 아래 고정으로 보여줄 내용 (예: 페이지 넘김 버튼). 없으면 안 그림.
  */
 export default function DrilldownSheet({
   // async 모드
   metric, metricLabel, period, propertyIds, onSelectRoom, properties = [],
   // static 모드
   staticItems, renderItem, staticLoading = false, staticError = false,
-  emptyMessage = '실패 건 없음', emptyIcon = '✅',
+  emptyMessage = '실패 건 없음', emptyIcon = '✅', footer,
   // 공통
   onClose,
 }) {
@@ -177,6 +178,12 @@ export default function DrilldownSheet({
               ))
           )}
         </div>
+
+        {footer && (
+          <div style={{ borderTop: '1px solid #e2e8f0', flexShrink: 0 }}>
+            {footer}
+          </div>
+        )}
       </div>
     </>
   );

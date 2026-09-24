@@ -10,7 +10,7 @@ import MonthlyCalendar from './reporting/MonthlyCalendar.jsx';
 
 const ORDER = ['CLEANING', 'PRE_STAY_READY', 'OCCUPIED', 'VACANT'];
 
-export default function MonthlyView({ onSelectStatus, onSelectProperty, onBack, properties = PROPERTIES, syncBadge }) {
+export default function MonthlyView({ onSelectStatus, onNavigateToList, onSelectProperty, onBack, properties = PROPERTIES, syncBadge }) {
   const isMobile = useMobile();
   const [statusDetailsOpen, setStatusDetailsOpen] = useState(false);
   const [statsPeriod, setStatsPeriod] = useState('this_month');
@@ -130,7 +130,7 @@ export default function MonthlyView({ onSelectStatus, onSelectProperty, onBack, 
       <SelectedPropertyReport statsPeriod={statsPeriod} scopedProperties={scopedProperties} statsPropertyIds={statsPropertyIds} scope={scope} noSelection={noSelection} allSelected={allSelected} properties={properties} onSelectProperty={onSelectProperty} isMobile={isMobile} monthlyCalendarState={monthlyCalendarState} />
       <MonthlyViewFilter statsPeriod={statsPeriod} onPeriodChange={setStatsPeriod} isMobile={isMobile} />
       <PropertyMultiSelectDropdown properties={properties} selectedRooms={selectedRooms} setSelectedRooms={setSelectedRooms} scope={scope} isMobile={isMobile} />
-      <MonthlyCalendar statsPeriod={statsPeriod} scopedProperties={scopedProperties} noSelection={noSelection} properties={properties} onSelectProperty={onSelectProperty} isMobile={isMobile} monthlyCalendarState={monthlyCalendarState} />
+      <MonthlyCalendar statsPeriod={statsPeriod} scopedProperties={scopedProperties} noSelection={noSelection} properties={properties} onSelectProperty={onSelectProperty} onNavigateToList={onNavigateToList} isMobile={isMobile} monthlyCalendarState={monthlyCalendarState} />
     </div>
   );
 }

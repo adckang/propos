@@ -595,8 +595,8 @@ describe('화면 배선 — 숙소 이름 · 구어체 한 줄 · 시간, 심각
     assert.match(sheet, /renderItem\s*\?\s*activeItems\.map\(\(item, i\) => renderItem\(item, i\)\)/);
   });
 
-  test('FutureMatrixPanel — 배정 실패·요청 필요 목록도 같은 행, 급한 순 정렬, 눌러서 숙소로 이동', () => {
-    assert.match(panel, /buildCleaningIssueRows\(/);
+  test('FutureMatrixPanel — "수동배정 필요"는 배정 실패·요청 필요를 합친 같은 행, 급한 순 정렬, 눌러서 숙소로 이동', () => {
+    assert.match(panel, /buildMixedCleaningIssueRows\(/);
     assert.match(panel, /<ViolationRow/);
     assert.match(panel, /dateLabel=\{view\.when\}/);
     assert.match(panel, /onSelectRoom\?\.\(item\.property_id\)/);
@@ -662,9 +662,10 @@ describe('dev 스텁 — 실제 서버 응답과 같은 키로 화면을 확인�
     assert.match(src, /resolved_at: "2026-09-07T23:20:00\.000Z"/);
     assert.match(src, /anchor_at: "2026-09-08T11:00:00\.000Z"/);
   });
-  test('cleaning/stats 샘플: 요청·거절 인원과 취소 시각', () => {
-    assert.match(src, /notified_count: status === "ESCALATED"/);
-    assert.match(src, /declined_count: status === "ESCALATED"/);
-    assert.match(src, /updated_at: new Date\(Date\.now\(\)/);
+  test('cleaning/stats 샘플: 목업 숙소도 상태가 다양하지만 대부분(80%)은 배정완료', () => {
+    // 2026-09-24 수정: 처음엔 목업을 전부 ASSIGNED로 고정했다가, "다양하게 하되 80%는 배정완료로"로
+    // 정정됨 (s56.calendar-day-actions.test.js 에 확률 분포 상세 테스트)
+    assert.match(src, /upTo: 80, status: "ASSIGNED"/);
+    assert.match(src, /const assigned\s+= items\.filter\(i => i\.status === "ASSIGNED"\)\.length;/);
   });
 });

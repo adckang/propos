@@ -314,38 +314,73 @@ function apiProxyPlugin(env) {
         return;
       }
       if (req.url?.startsWith("/api/cleaning/stats") && req.method === "GET") {
-        // dev 전용 스텁 — 청소 배정 4분류 (실제 DB 없이 레포트 UI 확인용)
-        // 목업 숙소별로 분배 → 선택 숙소 합 == 개별 합, 드릴다운 목록 개수 == 표시 건수
+        // dev 전용 스텁 — 실제 운영 중인 숙소는 파주201 하나뿐이고 나머지(P001~P020)는 화면 확인용 목업이다.
+        // 목업도 상태가 다양해야 화면(배정요청중/실패/재요청 목록 등)을 확인할 수 있지만, 실제 운영과
+        // 헷갈릴 만큼 노이즈가 크면 안 되므로 "거의 80%는 배정완료"로 두고 나머지 20%만 섞는다(사용자 지시).
+        // 매 요청마다 값이 바뀌면 화면을 다시 열 때마다 숫자가 달라져 확인하기 어려우므로,
+        // 숙소+체크아웃 날짜를 해시해 매번 같은 결과가 나오게 한다(진짜 무작위 대신 결정적 배정).
+        //
+        // 잡의 checkout_at은 그 숙소의 "실제 예약 체크아웃"에서 그대로 가져온다 — 그래야 캘린더가
+        // 계산하는 퇴실 수와 여기서 만든 배정완료+미배정 합이 항상 정확히 맞아떨어진다.
         const csUrl      = new URL(req.url, "http://localhost");
         const withItems  = csUrl.searchParams.get("items") === "true";
         const rawIds     = csUrl.searchParams.get("property_ids") ?? "";
         const selectedIds = rawIds ? rawIds.split(",").map(s => s.trim()).filter(Boolean) : null;
-        const { sc, holders } = makeStubScope(selectedIds);
-        const OFF = { assigned: 2, requesting: 3, failed: 5, needsRequest: 11 }; // 항목마다 다른 숙소가 걸리도록
-        const assigned = sc(4, OFF.assigned), requesting = sc(2, OFF.requesting), failed = sc(1, OFF.failed);
-        // 실제 API와 동일: total = 취소 제외 잡 수 = 배정완료 + 요청중 + 실패, needsRequest는 CANCELLED 별도
-        const base = { total: assigned + requesting + failed, assigned, requesting, failed, needsRequest: sc(1, OFF.needsRequest) };
-        base.unassigned = base.total - base.assigned;
-        if (!withItems) { sendJson(res, 200, base); return; }
+        const { rooms } = makeStubScope(selectedIds);
         const period = csUrl.searchParams.get("period") ?? "next_week";
         const scheduleRange = periodToRemainingRange(period);
-        const spanDays = Math.max(1, Math.floor((scheduleRange.to - scheduleRange.from) / 86_400_000));
-        const toItem = (p, status, slot) => ({
-          property_id: p.id,
-          property_name: p.name,
-          status,
-          checkout_at: new Date(scheduleRange.from.getTime() + (slot % spanDays) * 86_400_000 + 12 * 3_600_000).toISOString(),
-          // 실제 서버와 같은 보조 값 — 배정 실패: 요청/거절 인원, 취소: 취소된 시각
-          updated_at: new Date(Date.now() - (slot % 5 + 1) * 5 * 3_600_000).toISOString(),
-          notified_count: status === "ESCALATED" ? 3 + (slot % 3) : 0,
-          declined_count: status === "ESCALATED" ? slot % 3 : 0,
-        });
-        const items = [
-          ...holders(4, OFF.assigned).map((p, i) => toItem(p, "ASSIGNED", i * 5 + 1)),
-          ...holders(2, OFF.requesting).map((p, i) => toItem(p, "PENDING", i * 7 + 2)),
-          ...holders(1, OFF.failed).map((p, i) => toItem(p, "ESCALATED", i * 11 + 3)),
-          ...holders(1, OFF.needsRequest).map((p, i) => toItem(p, "CANCELLED", i * 13 + 4)),
+        const CLEANER_NAMES = ["김민지", "박서준", "이하은", "최지훈"];
+
+        // 그 숙소의 실제 예약 중 이 기간 안에 체크아웃하는 건 전부 (한 숙소가 여러 번 체크아웃할 수 있음)
+        const checkoutsInRange = (p) => (p.reservations ?? [])
+          .map(r => (r.checkOut instanceof Date ? r.checkOut : new Date(r.checkOut)))
+          .filter(d => d >= scheduleRange.from && d < scheduleRange.to)
+          .sort((a, b) => a - b);
+
+        // 문자열 → 0~99 (같은 입력엔 항상 같은 값 — 새로고침해도 화면이 안 바뀌게)
+        const roll100 = (str) => {
+          let h = 0;
+          for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+          return h % 100;
+        };
+        // 80% 배정완료 / 10% 배정 요청중 / 5% 배정 실패 / 5% 배정 요청 필요(취소)
+        const STATUS_TABLE = [
+          { upTo: 80, status: "ASSIGNED" },
+          { upTo: 90, status: "PENDING" },
+          { upTo: 95, status: "ESCALATED" },
+          { upTo: 100, status: "CANCELLED" },
         ];
+        const statusFor = (p, checkoutAt) => {
+          const roll = roll100(`${p.id}|${checkoutAt.toISOString()}`);
+          return STATUS_TABLE.find(({ upTo }) => roll < upTo).status;
+        };
+
+        let slot = 0;
+        const items = rooms.flatMap(({ p }) => checkoutsInRange(p).map((checkoutAt) => {
+          const status = statusFor(p, checkoutAt);
+          const item = {
+            property_id: p.id,
+            property_name: p.name,
+            status,
+            checkout_at: checkoutAt.toISOString(),
+            updated_at: new Date(Date.now() - (slot % 5 + 1) * 3_600_000).toISOString(),
+            notified_count: status === "ESCALATED" ? 3 + (slot % 3) : 0,
+            declined_count: status === "ESCALATED" ? slot % 3 : 0,
+            cleaner_name: (status === "ASSIGNED" || status === "COMPLETED") ? CLEANER_NAMES[slot % CLEANER_NAMES.length] : null,
+          };
+          slot += 1;
+          return item;
+        }));
+
+        // base 숫자는 items에서 그대로 센다 (별도 계산 X) → 요약과 목록이 항상 일치
+        const assigned    = items.filter(i => i.status === "ASSIGNED").length;
+        const requesting  = items.filter(i => i.status === "PENDING").length;
+        const failed      = items.filter(i => i.status === "ESCALATED").length;
+        const needsRequest = items.filter(i => i.status === "CANCELLED").length;
+        // 실제 API와 동일: total = 취소 제외 잡 수 = 배정완료 + 요청중 + 실패, needsRequest는 CANCELLED 별도
+        const base = { total: assigned + requesting + failed, assigned, requesting, failed, needsRequest };
+        base.unassigned = base.total - base.assigned;
+        if (!withItems) { sendJson(res, 200, base); return; }
         sendJson(res, 200, {
           ...base,
           items,

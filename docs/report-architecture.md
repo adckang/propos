@@ -808,52 +808,56 @@ EventMatrixPanel과 FutureMatrixPanel이 공유하는 3-컬럼 행 포맷:
 ### 13-3. Template-F 구현체 — FutureMatrixPanel
 
 **파일:** `src/components/v2/reporting/FutureMatrixPanel.jsx`
-**적용:** FUTURE 기간 (`next_week`, `tomorrow`)
+**적용:** FUTURE 기간 (`next_week`, `tomorrow`) + ACTIVE 기간의 [예정] 구간 (`this_week`, `this_month`)
+**공유:** 같은 컴포넌트를 ListView와 **대시보드(현황 대시보드) "다음달" 탭**이 함께 쓴다 —
+`ReportPanel`이 `describePeriod(period).tense === 'future'`일 때 이 패널로 분기하고, `next_month`도 tense가 `future`다.
 
-> **현재 구현 범위:** 섹션 4의 날짜별 일정표 형식은 미구현 (iCal 연동 후 확장 예정).
-> 현재는 4개 KPI 행으로 구성된 운영 준비 현황 패널.
+> ⚠️ 이 섹션은 예전에 "기기 준비율 / 체류중 이상 감지 / 청소 할당율" 4개 행 구조로 적혀 있었으나,
+> 실제 구현은 그 구조로 만들어진 적 없이 청소 배정 중심의 8줄(체크인·체크아웃·배정4분류·공실·체류) 구조를 거쳐
+> 2026-09-24 하루 동안 네 번 수정 끝에 5줄+팝업 구조로 재구성됐다 (D-019). 옛 서술은 삭제, 아래가 현재 실제 구조.
 
-#### 4개 지표 행
+#### 5줄 구성 (D-019 — "한 화면에 너무 많이" 방지, 세부는 팝업)
 
-| # | 라벨 | 모드 | 데이터 소스 | 드릴다운 |
-|---|------|------|------------|---------|
-| 1 | 체크인 예정 | isCount | `stats.checkIns` (`/api/stats?period=`, iCal 기반) | — |
-| 2 | 기기 준비율 | ratio | `GET /api/ha/all-states` → `assessDeviceReadiness(states)` | 문제 기기 목록 (staticItems) |
-| 3 | 체류중 이상 감지 | isCount | `properties[]` prop → `getOccupancyIssues(properties)` | 이상 숙소 목록 (staticItems) |
-| 4 | 청소 할당율 | ratio | `GET /api/cleaning/stats?period=` → `cleaning_jobs` DB | (🔧 목록 API 미구현) |
+| # | 헤드라인 | 데이터 소스 | 누르면 뜨는 팝업 |
+|---|---------|------------|------------------|
+| 1 | 체크인 예정 N건 | `properties[].reservations` → `countWeekCheckIns` | — (클릭 없음) |
+| 2 | 퇴실예정 N건 | `properties[].reservations` → `countWeekCheckOuts` | — (클릭 없음, 청소 배정과 섞지 않음. 1·2는 각자 한 줄씩 순차적으로 — 나란히 아님) |
+| 3 | 배정완료 M건 | `GET /api/cleaning/stats?period=&items=true` → `assigned` | — (클릭 없음) |
+| 4 | 미배정 K건 (K>0이면 빨강) | 위와 동일, 아래 "청소 배정 값 재계산" 참고 | **배정 요청중 / 수동배정 필요** 2줄(배정완료는 3에서 이미 보이므로 팝업엔 없음) → 그중 하나를 또 누르면 팝업이 전환되어 숙소별 상세 목록 (`DrilldownSheet`, D-018 형식) |
+| 5 | 공실률 NN% | `properties[].reservations` → `getOccupancyForecast` (`vacancyRate`) | 체류 N건 · 공실 N건 (숙소 수, `occupiedRooms`/`vacantRooms`) |
 
-**데이터 소스 상세:**
+> 3·4(청소배정)는 1·2(예약 건수)와 **서로 다른 숫자일 수 있다** — 체크아웃은 예약(iCal) 기준,
+> 청소배정은 실제 `cleaning_jobs`가 만들어진 것만 세기 때문(아직 잡이 안 만들어진 체크아웃도 있음). 둘을 맞추지 않는다.
 
-| 지표 | 함수 / API | 집계 규칙 |
-|------|-----------|----------|
-| 체크인 예정 | `/api/stats?period=` → `stats.checkIns` | iCal 파싱 결과 |
-| 기기 준비율 | `assessDeviceReadiness(states[])` | HA entity state 중 offline > no_response > battery_low 우선순위로 문제 분류. ready = total - issues |
-| 체류중 이상 감지 | `getOccupancyIssues(properties[])` | `mainStatus === 'OCCUPIED'` + `ISSUE_AND_ENERGY / ISSUE_COMPLAINT / ENERGY_WASTE` 서브 상태 |
-| 청소 할당율 | `GET /api/cleaning/stats?period=` | `cleaning_jobs.checkout_at` 범위 쿼리. CANCELLED 제외. ASSIGNED+COMPLETED = 배정 완료 |
+**청소 배정 값 재계산 (`GET /api/cleaning/stats` 응답을 화면에서 다시 묶음):**
 
-**오류 상태:** 각 fetch 실패 시 해당 라벨에 `⚠️` suffix (`기기 준비율 ⚠️`, `청소 할당율 ⚠️`)
+| 화면 값 | 계산 |
+|---|---|
+| 배정완료 | `assigned` (ASSIGNED+COMPLETED, API가 이미 계산) |
+| 배정 요청중 | `requesting` (PENDING~BULK_REMINDED, API가 이미 계산) |
+| **수동배정 필요** | `needsRequest + failed` — "배정 요청 필요"(CANCELLED, D-017)와 "배정 실패"(ESCALATED)를 화면에서 합산. 운영자 입장에서 둘 다 사람이 직접 나서야 하는 것이라 헤드라인에서는 하나로 묶고, 상세 목록에서는 각자의 문장을 유지한다 |
+| 미배정 (헤드라인 값) | `수동배정 필요 + 배정 요청중` |
 
-**도메인 함수:**
+> D-017의 "배정 요청 필요"·"배정 실패"를 안 섞는다는 규칙은 **집계 로직(서버 쿼리)** 기준이며 그대로 유지된다.
+> 여기서 합치는 건 화면 헤드라인의 표시 방식일 뿐 — 상세 목록에서는 여전히 각자 다른 문장으로 구분된다.
 
-| 함수 | 파일 |
-|------|------|
-| `assessDeviceReadiness(states)` | `src/domain/futureReportDomain.js` |
-| `getOccupancyIssues(properties)` | `src/domain/futureReportDomain.js` |
-| `computeCleaningStats(jobs)` | `src/domain/cleaningStatsDomain.js` |
+**수동배정 필요 상세 목록:** `failedItems`(kind=`'failed'`) + `needsRequestItems`(kind=`'needsRequest'`)를 합쳐
+`buildMixedCleaningIssueRows(entries, now)` (`src/domain/violationDetailDomain.js`)로 급한(체크아웃이 가까운) 순 정렬.
+그리기는 D-018과 같은 `ViolationRow` (신호등 색, 등급 글자 없음).
 
-#### `computeCleaningStats()` 집계 규칙
+**배정 요청중 상세 목록:** 서버를 추가로 부르지 않고, `/api/cleaning/stats?items=true`가 이미 주는 `items`(전체 잡,
+상태 포함)를 `REQUESTING_STATUSES`(PENDING~BULK_REMINDED)로 걸러 `buildCleaningIssueRows('requesting', items, now)`
+로 만든다. `describeCleaningIssue('requesting', …)`는 **항상 회색(info)** — 아직 시스템이 정상 진행 중인 상태라 급함을
+표시하지 않는다. 줄 문장은 `cleaning_jobs.status` 코드를 그대로 보여주지 않고 "담당자를 찾고 있어요" 같은 문장으로
+옮긴다(`REQUESTING_STAGE_TEXT`, content-guide 내부 상태명 노출 금지 원칙).
 
-`cleaning_jobs.status` 기준:
+**보류된 것 — "입실예정" 클릭 시 기기 상태:** 제안은 됐으나 미구현 (D-019 참고).
+`assessDeviceReadiness(haStates, now)` (`src/domain/futureReportDomain.js`, 테스트 완료)와 `GET /api/ha/all-states`가
+이미 존재하지만 **현재 이 패널(또는 다른 어떤 화면)에도 연결돼 있지 않다.** 재검토 시 이 함수를 새로 만들 필요 없이 연결만 하면 된다.
 
-| 상태 | 분류 |
-|------|------|
-| `CANCELLED` | 제외 (total 미포함) |
-| `ASSIGNED`, `COMPLETED` | 배정 완료 (`assigned`) |
-| `PENDING`, `NOTIFYING_VIP_1/2/3`, `NOTIFYING_BULK`, `BULK_REMINDED`, `ESCALATED` | 미배정 (`unassigned`) |
-
-> 불변식: `total === assigned + unassigned` 항상 성립.
-
-**드릴다운 모드:** `DrilldownSheet` `staticItems` 모드 사용 (API fetch 없이 컴포넌트가 직접 items 전달)
+**드릴다운 모드:** `DrilldownSheet` `staticItems` 모드 (API fetch 없이 컴포넌트가 직접 items 전달). 미배정/공실률 팝업은
+`renderItem`에 `StatRow`(단순 라벨-값 줄, 클릭 가능한 항목만 다음 팝업으로 넘어가는 `›`) 를 넘겨 재사용한다 — 인라인
+펼침이 아니라 다른 모든 상세보기와 같은 팝업(딤 배경 + 바텀시트)이다.
 
 ---
 

@@ -462,10 +462,12 @@ async function getCleaningStats(req, res) {
         ORDER BY j.checkout_at`,
       baseVals
     ),
+    // cleaner_name: 배정완료 건을 "숙소별 청소 담당자" 목록으로 보여줄 때 씀 (대시보드 캘린더)
     db.query(
-      `SELECT j.property_id, j.checkout_at, j.status, p.name AS property_name
+      `SELECT j.property_id, j.checkout_at, j.status, p.name AS property_name, c.name AS cleaner_name
          FROM cleaning_jobs j
          LEFT JOIN property_cleaning_config p ON p.property_id = j.property_id
+         LEFT JOIN cleaners c ON c.id = j.assigned_cleaner_id
         WHERE ${itemWhere}
         ORDER BY j.checkout_at`,
       baseVals

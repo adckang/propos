@@ -238,34 +238,33 @@ function compareRows(a, b, recencyOf) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 /**
- * 청소 배정 문제 한 건의 화면 표시 값. 체크아웃이 24시간 이내면 빨강, 그 밖은 주황 (초록 없음).
+ * 청소 배정 문제(또는 진행 상태) 한 건의 화면 표시 값.
+ * failed/needsRequest 는 운영자가 직접 나서야 하는 건이라 체크아웃이 24시간 이내면 빨강, 그 밖은 주황(초록 없음).
+ * requesting 은 시스템이 아직 자동으로 진행 중인 정상 상태라 색을 매기지 않는다(회색·info) — 볼 건 있지만 급하진 않음.
  *
- * @param {'failed'|'needsRequest'} kind  failed=배정 실패(청소자를 못 구함), needsRequest=취소돼 다시 요청 필요
- * @param {{ checkout_at: any, updated_at?: any, notified_count?: number, declined_count?: number }} item
+ * @param {'failed'|'needsRequest'|'requesting'} kind
+ *   failed=배정 실패(청소자를 못 구함) · needsRequest=취소돼 다시 요청 필요 · requesting=자동 배정 요청 진행 중
+ * @param {{ checkout_at: any, updated_at?: any, notified_count?: number, declined_count?: number, status?: string }} item
  * @param {number} [now]
  * @returns {{ severity, text: string, when: string, sortKey: number }}  when = 체크아웃 시각 ("9/23(수) 11:00")
  */
 export function describeCleaningIssue(kind, item, now = Date.now()) {
   const checkoutMs = toMs(item?.checkout_at);
   const hoursLeft = checkoutMs != null ? (checkoutMs - now) / HOUR_MS : null;
+  const when = checkoutMs != null ? formatKstDayTime(checkoutMs) : '—';
+  const lead = hoursLeft != null ? `${describeCheckoutLead(hoursLeft, checkoutMs, now)} ` : '';
+  const sortKey = hoursLeft != null ? -hoursLeft : -Infinity; // 남은 시간이 짧을수록 큰 값 (급한 게 위로)
 
-  let severity = SEVERITY.CAUTION;
-  let sortKey = -Infinity;
-  if (hoursLeft != null) {
-    // 이미 지난 체크아웃(음수)도 가장 급하다
-    if (hoursLeft <= CHECKOUT_URGENCY_HOURS.severe) severity = SEVERITY.SEVERE;
-    sortKey = -hoursLeft; // 남은 시간이 짧을수록 큰 값
+  if (kind === 'requesting') {
+    return { severity: SEVERITY.INFO, text: `${lead}${describeRequesting(item)}`, when, sortKey };
   }
 
-  const problem = kind === 'failed' ? describeFailed(item) : describeCancelled(item, now);
-  const lead = hoursLeft != null ? `${describeCheckoutLead(hoursLeft, checkoutMs, now)} ` : '';
+  let severity = SEVERITY.CAUTION;
+  // 이미 지난 체크아웃(음수)도 가장 급하다
+  if (hoursLeft != null && hoursLeft <= CHECKOUT_URGENCY_HOURS.severe) severity = SEVERITY.SEVERE;
 
-  return {
-    severity,
-    text: `${lead}${problem}`,
-    when: checkoutMs != null ? formatKstDayTime(checkoutMs) : '—',
-    sortKey,
-  };
+  const problem = kind === 'failed' ? describeFailed(item) : describeCancelled(item, now);
+  return { severity, text: `${lead}${problem}`, when, sortKey };
 }
 
 /** "체크아웃이 5시간 뒤인데" / "체크아웃이 내일인데" / "체크아웃이 3일 뒤인데" / "체크아웃 시간이 3시간 지났는데" */
@@ -295,8 +294,34 @@ function describeCancelled(item, now) {
   return `취소된 청소를 다시 요청해야 해요 (${formatDuration((now - cancelledMs) / MIN_MS)} 전에 취소됨)`;
 }
 
+// cleaning_jobs.status 내부 코드를 그대로 보여주지 않고 단계를 문장으로 옮긴다 (content-guide 원칙: 내부 상태명 노출 금지)
+const REQUESTING_STAGE_TEXT = Object.freeze({
+  PENDING:          '담당자를 찾고 있어요',
+  NOTIFYING_VIP_1:  '우선순위 청소자에게 요청했어요',
+  NOTIFYING_VIP_2:  '우선순위 청소자에게 다시 요청했어요',
+  NOTIFYING_VIP_3:  '우선순위 청소자에게 재차 요청했어요',
+  NOTIFYING_BULK:   '전체 청소자에게 요청을 넓혔어요',
+  BULK_REMINDED:    '전체 청소자에게 다시 알렸어요',
+});
+
+function describeRequesting(item) {
+  return REQUESTING_STAGE_TEXT[item?.status] ?? '청소 배정을 요청하고 응답을 기다리고 있어요';
+}
+
 /** 청소 배정 문제 목록 행 — 체크아웃이 가까운 순 */
 export function buildCleaningIssueRows(kind, items, now = Date.now()) {
   const rows = (items ?? []).map(item => ({ item, view: describeCleaningIssue(kind, item, now) }));
   return rows.sort((a, b) => compareRows(a, b, () => 0)); // 남은 시간이 같으면 원래 순서 유지
+}
+
+/**
+ * "수동배정 필요" 목록 — 배정 실패(failed)와 배정 요청 필요(needsRequest)를 한 목록으로 합쳐
+ * 체크아웃이 가까운 순으로 정렬한다. 둘 다 "운영자가 직접 나서야 하는 건"이라 화면에서는 한 덩어리로
+ * 보여주고, 줄마다는 각자의 사정("사람을 못 구했어요" / "취소돼서 다시 요청해야 해요")을 그대로 보여준다.
+ *
+ * @param {Array<{ kind: 'failed'|'needsRequest', item: object }>} entries
+ */
+export function buildMixedCleaningIssueRows(entries, now = Date.now()) {
+  const rows = (entries ?? []).map(({ kind, item }) => ({ item, view: describeCleaningIssue(kind, item, now) }));
+  return rows.sort((a, b) => compareRows(a, b, () => 0));
 }
