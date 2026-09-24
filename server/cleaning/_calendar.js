@@ -1,7 +1,7 @@
 /**
  * Google Calendar 블로커 이벤트 관리.
  * Appointment Schedule 슬롯 제어: opaque 이벤트로 예약 불가 표시.
- * Vercel 라우팅에서 제외되는 _ 접두사 파일.
+ * Vercel 함수 수에 포함되지 않도록 server/ 아래에 둔다.
  */
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";

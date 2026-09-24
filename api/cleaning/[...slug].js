@@ -10,7 +10,7 @@ import {
   calcCleaningTimes,
   sendCompletionSmsToRest,
   postSlack,
-} from "./_dispatch.js";
+} from "../../server/cleaning/_dispatch.js";
 import {
   getGoogleToken,
   getGmailToken,
@@ -18,8 +18,8 @@ import {
   deleteBlockerEvent,
   getNextMonthDates,
   parseAllFutureCheckouts,
-} from "./_calendar.js";
-import { notify } from "./_notify.js";
+} from "../../server/cleaning/_calendar.js";
+import { notify } from "../../server/cleaning/_notify.js";
 import { periodToRemainingRange } from "../../src/domain/periodDomain.js";
 import { validatePropertyName } from "../../src/domain/propertyIdentityDomain.js";
 import { renamePropertyId, PropertyRenameError } from "../../src/infrastructure/propertyRenameRepository.js";

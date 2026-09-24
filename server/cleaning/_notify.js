@@ -1,5 +1,6 @@
 /**
  * NotificationService — 채널 선택 · 발송 · 기록 단일 진입점
+ * Vercel 함수 수에 포함되지 않도록 server/ 아래에 둔다.
  *
  * 채널 결정 우선순위:
  *   1. fcm_status='active' + fcm_token 있음  → FCM

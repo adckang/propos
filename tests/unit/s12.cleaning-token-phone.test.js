@@ -109,7 +109,7 @@ describe("toE164 — E.164 변환", () => {
 // ============================================================
 // calcCleaningTimes 경계값
 // ============================================================
-import { calcCleaningTimes } from "../../api/cleaning/_dispatch.js";
+import { calcCleaningTimes } from "../../server/cleaning/_dispatch.js";
 
 describe("calcCleaningTimes — 경계값", () => {
   test("반환값이 Date 객체", () => {

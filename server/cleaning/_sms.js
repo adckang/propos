@@ -1,4 +1,4 @@
-// SMS 발송 유틸 (android-sms-gateway)
+// SMS 발송 유틸 (android-sms-gateway, server 전용 모듈)
 // 환경변수: PROPOS_SMS_GW_ID, PROPOS_SMS_GW_PWD
 
 const GW_BASE = "https://api.sms-gate.app/3rdparty/v1";

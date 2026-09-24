@@ -1,6 +1,6 @@
 /**
  * 청소 알림 발송 공통 로직.
- * Vercel 라우팅에서 제외되는 _ 접두사 파일.
+ * Vercel 함수 수에 포함되지 않도록 server/ 아래에 둔다.
  */
 
 import { notify } from "./_notify.js";

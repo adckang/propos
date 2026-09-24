@@ -9,7 +9,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
-import { parseAllFutureCheckouts } from "../../api/cleaning/_calendar.js";
+import { parseAllFutureCheckouts } from "../../server/cleaning/_calendar.js";
 
 // ============================================================
 // parseAllFutureCheckouts — 오늘 이후 전체 추출

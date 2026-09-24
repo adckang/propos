@@ -8,6 +8,14 @@
   ],
   "rewrites": [
     {
+      "source": "/api/stats/calendar",
+      "destination": "/api/stats?slug=calendar"
+    },
+    {
+      "source": "/api/stats/drilldown",
+      "destination": "/api/stats?slug=drilldown"
+    },
+    {
       "source": "/api/c/:id",
       "destination": "/api/cleaning/c?id=:id&slug=c"
     },

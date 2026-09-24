@@ -400,7 +400,7 @@ describe('타임라인 위치 → 레포트 기간 배선', () => {
   });
 
   test('실패 상세 API: 과거 주/일 기간을 받아들인다', () => {
-    assert.match(read('api/stats/drilldown.js'), /describePeriod\(period\)/);
+    assert.match(read('api/stats.js'), /describePeriod\(period\)/);
   });
 
   test('서버 청소 지표: 미래 판정은 하드코딩 목록이 아니라 기간 시제', () => {

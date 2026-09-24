@@ -5,8 +5,8 @@
 
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { selectChannel } from "../../api/cleaning/_notify.js";
-import { toE164 } from "../../api/cleaning/_sms.js";
+import { selectChannel } from "../../server/cleaning/_notify.js";
+import { toE164 } from "../../server/cleaning/_sms.js";
 
 describe("NotificationService — 채널 선택", () => {
   test("fcm_status=active + fcm_token 있음 → FCM", () => {

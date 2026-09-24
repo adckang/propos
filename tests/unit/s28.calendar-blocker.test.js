@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import {
   getNextMonthDates,
   parseCheckoutsFromIcal,
-} from "../../api/cleaning/_calendar.js";
+} from "../../server/cleaning/_calendar.js";
 
 // ============================================================
 // getNextMonthDates — 다음 달 날짜 목록

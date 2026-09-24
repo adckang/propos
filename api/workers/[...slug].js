@@ -7,7 +7,7 @@
  */
 
 import { Pool } from "pg";
-import { postSlack } from "../cleaning/_dispatch.js";
+import { postSlack } from "../../server/cleaning/_dispatch.js";
 
 const db = new Pool({ connectionString: process.env.POSTGRES_URL });
 

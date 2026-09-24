@@ -1,5 +1,5 @@
 /**
- * FCM 푸시 발송 유틸리티 (sendSms 대체)
+ * FCM 푸시 발송 유틸리티 (sendSms 대체, server 전용 모듈)
  * 환경변수: FIREBASE_SERVICE_ACCOUNT_JSON (서비스 계정 키 전체 JSON 문자열)
  */
 

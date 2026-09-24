@@ -11,8 +11,8 @@ import {
   calcCleaningTimes,
   postSlack,
   getPropertyConfig,
-} from "../cleaning/_dispatch.js";
-import { notify } from "../cleaning/_notify.js";
+} from "../../server/cleaning/_dispatch.js";
+import { notify } from "../../server/cleaning/_notify.js";
 import {
   getGoogleToken,
   getGmailToken,
@@ -20,7 +20,7 @@ import {
   deleteBlockerEvent,
   getNextMonthDates,
   parseCheckoutsFromIcal,
-} from "../cleaning/_calendar.js";
+} from "../../server/cleaning/_calendar.js";
 import { getStatsForPeriod } from "../../src/application/reportingService.js";
 import { countPeriodEvents } from "../../src/domain/reportingDomain.js";
 import { queryEvents } from "../../src/infrastructure/eventRepository.js";

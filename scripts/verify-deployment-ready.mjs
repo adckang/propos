@@ -13,6 +13,13 @@ function repoFileExists(relativePath) {
   return fs.existsSync(path.join(repoRoot, relativePath));
 }
 
+function listFiles(directory) {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const fullPath = path.join(directory, entry.name);
+    return entry.isDirectory() ? listFiles(fullPath) : [fullPath];
+  });
+}
+
 function assert(condition, message, errors) {
   if (!condition) {
     errors.push(message);
@@ -34,6 +41,16 @@ const hasSpaRewrite = Array.isArray(vercelConfig.rewrites) && vercelConfig.rewri
 ));
 assert(hasSpaRewrite, "[verify:deploy] vercel.json must rewrite SPA routes to /index.html.", errors);
 
+for (const [source, slug] of [
+  ["/api/stats/calendar", "calendar"],
+  ["/api/stats/drilldown", "drilldown"],
+]) {
+  const hasStatsRewrite = vercelConfig.rewrites.some(rule => (
+    rule?.source === source && rule?.destination === `/api/stats?slug=${slug}`
+  ));
+  assert(hasStatsRewrite, `[verify:deploy] vercel.json must route ${source} through api/stats.js.`, errors);
+}
+
 const hasNoStoreHeader = Array.isArray(vercelConfig.headers) && vercelConfig.headers.some(entry => (
   entry?.source === "/api/ha/:path*" &&
   Array.isArray(entry.headers) &&
@@ -49,10 +66,14 @@ const hasIcalNoStoreHeader = Array.isArray(vercelConfig.headers) && vercelConfig
 assert(hasIcalNoStoreHeader, "[verify:deploy] vercel.json must set Cache-Control: no-store for /api/ical.", errors);
 
 for (const file of [
-  "api/ha/service.js",
-  "api/ha/state.js",
-  "api/ha/states.js",
+  "api/ha/[...slug].js",
+  "api/stats.js",
   "api/ical.js",
+  "server/cleaning/_calendar.js",
+  "server/cleaning/_dispatch.js",
+  "server/cleaning/_notify.js",
+  "server/cleaning/_push.js",
+  "server/cleaning/_sms.js",
   "server/haProxy.js",
   "server/haApiHandlers.js",
   "server/icalProxy.js",
@@ -60,6 +81,14 @@ for (const file of [
 ]) {
   assert(repoFileExists(file), `[verify:deploy] Missing deployment file: ${file}`, errors);
 }
+
+const apiFunctionFiles = listFiles(path.join(repoRoot, "api"))
+  .filter((file) => /\.(?:js|mjs|cjs|ts)$/.test(file));
+assert(
+  apiFunctionFiles.length <= 12,
+  `[verify:deploy] Vercel Hobby allows at most 12 functions; found ${apiFunctionFiles.length}.`,
+  errors,
+);
 
 for (const envKey of ["PROPOS_HA_BASE_URL", "PROPOS_HA_WS_URL", "PROPOS_HA_TOKEN"]) {
   assert(privateConfigSource.includes(envKey), `[verify:deploy] privateConfig.js must reference ${envKey}.`, errors);

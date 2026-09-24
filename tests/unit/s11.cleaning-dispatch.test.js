@@ -18,7 +18,7 @@ import {
   calcCleaningTimes,
   createNotif,
   advanceJob,
-} from "../../api/cleaning/_dispatch.js";
+} from "../../server/cleaning/_dispatch.js";
 
 // ============================================================
 // calcCleaningTimes
@@ -444,7 +444,7 @@ describe("sendCompletionSmsToRest — FCM 전환 후 메시지 내용", () => {
 // ============================================================
 describe("CANCELLED 상태 — 청소자 충돌 체크에서 제외 (소스코드 확인)", () => {
   const dispatchSrc = readFileSync(
-    fileURLToPath(new URL("../../api/cleaning/_dispatch.js", import.meta.url)),
+    fileURLToPath(new URL("../../server/cleaning/_dispatch.js", import.meta.url)),
     "utf8"
   );
 
