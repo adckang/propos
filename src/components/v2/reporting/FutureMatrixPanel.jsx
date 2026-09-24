@@ -11,6 +11,10 @@
  * 데이터 소스:
  *   체크인/아웃, 공실/체류 → properties[].reservations (gantt와 동일)
  *   청소 배정 4분류 → /api/cleaning/stats?period=&items=true (DB)
+ *
+ * 배정 실패 / 배정 요청 필요 건수를 누르면 뜨는 목록은 체크아웃이 가까운(급한) 건이 위로 오게 정렬하고,
+ * 줄마다 "체크아웃까지 남은 시간 · 청소자 요청/거절 현황 · 취소 경과"를 구어체 한 줄로 알려준다 (violationDetailDomain).
+ * 급한 정도는 글자 없이 줄 색(빨강/주황/초록)으로만 알린다.
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -21,6 +25,9 @@ import {
   getOccupancyForecast,
 } from '../../../domain/futureWeekDomain.js';
 import DrilldownSheet from './DrilldownSheet.jsx';
+import ViolationRow from './ViolationRow.jsx';
+import { resolvePropertyName } from '../../../domain/propertyNameDomain.js';
+import { buildCleaningIssueRows } from '../../../domain/violationDetailDomain.js';
 
 // ── 스타일 상수 ──────────────────────────────────────────────────────────────
 const ROW_BASE = {
@@ -62,23 +69,8 @@ function Row({ label, value, red = false, gray = false, last = false, onClick })
   );
 }
 
-function CleaningItem({ item }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #f1f5f9' }}>
-      <span style={{ flex: 1 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', display: 'block' }}>
-          {item.property_name ?? item.property_id}
-        </span>
-      </span>
-      <span style={{ fontSize: 11, color: '#94a3b8', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
-        {(item.checkout_at ?? '').slice(0, 10)}
-      </span>
-    </div>
-  );
-}
-
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
-export default function FutureMatrixPanel({ stats, period, properties = [], propertyIds = null, isMobile = false }) {
+export default function FutureMatrixPanel({ stats, period, properties = [], propertyIds = null, isMobile = false, onSelectRoom }) {
   const [cleaningStats,   setCleaningStats]   = useState(null);
   const [cleaningLoading, setCleaningLoading] = useState(true);
   const [cleaningError,   setCleaningError]   = useState(false);
@@ -142,9 +134,14 @@ export default function FutureMatrixPanel({ stats, period, properties = [], prop
   const needsReqClickable = !cleaningLoading && !cleaningError && (csNeedsReq ?? 0) > 0;
   const failedClickable   = !cleaningLoading && !cleaningError && (csFailed ?? 0) > 0;
 
-  const drilldownItems = drilldown === 'failed'
-    ? (cleaningStats?.failedItems ?? [])
-    : (cleaningStats?.needsRequestItems ?? []);
+  // 급한 건이 위로 (체크아웃이 가까운 순) 정렬된 행
+  const drilldownRows = drilldown
+    ? buildCleaningIssueRows(
+        drilldown,
+        drilldown === 'failed' ? (cleaningStats?.failedItems ?? []) : (cleaningStats?.needsRequestItems ?? []),
+        Date.now(),
+      )
+    : [];
   const drilldownLabel = drilldown === 'failed' ? '배정 실패' : '배정 요청 필요';
 
   const pad = isMobile ? '10px 12px' : '14px 20px';
@@ -196,8 +193,19 @@ export default function FutureMatrixPanel({ stats, period, properties = [], prop
       {drilldown && (
         <DrilldownSheet
           metricLabel={drilldownLabel}
-          staticItems={drilldownItems}
-          renderItem={(item) => <CleaningItem key={item.property_id} item={item} />}
+          staticItems={drilldownRows}
+          renderItem={({ item, view }) => (
+            <ViolationRow
+              key={`${item.property_id}-${item.checkout_at}`}
+              name={resolvePropertyName(properties, item.property_id, item.property_name)}
+              view={view}
+              dateLabel={view.when}
+              onClick={() => {
+                setDrilldown(null);
+                onSelectRoom?.(item.property_id);
+              }}
+            />
+          )}
           emptyMessage="해당 건 없음"
           emptyIcon="✅"
           onClose={() => setDrilldown(null)}

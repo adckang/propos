@@ -432,28 +432,56 @@ async function getCleaningStats(req, res) {
   }
 
   // items=true: 드릴다운용 개별 잡 목록 포함
-  const [failedResult, needsRequestResult] = await Promise.all([
+  let itemWhere = "j.checkout_at >= $1 AND j.checkout_at < $2";
+  if (filterIds) itemWhere += " AND j.property_id = ANY($3::text[])";
+  const [failedResult, needsRequestResult, itemResult] = await Promise.all([
+    // 배정 실패: 청소자에게 몇 번 요청했고 몇 명이 거절했는지까지 (목록에서 "요청 5명 · 거절 2명 · 무응답 3명")
     db.query(
-      `SELECT j.property_id, j.checkout_at, p.name AS property_name
-       FROM cleaning_jobs j
-       LEFT JOIN property_cleaning_config p ON p.property_id = j.property_id
-       WHERE ${baseWhere} AND j.status = 'ESCALATED'
-       ORDER BY j.checkout_at`,
+      `SELECT j.property_id, j.checkout_at, j.updated_at, p.name AS property_name,
+              COALESCE(n.notified_count, 0) AS notified_count,
+              COALESCE(n.declined_count, 0) AS declined_count
+         FROM cleaning_jobs j
+         LEFT JOIN property_cleaning_config p ON p.property_id = j.property_id
+         LEFT JOIN (
+           SELECT job_id,
+                  COUNT(*) AS notified_count,
+                  COUNT(*) FILTER (WHERE response IN ('DECLINED','DECLINED_AFTER_ASSIGNED')) AS declined_count
+             FROM cleaning_notifs
+            GROUP BY job_id
+         ) n ON n.job_id = j.id
+        WHERE ${itemWhere} AND j.status = 'ESCALATED'
+        ORDER BY j.checkout_at`,
+      baseVals
+    ),
+    // 배정 요청 필요(취소된 청소): 언제 취소됐는지(updated_at)
+    db.query(
+      `SELECT j.property_id, j.checkout_at, j.updated_at, p.name AS property_name
+         FROM cleaning_jobs j
+         LEFT JOIN property_cleaning_config p ON p.property_id = j.property_id
+        WHERE ${itemWhere} AND j.status = 'CANCELLED'
+        ORDER BY j.checkout_at`,
       baseVals
     ),
     db.query(
-      `SELECT j.property_id, j.checkout_at, p.name AS property_name
-       FROM cleaning_jobs j
-       LEFT JOIN property_cleaning_config p ON p.property_id = j.property_id
-       WHERE ${baseWhere} AND j.status = 'CANCELLED'
-       ORDER BY j.checkout_at`,
+      `SELECT j.property_id, j.checkout_at, j.status, p.name AS property_name
+         FROM cleaning_jobs j
+         LEFT JOIN property_cleaning_config p ON p.property_id = j.property_id
+        WHERE ${itemWhere}
+        ORDER BY j.checkout_at`,
       baseVals
     ),
   ]);
+  const items = itemResult.rows;
 
   return sendJson(res, 200, {
     total, assigned, requesting, failed, needsRequest, unassigned: total - assigned,
-    failedItems:      failedResult.rows,
+    items,
+    // COUNT(*) 는 pg 가 문자열로 돌려주므로 숫자로 바꿔 보낸다
+    failedItems:       failedResult.rows.map(r => ({
+      ...r,
+      notified_count: Number(r.notified_count) || 0,
+      declined_count: Number(r.declined_count) || 0,
+    })),
     needsRequestItems: needsRequestResult.rows,
   });
 }

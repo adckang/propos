@@ -337,7 +337,7 @@ async function handleCleaningFollowup(db, res) {
     `SELECT j.id, j.property_id, j.cleaning_start_at
      FROM cleaning_jobs j
      JOIN LATERAL (
-       SELECT MIN(sent_at) AS first_sent FROM cleaning_notifs WHERE job_id = j.id
+       SELECT MIN(sent_at) AS first_sent FROM cleaning_notifs WHERE job_id = j.id AND tier = 'BULK'
      ) n ON true
      WHERE j.status IN ('NOTIFYING_BULK','BULK_REMINDED')
        AND n.first_sent < NOW() - INTERVAL '3 hours'`
@@ -465,6 +465,40 @@ export default async function handler(req, res) {
           }
         } catch (e) {
           console.error("[morning] Gmail Watch 갱신 실패:", e.message);
+        }
+
+        // Calendar Watch 7일 만료 → 매주 월요일 자동 갱신 (GAP-001 fix)
+        try {
+          const CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
+          const { rows: calProps } = await db.query(
+            `SELECT DISTINCT google_calendar_id FROM property_cleaning_config WHERE google_calendar_id IS NOT NULL`
+          );
+          if (calProps.length) {
+            const calToken = await getGoogleToken();
+            const webhookUrl = `${DASHBOARD_URL}/api/cleaning/calendar-webhook`;
+            const calSecret = process.env.GOOGLE_WEBHOOK_SECRET ?? "";
+            let calWatchCount = 0;
+            for (const { google_calendar_id: calId } of calProps) {
+              const channelId = `propos-cal-${calId.replace(/[^a-z0-9]/gi, "-")}-${Date.now()}`;
+              const r = await fetch(
+                `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(calId)}/events/watch`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", Authorization: `Bearer ${calToken}` },
+                  body: JSON.stringify({
+                    id: channelId, type: "web_hook", address: webhookUrl,
+                    token: calSecret, params: { ttl: "604800" },
+                  }),
+                }
+              );
+              if (r.ok) calWatchCount++;
+            }
+            await postSlack(`[PROPOS] 📅 Calendar Watch 자동 갱신 완료 (${calWatchCount}/${calProps.length}개 캘린더)`);
+            ran.push("calendar-watch-renewed");
+          }
+        } catch (e) {
+          console.error("[morning] Calendar Watch 갱신 실패:", e.message);
+          await postSlack(`[PROPOS] ⚠️ Calendar Watch 갱신 실패: ${e.message}`).catch(() => {});
         }
       }
 

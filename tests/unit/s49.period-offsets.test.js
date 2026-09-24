@@ -429,9 +429,13 @@ describe('청소 취소 → "배정 요청 필요"', () => {
 
   test('취소된 건은 "배정 요청 필요" 상세 목록에도 나온다', () => {
     const src = read('api/cleaning/[...slug].js');
-    const start = src.indexOf('needsRequestResult');
-    assert.ok(start > 0);
-    assert.match(src.slice(start, start + 600), /j\.status = 'CANCELLED'/);
+    // [failedResult, needsRequestResult, itemResult] = Promise.all([쿼리1, 쿼리2, 쿼리3]) — 두 번째 쿼리가 취소 건
+    const start = src.indexOf('const [failedResult, needsRequestResult, itemResult] = await Promise.all([');
+    assert.ok(start > 0, 'Promise.all 구조를 찾지 못함');
+    const queries = src.slice(start).split('db.query(').slice(1, 4);
+    assert.equal(queries.length, 3);
+    assert.match(queries[0], /j\.status = 'ESCALATED'/, '첫 번째(failedResult)는 배정 실패');
+    assert.match(queries[1], /j\.status = 'CANCELLED'/, '두 번째(needsRequestResult)는 취소 = 배정 요청 필요');
   });
 
   test('진행 상태(배정 요청중)에는 취소 건을 섞지 않는다', () => {

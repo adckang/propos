@@ -14,9 +14,10 @@
 import { Pool } from "pg";
 import { getDrilldownForMetric } from "../../src/application/reportingService.js";
 import { describePeriod } from "../../src/domain/periodDomain.js";
+import { parsePropertyIds } from "../../src/application/statsQueryParser.js";
 
 const VALID_PERIODS = [
-  "yesterday", "last_hour", "last_week", "last_month",
+  "yesterday", "last_hour", "last_week", "last_month", "this_month",
 ];
 
 // 과거 주/일 기간(2주 전, 3일 전 …)의 실패 목록도 볼 수 있어야 한다
@@ -49,7 +50,10 @@ export default async function handler(req, res) {
 
   const db = new Pool({ connectionString: process.env.POSTGRES_URL });
   try {
-    const result = await getDrilldownForMetric(metric, period, { db });
+    const result = await getDrilldownForMetric(metric, period, {
+      db,
+      propertyIds: parsePropertyIds(req.query),
+    });
     return res.status(200).json(result);
   } catch (err) {
     console.error("[api/stats/drilldown] error:", err);

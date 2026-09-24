@@ -38,7 +38,7 @@ Postgres 저장 후 어느 단계가 실패해도 재처리 가능하다.
 ```sql
 CREATE TABLE events (
   id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  property_id   TEXT        NOT NULL,
+  property_id   TEXT        NOT NULL,  -- 숙소 표시 이름 (D-016)
   type          TEXT        NOT NULL,
   is_soft       BOOLEAN     NOT NULL DEFAULT false,
   device_time   TIMESTAMPTZ NOT NULL,
@@ -241,23 +241,33 @@ startup → eventQueue.ndjson 읽기 → 미완료 이벤트 복원
 
 ### 7-2. 읽기 전략
 
+**현재 상태 레포트(`now` / `today`)는 KV를 읽지 않는다.** Postgres 이벤트 기록에서 직접 계산한다.
+
 ```
-KV GET state:{property_id}
-├─ 캐시 hit  → 즉시 반환
-└─ 캐시 miss → Postgres 쿼리 → KV SET (TTL 5분) → 반환
+숙소마다 "마지막 큰 상태 변화"(체크인·체크아웃·청소 시작·청소 완료)를 찾고,
+그 뒤의 세부 이벤트(민원·에너지 낭비·입실 준비)를 상태 규칙(room-state-machine)에 순서대로 적용
+→ 숙소 여러 곳도 한 번의 질의 (getLastKnownStatesFromDB / roomStateFromEventsDomain)
 ```
 
-명시적 동기화 코드 없음. TTL 만료가 자동 갱신 트리거.
+이유: KV `state:{property_id}`는 TTL 5분이라 그 뒤 숙소가 결과에서 통째로 빠졌고(전체 조회는 KV에 남은 키만 셌다),
+민원·에너지 낭비 이벤트는 캐시를 삭제만 해서 "이상 N건"이 항상 0이었으며, 입실 준비는 저장 자체가 안 됐다.
+아침 브리핑(Slack)·현재 상태 화면이 모두 이 계산을 쓴다. 300숙소 × 6만 이벤트 기준 약 50ms(실제 Postgres 엔진 검증).
 
-### 7-3. KV 완전 초기화 복구
+`state:{property_id}` 쓰기(이벤트 수신 파이프라인)는 남아 있지만 현재는 읽는 곳이 없다 — 정리 후보.
 
-KV가 날아가도 Postgres의 최신 이벤트에서 현재 상태 재건 가능:
+### 7-3. 상태 재건 규칙
+
+기록만 있으면 언제든 현재 상태를 다시 계산할 수 있다 (KV 초기화 여부와 무관):
 
 ```sql
-SELECT type, device_time FROM events
-WHERE property_id = $1
-ORDER BY device_time DESC LIMIT 1;
+-- 숙소별 마지막 큰 상태 변화 + 그 이후 세부 이벤트 (요약)
+SELECT DISTINCT ON (property_id) property_id, type, device_time
+  FROM events WHERE type IN ('check_in_detected','check_out_detected','cleaning_started','cleaning_finished')
+ ORDER BY property_id, device_time DESC;
 ```
+
+주의: 기록이 하나도 없는 숙소(새로 등록해 이벤트가 아직 없음)는 "상태를 알 수 없어" 현재 상태 집계에 잡히지 않는다.
+체크아웃 이벤트가 오지 않으면(센서·Pi 오프라인) 마지막 상태가 그대로 유지된다.
 
 ---
 

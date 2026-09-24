@@ -6,9 +6,16 @@
  *   period      — 기간 키
  *   onClose     — 닫기 콜백
  *   onSelectRoom — (property_id) => void  숙소 선택 콜백
+ *   properties  — 화면의 숙소 목록. 항목의 property_id 를 리스트 화면과 같은 숙소 이름으로 바꿔 표시
+ *
+ * async 모드의 각 줄은 [숙소 이름] [무슨 문제가 어떻게 있었는지 구어체 한 줄] [시간] — 심각도는 줄 색으로만 알리고
+ * 심한 건이 위로 오게 정렬한다 (계산: violationDetailDomain, 그리기: ViolationRow).
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { resolvePropertyName } from '../../../domain/propertyNameDomain.js';
+import { buildViolationRows, formatKstDateTime } from '../../../domain/violationDetailDomain.js';
+import ViolationRow from './ViolationRow.jsx';
 
 const METRIC_LABELS = {
   cleaning_time:          '청소 시간 초과',
@@ -18,62 +25,6 @@ const METRIC_LABELS = {
   post_cleaning_security: '청소후 보안 위반',
   pre_stay_optimization:  '입실전 최적화 미완료',
 };
-
-function formatDate(raw) {
-  if (!raw) return '—';
-  const d = new Date(raw);
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mi = String(d.getMinutes()).padStart(2, '0');
-  return `${mm}/${dd} ${hh}:${mi}`;
-}
-
-function formatDetail(metric, detail) {
-  if (metric === 'cleaning_time' && detail?.duration_hours != null) {
-    const totalMin = Math.round(detail.duration_hours * 60);
-    const h = Math.floor(totalMin / 60);
-    const m = totalMin % 60;
-    return `${h}시간 ${m}분 소요`;
-  }
-  return null;
-}
-
-function FailItem({ item, metric, onSelect }) {
-  const detail = formatDetail(metric, item.detail);
-  return (
-    <button
-      onClick={() => onSelect(item.property_id)}
-      style={{
-        width: '100%', display: 'flex', alignItems: 'center',
-        padding: '11px 16px', background: 'none', border: 'none',
-        borderBottom: '1px solid #f1f5f9', cursor: 'pointer',
-        fontFamily: 'inherit', textAlign: 'left',
-      }}
-    >
-      <span style={{
-        fontSize: 16, marginRight: 10,
-        background: '#fee2e2', borderRadius: '50%',
-        width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0,
-      }}>❌</span>
-      <span style={{ flex: 1 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', display: 'block' }}>
-          {item.property_id}
-        </span>
-        {detail && (
-          <span style={{ fontSize: 11, color: '#dc2626', marginTop: 1, display: 'block' }}>
-            {detail}
-          </span>
-        )}
-      </span>
-      <span style={{ fontSize: 11, color: '#94a3b8', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
-        {formatDate(item.occurred_at)}
-      </span>
-      <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 8 }}>›</span>
-    </button>
-  );
-}
 
 /**
  * DrilldownSheet — 두 가지 모드로 사용:
@@ -90,7 +41,7 @@ function FailItem({ item, metric, onSelect }) {
  */
 export default function DrilldownSheet({
   // async 모드
-  metric, metricLabel, period, onSelectRoom,
+  metric, metricLabel, period, propertyIds, onSelectRoom, properties = [],
   // static 모드
   staticItems, renderItem, staticLoading = false, staticError = false,
   emptyMessage = '실패 건 없음', emptyIcon = '✅',
@@ -98,6 +49,7 @@ export default function DrilldownSheet({
   onClose,
 }) {
   const isStatic = staticItems !== undefined;
+  const idsKey = Array.isArray(propertyIds) ? propertyIds.join(',') : '';
 
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(!isStatic);
@@ -109,11 +61,15 @@ export default function DrilldownSheet({
     setLoading(true);
     setData(null);
     setError(false);
-    fetch(`/api/stats/drilldown?period=${period}&metric=${metric}`)
+    const params = new URLSearchParams({ period, metric });
+    if (Array.isArray(propertyIds) && propertyIds.length > 0) {
+      params.set('property_ids', propertyIds.join(','));
+    }
+    fetch(`/api/stats/drilldown?${params}`)
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(d => { setData(d); setLoading(false); })
       .catch(() => { setError(true); setLoading(false); });
-  }, [metric, period, isStatic]);
+  }, [metric, period, isStatic, idsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const title = isStatic
     ? (metricLabel ?? '')
@@ -122,6 +78,12 @@ export default function DrilldownSheet({
   const activeLoading = isStatic ? staticLoading : loading;
   const activeError   = isStatic ? staticError   : error;
   const activeItems   = isStatic ? (staticItems ?? []) : (data?.items ?? []);
+
+  // async 모드: 항목마다 문장·심각도를 계산해 심한 건이 위로 오게 정렬 (데이터가 바뀔 때만 다시 계산)
+  const violationRows = useMemo(
+    () => (isStatic ? [] : buildViolationRows(metric, data?.items ?? [], Date.now())),
+    [isStatic, metric, data],
+  );
 
   return (
     <>
@@ -159,6 +121,7 @@ export default function DrilldownSheet({
                 실패 {data.failCount}건
               </div>
             )}
+
           </div>
           <button
             onClick={onClose}
@@ -197,20 +160,21 @@ export default function DrilldownSheet({
             </div>
           )}
 
-          {!activeLoading && !activeError && activeItems.map((item, i) =>
+          {!activeLoading && !activeError && (
             renderItem
-              ? renderItem(item, i)
-              : (
-                <FailItem
-                  key={i}
-                  item={item}
-                  metric={metric}
-                  onSelect={(propertyId) => {
+              ? activeItems.map((item, i) => renderItem(item, i))
+              : violationRows.map(({ item, view }, i) => (
+                <ViolationRow
+                  key={`${item.property_id}-${item.occurred_at}-${i}`}
+                  name={resolvePropertyName(properties, item.property_id)}
+                  view={view}
+                  dateLabel={formatKstDateTime(item.occurred_at)}
+                  onClick={() => {
                     onClose();
-                    onSelectRoom?.(propertyId);
+                    onSelectRoom?.(item.property_id);
                   }}
                 />
-              )
+              ))
           )}
         </div>
       </div>

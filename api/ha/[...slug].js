@@ -2,16 +2,18 @@ import {
   handleVercelService,
   handleVercelState,
   handleVercelStates,
+  handleVercelAllStates,
   handleVercelHistory,
   handleVercelTemplate,
 } from "../../server/haApiHandlers.js";
 
 const HANDLERS = {
-  service:  handleVercelService,
-  state:    handleVercelState,
-  states:   handleVercelStates,
-  history:  handleVercelHistory,
-  template: handleVercelTemplate,
+  service:    handleVercelService,
+  state:      handleVercelState,
+  states:     handleVercelStates,
+  'all-states': handleVercelAllStates,
+  history:    handleVercelHistory,
+  template:   handleVercelTemplate,
 };
 
 export default async function handler(req, res) {

@@ -10,7 +10,7 @@ import { useState } from 'react';
 const URGENT_PHRASES = ['이상감지', '이상 징후', '바로 확인'];
 
 function isUrgent(text) {
-  return URGENT_PHRASES.some(p => text.includes(p));
+  return URGENT_PHRASES.some(p => text.includes(p)) || /운영 문제 [1-9]\d*건/.test(text);
 }
 
 export default function SummaryBanner({ summary, loading, isMobile = false, children }) {

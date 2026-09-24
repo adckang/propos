@@ -96,6 +96,13 @@ export async function getHaHistoryFull(entityId, startIso) {
   return Array.isArray(data) && Array.isArray(data[0]) ? data[0] : [];
 }
 
+export async function getHaAllStates() {
+  const response = await fetch(`${HA_BASE}/api/states`, { headers: getHeaders() });
+  if (!response.ok) return [];
+  const data = await parseJsonSafe(response);
+  return Array.isArray(data) ? data : [];
+}
+
 export async function getHaStates(entityIds) {
   if (!Array.isArray(entityIds)) {
     throw new Error("entityIds must be an array");

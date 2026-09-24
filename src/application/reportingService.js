@@ -2,11 +2,14 @@ import { getPeriodRange, countCurrentStats, countPeriodEvents } from "../domain/
 import { describePeriod } from "../domain/periodDomain.js";
 import {
   detectCleaningTimeFailures,
-  detectEventTypeFailures,
   detectPreStayOptimizationFailures,
+  detectVacantEnergyFailures,
+  detectPostCheckoutFailures,
+  detectPostCleaningFailures,
 } from "../domain/metricDrilldownDomain.js";
-import { queryEvents, getLastKnownStatesFromDB } from "../infrastructure/eventRepository.js";
-import { queryCleaningJobCounts } from "../infrastructure/cleaningJobRepository.js";
+import { queryEvents, getLastKnownStatesFromDB, queryStateEventsForProperty } from "../infrastructure/eventRepository.js";
+import { queryCleaningJobCounts, queryCleaningIssueItems } from "../infrastructure/cleaningJobRepository.js";
+import { buildIssueItems, buildStateSegmentsFromEvents, groupIssueItemsByKstDate } from "../domain/monthlyCalendarDomain.js";
 
 // content-guide.md 규칙 준수: 한 문장에 숫자 최대 2개, 내부 상태명 노출 금지
 
@@ -147,7 +150,7 @@ export async function getStatsForPeriod(period, { db, propertyIds = null, now = 
     return { period, stats, summary };
   }
 
-  const range = getPeriodRange(period);
+  const range = getPeriodRange(period, now);
   const events = await queryEvents(db, range, propertyIds);
   const stats = countPeriodEvents(events);
   await injectCleaningMetrics(stats, { db, events, range, propertyIds, period, now });
@@ -160,13 +163,49 @@ export async function getStatsForPeriod(period, { db, propertyIds = null, now = 
   };
 }
 
+/** 월간 캘린더의 날짜별 문제 이력과 단일 숙소 상태 구간. */
+export async function getMonthlyCalendarData(period, { db, propertyIds = null, now = new Date() }) {
+  const desc = describePeriod(period);
+  if (desc?.unit !== 'month') throw new Error(`monthly period required: "${period}"`);
+
+  const range = getPeriodRange(period, now);
+  const events = await queryEvents(db, range, propertyIds);
+
+  let cleaningIssues = [];
+  try {
+    cleaningIssues = await queryCleaningIssueItems(db, range, propertyIds, now);
+  } catch (err) {
+    console.error('[reportingService] 월간 cleaning_jobs 조회 실패:', err?.message ?? err);
+  }
+
+  const items = buildIssueItems(events, cleaningIssues);
+  let stateSegments = [];
+  if (Array.isArray(propertyIds) && propertyIds.length === 1) {
+    const stateEvents = await queryStateEventsForProperty(db, range, propertyIds[0]);
+    stateSegments = buildStateSegmentsFromEvents(stateEvents, range, now);
+  }
+
+  return {
+    period,
+    range: { from: range.from.toISOString(), to: range.to.toISOString() },
+    days: groupIssueItemsByKstDate(items),
+    items,
+    stateSegments: stateSegments.map(segment => ({
+      ...segment,
+      start: segment.start.toISOString(),
+      end: segment.end.toISOString(),
+    })),
+  };
+}
+
 // metric key → 감지 함수 매핑
 const METRIC_DETECTORS = {
   cleaning_time:          (events) => detectCleaningTimeFailures(events),
-  post_checkout_energy:   (events) => detectEventTypeFailures(events, "post_checkout_energy_waste_detected"),
-  post_checkout_security: (events) => detectEventTypeFailures(events, "post_checkout_security_breach_detected"),
-  vacant_energy:          (events) => detectEventTypeFailures(events, "vacant_energy_waste_detected"),
-  post_cleaning_security: (events) => detectEventTypeFailures(events, "post_cleaning_security_breach_detected"),
+  // 아래 4개는 "얼마나 심했는지"를 화면이 숫자로 보여줄 수 있도록 앞뒤 이벤트(퇴실·청소 완료·꺼짐)를 짝지은 detail 을 담는다
+  post_checkout_energy:   (events) => detectPostCheckoutFailures(events, "post_checkout_energy_waste_detected"),
+  post_checkout_security: (events) => detectPostCheckoutFailures(events, "post_checkout_security_breach_detected"),
+  vacant_energy:          (events) => detectVacantEnergyFailures(events),
+  post_cleaning_security: (events) => detectPostCleaningFailures(events, "post_cleaning_security_breach_detected"),
   pre_stay_optimization:  (events) => detectPreStayOptimizationFailures(events),
 };
 
@@ -178,13 +217,27 @@ const METRIC_DETECTORS = {
  * @param {{ db: object }} deps
  * @returns {Promise<{ metric, period, failCount, items }>}
  */
-export async function getDrilldownForMetric(metric, period, { db }) {
+export async function getDrilldownForMetric(metric, period, { db, propertyIds = null }) {
   const detect = METRIC_DETECTORS[metric];
   if (!detect) throw new Error(`unknown metric: "${metric}"`);
 
   const range  = getPeriodRange(period);
-  const events = await queryEvents(db, range);
-  const items  = detect(events);
+  const events = await queryEvents(db, range, propertyIds);
+  // 공실 에너지 낭비는 "언제 꺼졌는지"까지 봐야 얼마나 켜져 있었는지 알 수 있다 —
+  // 기간이 끝난 뒤에 꺼진 건도 "꺼짐 확인 안 됨"으로 잘못 보이지 않게 기간 끝~지금의 꺼짐 기록만 더 가져온다
+  const late   = metric === "vacant_energy"
+    ? await queryLateEvents(db, range, propertyIds, "vacant_energy_waste_resolved")
+    : [];
+  const items  = detect(late.length > 0 ? events.concat(late) : events);
 
   return { metric, period, failCount: items.length, items };
+}
+
+/** 기간 끝 ~ 지금 사이의 특정 타입 이벤트 (기간이 아직 안 끝났으면 없음) */
+async function queryLateEvents(db, range, propertyIds, type) {
+  const fromMs = new Date(range.to).getTime();
+  const nowMs  = Date.now();
+  if (!(fromMs < nowMs)) return [];
+  const later = await queryEvents(db, { from: new Date(fromMs), to: new Date(nowMs) }, propertyIds);
+  return later.filter(e => e.type === type);
 }

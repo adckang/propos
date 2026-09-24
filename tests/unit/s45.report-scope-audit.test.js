@@ -400,7 +400,7 @@ describe('미래 패널 → 선택 범위 전달 (R2, R3)', () => {
   });
 
   test('Dashboard → 이번 달 ReportPanel: properties 전달', () => {
-    const el = jsxElement(read('src/components/v2/DashboardView.jsx'), 'ReportPanel', t => t.includes('this_month'));
+    const el = jsxElement(read('src/components/v2/reporting/SelectedPropertyReport.jsx'), 'ReportPanel');
     assert.ok(el.includes('properties='));
   });
 

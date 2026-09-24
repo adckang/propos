@@ -136,3 +136,37 @@ export async function queryEvents(db, range, propertyIds = null) {
   );
   return result.rows;
 }
+
+/**
+ * 단일 숙소의 월간 상태 구간 계산용 이벤트를 조회한다.
+ * 월 시작 전 마지막 anchor 1건과 월 범위 안의 anchor/follow 이벤트를 시간순으로 반환한다.
+ */
+export async function queryStateEventsForProperty(db, range, propertyId) {
+  if (!propertyId) return [];
+
+  const eventTypes = [...new Set([...ANCHOR_EVENT_TYPES, ...FOLLOW_EVENT_TYPES])];
+  const { rows } = await db.query(
+    `WITH previous_anchor AS (
+       SELECT *
+         FROM events
+        WHERE property_id = $1
+          AND type = ANY($2::text[])
+          AND device_time < $3
+        ORDER BY device_time DESC
+        LIMIT 1
+     ), range_events AS (
+       SELECT *
+         FROM events
+        WHERE property_id = $1
+          AND type = ANY($4::text[])
+          AND device_time >= $3
+          AND device_time <= $5
+     )
+     SELECT * FROM previous_anchor
+     UNION ALL
+     SELECT * FROM range_events
+     ORDER BY device_time ASC`,
+    [propertyId, ANCHOR_EVENT_TYPES, range.from, eventTypes, range.to]
+  );
+  return rows;
+}

@@ -6,7 +6,7 @@
  *   [{ property_id, occurred_at, detail }]
  */
 
-const CLEANING_LIMIT_HOURS = 3;
+export const CLEANING_LIMIT_HOURS = 3;
 
 /**
  * 청소 시작~완료 시간이 기준(3시간)을 초과한 건 반환.
@@ -47,7 +47,7 @@ export function detectCleaningTimeFailures(events) {
         failures.push({
           property_id,
           occurred_at: finished_at,
-          detail: { duration_hours, started_at, finished_at },
+          detail: { duration_hours, started_at, finished_at, limit_hours: CLEANING_LIMIT_HOURS },
         });
       }
     }
@@ -88,4 +88,82 @@ export function detectPreStayOptimizationFailures(events) {
       occurred_at: device_time,
       detail: {},
     }));
+}
+
+// ── 위반 건의 "정도"를 알 수 있게 앞뒤 이벤트를 짝지어 준다 ────────────────────────────────
+// 화면(violationDetailDomain)이 "퇴실 12분 뒤 감지", "2시간 10분 켜져 있음"처럼 숫자를 보여주려면
+// 그 건이 무엇 뒤에 일어났는지, 언제 해소됐는지가 필요하다. 짝을 못 찾으면 해당 키를 넣지 않는다
+// (detail 이 비어 있으면 화면은 "정도를 모르는 건"으로 그린다).
+
+function toMs(raw) {
+  if (raw == null) return null;
+  const ms = raw instanceof Date ? raw.getTime() : new Date(raw).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
+function toIso(ms) {
+  return new Date(ms).toISOString();
+}
+
+/**
+ * detectEventTypeFailures 결과에 앞뒤 이벤트 정보를 붙인다.
+ *
+ * @param {object[]} events
+ * @param {string} eventType                감지 이벤트 (예: vacant_energy_waste_detected)
+ * @param {{ anchorType?: string, resolutionType?: string }} [opts]
+ *   anchorType     — 이 건 "직전"의 기준 이벤트 (예: check_out_detected). 있으면 detail.anchor_at
+ *   resolutionType — 이 건 "직후"의 해소 이벤트 (예: vacant_energy_waste_resolved). 있으면 detail.resolved_at
+ * 그 밖에 이벤트 data.reason 이 문자열이면 detail.reason 으로 옮긴다.
+ */
+export function detectEventFailuresWithContext(events, eventType, { anchorType, resolutionType } = {}) {
+  const byProperty = (type) => {
+    const map = new Map();
+    for (const e of events) {
+      if (e.type !== type) continue;
+      const ms = toMs(e.device_time);
+      if (ms == null) continue;
+      if (!map.has(e.property_id)) map.set(e.property_id, []);
+      map.get(e.property_id).push(ms);
+    }
+    return map;
+  };
+  const anchors     = anchorType     ? byProperty(anchorType)     : null;
+  const resolutions = resolutionType ? byProperty(resolutionType) : null;
+
+  return events
+    .filter(e => e.type === eventType)
+    .map(e => {
+      const at = toMs(e.device_time);
+      const detail = {};
+      if (at != null && anchors) {
+        // 이 건과 같거나 그 전에 있었던 가장 가까운 기준 이벤트
+        const before = (anchors.get(e.property_id) ?? []).filter(ms => ms <= at);
+        if (before.length > 0) detail.anchor_at = toIso(Math.max(...before));
+      }
+      if (at != null && resolutions) {
+        // 이 건 뒤에 처음 나온 해소 이벤트
+        const after = (resolutions.get(e.property_id) ?? []).filter(ms => ms > at);
+        if (after.length > 0) detail.resolved_at = toIso(Math.min(...after));
+      }
+      const reason = e.data?.reason;
+      if (typeof reason === "string" && reason.trim()) detail.reason = reason.trim();
+      return { property_id: e.property_id, occurred_at: e.device_time, detail };
+    });
+}
+
+/** 공실 에너지 낭비 — 감지 → 꺼짐(해소)까지 얼마나 켜져 있었는지 */
+export function detectVacantEnergyFailures(events) {
+  return detectEventFailuresWithContext(events, "vacant_energy_waste_detected", {
+    resolutionType: "vacant_energy_waste_resolved",
+  });
+}
+
+/** 퇴실 후 청소 전 절전·보안 위반 — 퇴실 감지로부터 몇 분 뒤였는지 */
+export function detectPostCheckoutFailures(events, eventType) {
+  return detectEventFailuresWithContext(events, eventType, { anchorType: "check_out_detected" });
+}
+
+/** 청소 완료 후 보안 위반 — 청소 완료로부터 몇 분 뒤였는지 */
+export function detectPostCleaningFailures(events, eventType) {
+  return detectEventFailuresWithContext(events, eventType, { anchorType: "cleaning_finished" });
 }

@@ -380,6 +380,10 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
   const inquiryMailHref = "mailto:hello@propos.kr?subject=SPACE%20HOST%20운영진단%20문의&body=숙소%20수:%0A숙소%20지역:%0A현재%20가장%20불편한%20운영%20문제:%0A연락%20가능한%20방법:";
   const pricingSectionRef = useRef(null);
   const priceViewTrackedRef = useRef(false);
+  const featureSectionRef = useRef(null);
+  const featureViewTrackedRef = useRef(false);
+  const consultationSectionRef = useRef(null);
+  const consultationViewTrackedRef = useRef(false);
 
   const scrollToSection = (id) => {
     if (typeof window === "undefined") return;
@@ -406,6 +410,7 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
 
   const openInquiryMail = () => {
     if (typeof window === "undefined") return;
+    trackEvent("inquiry_mail_open");   // 퍼널 최하단 전환 이벤트
     window.location.href = inquiryMailHref;
   };
 
@@ -439,6 +444,32 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
     );
 
     observer.observe(pricingSectionRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  // 기능 섹션 진입 추적
+  useEffect(() => {
+    if (typeof window === "undefined" || !featureSectionRef.current || featureViewTrackedRef.current) return undefined;
+    const observer = new window.IntersectionObserver((entries) => {
+      if (!entries[0]?.isIntersecting || featureViewTrackedRef.current) return;
+      featureViewTrackedRef.current = true;
+      trackEvent("feature_section_view");
+      observer.disconnect();
+    }, { threshold: 0.2 });
+    observer.observe(featureSectionRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  // 문의 섹션 진입 추적 (퍼널 마지막 단계 도달)
+  useEffect(() => {
+    if (typeof window === "undefined" || !consultationSectionRef.current || consultationViewTrackedRef.current) return undefined;
+    const observer = new window.IntersectionObserver((entries) => {
+      if (!entries[0]?.isIntersecting || consultationViewTrackedRef.current) return;
+      consultationViewTrackedRef.current = true;
+      trackEvent("consultation_section_view");
+      observer.disconnect();
+    }, { threshold: 0.3 });
+    observer.observe(consultationSectionRef.current);
     return () => observer.disconnect();
   }, []);
 
@@ -492,7 +523,7 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
       <Scene3EnergySaving />
 
       {/* ════════════════ SCENE 04 — 레이어 분리형 청소 모니터 ════════════════ */}
-      <Scene4CleaningMonitor />
+      <div ref={featureSectionRef}><Scene4CleaningMonitor /></div>
 
       {/* ════════════════ SCENE 05 — 레이어 분리형 AI 엔진 ════════════════ */}
       <Scene5AIEngine />
@@ -788,7 +819,7 @@ export default function LandingPageV1({ onEnterApp, onSwitchVersion }) {
       </section>
 
       {/* ════════════════ CTA ════════════════ */}
-      <section id="consultation" style={{ padding: m ? "72px 20px" : "120px 40px", textAlign: "center", position: "relative", overflow: "hidden", background: "linear-gradient(180deg, #030913 0%, #020617 100%)" }}>
+      <section ref={consultationSectionRef} id="consultation" style={{ padding: m ? "72px 20px" : "120px 40px", textAlign: "center", position: "relative", overflow: "hidden", background: "linear-gradient(180deg, #030913 0%, #020617 100%)" }}>
         {/* If an actual input form is added here later, add data-clarity-mask to the input wrapper. */}
         <div style={{
           position: "absolute", inset: 0, pointerEvents: "none",

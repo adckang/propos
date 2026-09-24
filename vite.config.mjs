@@ -8,7 +8,7 @@ import { getHaBaseUrl, getHaToken } from "./server/haProxy.js";
 import { fetchWeather } from "./server/weatherService.js";
 import { PROPERTIES as MOCK_PROPERTIES } from "./src/data/roomStateMockData.js";
 import { countCurrentStats } from "./src/domain/reportingDomain.js";
-import { describePeriod } from "./src/domain/periodDomain.js";
+import { describePeriod, periodToRemainingRange } from "./src/domain/periodDomain.js";
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -60,6 +60,76 @@ function makeStubScope(selectedIds) {
   return { rooms, sc, scaleAll, holders, keyOffset };
 }
 
+// 월간 화면 공통 목업 문제 원본. 숙소 소유자는 고정하고 선택 시 필터만 한다.
+// 레포트 요약·달력·월간 지표 상세가 모두 이 목록을 사용한다.
+const MONTHLY_DEMO_ISSUE_TEMPLATES = [
+  { propertyIndex: 0,  day: 3,  hour: 11, category: "OCCUPIED",       type: "complaint_detected",                    label: "민원 발생" },
+  { propertyIndex: 2,  day: 7,  hour: 15, category: "CLEANING",       type: "cleaning_time_exceeded",                label: "청소 시간 3시간 초과" },
+  { propertyIndex: 6,  day: 7,  hour: 18, category: "VACANT",         type: "vacant_energy_waste_detected",          label: "공실 중 에너지 낭비" },
+  { propertyIndex: 11, day: 12, hour: 9,  category: "PRE_STAY_READY", type: "pre_stay_optimization_failed",           label: "입실전 숙소 최적화 미완료" },
+  { propertyIndex: 17, day: 18, hour: 22, category: "OCCUPIED",       type: "energy_waste_detected",                 label: "체류 중 에너지 낭비" },
+  { propertyIndex: 4,  day: 20, hour: 12, category: "CLEANING",       type: "post_checkout_energy_waste_detected",   label: "퇴실 후 청소 전 에너지 낭비" },
+  { propertyIndex: 5,  day: 20, hour: 13, category: "CLEANING",       type: "post_checkout_security_breach_detected",label: "퇴실 후 청소 전 보안 문제" },
+  { propertyIndex: 7,  day: 24, hour: 16, category: "VACANT",         type: "post_cleaning_security_breach_detected",label: "청소 후 공실 보안 문제" },
+  { propertyIndex: 8,  day: 26, hour: 11, category: "CLEANING",       type: "cleaning_assignment_issue",             label: "청소 미배정" },
+];
+
+function demoMonthRange(period) {
+  const now = new Date();
+  const offset = period === "last_month" ? -1 : period === "next_month" ? 1 : 0;
+  const from = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  const to = new Date(now.getFullYear(), now.getMonth() + offset + 1, 1);
+  return { from, to };
+}
+
+function monthlyDemoIssues(period, selectedIds = null) {
+  if (period === "next_month") return [];
+  const { from } = demoMonthRange(period);
+  return MONTHLY_DEMO_ISSUE_TEMPLATES
+    .map(template => {
+      const property = MOCK_PROPERTIES[template.propertyIndex];
+      return {
+        property_id: property.id,
+        occurred_at: new Date(from.getFullYear(), from.getMonth(), template.day, template.hour).toISOString(),
+        category: template.category,
+        type: template.type,
+        label: template.label,
+        resolved_at: null,
+        detail: {},
+      };
+    })
+    .filter(item => !selectedIds || selectedIds.includes(item.property_id));
+}
+
+function alignMonthlyStatsWithIssues(stats, issues) {
+  const count = type => issues.filter(item => item.type === type).length;
+  const anomalies = count("complaint_detected") + count("energy_waste_detected");
+  const preStayFailures = count("pre_stay_optimization_failed");
+  const cleaningTimeFailures = count("cleaning_time_exceeded");
+  const assignmentFailures = count("cleaning_assignment_issue");
+  const preStayAttempts = Math.max(stats.preStayAttempts ?? 0, preStayFailures);
+  const cleaningFinished = Math.max(stats.cleaningFinished ?? 0, cleaningTimeFailures);
+  const cleaningCreated = Math.max(stats.cleaningCreated ?? 0, assignmentFailures);
+  return {
+    ...stats,
+    anomalies,
+    energyWaste: count("energy_waste_detected"),
+    noShowSuspected: count("no_show_suspected"),
+    earlyCheckinSuspected: count("early_checkin_suspected"),
+    checkoutConfirmationNeeded: count("checkout_confirmation_needed"),
+    vacantEnergyWaste: count("vacant_energy_waste_detected"),
+    postCheckoutEnergyWaste: count("post_checkout_energy_waste_detected"),
+    postCheckoutSecurityBreach: count("post_checkout_security_breach_detected"),
+    postCleaningSecurityBreach: count("post_cleaning_security_breach_detected"),
+    preStayAttempts,
+    preStayOptimized: Math.max(0, preStayAttempts - preStayFailures),
+    cleaningFinished,
+    cleaningOnTime: Math.max(0, cleaningFinished - cleaningTimeFailures),
+    cleaningCreated,
+    cleaningAssigned: Math.max(0, cleaningCreated - assignmentFailures),
+  };
+}
+
 function apiProxyPlugin(env) {
   const attachMiddleware = server => {
     server.middlewares.use(async (req, res, next) => {
@@ -90,34 +160,78 @@ function apiProxyPlugin(env) {
         await handleCameraSnapshot(req, res);
         return;
       }
+      // dev 전용 월간 캘린더 스텁 — 실제 DB 없이 날짜별 문제 UI 확인용
+      if (req.url?.startsWith("/api/stats/calendar") && req.method === "GET") {
+        const url = new URL(req.url, "http://localhost");
+        const period = url.searchParams.get("period") ?? "this_month";
+        const rawIds = url.searchParams.get("property_ids") ?? "";
+        const selectedIds = rawIds ? rawIds.split(",").map(s => s.trim()).filter(Boolean) : null;
+        const { from: monthStart, to: monthEnd } = demoMonthRange(period);
+        const items = monthlyDemoIssues(period, selectedIds);
+        const days = {};
+        for (const item of items) {
+          const d = new Date(item.occurred_at);
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          if (!days[key]) days[key] = { total: 0, categories: {}, items: [] };
+          days[key].total += 1;
+          days[key].categories[item.category] = (days[key].categories[item.category] ?? 0) + 1;
+          days[key].items.push(item);
+        }
+        sendJson(res, 200, {
+          period,
+          range: { from: monthStart.toISOString(), to: new Date(monthEnd.getTime() - 1).toISOString() },
+          days,
+          items,
+          stateSegments: [],
+        });
+        return;
+      }
       // dev 전용 /api/stats/drilldown 스텁
       if (req.url?.startsWith("/api/stats/drilldown") && req.method === "GET") {
         const url    = new URL(req.url, "http://localhost");
         const metric = url.searchParams.get("metric") ?? "";
         const period = url.searchParams.get("period") ?? "";
+        const rawIds = url.searchParams.get("property_ids") ?? "";
+        const selectedIds = rawIds ? rawIds.split(",").map(s => s.trim()).filter(Boolean) : null;
+        // 샘플 ID 는 목업 숙소 ID(P012=개포 L호 …) — 화면이 리스트와 같은 숙소 이름으로 바꿔 보여주는지 dev 에서 확인할 수 있도록
+        // 목록 줄마다 "얼마나 심했는지"가 보이는지 dev 에서 확인하도록 심각도가 섞이게 구성 (실제 서버 응답과 같은 detail 키)
         const DEMO_ITEMS = {
           cleaning_time:          [
-            { property_id: "room-101", occurred_at: new Date("2026-09-08T14:30:00Z"), detail: { duration_hours: 3.8, started_at: new Date("2026-09-08T10:40:00Z"), finished_at: new Date("2026-09-08T14:30:00Z") } },
-            { property_id: "room-305", occurred_at: new Date("2026-09-07T18:10:00Z"), detail: { duration_hours: 4.2, started_at: new Date("2026-09-07T14:00:00Z"), finished_at: new Date("2026-09-07T18:10:00Z") } },
+            { property_id: "P012", occurred_at: new Date("2026-09-08T14:30:00Z"), detail: { duration_hours: 3.8, started_at: new Date("2026-09-08T10:42:00Z"), finished_at: new Date("2026-09-08T14:30:00Z"), limit_hours: 3 } },
+            { property_id: "P013", occurred_at: new Date("2026-09-07T18:10:00Z"), detail: { duration_hours: 4.2, started_at: new Date("2026-09-07T13:58:00Z"), finished_at: new Date("2026-09-07T18:10:00Z"), limit_hours: 3 } },
+            { property_id: "P014", occurred_at: new Date("2026-09-09T09:06:00Z"), detail: { duration_hours: 3.1, started_at: new Date("2026-09-09T06:00:00Z"), finished_at: new Date("2026-09-09T09:06:00Z"), limit_hours: 3 } },
+            { property_id: "P009", occurred_at: new Date("2026-09-06T17:30:00Z"), detail: { duration_hours: 5.5, started_at: new Date("2026-09-06T12:00:00Z"), finished_at: new Date("2026-09-06T17:30:00Z"), limit_hours: 3 } },
           ],
           post_checkout_energy:   [
-            { property_id: "room-203", occurred_at: new Date("2026-09-08T11:00:00Z"), detail: {} },
-            { property_id: "room-102", occurred_at: new Date("2026-09-06T09:30:00Z"), detail: {} },
+            { property_id: "P014", occurred_at: new Date("2026-09-08T11:12:00Z"), detail: { anchor_at: "2026-09-08T11:00:00.000Z" } },
+            { property_id: "P008", occurred_at: new Date("2026-09-06T09:30:00Z"), detail: { anchor_at: "2026-09-06T08:50:00.000Z", reason: "거실 에어컨·조명 켜짐" } },
           ],
           post_checkout_security: [
-            { property_id: "room-401", occurred_at: new Date("2026-09-09T16:00:00Z"), detail: {} },
+            { property_id: "P009", occurred_at: new Date("2026-09-09T16:00:00Z"), detail: { anchor_at: "2026-09-09T15:20:00.000Z" } },
           ],
           vacant_energy:          [
-            { property_id: "room-202", occurred_at: new Date("2026-09-07T20:00:00Z"), detail: {} },
-            { property_id: "room-303", occurred_at: new Date("2026-09-08T08:00:00Z"), detail: {} },
-            { property_id: "room-104", occurred_at: new Date("2026-09-09T12:00:00Z"), detail: {} },
+            { property_id: "P010", occurred_at: new Date("2026-09-07T20:00:00Z"), detail: { resolved_at: "2026-09-07T23:20:00.000Z" } },
+            { property_id: "P011", occurred_at: new Date("2026-09-08T08:00:00Z"), detail: { resolved_at: "2026-09-08T09:30:00.000Z" } },
+            { property_id: "P015", occurred_at: new Date("2026-09-09T12:00:00Z"), detail: { resolved_at: "2026-09-09T12:25:00.000Z" } },
+            { property_id: "P016", occurred_at: new Date("2026-09-09T02:00:00Z"), detail: {} },
           ],
           post_cleaning_security: [
-            { property_id: "room-205", occurred_at: new Date("2026-09-08T15:00:00Z"), detail: {} },
+            { property_id: "P016", occurred_at: new Date("2026-09-08T15:00:00Z"), detail: { anchor_at: "2026-09-08T14:10:00.000Z" } },
           ],
           pre_stay_optimization:  [],
         };
-        const items = DEMO_ITEMS[metric] ?? [];
+        const MONTHLY_METRIC_TYPES = {
+          cleaning_time:          "cleaning_time_exceeded",
+          post_checkout_energy:   "post_checkout_energy_waste_detected",
+          post_checkout_security: "post_checkout_security_breach_detected",
+          vacant_energy:          "vacant_energy_waste_detected",
+          post_cleaning_security: "post_cleaning_security_breach_detected",
+          pre_stay_optimization:  "pre_stay_optimization_failed",
+        };
+        const isMonthly = ["last_month", "this_month"].includes(period);
+        const items = isMonthly
+          ? monthlyDemoIssues(period, selectedIds).filter(item => item.type === MONTHLY_METRIC_TYPES[metric])
+          : (DEMO_ITEMS[metric] ?? []).filter(item => !selectedIds || selectedIds.includes(item.property_id));
         sendJson(res, 200, { metric, period, failCount: items.length, items });
         return;
       }
@@ -180,8 +294,17 @@ function apiProxyPlugin(env) {
         const isLive   = ["now", "today"].includes(period);
         const isActive = desc?.tense === "active" && !isLive;
         const isFuture = desc?.tense === "future";
-        const stats = isLive ? NOW_STATS : isActive ? ACTIVE_STATS : isFuture ? FUTURE_STATS : PAST_STATS;
+        const baseStats = isLive ? NOW_STATS : isActive ? ACTIVE_STATS : isFuture ? FUTURE_STATS : PAST_STATS;
+        const monthIssues = desc?.unit === "month" ? monthlyDemoIssues(period, selectedIds) : [];
+        const stats = desc?.unit === "month" && !isFuture
+          ? alignMonthlyStatsWithIssues(baseStats, monthIssues)
+          : baseStats;
         let summary = PERIOD_SUMMARY[period];
+        if (desc?.unit === "month" && !isFuture) {
+          summary = monthIssues.length > 0
+            ? `${desc.label} ${selLabel} 운영 문제 ${monthIssues.length}건이 있었어요.`
+            : `${desc.label} ${selLabel} 운영 문제가 없었어요.`;
+        }
         if (summary === undefined && desc) {
           summary = isFuture
             ? `${desc.label} ${selLabel} 체크인 ${stats.checkIns}건 예정이에요.`
@@ -204,15 +327,30 @@ function apiProxyPlugin(env) {
         const base = { total: assigned + requesting + failed, assigned, requesting, failed, needsRequest: sc(1, OFF.needsRequest) };
         base.unassigned = base.total - base.assigned;
         if (!withItems) { sendJson(res, 200, base); return; }
-        const toItem = (p) => ({
+        const period = csUrl.searchParams.get("period") ?? "next_week";
+        const scheduleRange = periodToRemainingRange(period);
+        const spanDays = Math.max(1, Math.floor((scheduleRange.to - scheduleRange.from) / 86_400_000));
+        const toItem = (p, status, slot) => ({
           property_id: p.id,
           property_name: p.name,
-          checkout_at: (p.reservation?.checkOut ?? new Date(Date.now() + 86_400_000)).toISOString(),
+          status,
+          checkout_at: new Date(scheduleRange.from.getTime() + (slot % spanDays) * 86_400_000 + 12 * 3_600_000).toISOString(),
+          // 실제 서버와 같은 보조 값 — 배정 실패: 요청/거절 인원, 취소: 취소된 시각
+          updated_at: new Date(Date.now() - (slot % 5 + 1) * 5 * 3_600_000).toISOString(),
+          notified_count: status === "ESCALATED" ? 3 + (slot % 3) : 0,
+          declined_count: status === "ESCALATED" ? slot % 3 : 0,
         });
+        const items = [
+          ...holders(4, OFF.assigned).map((p, i) => toItem(p, "ASSIGNED", i * 5 + 1)),
+          ...holders(2, OFF.requesting).map((p, i) => toItem(p, "PENDING", i * 7 + 2)),
+          ...holders(1, OFF.failed).map((p, i) => toItem(p, "ESCALATED", i * 11 + 3)),
+          ...holders(1, OFF.needsRequest).map((p, i) => toItem(p, "CANCELLED", i * 13 + 4)),
+        ];
         sendJson(res, 200, {
           ...base,
-          failedItems:       holders(1, OFF.failed).map(toItem),
-          needsRequestItems: holders(1, OFF.needsRequest).map(toItem),
+          items,
+          failedItems:       items.filter(item => item.status === "ESCALATED"),
+          needsRequestItems: items.filter(item => item.status === "CANCELLED"),
         });
         return;
       }

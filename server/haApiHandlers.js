@@ -1,4 +1,4 @@
-import { callHaService, getHaState, getHaStates, renderHaTemplate, getHaHistory } from "./haProxy.js";
+import { callHaService, getHaState, getHaStates, getHaAllStates, renderHaTemplate, getHaHistory } from "./haProxy.js";
 
 function sendJson(res, statusCode, payload) {
   res.statusCode = statusCode;
@@ -84,6 +84,12 @@ export async function handleNodeHaRequest(req, res) {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/ha/all-states") {
+      const states = await getHaAllStates();
+      sendJson(res, 200, { states });
+      return;
+    }
+
     sendJson(res, 404, { error: "Not found" });
   } catch (error) {
     sendJson(res, 500, { error: error.message || "Unknown error" });
@@ -117,6 +123,15 @@ export async function handleVercelStates(req, res) {
 export async function handleVercelTemplate(req, res) {
   try {
     sendJson(res, 200, await handleTemplate(await readJsonBody(req)));
+  } catch (error) {
+    sendJson(res, 500, { error: error.message || "Unknown error" });
+  }
+}
+
+export async function handleVercelAllStates(req, res) {
+  try {
+    const states = await getHaAllStates();
+    sendJson(res, 200, { states });
   } catch (error) {
     sendJson(res, 500, { error: error.message || "Unknown error" });
   }

@@ -35,7 +35,7 @@ function LoadingRows() {
   );
 }
 
-function PanelContent({ tense, period, stats, loading, isMobile, onSelectRoom, properties, propertyIds }) {
+function PanelContent({ tense, period, stats, loading, isMobile, onSelectRoom, properties, propertyIds, drilldownPropertyIds }) {
   if (loading) return <LoadingRows />;
 
   if (!stats) {
@@ -47,15 +47,15 @@ function PanelContent({ tense, period, stats, loading, isMobile, onSelectRoom, p
     );
   }
 
-  if (tense === 'past')   return <EventMatrixPanel  stats={stats} period={period} isMobile={isMobile} onSelectRoom={onSelectRoom} />;
+  if (tense === 'past')   return <EventMatrixPanel  stats={stats} period={period} isMobile={isMobile} onSelectRoom={onSelectRoom} propertyIds={drilldownPropertyIds} properties={properties} />;
   if (tense === 'active' && period === 'today') return <TodayStatusPanel stats={stats} isMobile={isMobile} />;
-  if (tense === 'active') return <ActiveHybridPanel stats={stats} period={period} isMobile={isMobile} properties={properties} propertyIds={propertyIds} onSelectRoom={onSelectRoom} />;
+  if (tense === 'active') return <ActiveHybridPanel stats={stats} period={period} isMobile={isMobile} properties={properties} propertyIds={propertyIds} drilldownPropertyIds={drilldownPropertyIds} onSelectRoom={onSelectRoom} />;
   if (tense === 'future') return <FutureMatrixPanel stats={stats} period={period} isMobile={isMobile} properties={properties} propertyIds={propertyIds} onSelectRoom={onSelectRoom} />;
 
   return null;
 }
 
-export default function ReportPanel({ period, stats, loading, isMobile = false, onSelectRoom, properties = [], propertyIds = null }) {
+export default function ReportPanel({ period, stats, loading, isMobile = false, onSelectRoom, properties = [], propertyIds = null, drilldownPropertyIds }) {
   // 시제·표시 이름은 기간 규칙(periodDomain)에서 — 지난주/다음 주/2주 뒤/3일 전 …
   const desc  = describePeriod(period);
   const tense = desc?.tense ?? 'active';
@@ -109,6 +109,7 @@ export default function ReportPanel({ period, stats, loading, isMobile = false, 
           onSelectRoom={onSelectRoom}
           properties={properties}
           propertyIds={propertyIds}
+          drilldownPropertyIds={drilldownPropertyIds}
         />
       )}
     </div>

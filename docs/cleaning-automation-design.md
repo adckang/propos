@@ -133,8 +133,8 @@ COMPLETED            ← (향후) 청소 완료 처리
 
 ```sql
 CREATE TABLE IF NOT EXISTS property_cleaning_config (
-  property_id                TEXT PRIMARY KEY,
-  name                       TEXT NOT NULL,
+  property_id                TEXT PRIMARY KEY,   -- = 숙소 표시 이름 (D-016). 이름 변경 시 서버가 이력과 함께 이전
+  name                       TEXT NOT NULL,      -- property_id 와 항상 같은 값
   checkout_hour              INT  NOT NULL DEFAULT 11,
   cleaning_duration_hours    FLOAT NOT NULL DEFAULT 2.5,
   google_calendar_id         TEXT,            -- Webhook calendarId 매핑용 (예: bnb.paju@gmail.com)

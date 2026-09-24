@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import DashboardView from './DashboardView';
+import MonthlyView from './MonthlyView';
 import PropertyListView from './PropertyListView';
 import PropertyDetailView from './PropertyDetailView';
 import CleaningManager from './CleaningManager';
@@ -814,7 +814,7 @@ export default function RoomStateApp({ onBack }) {
     );
   } else {
     currentView = (
-      <DashboardView
+      <MonthlyView
         onSelectStatus={(status) => { setListFilter(status); setView('list'); }}
         onSelectProperty={(p) => { setSelectedPropertyId(p.id); setView('detail'); }}
         onBack={onBack}

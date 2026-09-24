@@ -33,7 +33,7 @@ function SectionLabel({ label, color, bg }) {
   );
 }
 
-export default function ActiveHybridPanel({ stats, period, isMobile = false, properties = [], propertyIds = null, onSelectRoom }) {
+export default function ActiveHybridPanel({ stats, period, isMobile = false, properties = [], propertyIds = null, drilldownPropertyIds, onSelectRoom }) {
   const { pastStats, futureStats } = splitActiveStats(stats);
 
   return (
@@ -47,6 +47,8 @@ export default function ActiveHybridPanel({ stats, period, isMobile = false, pro
           period={period}
           isMobile={isMobile}
           onSelectRoom={onSelectRoom}
+          propertyIds={drilldownPropertyIds}
+          properties={properties}
         />
       </div>
 

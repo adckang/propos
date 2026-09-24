@@ -4,11 +4,14 @@ import { weatherMeta } from '../../infrastructure/weatherClient';
 import { STATE_META, SEGMENT_COLORS, getWindowSegments } from '../../data/roomStateMockData';
 import { useMobile } from '../../hooks/useMobile';
 import { useReportingStats } from '../../hooks/useReportingStats';
+import { useMonthlyCalendar } from '../../hooks/useMonthlyCalendar.js';
 import DetailViewFilter from './reporting/DetailViewFilter';
 import SummaryBanner from './reporting/SummaryBanner';
 import ReportPanel from './reporting/ReportPanel';
+import DailyActivityReportPanel from './reporting/DailyActivityReportPanel.jsx';
 import { futureSummaryFor } from '../../domain/futureWeekDomain.js';
 import { periodForOffset } from '../../domain/periodDomain.js';
+import { toKstDateKey } from '../../domain/monthlyCalendarDomain.js';
 
 const PAST_HOURS    = 7 * 24;      // 현재 시각 이전 7일 (168h)
 const FUTURE_HOURS  = 7 * 24;      // 현재 시각 이후 7일 (168h)
@@ -572,8 +575,17 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
   );
 
   const { stats, summary, loading: statsLoading } = useReportingStats(statsPeriod, [property.id]);
+  const todayCalendar = useMonthlyCalendar(statsPeriod === 'today' ? 'this_month' : null, [property.id]);
+  const todayIssueItems = statsPeriod === 'today'
+    ? (todayCalendar.data?.days?.[toKstDateKey(now)]?.items ?? [])
+    : [];
   // 미래 기간 요약은 이 숙소의 예약(iCal) 기준 — 서버 요약은 이벤트 기반이라 미래엔 항상 "예약 없음"
-  const displaySummary = futureSummaryFor(statsPeriod, [property]) || summary;
+  const todayActivitySummary = statsPeriod === 'today' && todayCalendar.data
+    ? todayIssueItems.length > 0
+      ? `오늘 지금까지 이상 징후 ${todayIssueItems.length}건이 있었어요.`
+      : '오늘 지금까지 문제 이벤트가 없어요.'
+    : '';
+  const displaySummary = todayActivitySummary || futureSummaryFor(statsPeriod, [property]) || summary;
 
   const [lightboxSnap, setLightboxSnap] = useState(null);
 
@@ -740,8 +752,17 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
 
       {/* 요약 배너 + 레포트 패널 */}
       <SummaryBanner summary={displaySummary} loading={statsLoading} isMobile={isMobile}>
-        <ReportPanel period={statsPeriod} stats={stats} loading={statsLoading} isMobile={isMobile}
-          properties={[property]} propertyIds={[property.id]} />
+        {statsPeriod === 'today' ? (
+          <DailyActivityReportPanel
+            items={todayIssueItems}
+            loading={todayCalendar.loading}
+            error={!!todayCalendar.error}
+            isMobile={isMobile}
+          />
+        ) : (
+          <ReportPanel period={statsPeriod} stats={stats} loading={statsLoading} isMobile={isMobile}
+            properties={[property]} propertyIds={[property.id]} />
+        )}
       </SummaryBanner>
 
 

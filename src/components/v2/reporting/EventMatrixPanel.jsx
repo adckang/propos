@@ -32,7 +32,7 @@ const METRIC_KEYS = [
   null,                      // 6: 청소 스케줄 할당 (cleaning_jobs 테이블 기반 — 미지원)
 ];
 
-export default function EventMatrixPanel({ stats, period, isMobile = false, onSelectRoom }) {
+export default function EventMatrixPanel({ stats, period, isMobile = false, onSelectRoom, propertyIds, properties = [] }) {
   const [drilldown, setDrilldown] = useState(null); // { metricKey, label }
   if (!stats) return null;
 
@@ -145,6 +145,8 @@ export default function EventMatrixPanel({ stats, period, isMobile = false, onSe
           metric={drilldown.metricKey}
           metricLabel={drilldown.label}
           period={period}
+          propertyIds={propertyIds}
+          properties={properties}
           onClose={() => setDrilldown(null)}
           onSelectRoom={onSelectRoom}
         />
