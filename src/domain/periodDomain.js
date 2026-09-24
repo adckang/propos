@@ -139,6 +139,10 @@ export function periodToDateRange(period, nowMs) {
     };
   }
 
+  if (period === 'last_hour') {
+    return { from: new Date(now.getTime() - HOUR), to: new Date(now.getTime()) };
+  }
+
   return null;
 }
 
@@ -157,6 +161,28 @@ export function periodToRemainingRange(period, nowMs) {
   if (!range || describePeriod(period)?.tense !== 'active') return range;
   const now = nowMs != null ? nowMs : Date.now();
   return { from: new Date(Math.max(range.from.getTime(), now)), to: range.to };
+}
+
+/**
+ * 기간(period)이 ListView 타임라인 창(windowStart ~ windowStart+windowMs) 안에서 차지하는
+ * 위치를 퍼센트로 계산한다 — "지금 보고 있는 레포트가 타임라인의 어느 구간을 가리키는지"를
+ * 하이라이트 박스로 그리기 위한 좌표. 기간이 창을 완전히 벗어나면 null(안 그림).
+ * 창에 걸치는 경우 보이는 부분만큼만 [0, 100] 범위로 잘라낸다.
+ * @param {string} period
+ * @param {Date} windowStart
+ * @param {number} windowMs
+ * @param {number} [nowMs] — 테스트용 고정 타임스탬프 (ms). 생략 시 Date.now()
+ * @returns {{ left: number, width: number } | null}
+ */
+export function periodToWindowHighlight(period, windowStart, windowMs, nowMs) {
+  const range = periodToDateRange(period, nowMs);
+  if (!range || !windowMs) return null;
+  const rawLeft  = ((range.from.getTime() - windowStart.getTime()) / windowMs) * 100;
+  const rawRight = ((range.to.getTime()   - windowStart.getTime()) / windowMs) * 100;
+  const left  = Math.max(0, Math.min(100, rawLeft));
+  const right = Math.max(0, Math.min(100, rawRight));
+  if (right <= left) return null;
+  return { left, width: right - left };
 }
 
 /**

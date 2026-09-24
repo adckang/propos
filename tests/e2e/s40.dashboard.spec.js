@@ -88,7 +88,7 @@ test('E2E-004 월간 필터·숙소 복수선택·날짜 상세가 함께 동작
   await report.getByText('자세히').click();
   await expect(report.getByText('이번 달 레포트')).toBeVisible();
 
-  const tops = await Promise.all([report, monthFilter, propertySelect, calendar].map(locator =>
+  const tops = await Promise.all([monthFilter, report, propertySelect, calendar].map(locator =>
     locator.evaluate(element => element.getBoundingClientRect().top + window.scrollY)
   ));
   expect(tops[0] < tops[1] && tops[1] < tops[2] && tops[2] < tops[3]).toBeTruthy();

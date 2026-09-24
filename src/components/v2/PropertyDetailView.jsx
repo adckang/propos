@@ -7,10 +7,10 @@ import { useReportingStats } from '../../hooks/useReportingStats';
 import { useMonthlyCalendar } from '../../hooks/useMonthlyCalendar.js';
 import DetailViewFilter from './reporting/DetailViewFilter';
 import SummaryBanner from './reporting/SummaryBanner';
-import ReportPanel from './reporting/ReportPanel';
+import ReportPanel, { TENSE_STYLE } from './reporting/ReportPanel';
 import DailyActivityReportPanel from './reporting/DailyActivityReportPanel.jsx';
 import { futureSummaryFor } from '../../domain/futureWeekDomain.js';
-import { periodForOffset } from '../../domain/periodDomain.js';
+import { periodForOffset, periodToDateRange, describePeriod } from '../../domain/periodDomain.js';
 import { toKstDateKey } from '../../domain/monthlyCalendarDomain.js';
 
 const PAST_HOURS    = 7 * 24;      // 현재 시각 이전 7일 (168h)
@@ -599,6 +599,22 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
   const windowStart = useMemo(() => new Date(now.getTime() - PAST_HOURS * 3600000), []);
   const containerHeight = WINDOW_HOURS * hourPx;
 
+  // 레포트 기간 하이라이트 — ListView(PropertyListView, D-022)와 같은 방식. 이 타임라인이 세로·픽셀
+  // 기반(hourPx)이라 좌표 계산은 이 컴포넌트의 다른 요소(지금 마커, 시간 마커, 상태 바)와 똑같이
+  // 로컬에서 하고, "그 기간이 정확히 어느 날짜/시각인지"만 도메인 함수(periodToDateRange)로 구한다.
+  const periodRange = useMemo(() => periodToDateRange(statsPeriod), [statsPeriod]);
+  const periodTense = describePeriod(statsPeriod)?.tense ?? 'active';
+  const periodStyle = TENSE_STYLE[periodTense] ?? TENSE_STYLE.active;
+  const periodHighlightPx = useMemo(() => {
+    if (!periodRange) return null;
+    const rawTop    = ((periodRange.from.getTime() - windowStart.getTime()) / 3600000) * hourPx;
+    const rawBottom = ((periodRange.to.getTime()   - windowStart.getTime()) / 3600000) * hourPx;
+    const top    = Math.max(0, rawTop);
+    const bottom = Math.min(containerHeight, rawBottom);
+    if (bottom <= top) return null; // 기간이 현재 타임라인 창(±7일) 밖에 있음
+    return { top, height: bottom - top };
+  }, [periodRange, windowStart, hourPx, containerHeight]);
+
   const recentSegs = useMemo(() => getWindowSegments(property, PAST_HOURS, FUTURE_HOURS), [property]);
 
   // CLEANING 세그먼트 → 청소 슬롯 직접 매핑 (시간 겹침 기준)
@@ -855,6 +871,19 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
                 ))}
               </div>
             </div>
+
+            {/* 레포트 기간 하이라이트 — 헤더~타임라인 전체 폭을 관통하는 테두리 박스, 가장 앞에 오버레이 */}
+            {periodHighlightPx && (
+              <div style={{
+                position: 'absolute',
+                top: periodHighlightPx.top, height: periodHighlightPx.height,
+                left: 0, right: 0,
+                border: `2px solid ${periodStyle.label}`,
+                background: `${periodStyle.label}0d`,
+                borderRadius: 6,
+                zIndex: 40, pointerEvents: 'none',
+              }} />
+            )}
 
             {/* 현재 시각 마커 — 선 */}
             <div style={{

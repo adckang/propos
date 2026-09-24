@@ -19,7 +19,8 @@ import FutureMatrixPanel from './FutureMatrixPanel';
 import TodayStatusPanel from './TodayStatusPanel';
 import { describePeriod, periodRangeLabel } from '../../../domain/periodDomain.js';
 
-const TENSE_STYLE = {
+// 과거/진행중/미래 색 — ListView 타임라인의 레포트 기간 하이라이트도 이 색을 그대로 쓴다(통일성)
+export const TENSE_STYLE = {
   past:   { bg: '#f8fafc', border: '#e2e8f0',  activeBg: '#f1f5f9',  label: '#475569', icon: '📋' },
   active: { bg: '#f0fdf4', border: '#bbf7d0',  activeBg: '#dcfce7',  label: '#065f46', icon: '🔄' },
   future: { bg: '#eff6ff', border: '#bfdbfe',  activeBg: '#dbeafe',  label: '#1e40af', icon: '📅' },

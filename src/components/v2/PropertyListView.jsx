@@ -7,7 +7,8 @@ import SummaryBanner from './reporting/SummaryBanner';
 import ReportPanel from './reporting/ReportPanel';
 import { deriveSelectionScope, toggleAllSelection, syncSelectionWithProperties } from '../../domain/selectionScopeDomain.js';
 import { futureSummaryFor } from '../../domain/futureWeekDomain.js';
-import { periodForOffset } from '../../domain/periodDomain.js';
+import { periodForOffset, periodToWindowHighlight, describePeriod } from '../../domain/periodDomain.js';
+import { TENSE_STYLE } from './reporting/ReportPanel';
 
 const PAST_DAYS   = 6;
 const FUTURE_DAYS = 14;
@@ -196,6 +197,16 @@ export default function PropertyListView({
   const { windowStart, windowEnd, windowMs, dayLabels, monthLabels } = useGanttWindow(windowOffset);
   const { now, nowLeft, timeStr } = useLiveNow(windowStart, windowMs);
 
+  // 레포트 패널이 가리키는 정확한 날짜 구간 — 타임라인 위에 박스로 표시해서 "지금 보이는
+  // 레포트가 어느 구간을 말하는지" 한눈에 알 수 있게 한다. 색은 ReportPanel 헤더와 동일
+  // (과거=회색/진행중=초록/미래=파랑)하게 맞춰 통일성을 준다.
+  const periodTense = describePeriod(statsPeriod)?.tense ?? 'active';
+  const periodStyle = TENSE_STYLE[periodTense] ?? TENSE_STYLE.active;
+  const periodHighlight = useMemo(
+    () => periodToWindowHighlight(statsPeriod, windowStart, windowMs),
+    [statsPeriod, windowStart, windowMs],
+  );
+
   const filtered = properties.filter(p => {
     if (dayOccupantIds && (filter === 'OCCUPIED' || filter === 'VACANT')) return dayOccupantIds[filter].has(p.id);
     return filter === FILTER_ALL || p.currentState.mainStatus === filter;
@@ -294,7 +305,19 @@ export default function PropertyListView({
         })}
       </div>
 
-      {/* 요약 배너 + 레포트 패널 */}
+      {/* 타임라인 네비게이터 — 레포트 패널 바로 위 (UX: 이 네비가 곧 레포트 기간이자 타임라인
+          하이라이트 위치를 정하는 제어판이라, 그 결과인 레포트 패널·하이라이트 박스와 붙여서
+          "이 조작 → 이 레포트 → 저 구간"이 한 흐름으로 읽히게 함. D-024) */}
+      <ListViewFilter
+        windowOffset={windowOffset}
+        onOffsetChange={setWindowOffset}
+        mode={listMode}
+        onModeChange={setListMode}
+        isMobile={isMobile}
+      />
+
+      {/* 요약 배너 + 레포트 패널 — 바로 아래 타임라인의 하이라이트 박스와 맞닿아, 레포트가
+          가리키는 구간이 무엇인지 시각적으로 이어지게 함 (D-024) */}
       {noSelection ? (
         <div style={{
           padding: isMobile ? '9px 12px' : '10px 20px',
@@ -342,15 +365,6 @@ export default function PropertyListView({
         </SummaryBanner>
       )}
 
-      {/* 타임라인 네비게이터 — 간트 바로 위 (UX: 제어 대상 가까이) */}
-      <ListViewFilter
-        windowOffset={windowOffset}
-        onOffsetChange={setWindowOffset}
-        mode={listMode}
-        onModeChange={setListMode}
-        isMobile={isMobile}
-      />
-
       {/* 간트 헤더 + 목록 래퍼 — 현재 시각 연속선 기준점 */}
       <div style={{ flex: '1 0 auto', display: 'flex', flexDirection: 'column', position: 'relative' }}>
 
@@ -362,6 +376,21 @@ export default function PropertyListView({
           width: 2, background: '#1a202c', zIndex: 20, pointerEvents: 'none',
           transition: isDragging ? 'none' : 'left 0.25s ease',
         }} />
+
+        {/* 레포트 기간 하이라이트 — 헤더~목록 전체를 관통하는 테두리 박스, 가장 앞에 오버레이 */}
+        {periodHighlight && (
+          <div style={{
+            position: 'absolute',
+            left: `calc(${fixedLeft}px + ${periodHighlight.left / 100} * (100% - ${fixedLeft + PAD}px))`,
+            width: `calc(${periodHighlight.width / 100} * (100% - ${fixedLeft + PAD}px))`,
+            top: 0, bottom: 0,
+            border: `2px solid ${periodStyle.label}`,
+            background: `${periodStyle.label}0d`,
+            borderRadius: 6,
+            zIndex: 25, pointerEvents: 'none',
+            transition: isDragging ? 'none' : 'left 0.25s ease, width 0.25s ease',
+          }} />
+        )}
 
       {/* 간트 헤더 — 모바일: CB+스트립 너비만 고정, PC: CB+스트립+이름+배지 */}
       <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: `0 ${PAD}px`, display: 'flex', position: 'sticky', top: 0, zIndex: 15 }}>

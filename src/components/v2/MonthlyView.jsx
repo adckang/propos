@@ -127,8 +127,10 @@ export default function MonthlyView({ onSelectStatus, onNavigateToList, onSelect
         </div>
       )}
 
-      <SelectedPropertyReport statsPeriod={statsPeriod} scopedProperties={scopedProperties} statsPropertyIds={statsPropertyIds} scope={scope} noSelection={noSelection} allSelected={allSelected} properties={properties} onSelectProperty={onSelectProperty} isMobile={isMobile} monthlyCalendarState={monthlyCalendarState} />
+      {/* 네비게이터를 레포트 패널 위로 — ListView(D-024)와 같은 이유: 레포트 패널이 바로 아래
+          컴포넌트(숙소 선택 드롭다운을 거쳐 캘린더)와 더 가까워지도록 순서를 바꿈 */}
       <MonthlyViewFilter statsPeriod={statsPeriod} onPeriodChange={setStatsPeriod} isMobile={isMobile} />
+      <SelectedPropertyReport statsPeriod={statsPeriod} scopedProperties={scopedProperties} statsPropertyIds={statsPropertyIds} scope={scope} noSelection={noSelection} allSelected={allSelected} properties={properties} onSelectProperty={onSelectProperty} isMobile={isMobile} monthlyCalendarState={monthlyCalendarState} />
       <PropertyMultiSelectDropdown properties={properties} selectedRooms={selectedRooms} setSelectedRooms={setSelectedRooms} scope={scope} isMobile={isMobile} />
       <MonthlyCalendar statsPeriod={statsPeriod} scopedProperties={scopedProperties} noSelection={noSelection} properties={properties} onSelectProperty={onSelectProperty} onNavigateToList={onNavigateToList} isMobile={isMobile} monthlyCalendarState={monthlyCalendarState} />
     </div>
