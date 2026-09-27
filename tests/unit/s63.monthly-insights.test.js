@@ -170,6 +170,41 @@ describe('detectConsecutiveInsights — 같은 지표가 최근 달부터 연속
     ];
     assert.equal(detectConsecutiveInsights(history, '2026-09').length, 0);
   });
+
+  // 코드 리뷰에서 발견(실사용 버그 전 사전 확인) — 그 달에 지표가 아예 측정 불가(분모 0)였던
+  // 달은 monthlyHistory에서 행 자체가 빠질 수 있다(reportingService.computeMeasurableMetrics가
+  // denominator>0인 지표만 담기 때문). 그 "빠진 달"을 실패 0건으로 착각해 건너뛰고 이어붙이면
+  // 실제로는 8월 데이터가 아예 없는데도 "7월,9월 2개월 연속 실패"라는 과다 주장이 나온다.
+  test('중간 달이 통째로 빠지면(측정 불가) 연속으로 이어붙이지 않고 끊긴 것으로 본다', () => {
+    const history = [
+      { month: '2026-09', metricKey: 'm', metricLabel: 'M', failCount: 2 },
+      // 2026-08 행 자체가 없음 (그 달엔 분모 0이라 측정 불가)
+      { month: '2026-07', metricKey: 'm', metricLabel: 'M', failCount: 5 },
+    ];
+    assert.equal(detectConsecutiveInsights(history, '2026-09').length, 0,
+      '8월 데이터가 없는데 7월·9월을 이어붙여 연속으로 판정하면 안 됨');
+  });
+
+  test('달력상 진짜로 연속인 3개월(빠진 달 없음)은 정상적으로 인정된다', () => {
+    const history = [
+      { month: '2026-09', metricKey: 'm', metricLabel: 'M', failCount: 2 },
+      { month: '2026-08', metricKey: 'm', metricLabel: 'M', failCount: 1 },
+      { month: '2026-07', metricKey: 'm', metricLabel: 'M', failCount: 5 },
+    ];
+    const out = detectConsecutiveInsights(history, '2026-09');
+    assert.equal(out.length, 1);
+    assert.equal(out[0].evidence.consecutiveMonths, 3);
+  });
+
+  test('연도 경계(2026-01 → 2025-12)를 넘어가도 정확히 연속으로 인정한다', () => {
+    const history = [
+      { month: '2026-01', metricKey: 'm', metricLabel: 'M', failCount: 2 },
+      { month: '2025-12', metricKey: 'm', metricLabel: 'M', failCount: 1 },
+    ];
+    const out = detectConsecutiveInsights(history, '2026-01');
+    assert.equal(out.length, 1);
+    assert.equal(out[0].evidence.consecutiveMonths, 2);
+  });
 });
 
 // ── L1: rankInsights / formatInsightSentence ─────────────────────────────────
@@ -324,7 +359,15 @@ describe('api/stats.js — insights는 월간 기간에서만 추가된다', () 
   const src = read('api/stats.js');
   test('getMonthlyInsights를 import하고 this_month/last_month에서만 호출한다', () => {
     assert.match(src, /import\s*\{[^}]*getMonthlyInsights[^}]*\}\s*from\s*"\.\.\/src\/application\/reportingService\.js"/);
-    assert.match(src, /if \(period === "this_month" \|\| period === "last_month"\) \{\s*\n\s*result\.insights = await getMonthlyInsights/);
+    assert.match(src, /if \(period === "this_month" \|\| period === "last_month"\) \{/);
+  });
+
+  // 코드 리뷰에서 발견 — getMonthlyInsights는 그 자체로 추가 DB 조회를 여러 번 더 하는
+  // 부가 기능이라, 여기서 실패해도 이미 계산된 stats/summary까지 500으로 날려버리면 안 된다.
+  test('getMonthlyInsights 호출은 자체 try/catch로 감싸 실패해도 stats 응답 자체는 살린다', () => {
+    assert.match(src, /try \{\s*\n\s*result\.insights = await getMonthlyInsights/);
+    assert.match(src, /catch \(err\) \{\s*\n\s*console\.error\("\[api\/stats\] getMonthlyInsights/);
+    assert.match(src, /result\.insights = \[\];/);
   });
 });
 

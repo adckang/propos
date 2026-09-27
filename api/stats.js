@@ -101,7 +101,12 @@ export default async function handler(req, res) {
       propertyIds,
     });
     if (period === "this_month" || period === "last_month") {
-      result.insights = await getMonthlyInsights(period, { db, propertyIds });
+      try {
+        result.insights = await getMonthlyInsights(period, { db, propertyIds });
+      } catch (err) {
+        console.error("[api/stats] getMonthlyInsights 실패 — insights 없이 응답:", err?.message ?? err);
+        result.insights = [];
+      }
     }
     return res.status(200).json(result);
   } catch (err) {

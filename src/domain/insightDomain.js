@@ -127,11 +127,21 @@ export function detectMonthOverMonthInsights(currentAgg, previousAgg, reportPeri
   return insights;
 }
 
+// 'YYYY-MM' → 그 한 달 전의 'YYYY-MM'. detectConsecutiveInsights가 달력상 연속인지
+// 확인하는 데만 쓰는 순수 유틸.
+function prevMonthKey(monthKey) {
+  const [y, m] = monthKey.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 2, 1)); // m은 1-indexed → m-1이 이번 달(0-indexed), 그 전달은 -1 더
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
 // ── D. CONSECUTIVE — 같은 지표가 2개월 이상 연속으로 실패 발생 ────────────────────────
 /**
  * @param {{ month: string, metricKey, metricLabel, failCount }[]} monthlyHistory
  *   reportPeriod을 포함해 최근 완료된 여러 달치, 스코프 전체 합산(월별×지표별 실패 건수).
- *   month은 'YYYY-MM', 최신 달부터 과거 순으로 안 줘도 된다(이 함수 안에서 정렬함).
+ *   month은 'YYYY-MM', 최신 달부터 과거 순으로 안 줘도 된다(이 함수 안에서 정렬함). 그 지표가
+ *   해당 달에 측정 불가(분모 0)였으면 그 달 자체가 배열에서 아예 빠질 수 있다 — 이 함수는 그런
+ *   빠진 달을 "실패 없음"으로 이어붙이지 않고 연속이 끊긴 것으로 본다(과다 주장 방지).
  * @param {string} reportPeriod — 연속 판정의 "가장 최근 달" (보통 monthlyHistory의 최신 달과 같음)
  */
 export function detectConsecutiveInsights(monthlyHistory, reportPeriod) {
@@ -147,9 +157,12 @@ export function detectConsecutiveInsights(monthlyHistory, reportPeriod) {
   for (const [metricKey, { metricLabel, rows }] of byMetric) {
     const sorted = [...rows].sort((a, b) => b.month.localeCompare(a.month)); // 최근 달 → 과거
     const streakMonths = [];
+    let expectedMonth = null;
     for (const row of sorted) {
-      if (row.failCount >= 1) streakMonths.push(row.month);
-      else break; // 연속이 끊기면 중단 — 가장 최근 달부터 이어진 연속만 본다
+      if (expectedMonth !== null && row.month !== expectedMonth) break; // 중간에 달이 빠짐 — 달력상 연속이 아님
+      if (row.failCount < 1) break; // 연속이 끊기면 중단 — 가장 최근 달부터 이어진 연속만 본다
+      streakMonths.push(row.month);
+      expectedMonth = prevMonthKey(row.month);
     }
     if (streakMonths.length < MIN_MONTHS) continue;
 

@@ -223,11 +223,11 @@ export async function getMonthlyInsights(period, { db, propertyIds = null, now =
 
   const baseOffset = period === "last_month" ? 1 : 0;
 
-  // 최근 몇 달치 스코프 합산 지표 — MONTH_OVER_MONTH(현재·직전)·CONSECUTIVE(전체 이력) 공용
-  const monthDataList = [];
-  for (let i = 0; i < INSIGHT_LOOKBACK_MONTHS; i++) {
-    monthDataList.push(await computeAggregateMonthMetrics(db, baseOffset + i, propertyIds, now));
-  }
+  // 최근 몇 달치 스코프 합산 지표 — MONTH_OVER_MONTH(현재·직전)·CONSECUTIVE(전체 이력) 공용.
+  // 달마다 서로 독립적인 조회라 Promise.all로 동시에 실행(순서는 그대로 보존됨).
+  const monthDataList = await Promise.all(
+    Array.from({ length: INSIGHT_LOOKBACK_MONTHS }, (_, i) => computeAggregateMonthMetrics(db, baseOffset + i, propertyIds, now))
+  );
   const [currentMonth, previousMonth] = monthDataList;
   const reportPeriod = currentMonth.monthKey;
 
