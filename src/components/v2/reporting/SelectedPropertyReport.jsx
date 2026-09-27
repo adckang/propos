@@ -15,7 +15,7 @@ export default function SelectedPropertyReport({
   isMobile,
   monthlyCalendarState,
 }) {
-  const { stats: periodStats, summary, loading: periodLoading } = useReportingStats(
+  const { stats: periodStats, summary, insights, loading: periodLoading } = useReportingStats(
     noSelection ? null : statsPeriod,
     statsPropertyIds,
   );
@@ -42,7 +42,7 @@ export default function SelectedPropertyReport({
 
   return (
     <div data-testid="selected-property-report">
-    <SummaryBanner summary={displaySummary} loading={reportLoading} isMobile={isMobile}>
+    <SummaryBanner summary={displaySummary} loading={reportLoading} isMobile={isMobile} insights={insights}>
       <div style={{
         padding: isMobile ? '4px 12px' : '4px 20px',
         background: '#f8fafc', borderBottom: '1px solid #e2e8f0',

@@ -203,3 +203,29 @@ export function periodRangeLabel(period, nowMs) {
   const last  = md(range.to.getTime() - 1);
   return first === last ? first : `${first}~${last}`;
 }
+
+/**
+ * 이번 달 기준으로 n개월 전(0=이번 달, 1=지난달, 2=2개월 전 …)의 KST 달력 월 범위 + "YYYY-MM" 키.
+ *
+ * 기존 기간 이름 체계(this_month/last_month/next_month, describePeriod 등)와는 완전히 독립된
+ * 보조 함수다 — 월간 인사이트(insightDomain, D-027)가 여러 달 전 데이터를 조회할 때만 쓰고,
+ * describePeriod/periodToDateRange 등 다른 화면이 공유하는 함수는 전혀 건드리지 않는다
+ * (사이드이펙트 없음 — 한 곳에서만 쓰는 새 함수이므로 다른 화면에 영향 없음).
+ *
+ * @param {number} n — 0 이상
+ * @param {number} [nowMs] — 테스트용 고정 타임스탬프(ms). 생략 시 Date.now()
+ * @returns {{ from: Date, to: Date, monthKey: string }}
+ */
+export function monthsAgoRange(n, nowMs) {
+  const now = new Date(nowMs != null ? nowMs : Date.now());
+  const kst = new Date(now.getTime() + KST_OFFSET_MS);
+  const y = kst.getUTCFullYear();
+  const m = kst.getUTCMonth();
+
+  const from = kstMidnight(y, m - n, 1);
+  const to   = kstMidnight(y, m - n + 1, 1);
+  const keyDate = new Date(Date.UTC(y, m - n, 1));
+  const monthKey = `${keyDate.getUTCFullYear()}-${String(keyDate.getUTCMonth() + 1).padStart(2, '0')}`;
+
+  return { from, to, monthKey };
+}

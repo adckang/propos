@@ -7,6 +7,7 @@ import { Pool } from "pg";
 import {
   getDrilldownForMetric,
   getMonthlyCalendarData,
+  getMonthlyInsights,
   getStatsForPeriod,
 } from "../src/application/reportingService.js";
 import { parsePropertyIds } from "../src/application/statsQueryParser.js";
@@ -99,6 +100,9 @@ export default async function handler(req, res) {
       db,
       propertyIds,
     });
+    if (period === "this_month" || period === "last_month") {
+      result.insights = await getMonthlyInsights(period, { db, propertyIds });
+    }
     return res.status(200).json(result);
   } catch (err) {
     console.error(`[api/stats${route === "root" ? "" : `/${route}`}] error:`, err);

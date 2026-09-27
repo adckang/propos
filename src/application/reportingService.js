@@ -1,6 +1,6 @@
 import { getPeriodRange, countCurrentStats, countPeriodEvents } from "../domain/reportingDomain.js";
-import { describePeriod } from "../domain/periodDomain.js";
-import { summarizeOperationalMetrics } from "../domain/operationalMetricsDomain.js";
+import { describePeriod, monthsAgoRange } from "../domain/periodDomain.js";
+import { summarizeOperationalMetrics, computeMeasurableMetrics } from "../domain/operationalMetricsDomain.js";
 import {
   detectCleaningTimeFailures,
   detectPreStayOptimizationFailures,
@@ -8,8 +8,9 @@ import {
   detectPostCheckoutFailures,
   detectPostCleaningFailures,
 } from "../domain/metricDrilldownDomain.js";
+import { buildMonthlyInsightSentences } from "../domain/insightDomain.js";
 import { queryEvents, getLastKnownStatesFromDB, queryStateEventsForProperty } from "../infrastructure/eventRepository.js";
-import { queryCleaningJobCounts, queryCleaningIssueItems } from "../infrastructure/cleaningJobRepository.js";
+import { queryCleaningJobCounts, queryCleaningJobCountsByProperty, queryCleaningIssueItems } from "../infrastructure/cleaningJobRepository.js";
 import { buildIssueItems, buildStateSegmentsFromEvents, groupIssueItemsByKstDate } from "../domain/monthlyCalendarDomain.js";
 
 // content-guide.md 규칙 준수: 한 문장에 숫자 최대 2개, 내부 상태명 노출 금지
@@ -180,6 +181,102 @@ export async function getStatsForPeriod(period, { db, propertyIds = null, now = 
     stats,
     summary,
   };
+}
+
+// CONSECUTIVE가 보는 과거 달 수(이번/지난달 포함) — 연속 최소 2개월보다 여유 있게 잡아 3개월
+// 연속까지도 잡아낼 수 있게 함. 이 상수만 늘리면 월별 조회가 그만큼 더 도는 구조라 값 하나로 제어.
+const INSIGHT_LOOKBACK_MONTHS = 4;
+
+/**
+ * reportPeriod 기준 monthOffset달 전의 스코프 전체 합산 지표(measurable) + 그 달 이벤트를 계산한다.
+ * MONTH_OVER_MONTH(합산 비교)와 CONSECUTIVE(월별 이력) 둘 다 이 결과를 재사용 — 같은 달을
+ * 두 번 조회하지 않는다. REPEAT/CONCENTRATION(숙소별 분해)은 이 중 오프셋 0(이번 reportPeriod)의
+ * events만 별도로 다시 나눠 쓴다.
+ */
+async function computeAggregateMonthMetrics(db, monthOffset, propertyIds, now) {
+  const { from, to, monthKey } = monthsAgoRange(monthOffset, now.getTime());
+  const events = await queryEvents(db, { from, to }, propertyIds);
+  const stats = countPeriodEvents(events);
+  stats.cleaningOnTime = Math.max(0, stats.cleaningFinished - detectCleaningTimeFailures(events).length);
+  try {
+    const jobs = await queryCleaningJobCounts(db, { from, to }, propertyIds);
+    stats.cleaningCreated  = jobs.created;
+    stats.cleaningAssigned = jobs.assigned;
+  } catch (err) {
+    console.error("[reportingService] getMonthlyInsights cleaning_jobs 집계 실패:", err?.message ?? err);
+    stats.cleaningCreated  = null;
+    stats.cleaningAssigned = null;
+  }
+  return { monthKey, from, to, events, metrics: computeMeasurableMetrics(stats) };
+}
+
+/**
+ * 월간 레포트 Summary 하위에 붙는 "발견된 패턴" 최대 3문장 (D-027).
+ * this_month/last_month에서만 의미 있음 — 그 밖의 기간은 빈 배열.
+ *
+ * @param {string} period
+ * @param {{ db: object, propertyIds?: string[]|null, now?: Date }} deps
+ * @returns {Promise<string[]>}
+ */
+export async function getMonthlyInsights(period, { db, propertyIds = null, now = new Date() }) {
+  if (period !== "this_month" && period !== "last_month") return [];
+
+  const baseOffset = period === "last_month" ? 1 : 0;
+
+  // 최근 몇 달치 스코프 합산 지표 — MONTH_OVER_MONTH(현재·직전)·CONSECUTIVE(전체 이력) 공용
+  const monthDataList = [];
+  for (let i = 0; i < INSIGHT_LOOKBACK_MONTHS; i++) {
+    monthDataList.push(await computeAggregateMonthMetrics(db, baseOffset + i, propertyIds, now));
+  }
+  const [currentMonth, previousMonth] = monthDataList;
+  const reportPeriod = currentMonth.monthKey;
+
+  const toAggRow = (m) => ({ metricKey: m.key, metricLabel: m.label, numerator: m.numerator, denominator: m.denominator });
+  const currentAgg = currentMonth.metrics.map(toAggRow);
+  const previousAgg = previousMonth.metrics.map(toAggRow);
+  const monthlyHistory = monthDataList.flatMap(({ monthKey, metrics }) =>
+    metrics.map(m => ({ month: monthKey, metricKey: m.key, metricLabel: m.label, failCount: m.failCount }))
+  );
+
+  // 이번 reportPeriod 한 달치를 숙소별로 나눠서 REPEAT/CONCENTRATION용 rows 생성.
+  // 전체 숙소 스코프(propertyIds=null)일 땐 별도 "전체 숙소 목록" 조회 없이, 이미 가져온
+  // 이벤트에 실제로 등장한 property_id만 대상으로 한다(그 달에 아무 기록도 없는 숙소는
+  // REPEAT/CONCENTRATION 어느 쪽으로도 뽑힐 수 없어 굳이 스코프에 넣을 이유가 없음).
+  const events = currentMonth.events;
+  const scopeIds = Array.isArray(propertyIds) && propertyIds.length > 0
+    ? propertyIds
+    : [...new Set(events.map(e => e.property_id))];
+
+  const eventsByProperty = new Map(scopeIds.map(id => [id, []]));
+  for (const e of events) {
+    if (!eventsByProperty.has(e.property_id)) eventsByProperty.set(e.property_id, []);
+    eventsByProperty.get(e.property_id).push(e);
+  }
+
+  let cleaningMap = new Map();
+  if (scopeIds.length > 0) {
+    try {
+      const rows = await queryCleaningJobCountsByProperty(db, { from: currentMonth.from, to: currentMonth.to }, scopeIds);
+      cleaningMap = new Map(rows.map(r => [r.property_id, r]));
+    } catch (err) {
+      console.error("[reportingService] getMonthlyInsights 숙소별 cleaning_jobs 집계 실패:", err?.message ?? err);
+    }
+  }
+
+  // property_id = ListView 표시 이름 그 자체 (D-016) — 별도 이름 조회 불필요.
+  const propertyMetricRows = [];
+  for (const [propId, propEvents] of eventsByProperty) {
+    const stats = countPeriodEvents(propEvents);
+    stats.cleaningOnTime = Math.max(0, stats.cleaningFinished - detectCleaningTimeFailures(propEvents).length);
+    const cj = cleaningMap.get(propId) ?? { created: 0, assigned: 0 };
+    stats.cleaningCreated  = cj.created;
+    stats.cleaningAssigned = cj.assigned;
+    for (const m of computeMeasurableMetrics(stats)) {
+      propertyMetricRows.push({ propertyId: propId, propertyName: propId, metricKey: m.key, metricLabel: m.label, failCount: m.failCount });
+    }
+  }
+
+  return buildMonthlyInsightSentences({ propertyMetricRows, currentAgg, previousAgg, monthlyHistory }, reportPeriod);
 }
 
 /** 월간 캘린더의 날짜별 문제 이력과 단일 숙소 상태 구간. */

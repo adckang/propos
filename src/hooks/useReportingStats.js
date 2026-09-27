@@ -10,10 +10,10 @@ import { useState, useEffect } from 'react';
  *
  * @param {string|null} period - null이면 fetch 스킵
  * @param {string[]|null} propertyIds - null=전체, [...]= 선택된 숙소 ID
- * @returns {{ stats: object|null, summary: string, loading: boolean, error: string|null }}
+ * @returns {{ stats: object|null, summary: string, insights: string[], loading: boolean, error: string|null }}
  */
 export function useReportingStats(period, propertyIds = null) {
-  const [state, setState] = useState({ stats: null, summary: '', loading: true, error: null });
+  const [state, setState] = useState({ stats: null, summary: '', insights: [], loading: true, error: null });
 
   // stable key for useEffect dependency — prevents re-render on array reference change
   const idsKey = Array.isArray(propertyIds) ? propertyIds.join(',') : null;
@@ -21,7 +21,7 @@ export function useReportingStats(period, propertyIds = null) {
   useEffect(() => {
     // period null → 스킵 (조건부 fetching)
     if (!period) {
-      setState({ stats: null, summary: '', loading: false, error: null });
+      setState({ stats: null, summary: '', insights: [], loading: false, error: null });
       return;
     }
 
@@ -40,11 +40,11 @@ export function useReportingStats(period, propertyIds = null) {
       })
       .then(data => {
         if (cancelled) return;
-        setState({ stats: data.stats ?? null, summary: data.summary || '', loading: false, error: null });
+        setState({ stats: data.stats ?? null, summary: data.summary || '', insights: data.insights ?? [], loading: false, error: null });
       })
       .catch(err => {
         if (cancelled) return;
-        setState({ stats: null, summary: '', loading: false, error: err.message });
+        setState({ stats: null, summary: '', insights: [], loading: false, error: err.message });
       });
 
     return () => { cancelled = true; };

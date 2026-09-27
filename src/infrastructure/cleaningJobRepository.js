@@ -41,6 +41,38 @@ export async function queryCleaningJobCounts(db, range, propertyIds = null) {
 }
 
 /**
+ * queryCleaningJobCounts과 같은 집계를 숙소별로 나눠서 반환한다(월간 인사이트 REPEAT/CONCENTRATION,
+ * D-027 전용 — 기존 queryCleaningJobCounts는 그대로 두고 새로 추가한 함수라 기존 호출부에는
+ * 영향 없음).
+ *
+ * @param {object} db
+ * @param {{ from: Date, to: Date }} range
+ * @param {string[]} propertyIds - 빈 배열이면 DB 호출 없이 빈 배열 반환
+ * @returns {Promise<{ property_id: string, created: number, assigned: number }[]>}
+ */
+export async function queryCleaningJobCountsByProperty(db, range, propertyIds) {
+  if (!Array.isArray(propertyIds) || propertyIds.length === 0) return [];
+
+  const { rows } = await db.query(
+    `SELECT
+       property_id,
+       COUNT(*) FILTER (WHERE status <> 'CANCELLED')               AS created,
+       COUNT(*) FILTER (WHERE status IN ('ASSIGNED','COMPLETED'))  AS assigned
+     FROM cleaning_jobs
+     WHERE checkout_at >= $1 AND checkout_at <= $2
+       AND property_id = ANY($3::text[])
+     GROUP BY property_id`,
+    [range.from, range.to, propertyIds]
+  );
+
+  return rows.map(r => ({
+    property_id: r.property_id,
+    created:  Number(r.created)  || 0,
+    assigned: Number(r.assigned) || 0,
+  }));
+}
+
+/**
  * 이미 체크아웃 시각이 지났지만 배정/완료되지 않은 청소 잡을 문제 아이템으로 반환한다.
  * 미래 잡은 아직 문제가 아니므로 now 이후는 조회하지 않는다.
  */

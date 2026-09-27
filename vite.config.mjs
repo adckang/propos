@@ -8,8 +8,9 @@ import { getHaBaseUrl, getHaToken } from "./server/haProxy.js";
 import { fetchWeather } from "./server/weatherService.js";
 import { PROPERTIES as MOCK_PROPERTIES } from "./src/data/roomStateMockData.js";
 import { countCurrentStats } from "./src/domain/reportingDomain.js";
-import { describePeriod, periodToRemainingRange } from "./src/domain/periodDomain.js";
+import { describePeriod, periodToRemainingRange, monthsAgoRange } from "./src/domain/periodDomain.js";
 import { summarizeOperationalMetrics } from "./src/domain/operationalMetricsDomain.js";
+import { buildMonthlyInsightSentences } from "./src/domain/insightDomain.js";
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -129,6 +130,38 @@ function alignMonthlyStatsWithIssues(stats, issues) {
     cleaningCreated,
     cleaningAssigned: Math.max(0, cleaningCreated - assignmentFailures),
   };
+}
+
+// dev 전용 /api/stats "발견된 패턴" 목업 (D-027) — 실제 buildMonthlyInsightSentences를 그대로
+// 불러써서 문장 포맷·랭킹 로직이 production과 갈라지지 않게 한다(D-026 dev 스텁 교훈과 동일 원칙).
+// 서로 다른 지표/숙소에 3종(CONCENTRATION/CONSECUTIVE/MONTH_OVER_MONTH)이 자연스럽게 상위 3개로
+// 뽑히도록 구성 — REPEAT 후보(파주201 청소시간 2회)도 같이 넣어 "임계값 이상 후보가 top3보다
+// 많을 때 타입 우선순위로 걸러진다"는 랭킹 규칙까지 함께 확인할 수 있게 함.
+function mockMonthlyInsights(period, nowMs) {
+  const baseOffset = period === "last_month" ? 1 : 0;
+  const reportPeriod = monthsAgoRange(baseOffset, nowMs).monthKey;
+  const prevPeriod   = monthsAgoRange(baseOffset + 1, nowMs).monthKey;
+  const m2Period     = monthsAgoRange(baseOffset + 2, nowMs).monthKey;
+  const m3Period     = monthsAgoRange(baseOffset + 3, nowMs).monthKey;
+
+  const propertyMetricRows = [
+    { propertyId: "파주201",  propertyName: "파주201",  metricKey: "cleaning_time",          metricLabel: "청소시간 준수", failCount: 2 },
+    { propertyId: "역삼 G호", propertyName: "역삼 G호", metricKey: "post_checkout_energy",   metricLabel: "퇴실 후 절전", failCount: 3 },
+    { propertyId: "홍대 B호", propertyName: "홍대 B호", metricKey: "post_checkout_energy",   metricLabel: "퇴실 후 절전", failCount: 1 },
+    { propertyId: "파주201",  propertyName: "파주201",  metricKey: "post_checkout_energy",   metricLabel: "퇴실 후 절전", failCount: 1 },
+  ];
+
+  const currentAgg  = [{ metricKey: "vacant_energy", metricLabel: "빈방 절전 유지", numerator: 12, denominator: 20 }];
+  const previousAgg = [{ metricKey: "vacant_energy", metricLabel: "빈방 절전 유지", numerator: 17, denominator: 18 }];
+
+  const monthlyHistory = [
+    { month: reportPeriod, metricKey: "cleaning_assign", metricLabel: "청소 담당자 배정", failCount: 2 },
+    { month: prevPeriod,   metricKey: "cleaning_assign", metricLabel: "청소 담당자 배정", failCount: 1 },
+    { month: m2Period,     metricKey: "cleaning_assign", metricLabel: "청소 담당자 배정", failCount: 3 },
+    { month: m3Period,     metricKey: "cleaning_assign", metricLabel: "청소 담당자 배정", failCount: 0 },
+  ];
+
+  return buildMonthlyInsightSentences({ propertyMetricRows, currentAgg, previousAgg, monthlyHistory }, reportPeriod);
 }
 
 function apiProxyPlugin(env) {
@@ -309,7 +342,10 @@ function apiProxyPlugin(env) {
                 ? `${desc.label} ${selLabel} 체크인 ${stats.checkIns}건 완료, 이상감지 ${stats.anomalies}건이 있었어요.`
                 : `${desc.label} ${selLabel} 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`);
         }
-        sendJson(res, 200, { period, stats, summary: summary ?? "" });
+        const insights = (period === "this_month" || period === "last_month")
+          ? mockMonthlyInsights(period, Date.now())
+          : undefined;
+        sendJson(res, 200, { period, stats, summary: summary ?? "", ...(insights ? { insights } : {}) });
         return;
       }
       if (req.url?.startsWith("/api/cleaning/stats") && req.method === "GET") {

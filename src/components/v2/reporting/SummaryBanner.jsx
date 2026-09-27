@@ -19,10 +19,13 @@ function isUrgent(text) {
   return URGENT_PATTERNS.some(p => p.test(text));
 }
 
-export default function SummaryBanner({ summary, loading, isMobile = false, children }) {
+export default function SummaryBanner({ summary, loading, isMobile = false, insights = [], children }) {
   const [expanded, setExpanded] = useState(false);
+  const [insightsExpanded, setInsightsExpanded] = useState(false);
 
   if (!summary && !children) return null;
+
+  const hasInsights = insights.length > 0;
 
   const urgent = summary ? isUrgent(summary) : false;
   const hasChildren = Boolean(children);
@@ -73,6 +76,47 @@ export default function SummaryBanner({ summary, loading, isMobile = false, chil
             </span>
           )}
         </div>
+      )}
+      {hasInsights && (
+        <div
+          onClick={() => setInsightsExpanded(v => !v)}
+          style={{
+            padding: isMobile ? '6px 12px' : '7px 20px',
+            background: '#f8fafc',
+            borderBottom: `1px solid ${insightsExpanded ? 'transparent' : '#e2e8f0'}`,
+            fontSize: isMobile ? 11 : 12,
+            color: '#475569', fontWeight: 600,
+            display: 'flex', alignItems: 'center', gap: 6,
+            cursor: 'pointer', userSelect: 'none',
+          }}
+        >
+          <span>🔍</span>
+          <span style={{ flex: 1 }}>발견된 패턴 {insights.length}건</span>
+          <span style={{
+            fontSize: isMobile ? 12 : 13,
+            transition: 'transform 0.2s ease',
+            display: 'inline-block',
+            transform: insightsExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+          }}>▾</span>
+        </div>
+      )}
+      {hasInsights && insightsExpanded && (
+        <ul style={{
+          margin: 0, listStyle: 'none',
+          padding: isMobile ? '8px 12px' : '9px 20px',
+          background: '#fff', borderBottom: '1px solid #e2e8f0',
+          display: 'flex', flexDirection: 'column', gap: 6,
+        }}>
+          {insights.map((sentence, i) => (
+            <li key={i} style={{
+              fontSize: isMobile ? 12 : 13, color: '#334155', lineHeight: 1.4,
+              display: 'flex', gap: 6,
+            }}>
+              <span style={{ color: '#94a3b8', flexShrink: 0 }}>·</span>
+              <span>{sentence}</span>
+            </li>
+          ))}
+        </ul>
       )}
       {hasChildren && expanded && children}
     </div>
