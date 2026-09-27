@@ -2,7 +2,6 @@ import { useReportingStats } from '../../../hooks/useReportingStats.js';
 import { futureSummaryFor } from '../../../domain/futureWeekDomain.js';
 import SummaryBanner from './SummaryBanner.jsx';
 import ReportPanel from './ReportPanel.jsx';
-import { describePeriod } from '../../../domain/periodDomain.js';
 
 export default function SelectedPropertyReport({
   statsPeriod,
@@ -20,16 +19,12 @@ export default function SelectedPropertyReport({
     noSelection ? null : statsPeriod,
     statsPropertyIds,
   );
-  const issueTotal = monthlyCalendarState.data?.items?.length ?? 0;
-  const periodLabel = describePeriod(statsPeriod)?.label ?? '';
-  const issueSummary = monthlyCalendarState.data
-    ? issueTotal > 0
-      ? `${periodLabel}${statsPeriod === 'this_month' ? ' 지금까지' : ''} 운영 문제 ${issueTotal}건이 있었어요.`
-      : `${periodLabel}${statsPeriod === 'this_month' ? ' 지금까지' : ''} 운영 문제가 없었어요.`
-    : '';
+  // 지난달/이번달 요약 문장은 서버(generateSummary)가 운영 지표 기준으로 만들어서 준다 —
+  // ListView(지난주/이번주)와 같은 톤·같은 숫자 정의를 쓴다 (D-026). next_month(미래)만
+  // 이벤트가 없어 예약(iCal) 기준 문장으로 별도 처리.
   const displaySummary = statsPeriod === 'next_month'
     ? (futureSummaryFor(statsPeriod, scopedProperties) || summary)
-    : (issueSummary || summary);
+    : summary;
   const reportLoading = periodLoading || monthlyCalendarState.loading;
 
   if (noSelection) {

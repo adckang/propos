@@ -95,17 +95,17 @@ describe("generateSummary — 이번 주 / 이번 달", () => {
     assert.ok(s.length > 0);
   });
 
-  test("this_week, 이상 있을 때 → 이상 건수 또는 확인 촉구", () => {
+  // D-026(2026-09-25 후속: 5단계 등급 요약으로 단순화): anomalies는 이 요약 문장이 다루는
+  // 신호가 아니다 — checkOuts>0인데 위반 이벤트가 없으면 "퇴실 후 절전/보안"이 측정 가능해져
+  // 실패 0건 → "완벽해요"를 말한다.
+  test("this_week, anomalies 필드는 요약 문장에 영향 없음 — 운영 지표가 있으면 그걸 말한다", () => {
     const s = generateSummary("this_week", {
       checkIns: 3,
       checkOuts: 5,
       anomalies: 1,
       energyWaste: 0,
     });
-    assert.ok(
-      s.includes("1") || s.includes("이상"),
-      `이상 관련 내용 없음: "${s}"`
-    );
+    assert.equal(s, '이번 주 지금까지 완벽해요 (실패 0건)');
   });
 
   test("this_month → 비어 있지 않은 문장", () => {
@@ -151,17 +151,16 @@ describe("generateSummary — 지난주 / 지난달", () => {
     assert.ok(!hasInternalTerm(s), `내부 용어 노출됨: "${s}"`);
   });
 
-  test("last_month, 이상 있을 때 → 이상 건수 포함", () => {
+  // D-026(2026-09-25 후속): anomalies는 이 요약이 다루는 신호가 아니다 — checkOuts>0인데
+  // 위반 이벤트가 없으면 "완벽해요 (실패 0건)"을 말한다.
+  test("last_month, anomalies 필드는 요약 문장에 영향 없음 — 운영 지표가 있으면 그걸 말한다", () => {
     const s = generateSummary("last_month", {
       checkIns: 30,
       checkOuts: 29,
       anomalies: 2,
       energyWaste: 1,
     });
-    assert.ok(
-      s.includes("2") || s.includes("이상"),
-      `이상 관련 없음: "${s}"`
-    );
+    assert.equal(s, '지난달 완벽해요 (실패 0건)');
     assert.ok(countNumbers(s) <= 2, `숫자 ${countNumbers(s)}개 초과: "${s}"`);
   });
 });
@@ -212,14 +211,18 @@ describe("generateSummary — 일 단위 (yesterday / today / tomorrow)", () => 
     assert.ok(!hasInternalTerm(s), `내부 용어 노출됨: "${s}"`);
   });
 
-  test("yesterday, 이상 있음 → 이상 건수 포함", () => {
+  // D-026: 완료 기간(어제/지난주/지난달/이번 주/이번 달)의 요약 문장은 이제 7개 운영 지표
+  // 기준으로 만들어진다 — anomalies(실시간 이상감지 건수)는 이 문장이 다루는 신호가 아니다
+  // (대시보드 상단 상태칩 등 다른 곳에서 이미 보여줌). checkOuts는 있지만 위반 이벤트가 하나도
+  // 없으면(이 픽스처처럼) "퇴실 후 절전/보안" 두 지표가 100%로 측정 가능해져 그 결과를 말한다.
+  test("yesterday, anomalies 필드는 요약 문장에 영향 없음 — 운영 지표가 있으면 그걸 말한다", () => {
     const s = generateSummary("yesterday", {
       checkIns: 2,
       checkOuts: 2,
       anomalies: 1,
       energyWaste: 0,
     });
-    assert.ok(s.includes("1") || s.includes("이상"), `이상 관련 없음: "${s}"`);
+    assert.equal(s, '어제 완벽해요 (실패 0건)');
     assert.ok(countNumbers(s) <= 2, `숫자 ${countNumbers(s)}개 초과: "${s}"`);
   });
 

@@ -79,12 +79,8 @@ test('E2E-004 월간 필터·숙소 복수선택·날짜 상세가 함께 동작
   await expect(propertySelect).toContainText('ALL');
   await expect(calendar).toBeVisible();
 
-  const allIssueTotal = await calendar.getByRole('button', { name: /문제 \d+건/ }).evaluateAll(
-    buttons => buttons.reduce((sum, button) => sum + Number(button.textContent), 0)
-  );
-  const allSummary = await report.innerText();
-  expect(Number(allSummary.match(/운영 문제 (\d+)건/)?.[1])).toBe(allIssueTotal);
-
+  // D-026: 요약 문장이 캘린더의 "문제 N건" 배지 합계가 아니라 7개 운영 지표(달성률) 기준으로
+  // 바뀌어서, 더 이상 이 둘이 같은 숫자를 말할 이유가 없다 — 그 cross-check는 제거.
   await report.getByText('자세히').click();
   await expect(report.getByText('이번 달 레포트')).toBeVisible();
 
@@ -99,7 +95,6 @@ test('E2E-004 월간 필터·숙소 복수선택·날짜 상세가 함께 동작
   await expect(propertySelect).toContainText('선택 없음');
   await menu.locator('button').nth(1).click();
   await expect(propertySelect).toContainText('1개 선택');
-  await expect(report).toContainText('운영 문제 1건');
   const oneIssueTotal = await calendar.getByRole('button', { name: /문제 \d+건/ }).evaluateAll(
     buttons => buttons.reduce((sum, button) => sum + Number(button.textContent), 0)
   );

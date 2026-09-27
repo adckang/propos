@@ -1,92 +1,38 @@
 import { useState } from 'react';
 import DrilldownSheet from './DrilldownSheet';
-import SharedMetricRow from './SharedMetricRow';
+import SharedMetricRow, { ROW_GRID_TEMPLATE } from './SharedMetricRow';
 import { pctColor } from '../../../domain/metricRowDomain.js';
+import { computeOperationalMetrics } from '../../../domain/operationalMetricsDomain.js';
 
 /**
- * Template-P — 7개 운영 지표 (건수 / 달성률)
+ * Template-P — 7개 운영 지표 (건수 / 성공률)
  * 적용: PAST 기간 (last_week / yesterday / last_hour / last_month)
  * report-architecture.md 섹션 4 Template-P 참조.
  *
- * 지표 정의:
- *   1. 입실전 숙소 최적화율       — preStayOptimized / preStayAttempts
- *   2. 퇴실후 청소전 절전 적용률  — (checkOuts - postCheckoutEnergyWaste) / checkOuts
- *   3. 퇴실후 청소전 보안 적용률  — (checkOuts - postCheckoutSecurityBreach) / checkOuts
- *   4. 청소후 공실중 절전 적용률  — (cleaningFinished - vacantEnergyWaste) / cleaningFinished
- *   5. 청소후 공실중 보안 적용률  — (cleaningFinished - postCleaningSecurityBreach) / cleaningFinished
- *   6. 청소 시작~완료 시간 준수율 — cleaningOnTime / cleaningFinished  (기준: 3시간)
- *   7. 청소 스케줄 할당 성공률    — cleaningAssigned / cleaningCreated
+ * 지표 라벨·분자/분모 정의는 operationalMetricsDomain.computeOperationalMetrics 가 정본 —
+ * SummaryBanner 요약 문장(reportingService.generateSummary / SelectedPropertyReport)도 같은
+ * 정의를 써서, 표 숫자와 위 요약 문장이 항상 같은 얘기를 하게 한다 (D-026).
  */
 
 
 const MetricRow = SharedMetricRow;
 
-// 지표 index → drilldown metric 키 매핑 (없으면 null = 드릴다운 없음)
-const METRIC_KEYS = [
-  'pre_stay_optimization',   // 0: 입실전 숙소 최적화율
-  'post_checkout_energy',    // 1: 퇴실후 절전
-  'post_checkout_security',  // 2: 퇴실후 보안
-  'vacant_energy',           // 3: 청소후 공실중 절전
-  'post_cleaning_security',  // 4: 청소후 공실중 보안
-  'cleaning_time',           // 5: 청소 시간 준수율
-  null,                      // 6: 청소 스케줄 할당 (cleaning_jobs 테이블 기반 — 미지원)
-];
+// 지표 key → drilldown metric 키 매핑 (없으면 드릴다운 없음)
+const DRILLDOWN_METRIC = {
+  pre_stay_optimization:  'pre_stay_optimization',
+  post_checkout_energy:   'post_checkout_energy',
+  post_checkout_security: 'post_checkout_security',
+  vacant_energy:          'vacant_energy',
+  post_cleaning_security: 'post_cleaning_security',
+  cleaning_time:          'cleaning_time',
+  cleaning_assign:        null, // 청소 스케줄 할당 (cleaning_jobs 테이블 기반 — 드릴다운 미지원)
+};
 
 export default function EventMatrixPanel({ stats, period, isMobile = false, onSelectRoom, propertyIds, properties = [] }) {
   const [drilldown, setDrilldown] = useState(null); // { metricKey, label }
   if (!stats) return null;
 
-  const checkOuts                  = stats.checkOuts                  ?? 0;
-  const cleaningFinished           = stats.cleaningFinished            ?? checkOuts;
-  const vacantEnergyWaste          = stats.vacantEnergyWaste           ?? 0;
-  const postCheckoutEnergyWaste    = stats.postCheckoutEnergyWaste     ?? 0;
-  const postCheckoutSecurityBreach = stats.postCheckoutSecurityBreach  ?? 0;
-  const postCleaningSecurityBreach = stats.postCleaningSecurityBreach  ?? 0;
-
-  // 역산 패턴: 위반 건수를 분모에서 빼면 적용률 달성 건수
-  const vacantEnergySavingOk       = Math.max(0, cleaningFinished - vacantEnergyWaste);
-  const postCheckoutEnergyOk       = Math.max(0, checkOuts - postCheckoutEnergyWaste);
-  const postCheckoutSecurityOk     = Math.max(0, checkOuts - postCheckoutSecurityBreach);
-  const postCleaningSecurityOk     = Math.max(0, cleaningFinished - postCleaningSecurityBreach);
-
-  const METRICS = [
-    {
-      label:       '입실전 숙소 최적화율',
-      numerator:   stats.preStayOptimized ?? 0,
-      denominator: stats.preStayAttempts  ?? 0,
-    },
-    {
-      label:       '퇴실후 청소전 절전 적용률',
-      numerator:   postCheckoutEnergyOk,
-      denominator: checkOuts,
-    },
-    {
-      label:       '퇴실후 청소전 보안 적용률',
-      numerator:   postCheckoutSecurityOk,
-      denominator: checkOuts,
-    },
-    {
-      label:       '청소후 공실중 절전 적용률',
-      numerator:   vacantEnergySavingOk,
-      denominator: cleaningFinished,
-    },
-    {
-      label:       '청소후 공실중 보안 적용률',
-      numerator:   postCleaningSecurityOk,
-      denominator: cleaningFinished,
-    },
-    {
-      label:       '청소 시작~완료 시간 준수율',
-      numerator:   stats.cleaningOnTime  ?? 0,
-      denominator: cleaningFinished,
-    },
-    {
-      label:       '청소 스케줄 할당 성공률',
-      // cleaning_jobs 집계값 그대로 — 조회 실패(null)면 "해당 없음", 체크아웃 수로 대체하지 않는다
-      numerator:   stats.cleaningAssigned,
-      denominator: stats.cleaningCreated,
-    },
-  ];
+  const METRICS = computeOperationalMetrics(stats);
 
   // 안심지수: 측정 가능한 지표(noData 아니고 분모 > 0)만 평균
   const measurable = METRICS.filter(m => !m.noData && (m.denominator ?? 0) > 0);
@@ -105,22 +51,20 @@ export default function EventMatrixPanel({ stats, period, isMobile = false, onSe
   return (
     <div style={{ padding: isMobile ? '12px' : '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-      {/* 테이블 헤더 */}
+      {/* 테이블 헤더 — 행(SharedMetricRow)과 같은 그리드 템플릿을 써야 칼럼이 어긋나지 않는다 */}
       <div style={{
-        display: 'flex', alignItems: 'center',
+        display: 'grid', gridTemplateColumns: ROW_GRID_TEMPLATE, columnGap: 6, alignItems: 'center',
         padding: '0 14px 6px 14px',
         borderBottom: '2px solid #e2e8f0',
       }}>
-        <div style={{ flex: 1, fontSize: 9, fontWeight: 700, color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase' }}>
+        <div style={{ gridColumn: 1, fontSize: 9, fontWeight: 700, color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase' }}>
           운영 지표
         </div>
-        <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase',
-          minWidth: 64, textAlign: 'right', marginRight: 10 }}>
+        <div style={{ gridColumn: 2, fontSize: 9, fontWeight: 700, color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase', textAlign: 'right' }}>
           건수
         </div>
-        <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase',
-          minWidth: 46, textAlign: 'center' }}>
-          달성률
+        <div style={{ gridColumn: 3, fontSize: 9, fontWeight: 700, color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center' }}>
+          성공률
         </div>
       </div>
 
@@ -129,14 +73,18 @@ export default function EventMatrixPanel({ stats, period, isMobile = false, onSe
         background: '#f8fafc', border: '1px solid #e2e8f0',
         borderRadius: 10, padding: '0 14px',
       }}>
-        {METRICS.map((m, i) => (
-          <MetricRow
-            key={i}
-            {...m}
-            isLast={i === METRICS.length - 1}
-            onDrilldown={METRIC_KEYS[i] ? () => setDrilldown({ metricKey: METRIC_KEYS[i], label: m.label }) : undefined}
-          />
-        ))}
+        {METRICS.map((m, i) => {
+          const { key: metricKey, ...rowProps } = m;
+          const drilldownMetric = DRILLDOWN_METRIC[metricKey];
+          return (
+            <MetricRow
+              key={metricKey}
+              {...rowProps}
+              isLast={i === METRICS.length - 1}
+              onDrilldown={drilldownMetric ? () => setDrilldown({ metricKey: drilldownMetric, label: m.label }) : undefined}
+            />
+          );
+        })}
       </div>
 
       {/* 드릴다운 바텀 시트 */}

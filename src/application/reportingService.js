@@ -1,5 +1,6 @@
 import { getPeriodRange, countCurrentStats, countPeriodEvents } from "../domain/reportingDomain.js";
 import { describePeriod } from "../domain/periodDomain.js";
+import { summarizeOperationalMetrics } from "../domain/operationalMetricsDomain.js";
 import {
   detectCleaningTimeFailures,
   detectPreStayOptimizationFailures,
@@ -44,13 +45,18 @@ export function generateSummary(period, stats) {
 
   // 주 단위
   if (period === "this_week") {
-    if (stats.anomalies > 0) return `이번 주 이상감지 ${stats.anomalies}건이 있어요.`;
-    return `이번 주 체크인 ${stats.checkIns}건, 체크아웃 ${stats.checkOuts}건이에요.`;
+    return summarizeOperationalMetrics(period, stats) ?? (
+      stats.anomalies > 0
+        ? `이번 주 이상감지 ${stats.anomalies}건이 있어요.`
+        : `이번 주 체크인 ${stats.checkIns}건, 체크아웃 ${stats.checkOuts}건이에요.`
+    );
   }
   if (period === "last_week") {
-    const base = stats.anomalies > 0
-      ? `지난주 체크인 ${stats.checkIns}건 완료, 이상감지 ${stats.anomalies}건이 있었어요.`
-      : `지난주 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`;
+    const base = summarizeOperationalMetrics(period, stats) ?? (
+      stats.anomalies > 0
+        ? `지난주 체크인 ${stats.checkIns}건 완료, 이상감지 ${stats.anomalies}건이 있었어요.`
+        : `지난주 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`
+    );
     return base + softSuffix(stats);
   }
   if (period === "next_week") {
@@ -59,12 +65,18 @@ export function generateSummary(period, stats) {
 
   // 월 단위
   if (period === "this_month") {
-    if (stats.anomalies > 0) return `이번 달 이상감지 ${stats.anomalies}건이 있어요.`;
-    return `이번 달 체크인 ${stats.checkIns}건, 체크아웃 ${stats.checkOuts}건이에요.`;
+    return summarizeOperationalMetrics(period, stats) ?? (
+      stats.anomalies > 0
+        ? `이번 달 이상감지 ${stats.anomalies}건이 있어요.`
+        : `이번 달 체크인 ${stats.checkIns}건, 체크아웃 ${stats.checkOuts}건이에요.`
+    );
   }
   if (period === "last_month") {
-    if (stats.anomalies > 0) return `지난달 체크인 ${stats.checkIns}건 완료, 이상감지 ${stats.anomalies}건이 있었어요.`;
-    return `지난달 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`;
+    return summarizeOperationalMetrics(period, stats) ?? (
+      stats.anomalies > 0
+        ? `지난달 체크인 ${stats.checkIns}건 완료, 이상감지 ${stats.anomalies}건이 있었어요.`
+        : `지난달 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`
+    );
   }
   if (period === "next_month") {
     return stats.checkIns > 0 ? `다음 달 체크인 ${stats.checkIns}건 예정이에요.` : `다음 달 예약이 없어요.`;
@@ -72,9 +84,11 @@ export function generateSummary(period, stats) {
 
   // 일 단위
   if (period === "yesterday") {
-    const base = stats.anomalies > 0
-      ? `어제 체크인 ${stats.checkIns}건, 이상감지 ${stats.anomalies}건이 있었어요.`
-      : `어제 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`;
+    const base = summarizeOperationalMetrics(period, stats) ?? (
+      stats.anomalies > 0
+        ? `어제 체크인 ${stats.checkIns}건, 이상감지 ${stats.anomalies}건이 있었어요.`
+        : `어제 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`
+    );
     return base + softSuffix(stats);
   }
   if (period === "tomorrow") {
@@ -83,8 +97,11 @@ export function generateSummary(period, stats) {
 
   // 시간 단위
   if (period === "last_hour") {
-    const total = (stats.checkIns ?? 0) + (stats.checkOuts ?? 0) + (stats.anomalies ?? 0);
-    return total > 0 ? `지난 1시간 이벤트 ${total}건이 있었어요.` : `지난 1시간 이벤트가 없어요.`;
+    const fallback = () => {
+      const total = (stats.checkIns ?? 0) + (stats.checkOuts ?? 0) + (stats.anomalies ?? 0);
+      return total > 0 ? `지난 1시간 이벤트 ${total}건이 있었어요.` : `지난 1시간 이벤트가 없어요.`;
+    };
+    return summarizeOperationalMetrics(period, stats) ?? fallback();
   }
   if (period === "next_hour") {
     return stats.checkIns > 0 ? `1시간 내 체크인 ${stats.checkIns}건 예정이에요.` : `1시간 내 예정된 이벤트가 없어요.`;
@@ -94,9 +111,11 @@ export function generateSummary(period, stats) {
   const d = describePeriod(period);
   if (d && (d.unit === "week" || d.unit === "day") && d.tense !== "active") {
     if (d.tense === "past") {
-      const base = stats.anomalies > 0
-        ? `${d.label} 체크인 ${stats.checkIns}건 완료, 이상감지 ${stats.anomalies}건이 있었어요.`
-        : `${d.label} 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`;
+      const base = summarizeOperationalMetrics(period, stats) ?? (
+        stats.anomalies > 0
+          ? `${d.label} 체크인 ${stats.checkIns}건 완료, 이상감지 ${stats.anomalies}건이 있었어요.`
+          : `${d.label} 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`
+      );
       return base + softSuffix(stats);
     }
     return stats.checkIns > 0 ? `${d.label} 체크인 ${stats.checkIns}건 예정이에요.` : `${d.label} 예약이 없어요.`;

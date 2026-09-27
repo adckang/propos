@@ -9,6 +9,7 @@ import { fetchWeather } from "./server/weatherService.js";
 import { PROPERTIES as MOCK_PROPERTIES } from "./src/data/roomStateMockData.js";
 import { countCurrentStats } from "./src/domain/reportingDomain.js";
 import { describePeriod, periodToRemainingRange } from "./src/domain/periodDomain.js";
+import { summarizeOperationalMetrics } from "./src/domain/operationalMetricsDomain.js";
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -265,7 +266,7 @@ function apiProxyPlugin(env) {
 
         // ACTIVE_STATS: this_week / this_month — 과거 지표 + 남은 체크인(checkIns = 미래분)
         const ACTIVE_STATS = scaleAll({
-          checkOuts: 6, preStayAttempts: 8, preStayOptimized: 7,
+          checkOuts: 6, anomalies: 1, preStayAttempts: 8, preStayOptimized: 7,
           cleaningFinished: 6, cleaningOnTime: 5,
           cleaningAssigned: 5, cleaningCreated: 6,
           vacantEnergyWaste: 1, postCheckoutEnergyWaste: 1,
@@ -274,15 +275,12 @@ function apiProxyPlugin(env) {
         });
 
         const selLabel = selectedIds ? `${selectedIds.length}개 숙소` : "전체 숙소";
+        // now/today, 미래 기간만 — 과거/진행중(완료 구간) 요약은 아래에서 실제 generateSummary와
+        // 같은 함수(summarizeOperationalMetrics, D-026)로 만든다. 스텁이 따로 문장을 만들면 dev
+        // 화면과 실제 서버 로직이 갈라진다(과거 실제로 그렇게 갈라져 있었음 — 화면에서 발견).
         const PERIOD_SUMMARY = {
           now:       `현재 ${selLabel} 중 ${NOW_STATS.anomalyCount}개 이상 징후가 확인됐어요.`,
           today:     `현재 ${selLabel} 중 ${NOW_STATS.anomalyCount}개 이상 징후가 확인됐어요.`,
-          this_week: `이번 주 ${selLabel} 이상감지 ${sc(3)}건이 있어요.`,
-          last_week: `지난주 ${selLabel} 체크인 ${sc(14)}건 완료, 이상감지 ${sc(3)}건이 있었어요.`,
-          yesterday: `어제 ${selLabel} 체크인 ${sc(2)}건, 이상감지 ${sc(1)}건이 있었어요.`,
-          last_hour: `지난 1시간 ${selLabel} 이벤트 ${sc(3)}건이 있었어요.`,
-          this_month:`이번 달 ${selLabel} 이상감지 ${sc(3)}건이 있어요.`,
-          last_month:`지난달 ${selLabel} 체크인 ${sc(14)}건 완료, 이상감지 ${sc(3)}건이 있었어요.`,
           next_week: `다음 주 ${selLabel} 체크인 ${sc(8)}건 예정이에요.`,
           tomorrow:  `내일 ${selLabel} 체크인 ${sc(8)}건 예정이에요.`,
           next_hour: `1시간 내 ${selLabel} 체크인 ${sc(1)}건 예정이에요.`,
@@ -299,16 +297,17 @@ function apiProxyPlugin(env) {
         const stats = desc?.unit === "month" && !isFuture
           ? alignMonthlyStatsWithIssues(baseStats, monthIssues)
           : baseStats;
-        let summary = PERIOD_SUMMARY[period];
-        if (desc?.unit === "month" && !isFuture) {
-          summary = monthIssues.length > 0
-            ? `${desc.label} ${selLabel} 운영 문제 ${monthIssues.length}건이 있었어요.`
-            : `${desc.label} ${selLabel} 운영 문제가 없었어요.`;
-        }
+
+        let summary = (!isLive && !isFuture) ? summarizeOperationalMetrics(period, stats) : null;
+        if (summary == null) summary = PERIOD_SUMMARY[period];
         if (summary === undefined && desc) {
+          // "이상감지" 문구는 실제 건수가 있을 때만 넣는다 — 무조건 넣으면 0건에도 "이상감지 0건이
+          // 있었어요"가 되어 isUrgent()가 빨간 배너로 잘못 띄운다(사용자가 실제로 발견한 버그).
           summary = isFuture
             ? `${desc.label} ${selLabel} 체크인 ${stats.checkIns}건 예정이에요.`
-            : `${desc.label} ${selLabel} 체크인 ${stats.checkIns}건 완료, 이상감지 ${stats.anomalies}건이 있었어요.`;
+            : (stats.anomalies > 0
+                ? `${desc.label} ${selLabel} 체크인 ${stats.checkIns}건 완료, 이상감지 ${stats.anomalies}건이 있었어요.`
+                : `${desc.label} ${selLabel} 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`);
         }
         sendJson(res, 200, { period, stats, summary: summary ?? "" });
         return;
