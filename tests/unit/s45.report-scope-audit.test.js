@@ -455,7 +455,7 @@ describe('미래 기간 요약 문장 배선 (R15, L2)', () => {
   test('ListView: 미래 기간 요약은 선택 숙소의 예약으로 계산해 SummaryBanner 에 전달', () => {
     const src = read('src/components/v2/PropertyListView.jsx');
     assert.match(src, /futureSummaryFor\(statsPeriod,\s*scopedProperties\)\s*\|\|\s*summary/);
-    assert.ok(src.includes('<SummaryBanner summary={displaySummary}'));
+    assert.match(src, /<SummaryBanner\s+summary=\{displaySummary\}/);
   });
 
   test('DetailView: 이 숙소의 예약으로 계산', () => {

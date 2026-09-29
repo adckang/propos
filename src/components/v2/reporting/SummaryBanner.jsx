@@ -5,6 +5,7 @@
  */
 
 import { useState } from 'react';
+import InsightDrilldownSheet from './InsightDrilldownSheet.jsx';
 
 // "이상 없었어요" 같은 정상 문장과 구분하기 위해 구체적 표현만 매칭.
 // "이상감지"는 반드시 뒤에 [1-9]로 시작하는 건수가 붙어야 매칭한다 — 문장에 "이상감지 0건이
@@ -19,9 +20,13 @@ function isUrgent(text) {
   return URGENT_PATTERNS.some(p => p.test(text));
 }
 
-export default function SummaryBanner({ summary, loading, isMobile = false, insights = [], children }) {
+export default function SummaryBanner({
+  summary, loading, isMobile = false, insights = [], children,
+  onSelectRoom, properties = [],
+}) {
   const [expanded, setExpanded] = useState(false);
   const [insightsExpanded, setInsightsExpanded] = useState(false);
+  const [openInsight, setOpenInsight] = useState(null); // 클릭한 인사이트(있으면 상세 팝업 표시)
 
   if (!summary && !children) return null;
 
@@ -107,18 +112,33 @@ export default function SummaryBanner({ summary, loading, isMobile = false, insi
           background: '#fff', borderBottom: '1px solid #e2e8f0',
           display: 'flex', flexDirection: 'column', gap: 6,
         }}>
-          {insights.map((sentence, i) => (
-            <li key={i} style={{
-              fontSize: isMobile ? 12 : 13, color: '#334155', lineHeight: 1.4,
-              display: 'flex', gap: 6,
-            }}>
-              <span style={{ color: '#94a3b8', flexShrink: 0 }}>·</span>
-              <span>{sentence}</span>
+          {insights.map((insight, i) => (
+            <li key={i}>
+              <button
+                onClick={() => setOpenInsight(insight)}
+                style={{
+                  display: 'flex', gap: 6, width: '100%', textAlign: 'left',
+                  background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                  fontFamily: 'inherit', fontSize: isMobile ? 12 : 13, color: '#334155', lineHeight: 1.4,
+                }}
+              >
+                <span style={{ color: '#94a3b8', flexShrink: 0 }}>·</span>
+                <span style={{ flex: 1 }}>{insight.sentence}</span>
+                <span style={{ color: '#94a3b8', flexShrink: 0 }}>›</span>
+              </button>
             </li>
           ))}
         </ul>
       )}
       {hasChildren && expanded && children}
+      {openInsight && (
+        <InsightDrilldownSheet
+          insight={openInsight}
+          properties={properties}
+          onSelectRoom={onSelectRoom}
+          onClose={() => setOpenInsight(null)}
+        />
+      )}
     </div>
   );
 }

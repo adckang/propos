@@ -75,8 +75,8 @@ describe('지표 상세 목록 (DrilldownSheet)', () => {
     assert.match(src, /<ViolationRow[\s\S]*?name=\{resolvePropertyName\(properties, item\.property_id\)\}/);
   });
 
-  test('항목을 눌렀을 때 선택 콜백에는 ID 를 그대로 넘긴다 (상세 이동에 필요)', () => {
-    assert.match(src, /onSelectRoom\?\.\(item\.property_id\)/);
+  test('항목을 눌렀을 때 선택 콜백에는 ID와 발생 시각을 넘긴다 (상세 이동 + 그 날짜로 진입, D-028)', () => {
+    assert.match(src, /onSelectRoom\?\.\(item\.property_id, item\.occurred_at\)/);
   });
 });
 

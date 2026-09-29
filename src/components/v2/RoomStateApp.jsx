@@ -462,6 +462,7 @@ export default function RoomStateApp({ onBack }) {
   const [listFilter, setListFilter]       = useState(null);
   const [listDayOffset, setListDayOffset] = useState(null); // 대시보드 캘린더에서 "체류/공실" 눌러 날짜 지정 이동할 때만 채움
   const [listJumpIds, setListJumpIds]     = useState(null); // 그 날짜 기준 { occupied: [...], vacant: [...] } — 캘린더가 이미 계산한 값 그대로 사용
+  const [detailDayOffset, setDetailDayOffset] = useState(null); // "발견된 패턴" 팝업에서 특정 날짜로 눌러 들어올 때만 채움 (D-028)
   const [selectedPropertyId, setSelectedPropertyId] = useState(null);
   const [showSettings, setShowSettings]   = useState(false);
   const [syncConfig, setSyncConfig]       = useState(() => loadConfig());
@@ -860,6 +861,7 @@ export default function RoomStateApp({ onBack }) {
         onCleaningFinished={handleCleaningFinished}
         onMaintenanceStarted={handleMaintenanceStarted}
         onMaintenanceFinished={handleMaintenanceFinished}
+        initialDayOffset={detailDayOffset}
       />
     );
   } else if (view === 'list') {
@@ -868,7 +870,7 @@ export default function RoomStateApp({ onBack }) {
         initialFilter={listFilter}
         initialDayOffset={listDayOffset}
         initialOccupantIds={listJumpIds}
-        onSelectProperty={(p) => { setSelectedPropertyId(p.id); setView('detail'); }}
+        onSelectProperty={(p, dayOffset) => { setSelectedPropertyId(p.id); setDetailDayOffset(dayOffset ?? null); setView('detail'); }}
         onBack={() => setView('dashboard')}
         properties={mergedProperties}
       />
@@ -878,7 +880,7 @@ export default function RoomStateApp({ onBack }) {
       <MonthlyView
         onSelectStatus={(status) => { setListFilter(status); setListDayOffset(null); setListJumpIds(null); setView('list'); }}
         onNavigateToList={(dayOffset, occupancy, propertyIds) => { setListFilter(occupancy); setListDayOffset(dayOffset); setListJumpIds(propertyIds); setView('list'); }}
-        onSelectProperty={(p) => { setSelectedPropertyId(p.id); setView('detail'); }}
+        onSelectProperty={(p, dayOffset) => { setSelectedPropertyId(p.id); setDetailDayOffset(dayOffset ?? null); setView('detail'); }}
         onBack={onBack}
         properties={mergedProperties}
         syncBadge={

@@ -231,9 +231,10 @@ describe('SharedMetricRow — 실패가 하나라도 있으면 빨간 "실패 N�
     assert.match(block, /color: '#fff'/);
   });
 
-  test('고정 그리드 템플릿을 쓴다 — 라벨(가변)+건수+성공률+배지+화살표 5칼럼, 항상 같은 위치', () => {
+  test('고정 그리드 템플릿을 쓴다 — 라벨(가변)+건수+성공률+배지+화살표 5칼럼, 항상 같은 위치(데스크톱/모바일 둘 다)', () => {
     assert.match(src, /export const ROW_GRID_TEMPLATE = '1fr 64px 50px 76px 16px';/);
-    assert.match(src, /display: 'grid', gridTemplateColumns: ROW_GRID_TEMPLATE/);
+    assert.match(src, /export const ROW_GRID_TEMPLATE_MOBILE = '1fr \d+px \d+px \d+px \d+px';/);
+    assert.match(src, /gridTemplateColumns: isMobile \? ROW_GRID_TEMPLATE_MOBILE : ROW_GRID_TEMPLATE/);
     // 각 칸이 gridColumn으로 명시적 위치를 가져야 — 배지가 없는 행에서 화살표 칸이 앞으로
     // 당겨오지 않는다(명시 안 하면 grid auto-placement가 빈 칸을 건너뛰어 버린다)
     for (let col = 1; col <= 5; col++) {
@@ -242,12 +243,13 @@ describe('SharedMetricRow — 실패가 하나라도 있으면 빨간 "실패 N�
   });
 });
 
-describe('EventMatrixPanel — 헤더가 행과 같은 그리드 템플릿을 공유한다', () => {
+describe('EventMatrixPanel — 헤더가 행과 같은 그리드 템플릿(모바일 포함)을 공유한다', () => {
   const src = read('src/components/v2/reporting/EventMatrixPanel.jsx');
 
-  test('SharedMetricRow에서 ROW_GRID_TEMPLATE을 가져와 헤더에 그대로 쓴다', () => {
-    assert.match(src, /import SharedMetricRow, \{ ROW_GRID_TEMPLATE \} from '\.\/SharedMetricRow';/);
-    assert.match(src, /gridTemplateColumns: ROW_GRID_TEMPLATE/);
+  test('SharedMetricRow에서 ROW_GRID_TEMPLATE/ROW_GRID_TEMPLATE_MOBILE을 가져와 헤더에 그대로 쓰고, 각 행에도 isMobile을 넘긴다', () => {
+    assert.match(src, /import SharedMetricRow, \{ ROW_GRID_TEMPLATE, ROW_GRID_TEMPLATE_MOBILE \} from '\.\/SharedMetricRow';/);
+    assert.match(src, /gridTemplateColumns: isMobile \? ROW_GRID_TEMPLATE_MOBILE : ROW_GRID_TEMPLATE/);
+    assert.match(src, /<MetricRow[\s\S]{0,220}isMobile=\{isMobile\}/);
   });
 });
 

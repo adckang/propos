@@ -141,32 +141,32 @@ describe('detectMonthOverMonthInsights — 실패율이 전달 대비 임계값 
 });
 
 describe('detectConsecutiveInsights — 같은 지표가 최근 달부터 연속 실패', () => {
-  test(`연속 개월수가 MIN_MONTHS(${INSIGHT_THRESHOLDS.CONSECUTIVE.MIN_MONTHS}) 이상이면 통과, 과거→최근 순으로 evidence.months 반환`, () => {
+  test(`연속 개월수가 MIN_STREAK(${INSIGHT_THRESHOLDS.CONSECUTIVE.MIN_STREAK}) 이상이면 통과, 과거→최근 순으로 evidence.periods 반환`, () => {
     const history = [
-      { month: '2026-09', metricKey: 'm', metricLabel: 'M', failCount: 2 },
-      { month: '2026-08', metricKey: 'm', metricLabel: 'M', failCount: 1 },
-      { month: '2026-07', metricKey: 'm', metricLabel: 'M', failCount: 3 },
-      { month: '2026-06', metricKey: 'm', metricLabel: 'M', failCount: 0 },
+      { period: '2026-09', metricKey: 'm', metricLabel: 'M', failCount: 2 },
+      { period: '2026-08', metricKey: 'm', metricLabel: 'M', failCount: 1 },
+      { period: '2026-07', metricKey: 'm', metricLabel: 'M', failCount: 3 },
+      { period: '2026-06', metricKey: 'm', metricLabel: 'M', failCount: 0 },
     ];
     const out = detectConsecutiveInsights(history, '2026-09');
     assert.equal(out.length, 1);
-    assert.equal(out[0].evidence.consecutiveMonths, 3);
-    assert.deepEqual(out[0].evidence.months, ['2026-07', '2026-08', '2026-09']);
+    assert.equal(out[0].evidence.consecutivePeriods, 3);
+    assert.deepEqual(out[0].evidence.periods, ['2026-07', '2026-08', '2026-09']);
   });
 
   test('가장 최근 달이 실패 0건이면 연속 자체가 성립하지 않음', () => {
     const history = [
-      { month: '2026-09', metricKey: 'm', metricLabel: 'M', failCount: 0 },
-      { month: '2026-08', metricKey: 'm', metricLabel: 'M', failCount: 5 },
+      { period: '2026-09', metricKey: 'm', metricLabel: 'M', failCount: 0 },
+      { period: '2026-08', metricKey: 'm', metricLabel: 'M', failCount: 5 },
     ];
     assert.equal(detectConsecutiveInsights(history, '2026-09').length, 0);
   });
 
   test('중간에 실패 0건이 끼면 그 이전 연속만 인정 (가장 최근 달부터 이어진 연속만 봄)', () => {
     const history = [
-      { month: '2026-09', metricKey: 'm', metricLabel: 'M', failCount: 1 },
-      { month: '2026-08', metricKey: 'm', metricLabel: 'M', failCount: 0 },
-      { month: '2026-07', metricKey: 'm', metricLabel: 'M', failCount: 5 },
+      { period: '2026-09', metricKey: 'm', metricLabel: 'M', failCount: 1 },
+      { period: '2026-08', metricKey: 'm', metricLabel: 'M', failCount: 0 },
+      { period: '2026-07', metricKey: 'm', metricLabel: 'M', failCount: 5 },
     ];
     assert.equal(detectConsecutiveInsights(history, '2026-09').length, 0);
   });
@@ -177,9 +177,9 @@ describe('detectConsecutiveInsights — 같은 지표가 최근 달부터 연속
   // 실제로는 8월 데이터가 아예 없는데도 "7월,9월 2개월 연속 실패"라는 과다 주장이 나온다.
   test('중간 달이 통째로 빠지면(측정 불가) 연속으로 이어붙이지 않고 끊긴 것으로 본다', () => {
     const history = [
-      { month: '2026-09', metricKey: 'm', metricLabel: 'M', failCount: 2 },
+      { period: '2026-09', metricKey: 'm', metricLabel: 'M', failCount: 2 },
       // 2026-08 행 자체가 없음 (그 달엔 분모 0이라 측정 불가)
-      { month: '2026-07', metricKey: 'm', metricLabel: 'M', failCount: 5 },
+      { period: '2026-07', metricKey: 'm', metricLabel: 'M', failCount: 5 },
     ];
     assert.equal(detectConsecutiveInsights(history, '2026-09').length, 0,
       '8월 데이터가 없는데 7월·9월을 이어붙여 연속으로 판정하면 안 됨');
@@ -187,23 +187,23 @@ describe('detectConsecutiveInsights — 같은 지표가 최근 달부터 연속
 
   test('달력상 진짜로 연속인 3개월(빠진 달 없음)은 정상적으로 인정된다', () => {
     const history = [
-      { month: '2026-09', metricKey: 'm', metricLabel: 'M', failCount: 2 },
-      { month: '2026-08', metricKey: 'm', metricLabel: 'M', failCount: 1 },
-      { month: '2026-07', metricKey: 'm', metricLabel: 'M', failCount: 5 },
+      { period: '2026-09', metricKey: 'm', metricLabel: 'M', failCount: 2 },
+      { period: '2026-08', metricKey: 'm', metricLabel: 'M', failCount: 1 },
+      { period: '2026-07', metricKey: 'm', metricLabel: 'M', failCount: 5 },
     ];
     const out = detectConsecutiveInsights(history, '2026-09');
     assert.equal(out.length, 1);
-    assert.equal(out[0].evidence.consecutiveMonths, 3);
+    assert.equal(out[0].evidence.consecutivePeriods, 3);
   });
 
   test('연도 경계(2026-01 → 2025-12)를 넘어가도 정확히 연속으로 인정한다', () => {
     const history = [
-      { month: '2026-01', metricKey: 'm', metricLabel: 'M', failCount: 2 },
-      { month: '2025-12', metricKey: 'm', metricLabel: 'M', failCount: 1 },
+      { period: '2026-01', metricKey: 'm', metricLabel: 'M', failCount: 2 },
+      { period: '2025-12', metricKey: 'm', metricLabel: 'M', failCount: 1 },
     ];
     const out = detectConsecutiveInsights(history, '2026-01');
     assert.equal(out.length, 1);
-    assert.equal(out[0].evidence.consecutiveMonths, 2);
+    assert.equal(out[0].evidence.consecutivePeriods, 2);
   });
 });
 
@@ -267,7 +267,7 @@ describe('formatInsightSentence — reportPeriod을 그대로 써서 "이번달/
   test('CONSECUTIVE 문장', () => {
     const s = formatInsightSentence({
       type: 'CONSECUTIVE', reportPeriod: '2026-09', metricLabel: '청소 담당자 배정',
-      evidence: { consecutiveMonths: 3, months: ['2026-07', '2026-08', '2026-09'] },
+      evidence: { consecutivePeriods: 3, periods: ['2026-07', '2026-08', '2026-09'] },
     });
     assert.equal(s, '청소 담당자 배정 실패가 3개월 연속 발생했어요 (7월, 8월, 9월).');
   });
@@ -285,7 +285,7 @@ describe('buildMonthlyInsightSentences — 4개 detect + rank + format 통합', 
       propertyMetricRows: [
         { propertyId: 'p1', propertyName: '파주201', metricKey: 'cleaning_time', metricLabel: '청소시간 준수', failCount: 2 },
       ],
-      currentAgg: [], previousAgg: [], monthlyHistory: [],
+      currentAgg: [], previousAgg: [], periodHistory: [],
     };
     const out = buildMonthlyInsightSentences(data, '2026-09');
     assert.equal(out.length, 1);
@@ -339,18 +339,31 @@ describe('getMonthlyInsights — period 게이트 + 숙소 스코프 파생 + DB
   });
 
   test('매달 같은 실패가 반복되는 목업 → CONCENTRATION(p1 쏠림) + CONSECUTIVE(연속) + REPEAT(p1 반복) 문장이 나오고, 변화가 없으니 MONTH_OVER_MONTH는 안 나온다', async () => {
+    // D-028: getMonthlyInsights는 이제 문장뿐 아니라 type/metricKey/propertyId 등이 담긴 구조화된
+    // 객체 배열을 반환한다(팝업이 이 메타데이터로 어떤 상세를 보여줄지 결정) — sentence 필드로 검사.
     const out = await getMonthlyInsights('this_month', { db: makeDb([]), now: new Date('2026-09-28T00:00:00Z') });
-    assert.ok(out.some(s => /게스트 맞이 준비/.test(s) && /나왔어요/.test(s) && /p1/.test(s)),
+    const sentences = out.map(i => i.sentence);
+    assert.ok(sentences.some(s => /게스트 맞이 준비/.test(s) && /나왔어요/.test(s) && /p1/.test(s)),
       `CONCENTRATION 문장을 찾지 못함: ${JSON.stringify(out)}`);
-    assert.ok(out.some(s => /연속 발생했어요/.test(s)), `CONSECUTIVE 문장을 찾지 못함: ${JSON.stringify(out)}`);
-    assert.ok(out.some(s => /p1에서.*반복됐어요/.test(s)), `REPEAT 문장을 찾지 못함: ${JSON.stringify(out)}`);
-    assert.ok(!out.some(s => /%p/.test(s)), `변화가 없는데 MONTH_OVER_MONTH 문장이 나옴: ${JSON.stringify(out)}`);
+    assert.ok(sentences.some(s => /연속 발생했어요/.test(s)), `CONSECUTIVE 문장을 찾지 못함: ${JSON.stringify(out)}`);
+    assert.ok(sentences.some(s => /p1에서.*반복됐어요/.test(s)), `REPEAT 문장을 찾지 못함: ${JSON.stringify(out)}`);
+    assert.ok(!sentences.some(s => /%p/.test(s)), `변화가 없는데 MONTH_OVER_MONTH 문장이 나옴: ${JSON.stringify(out)}`);
     assert.equal(out.length, 3);
+    // 팝업 배선에 필요한 메타데이터도 있는지 확인 (D-028)
+    const concentration = out.find(i => i.type === 'CONCENTRATION');
+    assert.equal(concentration.propertyId, 'p1');
+    assert.equal(concentration.metricKey, 'pre_stay_optimization');
+    // periodKey — 팝업이 /api/stats/drilldown을 다시 부를 때 쓰는 원래 기간 키. reportPeriod("YYYY-MM")와
+    // 달리 이 API가 실제로 아는 이름("this_month" 등)이어야 한다 — 혼동하면 팝업이 빈 목록을 보여준다
+    // (실제로 겪은 버그, 2026-09-28: reportPeriod를 그대로 넘겼다가 드릴다운이 늘 "실패 0건"으로 보임).
+    assert.ok(out.every(i => i.periodKey === 'this_month'));
   });
 
   test('last_month는 조회 기준월이 한 달 밀린다 (reportPeriod가 이번 달이 아니라 지난달 라벨로 문장에 반영)', async () => {
     const out = await getMonthlyInsights('last_month', { db: makeDb([]), now: new Date('2026-09-28T00:00:00Z') });
-    assert.ok(out.some(s => /8월/.test(s)), `지난달(8월) 라벨이 문장에 없음: ${JSON.stringify(out)}`);
+    assert.ok(out.some(i => /8월/.test(i.sentence)), `지난달(8월) 라벨이 문장에 없음: ${JSON.stringify(out)}`);
+    assert.ok(out.every(i => i.reportPeriod === '2026-08'), 'reportPeriod가 지난달로 안 밀림');
+    assert.ok(out.every(i => i.periodKey === 'last_month'), 'periodKey는 reportPeriod와 달리 호출부 period 그대로');
   });
 });
 

@@ -8,6 +8,7 @@ import {
   getDrilldownForMetric,
   getMonthlyCalendarData,
   getMonthlyInsights,
+  getWeeklyInsights,
   getStatsForPeriod,
 } from "../src/application/reportingService.js";
 import { parsePropertyIds } from "../src/application/statsQueryParser.js";
@@ -24,7 +25,7 @@ const VALID_STATS_PERIODS = [
 const VALID_CALENDAR_PERIODS = new Set(["last_month", "this_month", "next_month"]);
 
 const VALID_DRILLDOWN_PERIODS = [
-  "yesterday", "last_hour", "last_week", "last_month", "this_month",
+  "yesterday", "last_hour", "this_week", "last_week", "this_month", "last_month",
 ];
 
 const VALID_DRILLDOWN_METRICS = [
@@ -100,11 +101,20 @@ export default async function handler(req, res) {
       db,
       propertyIds,
     });
+    // "발견된 패턴" — 월간(D-027)·주간(D-029) 둘 다 이 부가 분석이 실패해도 이미 계산된
+    // stats/summary는 살아있어야 하므로 자체 try/catch로 감싼다(코드 리뷰로 발견한 버그, D-027 참고).
     if (period === "this_month" || period === "last_month") {
       try {
         result.insights = await getMonthlyInsights(period, { db, propertyIds });
       } catch (err) {
         console.error("[api/stats] getMonthlyInsights 실패 — insights 없이 응답:", err?.message ?? err);
+        result.insights = [];
+      }
+    } else if (period === "this_week" || period === "last_week") {
+      try {
+        result.insights = await getWeeklyInsights(period, { db, propertyIds });
+      } catch (err) {
+        console.error("[api/stats] getWeeklyInsights 실패 — insights 없이 응답:", err?.message ?? err);
         result.insights = [];
       }
     }

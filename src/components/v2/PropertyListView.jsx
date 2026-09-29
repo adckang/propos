@@ -8,6 +8,7 @@ import ReportPanel from './reporting/ReportPanel';
 import { deriveSelectionScope, toggleAllSelection, syncSelectionWithProperties } from '../../domain/selectionScopeDomain.js';
 import { futureSummaryFor } from '../../domain/futureWeekDomain.js';
 import { periodForOffset, periodToWindowHighlight, describePeriod } from '../../domain/periodDomain.js';
+import { toKstDateKey, kstDayOffsetFromToday } from '../../domain/monthlyCalendarDomain.js';
 import { TENSE_STYLE } from './reporting/ReportPanel';
 
 const PAST_DAYS   = 6;
@@ -185,7 +186,7 @@ export default function PropertyListView({
 
   // 기간 데이터 (Report Panel + SummaryBanner용)
   // noSelection이면 period=null → 훅이 fetch 스킵
-  const { stats: periodStats, summary, loading: periodLoading } = useReportingStats(
+  const { stats: periodStats, summary, insights, loading: periodLoading } = useReportingStats(
     noSelection ? null : statsPeriod,
     statsPropertyIds,
   );
@@ -193,6 +194,15 @@ export default function PropertyListView({
 
   // 미래 기간 요약은 예약(iCal) 기준으로 클라이언트에서 계산 — 서버 요약은 이벤트 기반이라 미래엔 항상 "예약 없음"
   const displaySummary = futureSummaryFor(statsPeriod, scopedProperties) || summary;
+
+  // 위반 상세 목록·"발견된 패턴" 팝업(D-028/D-029) 둘 다 여기서 같은 방식으로 숙소 선택을 처리 —
+  // occurredAt이 있으면 디테일뷰가 그 날짜로 바로 열리도록 day offset을 같이 계산해서 넘긴다.
+  const handleSelectRoom = (propertyId, occurredAt) => {
+    const prop = properties.find(p => p.id === propertyId);
+    if (!prop) return;
+    const dayOffset = occurredAt != null ? kstDayOffsetFromToday(toKstDateKey(occurredAt)) : null;
+    onSelectProperty?.(prop, dayOffset);
+  };
 
   const { windowStart, windowEnd, windowMs, dayLabels, monthLabels } = useGanttWindow(windowOffset);
   const { now, nowLeft, timeStr } = useLiveNow(windowStart, windowMs);
@@ -328,7 +338,10 @@ export default function PropertyListView({
           숙소를 선택해주세요
         </div>
       ) : (
-        <SummaryBanner summary={displaySummary} loading={periodLoading} isMobile={isMobile}>
+        <SummaryBanner
+          summary={displaySummary} loading={periodLoading} isMobile={isMobile} insights={insights}
+          onSelectRoom={handleSelectRoom} properties={properties}
+        >
           {/* 레포트 패널 상단 — 선택 숙소 수 소형 표기 */}
           <div style={{
             padding: isMobile ? '4px 12px' : '4px 20px',
@@ -357,10 +370,7 @@ export default function PropertyListView({
             period={statsPeriod} stats={periodStats} loading={periodLoading} isMobile={isMobile}
             properties={scopedProperties}
             propertyIds={statsPropertyIds}
-            onSelectRoom={(propertyId) => {
-              const prop = properties.find(p => p.id === propertyId);
-              if (prop) onSelectProperty?.(prop);
-            }}
+            onSelectRoom={handleSelectRoom}
           />
         </SummaryBanner>
       )}

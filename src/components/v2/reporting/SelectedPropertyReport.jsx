@@ -1,5 +1,6 @@
 import { useReportingStats } from '../../../hooks/useReportingStats.js';
 import { futureSummaryFor } from '../../../domain/futureWeekDomain.js';
+import { toKstDateKey, kstDayOffsetFromToday } from '../../../domain/monthlyCalendarDomain.js';
 import SummaryBanner from './SummaryBanner.jsx';
 import ReportPanel from './ReportPanel.jsx';
 
@@ -27,6 +28,15 @@ export default function SelectedPropertyReport({
     : summary;
   const reportLoading = periodLoading || monthlyCalendarState.loading;
 
+  // 위반 상세 목록·인사이트 팝업 둘 다 여기서 같은 방식으로 숙소 선택을 처리 — occurredAt이 있으면
+  // 디테일뷰가 그 날짜로 바로 열리도록 day offset을 같이 계산해서 넘긴다 (D-028).
+  const handleSelectRoom = (propertyId, occurredAt) => {
+    const property = properties.find(item => item.id === propertyId);
+    if (!property) return;
+    const dayOffset = occurredAt != null ? kstDayOffsetFromToday(toKstDateKey(occurredAt)) : null;
+    onSelectProperty?.(property, dayOffset);
+  };
+
   if (noSelection) {
     return (
       <div style={{
@@ -42,7 +52,10 @@ export default function SelectedPropertyReport({
 
   return (
     <div data-testid="selected-property-report">
-    <SummaryBanner summary={displaySummary} loading={reportLoading} isMobile={isMobile} insights={insights}>
+    <SummaryBanner
+      summary={displaySummary} loading={reportLoading} isMobile={isMobile} insights={insights}
+      onSelectRoom={handleSelectRoom} properties={properties}
+    >
       <div style={{
         padding: isMobile ? '4px 12px' : '4px 20px',
         background: '#f8fafc', borderBottom: '1px solid #e2e8f0',
@@ -74,10 +87,7 @@ export default function SelectedPropertyReport({
         properties={scopedProperties}
         propertyIds={statsPropertyIds}
         drilldownPropertyIds={statsPropertyIds}
-        onSelectRoom={(propertyId) => {
-          const property = properties.find(item => item.id === propertyId);
-          if (property) onSelectProperty?.(property);
-        }}
+        onSelectRoom={handleSelectRoom}
       />
     </SummaryBanner>
     </div>

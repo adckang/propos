@@ -8,9 +8,10 @@ import { getHaBaseUrl, getHaToken } from "./server/haProxy.js";
 import { fetchWeather } from "./server/weatherService.js";
 import { PROPERTIES as MOCK_PROPERTIES } from "./src/data/roomStateMockData.js";
 import { countCurrentStats } from "./src/domain/reportingDomain.js";
-import { describePeriod, periodToRemainingRange, monthsAgoRange } from "./src/domain/periodDomain.js";
+import { describePeriod, periodToRemainingRange, monthsAgoRange, periodForOffset, periodToDateRange } from "./src/domain/periodDomain.js";
 import { summarizeOperationalMetrics } from "./src/domain/operationalMetricsDomain.js";
-import { buildMonthlyInsightSentences } from "./src/domain/insightDomain.js";
+import { buildMonthlyInsights, buildWeeklyInsights } from "./src/domain/insightDomain.js";
+import { toKstDateKey } from "./src/domain/monthlyCalendarDomain.js";
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -132,11 +133,15 @@ function alignMonthlyStatsWithIssues(stats, issues) {
   };
 }
 
-// dev 전용 /api/stats "발견된 패턴" 목업 (D-027) — 실제 buildMonthlyInsightSentences를 그대로
+// dev 전용 /api/stats "발견된 패턴" 목업 (D-027) — 실제 buildMonthlyInsights를 그대로
 // 불러써서 문장 포맷·랭킹 로직이 production과 갈라지지 않게 한다(D-026 dev 스텁 교훈과 동일 원칙).
 // 서로 다른 지표/숙소에 3종(CONCENTRATION/CONSECUTIVE/MONTH_OVER_MONTH)이 자연스럽게 상위 3개로
-// 뽑히도록 구성 — REPEAT 후보(파주201 청소시간 2회)도 같이 넣어 "임계값 이상 후보가 top3보다
+// 뽑히도록 구성 — REPEAT 후보(청담 C호 청소시간 2회)도 같이 넣어 "임계값 이상 후보가 top3보다
 // 많을 때 타입 우선순위로 걸러진다"는 랭킹 규칙까지 함께 확인할 수 있게 함.
+// propertyId는 실제 목업 숙소 ID(P0xx, MOCK_PROPERTIES)를 그대로 써서 — 팝업에서 "상세 보기" 클릭 시
+// 디테일뷰로 실제로 연결되고(D-028), /api/stats/drilldown 목업(monthlyDemoIssues)의 P005/P003 항목과도
+// 숙소가 일치한다(단, 건수는 그 목업이 숙소당 1건만 주는 구조라 여기 failCount와 정확히는 안 맞을 수 있음
+// — 기존에도 레포트 집계와 캘린더 배지 합계가 완전히 일치하진 않는 것과 같은 종류의 dev 목업 한계, D-020 참고).
 function mockMonthlyInsights(period, nowMs) {
   const baseOffset = period === "last_month" ? 1 : 0;
   const reportPeriod = monthsAgoRange(baseOffset, nowMs).monthKey;
@@ -145,23 +150,56 @@ function mockMonthlyInsights(period, nowMs) {
   const m3Period     = monthsAgoRange(baseOffset + 3, nowMs).monthKey;
 
   const propertyMetricRows = [
-    { propertyId: "파주201",  propertyName: "파주201",  metricKey: "cleaning_time",          metricLabel: "청소시간 준수", failCount: 2 },
-    { propertyId: "역삼 G호", propertyName: "역삼 G호", metricKey: "post_checkout_energy",   metricLabel: "퇴실 후 절전", failCount: 3 },
-    { propertyId: "홍대 B호", propertyName: "홍대 B호", metricKey: "post_checkout_energy",   metricLabel: "퇴실 후 절전", failCount: 1 },
-    { propertyId: "파주201",  propertyName: "파주201",  metricKey: "post_checkout_energy",   metricLabel: "퇴실 후 절전", failCount: 1 },
+    { propertyId: "P003", propertyName: "청담 C호", metricKey: "cleaning_time",        metricLabel: "청소시간 준수", failCount: 2 },
+    { propertyId: "P005", propertyName: "논현 E호", metricKey: "post_checkout_energy", metricLabel: "퇴실 후 절전", failCount: 3 },
+    { propertyId: "P006", propertyName: "신사 F호", metricKey: "post_checkout_energy", metricLabel: "퇴실 후 절전", failCount: 1 },
   ];
 
   const currentAgg  = [{ metricKey: "vacant_energy", metricLabel: "빈방 절전 유지", numerator: 12, denominator: 20 }];
   const previousAgg = [{ metricKey: "vacant_energy", metricLabel: "빈방 절전 유지", numerator: 17, denominator: 18 }];
 
-  const monthlyHistory = [
-    { month: reportPeriod, metricKey: "cleaning_assign", metricLabel: "청소 담당자 배정", failCount: 2 },
-    { month: prevPeriod,   metricKey: "cleaning_assign", metricLabel: "청소 담당자 배정", failCount: 1 },
-    { month: m2Period,     metricKey: "cleaning_assign", metricLabel: "청소 담당자 배정", failCount: 3 },
-    { month: m3Period,     metricKey: "cleaning_assign", metricLabel: "청소 담당자 배정", failCount: 0 },
+  const periodHistory = [
+    { period: reportPeriod, metricKey: "cleaning_assign", metricLabel: "청소 담당자 배정", failCount: 2 },
+    { period: prevPeriod,   metricKey: "cleaning_assign", metricLabel: "청소 담당자 배정", failCount: 1 },
+    { period: m2Period,     metricKey: "cleaning_assign", metricLabel: "청소 담당자 배정", failCount: 3 },
+    { period: m3Period,     metricKey: "cleaning_assign", metricLabel: "청소 담당자 배정", failCount: 0 },
   ];
 
-  return buildMonthlyInsightSentences({ propertyMetricRows, currentAgg, previousAgg, monthlyHistory }, reportPeriod);
+  const insights = buildMonthlyInsights({ propertyMetricRows, currentAgg, previousAgg, periodHistory }, reportPeriod);
+  // periodKey — 팝업이 /api/stats/drilldown을 다시 부를 때 쓰는 원래 기간 키 (실제 서버와 동일하게 채움, D-028)
+  return insights.map(insight => ({ ...insight, periodKey: period }));
+}
+
+// dev 전용 /api/stats "발견된 패턴" 목업 — 주간(ListView) 버전 (D-029). mockMonthlyInsights와
+// 같은 원칙(실제 buildWeeklyInsights 재사용, 실제 목업 숙소 ID 사용)이고 기간만 월→주로 바뀐다.
+// DEMO_ITEMS(비월간 드릴다운 목업, 아래쪽에 정의)에 있는 숙소로 맞춰서 팝업도 코히런트하게 만듦
+// (post_checkout_energy → P014/P008, cleaning_time → P012).
+function mockWeeklyInsights(period, nowMs) {
+  const baseOffset = period === "last_week" ? 1 : 0;
+  const weekStart = (n) => toKstDateKey(periodToDateRange(periodForOffset("week", -n), nowMs).from);
+  const reportPeriod = weekStart(baseOffset);
+  const prevPeriod    = weekStart(baseOffset + 1);
+  const w2Period      = weekStart(baseOffset + 2);
+  const w3Period      = weekStart(baseOffset + 3);
+
+  const propertyMetricRows = [
+    { propertyId: "P012", propertyName: "개포 L호",   metricKey: "cleaning_time",        metricLabel: "청소시간 준수", failCount: 2 },
+    { propertyId: "P014", propertyName: "자곡 N호",   metricKey: "post_checkout_energy", metricLabel: "퇴실 후 절전", failCount: 3 },
+    { propertyId: "P008", propertyName: "압구정 H호", metricKey: "post_checkout_energy", metricLabel: "퇴실 후 절전", failCount: 1 },
+  ];
+
+  const currentAgg  = [{ metricKey: "vacant_energy", metricLabel: "빈방 절전 유지", numerator: 2, denominator: 4 }];
+  const previousAgg = [{ metricKey: "vacant_energy", metricLabel: "빈방 절전 유지", numerator: 3, denominator: 3 }];
+
+  const periodHistory = [
+    { period: reportPeriod, metricKey: "cleaning_assign", metricLabel: "청소 담당자 배정", failCount: 1 },
+    { period: prevPeriod,   metricKey: "cleaning_assign", metricLabel: "청소 담당자 배정", failCount: 1 },
+    { period: w2Period,     metricKey: "cleaning_assign", metricLabel: "청소 담당자 배정", failCount: 2 },
+    { period: w3Period,     metricKey: "cleaning_assign", metricLabel: "청소 담당자 배정", failCount: 0 },
+  ];
+
+  const insights = buildWeeklyInsights({ propertyMetricRows, currentAgg, previousAgg, periodHistory }, reportPeriod);
+  return insights.map(insight => ({ ...insight, periodKey: period }));
 }
 
 function apiProxyPlugin(env) {
@@ -344,7 +382,9 @@ function apiProxyPlugin(env) {
         }
         const insights = (period === "this_month" || period === "last_month")
           ? mockMonthlyInsights(period, Date.now())
-          : undefined;
+          : (period === "this_week" || period === "last_week")
+            ? mockWeeklyInsights(period, Date.now())
+            : undefined;
         sendJson(res, 200, { period, stats, summary: summary ?? "", ...(insights ? { insights } : {}) });
         return;
       }

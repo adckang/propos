@@ -7,6 +7,11 @@ import { computeMetricRowDisplay } from '../../../domain/metricRowDomain.js';
 // 컨테이너가 고정으로 정하므로, 각 칸의 내용이 비어 있어도(배지 없음/화살표 없음) 다음 칸이
 // 그 자리로 당겨오지 않는다 — EventMatrixPanel의 헤더 행도 이 값을 그대로 가져다 쓴다.
 export const ROW_GRID_TEMPLATE = '1fr 64px 50px 76px 16px';
+// 모바일 — 고정 칼럼 예산을 줄여 라벨(1fr)에 더 많은 폭을 준다. 그대로 두면 건수·성공률·배지·
+// 화살표 네 칸이 206px를 고정으로 먹어, 좁은 화면에서 라벨이 한두 글자씩 줄바꿈되며 "세로쓰기"
+// 처럼 보였다(실사용 중 발견, 2026-09-28: "운영지표가 세로쓰기처럼 나오고... 우측 작은
+// 화살표들은 공간을 많이 차지하고 있어").
+export const ROW_GRID_TEMPLATE_MOBILE = '1fr 38px 34px 54px 12px';
 
 export default function SharedMetricRow({
   label,
@@ -15,6 +20,7 @@ export default function SharedMetricRow({
   isCount  = false,
   noData   = false,
   isLast   = false,
+  isMobile = false,
   onDrilldown,
 }) {
   const { countText, ratioText, ratioColor, ratioBg, failCount } =
@@ -32,14 +38,14 @@ export default function SharedMetricRow({
       <div style={{ gridColumn: 1, fontSize: 12, color: noData ? '#94a3b8' : '#4a5568', fontWeight: 500, minWidth: 0 }}>
         {label}
       </div>
-      <div style={{ gridColumn: 2, fontSize: 11, color: '#64748b', fontFamily: "'DM Mono', monospace", textAlign: 'right' }}>
+      <div style={{ gridColumn: 2, fontSize: isMobile ? 10 : 11, color: '#64748b', fontFamily: "'DM Mono', monospace", textAlign: 'right' }}>
         {countText}
       </div>
       <div style={{ gridColumn: 3, justifySelf: 'center' }}>
         <span style={{
-          fontSize: 12, fontWeight: 700, color: ratioColor, background: ratioBg,
+          fontSize: isMobile ? 11 : 12, fontWeight: 700, color: ratioColor, background: ratioBg,
           fontFamily: "'DM Mono', monospace",
-          borderRadius: 5, padding: '2px 6px', whiteSpace: 'nowrap',
+          borderRadius: 5, padding: isMobile ? '1px 4px' : '2px 6px', whiteSpace: 'nowrap',
         }}>
           {ratioText}
         </span>
@@ -47,22 +53,23 @@ export default function SharedMetricRow({
       <div style={{ gridColumn: 4 }}>
         {showBadge && (
           <span style={{
-            fontSize: 10, fontWeight: 700, color: '#fff', background: '#dc2626',
+            fontSize: isMobile ? 9 : 10, fontWeight: 700, color: '#fff', background: '#dc2626',
             fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap',
-            borderRadius: 5, padding: '2px 6px',
+            borderRadius: 5, padding: isMobile ? '1px 4px' : '2px 6px',
           }}>
             실패 {failCount}건
           </span>
         )}
       </div>
-      <div style={{ gridColumn: 5, fontSize: 12, color: '#94a3b8', textAlign: 'center' }}>
+      <div style={{ gridColumn: 5, fontSize: isMobile ? 11 : 12, color: '#94a3b8', textAlign: 'center' }}>
         {tappable && '›'}
       </div>
     </>
   );
 
   const baseStyle = {
-    display: 'grid', gridTemplateColumns: ROW_GRID_TEMPLATE, columnGap: 6, alignItems: 'center',
+    display: 'grid', gridTemplateColumns: isMobile ? ROW_GRID_TEMPLATE_MOBILE : ROW_GRID_TEMPLATE,
+    columnGap: isMobile ? 4 : 6, alignItems: 'center',
     padding: '9px 0',
     borderBottom: isLast ? 'none' : '1px solid #f1f5f9',
   };

@@ -5,7 +5,7 @@
  *   metricLabel — 지표명 (한국어)
  *   period      — 기간 키
  *   onClose     — 닫기 콜백
- *   onSelectRoom — (property_id) => void  숙소 선택 콜백
+ *   onSelectRoom — (property_id, occurredAt) => void  숙소 선택 콜백 (occurredAt = 그 줄의 발생 시각, static 모드에선 undefined)
  *   properties  — 화면의 숙소 목록. 항목의 property_id 를 리스트 화면과 같은 숙소 이름으로 바꿔 표시
  *
  * async 모드의 각 줄은 [숙소 이름] [무슨 문제가 어떻게 있었는지 구어체 한 줄] [시간] — 심각도는 줄 색으로만 알리고
@@ -172,7 +172,7 @@ export default function DrilldownSheet({
                   dateLabel={formatKstDateTime(item.occurred_at)}
                   onClick={() => {
                     onClose();
-                    onSelectRoom?.(item.property_id);
+                    onSelectRoom?.(item.property_id, item.occurred_at);
                   }}
                 />
               ))

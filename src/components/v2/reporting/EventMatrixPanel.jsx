@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import DrilldownSheet from './DrilldownSheet';
-import SharedMetricRow, { ROW_GRID_TEMPLATE } from './SharedMetricRow';
+import SharedMetricRow, { ROW_GRID_TEMPLATE, ROW_GRID_TEMPLATE_MOBILE } from './SharedMetricRow';
 import { pctColor } from '../../../domain/metricRowDomain.js';
 import { computeOperationalMetrics } from '../../../domain/operationalMetricsDomain.js';
 
@@ -49,12 +49,13 @@ export default function EventMatrixPanel({ stats, period, isMobile = false, onSe
     : '#e2e8f0';
 
   return (
-    <div style={{ padding: isMobile ? '12px' : '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ padding: isMobile ? '10px 4px' : '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
 
       {/* 테이블 헤더 — 행(SharedMetricRow)과 같은 그리드 템플릿을 써야 칼럼이 어긋나지 않는다 */}
       <div style={{
-        display: 'grid', gridTemplateColumns: ROW_GRID_TEMPLATE, columnGap: 6, alignItems: 'center',
-        padding: '0 14px 6px 14px',
+        display: 'grid', gridTemplateColumns: isMobile ? ROW_GRID_TEMPLATE_MOBILE : ROW_GRID_TEMPLATE,
+        columnGap: isMobile ? 4 : 6, alignItems: 'center',
+        padding: isMobile ? '0 8px 6px 8px' : '0 14px 6px 14px',
         borderBottom: '2px solid #e2e8f0',
       }}>
         <div style={{ gridColumn: 1, fontSize: 9, fontWeight: 700, color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase' }}>
@@ -71,7 +72,7 @@ export default function EventMatrixPanel({ stats, period, isMobile = false, onSe
       {/* 7개 지표 */}
       <div style={{
         background: '#f8fafc', border: '1px solid #e2e8f0',
-        borderRadius: 10, padding: '0 14px',
+        borderRadius: 10, padding: isMobile ? '0 8px' : '0 14px',
       }}>
         {METRICS.map((m, i) => {
           const { key: metricKey, ...rowProps } = m;
@@ -81,6 +82,7 @@ export default function EventMatrixPanel({ stats, period, isMobile = false, onSe
               key={metricKey}
               {...rowProps}
               isLast={i === METRICS.length - 1}
+              isMobile={isMobile}
               onDrilldown={drilldownMetric ? () => setDrilldown({ metricKey: drilldownMetric, label: m.label }) : undefined}
             />
           );

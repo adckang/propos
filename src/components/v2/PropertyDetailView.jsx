@@ -555,14 +555,16 @@ function CollapsibleSection({ title, issueCount = 0, summaryWhenGood, issuePrevi
   );
 }
 
-export default function PropertyDetailView({ property, weather, onBack, onCleaningStarted, onCleaningFinished, onMaintenanceStarted, onMaintenanceFinished }) {
+export default function PropertyDetailView({ property, weather, onBack, onCleaningStarted, onCleaningFinished, onMaintenanceStarted, onMaintenanceFinished, initialDayOffset = null }) {
   const isMobile = useMobile();
   const mainStatusRefs = useRef({});
   const timelineRef = useRef(null);
   const now = new Date();
 
   // 타임라인 뷰포트 네비게이션 state
-  const [dayOffset, setDayOffset]   = useState(0);              // 0=오늘, ±N=N일 이동
+  // initialDayOffset — 레포트 팝업(발견된 패턴 등)에서 "이 날짜로" 눌러 들어올 때만 채워짐(D-028,
+  // PropertyListView의 initialDayOffset과 같은 패턴). mount 시 한 번만 반영 — 이후 내부 네비게이션은 그대로.
+  const [dayOffset, setDayOffset]   = useState(initialDayOffset ?? 0); // 0=오늘, ±N=N일 이동
   const [tlMode, setTlMode]         = useState('day');           // 'day'|'hour'
   const [hourPeriod, setHourPeriod] = useState('now');           // 'last_hour'|'now'|'next_hour'
   const [scrollVersion, setScrollVersion] = useState(0);        // 같은 버튼 재클릭 시 강제 스크롤
