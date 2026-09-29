@@ -307,8 +307,8 @@ describe('futureSummaryFor — 예약 기준 요약 (미래 기간)', () => {
   // 2주 뒤 주(9/28~10/4)에 체크인 1건·체크아웃 1건
   const PROPS = [{ reservations: [stay('2026-09-29T06:00:00Z', '2026-10-02T02:00:00Z'), stay('2026-10-20T06:00:00Z', '2026-10-22T02:00:00Z')] }];
 
-  test('2주 뒤 주의 예약으로 문장을 만든다', () => {
-    assert.equal(futureSummaryFor('weeks_ahead_2', PROPS, WED_NOON_KST), '2주 뒤 체크인 1건, 체크아웃 1건 예정이에요.');
+  test('2주 뒤 주의 예약으로 문장을 만든다 (바쁨 등급 포함 — 숙소 1곳 · 합계 2건 → 바빠요)', () => {
+    assert.equal(futureSummaryFor('weeks_ahead_2', PROPS, WED_NOON_KST), '2주 뒤 바빠요 (체크인 1건 · 체크아웃 1건)');
   });
   test('그 주에 예약이 없으면 없다고 말한다', () => {
     assert.equal(futureSummaryFor('weeks_ahead_3', PROPS, WED_NOON_KST), '3주 뒤 예정된 체크인·체크아웃이 없어요.');

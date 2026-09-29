@@ -101,14 +101,14 @@ describe('summarizeOperationalMetrics — 5단계 등급 + 실패 총건수', ()
     assert.equal(summarizeOperationalMetrics('last_week', EXAMPLE_STATS), '지난주 보통이에요 (실패 10건)');
   });
 
-  test('진행중 기간(이번 주)은 "지금까지"를 붙인다', () => {
+  test('진행중 기간(이번 주)은 "지금까지"를 붙이지 않는다', () => {
     const s = summarizeOperationalMetrics('this_week', EXAMPLE_STATS);
-    assert.equal(s, '이번 주 지금까지 보통이에요 (실패 10건)');
+    assert.equal(s, '이번 주 보통이에요 (실패 10건)');
   });
 
   test('대시보드 월 기간(지난달/이번달)에도 같은 함수가 적용된다', () => {
     assert.equal(summarizeOperationalMetrics('last_month', EXAMPLE_STATS), '지난달 보통이에요 (실패 10건)');
-    assert.equal(summarizeOperationalMetrics('this_month', EXAMPLE_STATS), '이번 달 지금까지 보통이에요 (실패 10건)');
+    assert.equal(summarizeOperationalMetrics('this_month', EXAMPLE_STATS), '이번 달 보통이에요 (실패 10건)');
   });
 
   test('실패 총건수 0 → 평균 점수와 무관하게 "완벽해요" (반올림으로 100 되는 것과 별개 판정)', () => {

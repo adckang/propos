@@ -129,7 +129,7 @@ test('E2E-004 월간 필터·숙소 복수선택·날짜 상세가 함께 동작
   await expect(report.getByText('점유 예측')).toBeVisible();
 
   const nextReportText = (await report.innerText()).replace(/\s+/g, ' ');
-  const reservationMatch = nextReportText.match(/다음 달 체크인 (\d+)건, 체크아웃 (\d+)건/);
+  const reservationMatch = nextReportText.match(/다음 달 .+?\(체크인 (\d+)건 · 체크아웃 (\d+)건\)/);
   const movementTotals = await calendar.locator('[data-testid="future-movement-count"]').evaluateAll(nodes =>
     nodes.reduce((totals, node) => ({
       checkIns: totals.checkIns + Number(node.dataset.checkins),

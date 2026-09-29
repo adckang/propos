@@ -87,10 +87,8 @@ export function summarizeOperationalMetrics(period, stats) {
   const measurable = computeMeasurableMetrics(stats);
   if (measurable.length === 0) return null;
 
-  const ongoing    = desc.tense === 'active';
-  const timeWord    = ongoing ? `${desc.label} 지금까지` : desc.label;
   const avgScore    = Math.round(measurable.reduce((sum, m) => sum + (m.numerator / m.denominator) * 100, 0) / measurable.length);
   const totalFails  = measurable.reduce((sum, m) => sum + m.failCount, 0);
 
-  return `${timeWord} ${tierLabel(avgScore, totalFails)} (실패 ${totalFails}건)`;
+  return `${desc.label} ${tierLabel(avgScore, totalFails)} (실패 ${totalFails}건)`;
 }

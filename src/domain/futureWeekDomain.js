@@ -195,8 +195,27 @@ export function classifyCleaningAssignments(weekCheckouts, calendarEvents, dbJob
 // 표준 이름은 기존 문구 유지, 그 밖(2주 뒤, 3일 뒤 …)은 describePeriod 의 이름을 쓴다
 const FUTURE_LABEL = { tomorrow: '내일', next_week: '다음 주', next_month: '다음 달', next_hour: '1시간 내' };
 
+// 미래 "바쁨" 등급 — 과거 요약(operationalMetricsDomain의 5단계 등급, D-026)과 대칭되는
+// 개념을 미래 쪽에 적용한 것. week/month 단위 기간에서만 매긴다 — 하루/1시간 단위는 표본이
+// 너무 작아 정규화해도 왜곡된다(예: 내일 체크아웃 1건만 있어도 "아주 바빠요"로 과다 표시될 수
+// 있음). 지표: (체크인+체크아웃) ÷ 선택된 숙소 수 ÷ 주 환산 기간 — 숙소 1곳·1주와 숙소 20곳·1달
+// 처럼 스코프·기간 길이가 달라도 같은 기준("숙소 1곳이 1주에 겪는 회전 수")으로 비교 가능하게
+// 정규화한다. 기준값은 제안값 — 운영해보고 조정 (D-018/D-029와 같은 원칙).
+const BUSY_TIER_BY_MIN_RATE = [
+  { min: 4, label: '아주 바빠요' },
+  { min: 2, label: '바빠요' },
+  { min: 1, label: '보통이에요' },
+  { min: 0, label: '한산해요' },
+];
+
+function busyTierLabel(weeklyRatePerProperty) {
+  return BUSY_TIER_BY_MIN_RATE.find(t => weeklyRatePerProperty >= t.min).label;
+}
+
 /**
  * 미래 기간이면 예약 기반 요약 문장, 아니면 '' (호출자가 서버 요약으로 대체).
+ * week/month 단위 기간은 "바쁨" 등급(한산해요~아주 바빠요)을 붙인다 (day/hour 단위는 표본이
+ * 작아 등급을 매기지 않고 기존처럼 사실만 말한다).
  * content-guide: 한 문장에 숫자 최대 2개.
  *
  * @param {string} period
@@ -213,5 +232,14 @@ export function futureSummaryFor(period, properties, nowMs) {
   const checkIns  = countWeekCheckIns(properties,  range.from, range.to);
   const checkOuts = countWeekCheckOuts(properties, range.from, range.to);
   if (checkIns === 0 && checkOuts === 0) return `${label} 예정된 체크인·체크아웃이 없어요.`;
+
+  if (desc.unit === 'week' || desc.unit === 'month') {
+    const periodWeeks = (range.to.getTime() - range.from.getTime()) / DAY / 7;
+    const rate = properties.length > 0 && periodWeeks > 0
+      ? (checkIns + checkOuts) / properties.length / periodWeeks
+      : 0;
+    return `${label} ${busyTierLabel(rate)} (체크인 ${checkIns}건 · 체크아웃 ${checkOuts}건)`;
+  }
+
   return `${label} 체크인 ${checkIns}건, 체크아웃 ${checkOuts}건 예정이에요.`;
 }

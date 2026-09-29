@@ -105,7 +105,7 @@ describe("generateSummary — 이번 주 / 이번 달", () => {
       anomalies: 1,
       energyWaste: 0,
     });
-    assert.equal(s, '이번 주 지금까지 완벽해요 (실패 0건)');
+    assert.equal(s, '이번 주 완벽해요 (실패 0건)');
   });
 
   test("this_month → 비어 있지 않은 문장", () => {

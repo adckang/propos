@@ -19,7 +19,7 @@ import {
   classifyCleaningAssignments,
   futureSummaryFor,
 } from '../../src/domain/futureWeekDomain.js';
-import { periodToRemainingRange } from '../../src/domain/periodDomain.js';
+import { periodToRemainingRange, periodToDateRange } from '../../src/domain/periodDomain.js';
 
 // ── 테스트 픽스처 ──────────────────────────────────────────────────────────────
 const DAY  = 86_400_000;
@@ -445,9 +445,10 @@ describe('G: futureSummaryFor', () => {
   const nextWeekDt = (offsetDays, hourKst) => dt(7 + offsetDays, hourKst);
   const nres = (ci, co) => ({ checkIn: nextWeekDt(ci, 15), checkOut: nextWeekDt(co, 11) });
 
-  it('다음 주: 예약 기준 체크인·체크아웃 건수 문장', () => {
+  it('다음 주: 예약 기준 체크인·체크아웃 건수 + 바쁨 등급 문장', () => {
+    // 체크인 3 + 체크아웃 3 = 6, 숙소 2곳 · 1주 → 3/숙소 → "바빠요"(≥2)
     const P = [prop('P1', [nres(0, 2), nres(3, 5)]), prop('P2', [nres(1, 4)])];
-    assert.equal(futureSummaryFor('next_week', P, NOW), '다음 주 체크인 3건, 체크아웃 3건 예정이에요.');
+    assert.equal(futureSummaryFor('next_week', P, NOW), '다음 주 바빠요 (체크인 3건 · 체크아웃 3건)');
   });
 
   it('예약이 없으면 "예정된 체크인·체크아웃이 없어요"', () => {
@@ -463,8 +464,10 @@ describe('G: futureSummaryFor', () => {
 
   it('선택 숙소 범위: 넘겨준 숙소만 센다', () => {
     const A = prop('A', [nres(0, 2)]), B = prop('B', [nres(1, 3)]);
-    assert.equal(futureSummaryFor('next_week', [A], NOW), '다음 주 체크인 1건, 체크아웃 1건 예정이에요.');
-    assert.equal(futureSummaryFor('next_week', [A, B], NOW), '다음 주 체크인 2건, 체크아웃 2건 예정이에요.');
+    // A만: 체크인1+체크아웃1=2, 숙소 1곳 → 2/숙소 → "바빠요"
+    assert.equal(futureSummaryFor('next_week', [A], NOW), '다음 주 바빠요 (체크인 1건 · 체크아웃 1건)');
+    // A+B: 체크인2+체크아웃2=4, 숙소 2곳 → 2/숙소 → 똑같이 "바빠요" (숙소 수로 정규화되므로)
+    assert.equal(futureSummaryFor('next_week', [A, B], NOW), '다음 주 바빠요 (체크인 2건 · 체크아웃 2건)');
   });
 
   it('미래 기간이 아니면 빈 문자열 (호출자가 서버 요약 사용)', () => {
@@ -477,5 +480,67 @@ describe('G: futureSummaryFor', () => {
     const P = [prop('P1', [nres(0, 2), nres(3, 5)])];
     const digits = futureSummaryFor('next_week', P, NOW).match(/\d+/g) ?? [];
     assert.ok(digits.length <= 2, digits.join(','));
+  });
+});
+
+// ── H: 바쁨 등급 (week/month 단위 기간만) ────────────────────────────────────────
+describe('H: futureSummaryFor — 바쁨 등급', () => {
+  const NOW = dt(2, 12).getTime();
+  const nextWeekDt = (offsetDays, hourKst) => dt(7 + offsetDays, hourKst);
+  // 숙소 1곳 기준 (체크인+체크아웃) 합계로 등급 경계를 확인한다: <1 한산 / 1~2 보통 / 2~4 바빠요 / ≥4 아주 바빠요
+  // n건의 "체크인만" 예약을 만든다 (체크아웃은 기간 밖으로 밀어 체크인 수만 정확히 세게)
+  const checkInsOnly = (n) => [prop('P1', Array.from({ length: n }, () => ({ checkIn: nextWeekDt(0, 15), checkOut: dt(100, 11) })))];
+
+  it('숙소 1곳 · 합계 1건 (rate=1) → 보통이에요', () => {
+    assert.equal(futureSummaryFor('next_week', checkInsOnly(1), NOW), '다음 주 보통이에요 (체크인 1건 · 체크아웃 0건)');
+  });
+
+  it('숙소 1곳 · 합계 3건 (rate=3, 2≤3<4) → 바빠요', () => {
+    assert.equal(futureSummaryFor('next_week', checkInsOnly(3), NOW), '다음 주 바빠요 (체크인 3건 · 체크아웃 0건)');
+  });
+
+  it('숙소 1곳 · 합계 5건 (rate=5≥4) → 아주 바빠요', () => {
+    assert.equal(futureSummaryFor('next_week', checkInsOnly(5), NOW), '다음 주 아주 바빠요 (체크인 5건 · 체크아웃 0건)');
+  });
+
+  it('숙소 2곳 · 합계 3건 (rate=1.5, 1≤1.5<2) → 보통이에요 — 숙소 수로 정규화됨', () => {
+    const A = prop('A', [{ checkIn: nextWeekDt(0, 15), checkOut: dt(100, 11) }]);
+    const B = prop('B', Array.from({ length: 2 }, () => ({ checkIn: nextWeekDt(0, 15), checkOut: dt(100, 11) })));
+    assert.equal(futureSummaryFor('next_week', [A, B], NOW), '다음 주 보통이에요 (체크인 3건 · 체크아웃 0건)');
+  });
+
+  it('일/시 단위 기간은 등급을 매기지 않는다 (표본이 작아 왜곡되므로)', () => {
+    // 숙소 1곳에 체크아웃 1건만 있어도(주 단위였다면 rate=1 "보통이에요") 내일(day 단위)은 등급 없이 사실만 말한다
+    const tomorrowCi = new Date(dt(3, 15));
+    const P = [prop('P1', [{ checkIn: tomorrowCi, checkOut: dt(100, 11) }])];
+    const sentence = futureSummaryFor('tomorrow', P, NOW);
+    assert.equal(sentence, '내일 체크인 1건, 체크아웃 0건 예정이에요.');
+    assert.doesNotMatch(sentence, /한산해요|보통이에요|바빠요/);
+  });
+
+  it('month 단위는 기간의 실제 일수로 정규화한다 — 같은 회전 건수(8건)라도 31일짜리 달과 28일짜리 달에서 등급이 갈린다', () => {
+    // now=2026-12-15(KST) → next_month=2027년 1월(31일). now=2027-01-15(KST) → next_month=2027년 2월(28일, 2027=평년)
+    const nowDec = Date.UTC(2026, 11, 15, 3, 0, 0); // KST 정오
+    const nowJan = Date.UTC(2027, 0, 15, 3, 0, 0);  // KST 정오
+
+    const rangeJan = periodToDateRange('next_month', nowDec);
+    const rangeFeb = periodToDateRange('next_month', nowJan);
+    assert.equal((rangeJan.to.getTime() - rangeJan.from.getTime()) / DAY, 31);
+    assert.equal((rangeFeb.to.getTime() - rangeFeb.from.getTime()) / DAY, 28);
+
+    const checkInsOnlyIn = (range, n) => [prop('P1', Array.from({ length: n }, () => ({
+      checkIn:  new Date(range.from.getTime() + DAY),
+      checkOut: new Date(range.to.getTime() + 100 * DAY), // 범위 밖으로 밀어 체크아웃은 안 셈
+    })))];
+
+    // 8건: 1월(31일 → 주당 1.81건) → 보통이에요 / 2월(28일 → 정확히 주당 2건) → 바빠요
+    assert.equal(
+      futureSummaryFor('next_month', checkInsOnlyIn(rangeJan, 8), nowDec),
+      '다음 달 보통이에요 (체크인 8건 · 체크아웃 0건)'
+    );
+    assert.equal(
+      futureSummaryFor('next_month', checkInsOnlyIn(rangeFeb, 8), nowJan),
+      '다음 달 바빠요 (체크인 8건 · 체크아웃 0건)'
+    );
   });
 });
