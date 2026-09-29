@@ -102,6 +102,41 @@ async function fetchProperties() {
   }
 }
 
+// 클라우드 청소 DB(property_cleaning_config)에서 등록된 숙소를 최후 폴백으로 조회한다.
+// Pi(위 fetchProperties, Cloudflare 터널 경유)도 못 찾고 이 브라우저에 로컬 캐시도 없으면
+// 숙소가 화면에 아예 안 보이던 문제(실사용 버그, 2026-09-29) — 청소 DB는 Pi/터널과 무관하게
+// 항상 인터넷으로 접속 가능하므로, 최소한 등록된 숙소의 이름·iCal 연동은 여기서 알 수 있다.
+// 여러 숙소가 등록돼 있으면 iCal이 연동된 첫 번째(실제 운영 중인) 숙소를 우선한다.
+async function fetchCloudProperty() {
+  try {
+    const res = await fetch('/api/cleaning/properties');
+    if (!res.ok) return null;
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+    return rows.find(r => r.ical_url) ?? rows[0];
+  } catch {
+    return null;
+  }
+}
+
+// 청소 DB 행(property_cleaning_config 컬럼)을 로컬/Pi 설정과 같은 모양으로 바꾼다.
+// district/watcherId/devices 등 Pi 전용 필드는 청소 DB에 없어 빈 값 — Pi가 안 잡히는 상황이라
+// 어차피 기기 제어는 불가능하고, 최소한 예약·청소 정보는 이 값으로도 화면에 뜰 수 있게 한다.
+function cloudRowToConfig(row) {
+  return {
+    id: row.property_id,
+    name: row.name,
+    district: '',
+    watcherId: null,
+    airbnbIcalUrl: row.ical_url || '',
+    googleCalIcalUrl: '',
+    checkInHour: 15,
+    checkOutHour: row.checkout_hour ?? 11,
+    cleaningDurationHours: row.cleaning_duration_hours ?? 2.5,
+    devices: {},
+  };
+}
+
 // Pi 파일에 숙소 목록 저장
 async function putProperties(list) {
   try {
@@ -502,18 +537,40 @@ export default function RoomStateApp({ onBack }) {
       const list  = await fetchProperties();
       const piCfg = list[0]?.airbnbIcalUrl ? list[0] : null;
       let cfg = piCfg ?? local;
+      let cloudRow = null;
+      // Pi도 못 찾고 이 브라우저에 로컬 캐시도 없으면 — 클라우드 청소 DB에 등록된 숙소로 최후 폴백
+      if (!cfg) {
+        cloudRow = await fetchCloudProperty();
+        if (cloudRow) cfg = cloudRowToConfig(cloudRow);
+      }
       if (!cfg || cancelled) return;
 
       // 청소 DB 백필 + 식별자 정규화 (D-016). 저장된 id 가 이름과 다르면(레거시 prop_…)
       // 서버가 이력을 새 이름으로 이전한 뒤에만 정규 설정으로 바꾼다 — 실패하면 기존 설정 유지.
       if (cfg.airbnbIcalUrl) {
         const plan = planPropertyIdentity(cfg);
-        const res  = await registerProperty(plan.config, plan.previousId).catch(() => null);
-        if (res?.ok && plan.previousId) {
-          cfg = plan.config;
-          putProperties([cfg]);
-        } else if (res && !res.ok && plan.previousId) {
-          Toast.show(`숙소 이름 이전 실패: ${await errorMessageOf(res)}`, 'w');
+        if (!cloudRow) cloudRow = await fetchCloudProperty();
+        // 청소 DB(Postgres)가 정본(D-014) — 이미 이 이름으로 등록돼 있고 옮길 이력도 없으면
+        // (previousId 없음) 쓰지 않고 정본 값을 그대로 반영만 한다. 안 그러면 이 브라우저가
+        // 들고 있는(어쩌면 낡은) 체크아웃시각·청소시간·iCal 값이 열 때마다 정본을 덮어써서,
+        // 청소 관리 화면에서 방금 바꾼 값이 다음 접속 때 조용히 되돌아가 버린다
+        // (실사용 무결성 점검 중 발견, 2026-09-29 — A/B 두 화면이 같은 필드를 서로 몰래 쓰던 문제).
+        const alreadyCanonical = cloudRow?.property_id === plan.config.id;
+        if (alreadyCanonical && !plan.previousId) {
+          cfg = {
+            ...plan.config,
+            checkOutHour: cloudRow.checkout_hour ?? plan.config.checkOutHour,
+            cleaningDurationHours: cloudRow.cleaning_duration_hours ?? plan.config.cleaningDurationHours,
+            airbnbIcalUrl: cloudRow.ical_url || plan.config.airbnbIcalUrl,
+          };
+        } else {
+          const res = await registerProperty(plan.config, plan.previousId).catch(() => null);
+          if (res?.ok && plan.previousId) {
+            cfg = plan.config;
+            putProperties([cfg]);
+          } else if (res && !res.ok && plan.previousId) {
+            Toast.show(`숙소 이름 이전 실패: ${await errorMessageOf(res)}`, 'w');
+          }
         }
       }
 

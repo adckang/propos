@@ -169,21 +169,31 @@ async function upsertProperty(req, res) {
     return sendJson(res, 400, { error: "dry_run 은 previous_property_id 와 함께 사용해요" });
   }
 
-  const { rows } = await db.query(
-    `INSERT INTO property_cleaning_config (property_id,name,checkout_hour,cleaning_duration_hours,google_calendar_id,google_calendar_booking_url,host_phone,ical_url,updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
-     ON CONFLICT (property_id) DO UPDATE SET
-       name=COALESCE($2,property_cleaning_config.name),
-       checkout_hour=COALESCE($3,property_cleaning_config.checkout_hour),
-       cleaning_duration_hours=COALESCE($4,property_cleaning_config.cleaning_duration_hours),
-       google_calendar_id=COALESCE($5,property_cleaning_config.google_calendar_id),
-       google_calendar_booking_url=COALESCE($6,property_cleaning_config.google_calendar_booking_url),
-       host_phone=COALESCE($7,property_cleaning_config.host_phone),
-       ical_url=COALESCE($8,property_cleaning_config.ical_url),
-       updated_at=NOW()
-     RETURNING *`,
-    [property_id, name ?? null, checkout_hour ?? null, cleaning_duration_hours ?? null, google_calendar_id ?? null, google_calendar_booking_url ?? null, host_phone ?? null, ical_url ?? null]
-  );
+  let rows;
+  try {
+    ({ rows } = await db.query(
+      `INSERT INTO property_cleaning_config (property_id,name,checkout_hour,cleaning_duration_hours,google_calendar_id,google_calendar_booking_url,host_phone,ical_url,updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+       ON CONFLICT (property_id) DO UPDATE SET
+         name=COALESCE($2,property_cleaning_config.name),
+         checkout_hour=COALESCE($3,property_cleaning_config.checkout_hour),
+         cleaning_duration_hours=COALESCE($4,property_cleaning_config.cleaning_duration_hours),
+         google_calendar_id=COALESCE($5,property_cleaning_config.google_calendar_id),
+         google_calendar_booking_url=COALESCE($6,property_cleaning_config.google_calendar_booking_url),
+         host_phone=COALESCE($7,property_cleaning_config.host_phone),
+         ical_url=COALESCE($8,property_cleaning_config.ical_url),
+         updated_at=NOW()
+       RETURNING *`,
+      [property_id, name ?? null, checkout_hour ?? null, cleaning_duration_hours ?? null, google_calendar_id ?? null, google_calendar_booking_url ?? null, host_phone ?? null, ical_url ?? null]
+    ));
+  } catch (err) {
+    // 위 SELECT 중복 검사는 check-then-act라 동시 요청이 그 틈을 비집고 들어올 수 있다 —
+    // DB의 UNIQUE(name) 제약(마지막 방어선)이 그 경쟁 상태를 막아주면 여기서 받는다.
+    if (err.code === "23505" && err.constraint === "property_cleaning_config_name_unique") {
+      return sendJson(res, 409, { error: `이미 같은 이름의 숙소가 있어요`, code: "NAME_TAKEN" });
+    }
+    throw err;
+  }
   return sendJson(res, 200, migration && !migration.alreadyMigrated ? { ...rows[0], migrated: migration.moved } : rows[0]);
 }
 

@@ -301,6 +301,11 @@ function PropertyPanel({ syncConfig, liveProperty }) {
     setLoading(true);
     try {
       const nullIfEmpty = v => (v === '' || v == null) ? null : v;
+      // name(숙소 이름)은 화면에서 더 이상 수정할 수 없다(읽기 전용) — D-016 식별자
+      // (property_id=name) 변경은 대시보드 ⚙설정 모달의 이전(rename) 절차 한 곳에서만
+      // 일어나야 한다. 여기서 이름을 바꿔 보내면 서버가 property_id는 그대로 둔 채
+      // name만 바꿔 그 둘이 어긋난다. name 자체는 서버 필수 필드라 그대로 보내되
+      // (불러온 값 그대로라 항상 기존 값과 같음 — no-op), 값은 절대 사용자가 바꿀 수 없다.
       await apiFetch('/api/cleaning/properties', {
         method: 'POST',
         body: JSON.stringify({
@@ -473,9 +478,15 @@ function PropertyPanel({ syncConfig, liveProperty }) {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           <div>
-            <div style={labelStyle}>숙소 이름</div>
-            <input type="text" value={form.name} onChange={e => set('name', e.target.value)}
-              placeholder="파주 게스트하우스" style={inputStyle} />
+            <div style={labelStyle}>
+              숙소 이름
+              <span style={{ marginLeft: 6, fontWeight: 400, color: '#9ca3af' }}>
+                (변경은 대시보드 ⚙설정에서)
+              </span>
+            </div>
+            <div style={{ ...inputStyle, background: '#f3f4f6', color: '#6b7280' }}>
+              {form.name}
+            </div>
           </div>
           <div>
             <div style={labelStyle}>체크아웃 시각</div>

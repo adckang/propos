@@ -4,7 +4,7 @@
 -- 숙소별 청소 설정 (google_calendar_id, booking_url 포함)
 CREATE TABLE IF NOT EXISTS property_cleaning_config (
   property_id                TEXT PRIMARY KEY,
-  name                       TEXT NOT NULL,
+  name                       TEXT NOT NULL UNIQUE,  -- D-016: property_id = name. 같은 이름 중복 등록을 DB 레벨에서 차단
   checkout_hour              INT  NOT NULL DEFAULT 11,
   cleaning_duration_hours    FLOAT NOT NULL DEFAULT 2.5,
   google_calendar_id         TEXT,
