@@ -109,7 +109,8 @@ describe("toE164 — E.164 변환", () => {
 // ============================================================
 // calcCleaningTimes 경계값
 // ============================================================
-import { calcCleaningTimes } from "../../server/cleaning/_dispatch.js";
+import { calcCleaningTimes, toKstDateKey } from "../../server/cleaning/_dispatch.js";
+import { airbnbEventsToReservations, parseVEvents } from "../../src/domain/room-state/icalParser.js";
 
 describe("calcCleaningTimes — 경계값", () => {
   test("반환값이 Date 객체", () => {
@@ -133,5 +134,38 @@ describe("calcCleaningTimes — 경계값", () => {
     const b = calcCleaningTimes("2026-09-11", 11, 2.5);
     const diffDays = (b.cleaning_start_at.getTime() - a.cleaning_start_at.getTime()) / 86_400_000;
     assert.equal(diffDays, 1);
+  });
+});
+
+// ============================================================
+// iCal → 청소 일정 날짜 회귀 테스트
+// ============================================================
+describe("iCal 체크아웃 → 청소 일정 날짜", () => {
+  test("예약 객체의 checkOut으로 KST 날짜를 계산한다 (date 필드 의존 금지)", () => {
+    const events = parseVEvents([
+      "BEGIN:VCALENDAR",
+      "BEGIN:VEVENT",
+      "UID:real-reservation-1",
+      "DTSTART;VALUE=DATE:20261010",
+      "DTEND;VALUE=DATE:20261012",
+      "SUMMARY:Reserved",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n"));
+    const [reservation] = airbnbEventsToReservations(events, 15, 11);
+
+    assert.equal(Object.hasOwn(reservation, "date"), false);
+    const date = toKstDateKey(reservation.checkOut);
+    assert.equal(date, "2026-10-12");
+
+    const times = calcCleaningTimes(date, 11, 2.5);
+    assert.equal(times.cleaning_start_at.toISOString(), "2026-10-12T02:00:00.000Z");
+    assert.equal(times.cleaning_end_at.toISOString(), "2026-10-12T04:30:00.000Z");
+  });
+
+  test("잘못된 체크아웃 값은 빈 날짜로 차단된다", () => {
+    assert.equal(toKstDateKey(undefined), "");
+    assert.equal(toKstDateKey(null), "");
+    assert.equal(toKstDateKey(new Date("invalid")), "");
   });
 });

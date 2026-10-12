@@ -281,6 +281,20 @@ export async function getPropertyConfig(db, propertyId) {
   return rows[0] ?? null;
 }
 
+/**
+ * Date/ISO timestamp를 한국 표준시 기준 달력 날짜(YYYY-MM-DD)로 변환한다.
+ * 청소 일정은 시각이 아니라 숙소의 체크아웃 달력 날짜를 기준으로 계산한다.
+ * 잘못된 입력은 빈 문자열로 반환해 Invalid Date가 후속 로직으로 전파되지 않게 한다.
+ */
+export function toKstDateKey(raw) {
+  if (raw == null) return '';
+  const date = raw instanceof Date ? raw : new Date(raw);
+  if (!Number.isFinite(date.getTime())) return '';
+
+  const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  return `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, '0')}-${String(kst.getUTCDate()).padStart(2, '0')}`;
+}
+
 export function calcCleaningTimes(checkoutDateStr, checkOutHour, durationHours) {
   const pad = (n) => String(n).padStart(2, "0");
   const startIso = `${checkoutDateStr}T${pad(checkOutHour)}:00:00+09:00`;

@@ -8,6 +8,7 @@ import {
   advanceJob,
   getPropertyConfig,
   calcCleaningTimes,
+  toKstDateKey,
   sendCompletionSmsToRest,
   postSlack,
 } from "../../server/cleaning/_dispatch.js";
@@ -696,9 +697,15 @@ async function syncAllPropertiesIcal(db, filterPropertyId = null) {
       );
     }
 
-    for (const { date, uid } of checkouts) {
+    for (const reservation of checkouts) {
+      const { uid } = reservation;
+      const date = toKstDateKey(reservation.checkOut);
+      if (!date) {
+        console.error(`[syncAllIcal] 잘못된 체크아웃 날짜 (${prop.property_id}/${uid ?? 'unknown'})`);
+        continue;
+      }
       const { cleaning_start_at, cleaning_end_at } = calcCleaningTimes(
-        date, prop.checkout_hour, prop.cleaning_duration_hours
+        date, prop.checkout_hour ?? 11, prop.cleaning_duration_hours ?? 2.5
       );
       const diffDays = (cleaning_start_at.getTime() - now) / 86_400_000;
       const source = diffDays <= 14 ? "SHORT_NOTICE" : "MONTHLY_BATCH";
