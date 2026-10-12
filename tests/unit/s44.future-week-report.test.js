@@ -238,6 +238,13 @@ describe('C: getOccupancyForecast', () => {
     assert.equal(r.occupiedRooms, 1); // 방은 1개
   });
 
+  it('C11-1 한 숙소의 예약이 겹쳐도 같은 날짜는 한 번만 센다', () => {
+    // Mon~Thu = 3박, Wed~Sat = 3박이지만 겹치는 Wed~Thu 1박은 중복하지 않아 총 5박이다.
+    const r = getOccupancyForecast([prop('P1', [res(0, 3), res(2, 5)])], WS, WE);
+    assert.equal(r.occupiedNights, 5);
+    assert.equal(r.vacantNights, 2);
+  });
+
   it('C12 occupancyRate = occupiedNights / totalNights', () => {
     // P1: 7박, P2: 3박(목~일) → 10/14
     const r = getOccupancyForecast([

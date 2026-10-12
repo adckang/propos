@@ -64,7 +64,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // ── 숙소 설정 (Pi 파일 영구 저장) ─────────────────────────────────────────
+  // ── 워처 메타데이터 (Pi 파일 영구 저장, 예약 원본 아님) ─────────────────────
   if (req.method === 'GET' && url.pathname === '/api/properties') {
     sendJson(res, 200, loadProperties());
     return;

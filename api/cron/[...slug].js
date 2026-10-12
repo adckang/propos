@@ -13,6 +13,7 @@ import {
   getPropertyConfig,
 } from "../../server/cleaning/_dispatch.js";
 import { notify } from "../../server/cleaning/_notify.js";
+import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 import {
   getGoogleToken,
   getGmailToken,
@@ -135,7 +136,7 @@ async function handleMonthlyClean(db, res) {
   const targetYM = nextMonthDates[0].slice(0, 7); // "YYYY-MM"
 
   const { rows: properties } = await db.query(
-    `SELECT * FROM property_cleaning_config`
+    `SELECT * FROM property_cleaning_config WHERE data_origin = 'REAL'`
   );
 
   let blockersCreated = 0, blockersSkipped = 0, jobsCreated = 0, jobsSkipped = 0;
@@ -223,7 +224,8 @@ async function handleMonthlyClean(db, res) {
 
   const { rows: pendingJobs } = await db.query(
     `SELECT * FROM cleaning_jobs
-     WHERE status = 'PENDING'
+     WHERE data_origin = 'REAL'
+       AND status = 'PENDING'
        AND cleaning_start_at >= $1
        AND cleaning_start_at < $2
      ORDER BY cleaning_start_at ASC`,
@@ -257,7 +259,8 @@ async function handleCleaningFollowup(db, res) {
   // dispatch_after 도래한 PENDING job 즉시 발동
   const { rows: readyJobs } = await db.query(
     `SELECT * FROM cleaning_jobs
-     WHERE status = 'PENDING' AND dispatch_after <= NOW()
+     WHERE data_origin = 'REAL'
+       AND status = 'PENDING' AND dispatch_after <= NOW()
      ORDER BY dispatch_after ASC`
   );
   for (const job of readyJobs) {
@@ -276,7 +279,8 @@ async function handleCleaningFollowup(db, res) {
        SELECT sent_at FROM cleaning_notifs
        WHERE job_id = j.id ORDER BY sent_at DESC LIMIT 1
      ) n ON true
-     WHERE j.status IN ('NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3')
+     WHERE j.data_origin = 'REAL'
+       AND j.status IN ('NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3')
        AND n.sent_at < NOW() - INTERVAL '1 hour'`
   );
 
@@ -296,7 +300,8 @@ async function handleCleaningFollowup(db, res) {
      FROM cleaning_notifs n
      JOIN cleaning_jobs j ON j.id = n.job_id
      JOIN cleaners c ON c.id = n.cleaner_id
-     WHERE j.status = 'NOTIFYING_BULK'
+     WHERE j.data_origin = 'REAL'
+       AND j.status = 'NOTIFYING_BULK'
        AND n.reminded_at IS NULL
        AND n.response IS NULL
        AND n.sent_at < NOW() - INTERVAL '1 hour'`
@@ -339,7 +344,8 @@ async function handleCleaningFollowup(db, res) {
      JOIN LATERAL (
        SELECT MIN(sent_at) AS first_sent FROM cleaning_notifs WHERE job_id = j.id AND tier = 'BULK'
      ) n ON true
-     WHERE j.status IN ('NOTIFYING_BULK','BULK_REMINDED')
+     WHERE j.data_origin = 'REAL'
+       AND j.status IN ('NOTIFYING_BULK','BULK_REMINDED')
        AND n.first_sent < NOW() - INTERVAL '3 hours'`
   );
 
@@ -407,6 +413,10 @@ async function handleWorkerHealthCheck(db, res) {
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).end();
+
+  if (resolveServerDataProfile(process.env) === DATA_PROFILE.DEMO) {
+    return res.status(403).json({ error: "demo profile is read-only", dataProfile: "demo" });
+  }
 
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret && req.headers.authorization !== `Bearer ${cronSecret}`) {

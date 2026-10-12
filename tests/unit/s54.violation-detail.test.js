@@ -38,6 +38,7 @@ import {
   buildCleaningIssueRows,
 } from '../../src/domain/violationDetailDomain.js';
 import { getDrilldownForMetric } from '../../src/application/reportingService.js';
+import { getDemoCleaningStats, getDemoDrilldown } from '../../src/application/demoReportingService.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8');
@@ -655,17 +656,21 @@ describe('화면 배선 — 숙소 이름 · 구어체 한 줄 · 시간, 심각
   });
 });
 
-describe('dev 스텁 — 실제 서버 응답과 같은 키로 화면을 확인할 수 있다', () => {
-  const src = read('vite.config.mjs');
+describe('demo 공통 서비스 — 실제 서버 응답과 같은 키로 화면을 확인할 수 있다', () => {
+  const now = new Date('2026-09-21T03:00:00Z');
   test('drilldown 샘플: 기준(limit_hours) · 꺼짐(resolved_at) · 퇴실 기준(anchor_at)', () => {
-    assert.match(src, /limit_hours: 3/);
-    assert.match(src, /resolved_at: "2026-09-07T23:20:00\.000Z"/);
-    assert.match(src, /anchor_at: "2026-09-08T11:00:00\.000Z"/);
+    const cleaning = getDemoDrilldown('cleaning_time', 'last_week', { now });
+    const vacant = getDemoDrilldown('vacant_energy', 'last_week', { now });
+    const checkout = getDemoDrilldown('post_checkout_energy', 'last_week', { now });
+    assert.ok(cleaning.items.every(item => item.detail.limit_hours === 3));
+    assert.ok(vacant.items.some(item => item.detail.resolved_at));
+    assert.ok(checkout.items.every(item => item.detail.anchor_at));
+    assert.ok([...cleaning.items, ...vacant.items, ...checkout.items].every(item => item.data_origin === 'DEMO'));
   });
   test('cleaning/stats 샘플: 목업 숙소도 상태가 다양하지만 대부분(80%)은 배정완료', () => {
-    // 2026-09-24 수정: 처음엔 목업을 전부 ASSIGNED로 고정했다가, "다양하게 하되 80%는 배정완료로"로
-    // 정정됨 (s56.calendar-day-actions.test.js 에 확률 분포 상세 테스트)
-    assert.match(src, /upTo: 80, status: "ASSIGNED"/);
-    assert.match(src, /const assigned\s+= items\.filter\(i => i\.status === "ASSIGNED"\)\.length;/);
+    const result = getDemoCleaningStats('next_month', { withItems: true, now });
+    const ratio = result.assigned / result.items.length;
+    assert.ok(ratio > 0.70 && ratio < 0.90, `배정완료 비율: ${(ratio * 100).toFixed(1)}%`);
+    assert.equal(result.dataProfile, 'demo');
   });
 });

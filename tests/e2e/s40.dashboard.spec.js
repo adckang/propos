@@ -15,6 +15,7 @@ import CFG from '../../src/config/privateConfig.js';
 const HA_BASE_URL  = process.env.PROPOS_HA_BASE_URL || CFG?.ha?.baseUrl || '';
 const HA_TOKEN     = process.env.PROPOS_HA_TOKEN    || CFG?.ha?.token   || '';
 const HA_AVAILABLE = !!(HA_BASE_URL && HA_TOKEN);
+const REAL_DATA_PROFILE = process.env.PROPOS_DATA_PROFILE === 'real';
 
 // ────────────────────────────────────────────────────────────────────────────
 // E2E-001  페이지 로드 → DashboardView 렌더
@@ -95,17 +96,18 @@ test('E2E-004 월간 필터·숙소 복수선택·날짜 상세가 함께 동작
   await expect(propertySelect).toContainText('선택 없음');
   await menu.locator('button').nth(1).click();
   await expect(propertySelect).toContainText('1개 선택');
-  const oneIssueTotal = await calendar.getByRole('button', { name: /문제 \d+건/ }).evaluateAll(
+  const p001Calendar = await (await page.request.get('/api/stats/calendar?period=this_month&property_ids=P001')).json();
+  const p001IssueTotal = Object.values(p001Calendar.days ?? {}).reduce((sum, day) => sum + Number(day.total ?? 0), 0);
+  await expect.poll(() => calendar.getByRole('button', { name: /문제 \d+건/ }).evaluateAll(
     buttons => buttons.reduce((sum, button) => sum + Number(button.textContent), 0)
-  );
-  expect(oneIssueTotal).toBe(1);
+  )).toBe(p001IssueTotal);
   await expect(calendar.locator('[data-testid="calendar-state-bar"]').first()).toBeVisible();
 
   const p001Drilldown = await (await page.request.get('/api/stats/drilldown?period=this_month&metric=cleaning_time&property_ids=P001')).json();
   const p003Drilldown = await (await page.request.get('/api/stats/drilldown?period=this_month&metric=cleaning_time&property_ids=P003')).json();
   expect(p001Drilldown.failCount).toBe(0);
-  expect(p003Drilldown.failCount).toBe(1);
-  expect(p003Drilldown.items.map(item => item.property_id)).toEqual(['P003']);
+  expect(p003Drilldown.failCount).toBe(p003Drilldown.items.length);
+  expect(p003Drilldown.items.every(item => item.property_id === 'P003')).toBeTruthy();
   await menu.getByRole('button', { name: 'ALL' }).click();
   await expect(propertySelect).toContainText('ALL');
 
@@ -147,14 +149,18 @@ test('E2E-004 월간 필터·숙소 복수선택·날짜 상세가 함께 동작
       vacant: totals.vacant + Number(node.dataset.vacant),
     }), { occupied: 0, vacant: 0 })
   );
-  expect(occupancyTotals.occupied).toBe(Number(nextReportText.match(/체류 예정\s*\d+숙소 · (\d+)박/)?.[1]));
-  expect(occupancyTotals.vacant).toBe(Number(nextReportText.match(/공실 예정\s*\d+숙소 · (\d+)박/)?.[1]));
+  const vacancyMatch = nextReportText.match(/공실률\s*(\d+)%/);
+  expect(vacancyMatch).not.toBeNull();
+  expect(Math.round(occupancyTotals.vacant / (occupancyTotals.occupied + occupancyTotals.vacant) * 100))
+    .toBe(Number(vacancyMatch[1]));
 
-  const cleaningTotal = await calendar.locator('[data-testid="future-cleaning-count"]').evaluateAll(nodes =>
-    nodes.reduce((sum, node) => sum + Number(node.dataset.count), 0)
+  const cleaningTotal = await calendar.locator('[data-testid="future-cleaning-assigned"]').evaluateAll(nodes =>
+    nodes.reduce((sum, node) => sum + Number(node.dataset.value), 0)
+  ) + await calendar.locator('[data-testid="future-cleaning-unassigned"]').evaluateAll(nodes =>
+    nodes.reduce((sum, node) => sum + Number(node.textContent.match(/(\d+)$/)?.[1] ?? 0), 0)
   );
   const reportCleaningCounts = await Promise.all(
-    ['배정완료', '배정 요청 필요', '배정 요청중', '배정 실패'].map(async label => {
+    ['배정완료', '미배정'].map(async label => {
       const row = report.getByText(label, { exact: true }).locator('..');
       await expect(row).toContainText(/\d+건/);
       const valueText = await row.locator('span').nth(1).innerText();
@@ -164,16 +170,16 @@ test('E2E-004 월간 필터·숙소 복수선택·날짜 상세가 함께 동작
   const reportCleaningTotal = reportCleaningCounts.reduce((sum, count) => sum + count, 0);
   expect(cleaningTotal).toBe(reportCleaningTotal);
 
-  const cleaningButton = calendar.getByRole('button', { name: /청소 \d+건/ }).first();
+  const cleaningButton = calendar.getByRole('button', { name: /청소 (배정 완료|미배정) \d+/ }).first();
   await cleaningButton.click();
-  await expect(page.getByText(/청소 예정 \d+건/).last()).toBeVisible();
+  await expect(page.getByRole('button', { name: '✕' })).toBeVisible();
 });
 
 // ────────────────────────────────────────────────────────────────────────────
 // E2E-003  (HA 필요) 도어 토글 → 워처 상태 API 갱신 확인
 // ────────────────────────────────────────────────────────────────────────────
 test('E2E-003 HA 도어 토글 → /api/monitoring/state lastEventAt 갱신', async ({ page }) => {
-  test.skip(!HA_AVAILABLE, 'PROPOS_HA_BASE_URL / PROPOS_HA_TOKEN 미설정');
+  test.skip(!HA_AVAILABLE || !REAL_DATA_PROFILE, 'real 프로필 또는 HA 환경변수 미설정');
 
   await page.goto('/');
   await expect(page.locator('[data-testid="dashboard-summary"]')).toBeVisible();

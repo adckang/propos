@@ -8,6 +8,7 @@
 
 import { Pool } from "pg";
 import { postSlack } from "../../server/cleaning/_dispatch.js";
+import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 
 const db = new Pool({ connectionString: process.env.POSTGRES_URL });
 
@@ -173,6 +174,9 @@ async function handleProfile(req, res) {
 }
 
 export default async function handler(req, res) {
+  if (resolveServerDataProfile(process.env) === DATA_PROFILE.DEMO) {
+    return sendJson(res, 403, { error: "demo profile is read-only", dataProfile: "demo" });
+  }
   const slug = parseSlug(req);
   const [resource] = slug;
 

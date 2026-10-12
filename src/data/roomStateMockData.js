@@ -1,16 +1,21 @@
 // roomStateMockData.js — Room State Machine UI 전용 목업 데이터
 
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
 // daysOffset 기준 날짜 생성 (hourDecimal: 15.5 = 15:30)
 function o(daysOffset, hourDecimal = 0) {
-  const d = new Date();
-  d.setDate(d.getDate() + daysOffset);
-  d.setHours(Math.floor(hourDecimal), Math.round((hourDecimal % 1) * 60), 0, 0);
-  return d;
+  const kstNow = new Date(Date.now() + KST_OFFSET_MS);
+  const hour = Math.floor(hourDecimal);
+  const minute = Math.round((hourDecimal % 1) * 60);
+  return new Date(Date.UTC(
+    kstNow.getUTCFullYear(), kstNow.getUTCMonth(), kstNow.getUTCDate() + daysOffset,
+    hour - 9, minute, 0, 0,
+  ));
 }
 
-// 요일 기반 상대 오프셋 사전 계산 (모듈 로드 시 1회)
+// KST 요일 기반 상대 오프셋 사전 계산 (서버 UTC와 한국 브라우저가 같은 날짜를 만든다)
 const _d = (() => {
-  const dow = new Date().getDay(); // 0=Sun, 6=Sat
+  const dow = new Date(Date.now() + KST_OFFSET_MS).getUTCDay(); // 0=Sun, 6=Sat
   const pSat  = dow === 6 ? 0 : -(((dow + 1) % 7) || 7);
   const nSat  = dow === 6 ? 7 : (6 - dow);
   const pSun  = -dow;
@@ -300,7 +305,7 @@ const RAW_PROPERTIES = [
     reservations: [
       { guestName: '송유나',          platform: 'Airbnb',      checkIn: o(_d.nMon, 15),      checkOut: o(_d.nMon+2, 11) },
       { guestName: '강태양 커플',     platform: '야놀자',      checkIn: o(_d.nFri, 15),      checkOut: o(_d.nFri+2, 11) },
-      { guestName: '오지수',          platform: 'Airbnb',      checkIn: o(_d.nFri+3, 15),    checkOut: o(_d.nFri+6, 11) },
+      { guestName: '오지수',          platform: 'Airbnb',      checkIn: o(_d.nFri+4, 15),    checkOut: o(_d.nFri+7, 11) },
       { guestName: '임현우 가족',     platform: 'Airbnb',      checkIn: o(_d.nFri+7, 14),    checkOut: o(_d.nFri+14, 11) },
       { guestName: '배민서 (비즈)',   platform: '에어클라우드', checkIn: o(_d.nFri+14, 16),   checkOut: o(_d.nFri+19, 11) },
       { guestName: '조다솜 커플',     platform: 'Airbnb',      checkIn: o(_d.nFri+21, 15),   checkOut: o(_d.nFri+23, 11) },
@@ -323,9 +328,9 @@ const RAW_PROPERTIES = [
       { mainStatus: 'VACANT',         subStatus: 'CLEANING_FINISHED',    start: o(-4, 12), end: null      },
     ],
     reservation: { guestName: '임지혁 (비즈)', platform: '에어클라우드',
-      checkIn: o(_d.nMon, 16), checkOut: o(_d.nFri, 11) },
+      checkIn: o(_d.nMon, 16), checkOut: o(_d.nMon+4, 11) },
     reservations: [
-      { guestName: '임지혁 (비즈)',   platform: '에어클라우드', checkIn: o(_d.nMon, 16),      checkOut: o(_d.nFri, 11) },
+      { guestName: '임지혁 (비즈)',   platform: '에어클라우드', checkIn: o(_d.nMon, 16),      checkOut: o(_d.nMon+4, 11) },
       { guestName: '신지우',          platform: 'Airbnb',      checkIn: o(_d.nFri, 15),      checkOut: o(_d.nFri+2, 11) },
       { guestName: '류하늘 커플',     platform: '야놀자',      checkIn: o(_d.nFri+3, 15),    checkOut: o(_d.nFri+6, 11) },
       { guestName: '문태양 (비즈)',   platform: '에어클라우드', checkIn: o(_d.nFri+7, 16),    checkOut: o(_d.nFri+11, 11) },

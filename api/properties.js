@@ -1,10 +1,15 @@
 /**
- * GET /api/properties  — 저장된 숙소 목록 반환
- * PUT /api/properties  — 숙소 목록 저장
+ * GET /api/properties  — Pi 워처 메타데이터 반환
+ * PUT /api/properties  — Pi 워처 메타데이터 저장
  *
- * Vercel에서는 PROPOS_WATCHER_URL(Pi 포트 3001)로 프록시.
- * 환경변수 미설정 시 503 반환.
+ * 예약·iCal·청소 일정은 Postgres의 /api/cleaning/*가 정본이다.
+ * Vercel에서는 PROPOS_WATCHER_URL(Pi 포트 3001)로 워처 메타데이터만 프록시한다.
+ * 환경변수 미설정 시 빈 메타데이터 목록을 반환한다. 예약·청소 정본은 Postgres이므로
+ * Pi가 잠시 오프라인이어도 운영 화면의 데이터 조회를 실패시키지 않는다.
  */
+
+import { getDemoPropertyConfigs } from '../src/application/demoReportingService.js';
+import { DATA_PROFILE, resolveServerDataProfile } from '../src/config/dataProfile.js';
 
 const WATCHER_URLS = (() => {
   try { return JSON.parse(process.env.PROPOS_WATCHER_URLS ?? '{}'); }
@@ -38,10 +43,25 @@ export default async function handler(req, res) {
     return;
   }
 
+  if (resolveServerDataProfile(process.env) === DATA_PROFILE.DEMO) {
+    if (req.method === 'GET') {
+      const properties = getDemoPropertyConfigs().map(property => ({
+        id: property.property_id,
+        name: property.name,
+        checkOutHour: property.checkout_hour,
+        cleaningDurationHours: property.cleaning_duration_hours,
+        dataOrigin: 'DEMO',
+      }));
+      return sendJson(res, 200, properties);
+    }
+    return sendJson(res, 403, { error: 'demo profile is read-only', dataProfile: 'demo' });
+  }
+
   const watcherId = req.query?.watcherId ?? null;
   const WATCHER_URL = resolveWatcherUrl(watcherId);
 
   if (!WATCHER_URL) {
+    if (req.method === 'GET') return sendJson(res, 200, []);
     sendJson(res, 503, { error: 'PROPOS_WATCHER_URL not configured' });
     return;
   }

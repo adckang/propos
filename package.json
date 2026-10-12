@@ -17,6 +17,9 @@
     "verify:deploy": "node scripts/verify-deployment-ready.mjs",
     "sync:dist": "node scripts/sync-dist.mjs",
     "verify:dist": "node scripts/verify-dist-sync.mjs",
+    "data:check": "node scripts/data-simulator.mjs check --fixture",
+    "data:check:db": "node scripts/data-simulator.mjs check-db",
+    "data:generate": "node scripts/data-simulator.mjs generate --synthetic",
     "test:smoke": "playwright test",
     "prepare": "node scripts/setup-git-hooks.mjs"
   },

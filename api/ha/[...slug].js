@@ -6,6 +6,7 @@ import {
   handleVercelHistory,
   handleVercelTemplate,
 } from "../../server/haApiHandlers.js";
+import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 
 const HANDLERS = {
   service:    handleVercelService,
@@ -17,6 +18,12 @@ const HANDLERS = {
 };
 
 export default async function handler(req, res) {
+  if (resolveServerDataProfile(process.env) === DATA_PROFILE.DEMO) {
+    res.statusCode = 403;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "demo profile cannot access Home Assistant", dataProfile: "demo" }));
+    return;
+  }
   const action = (req.query?.slug
     ? (Array.isArray(req.query.slug) ? req.query.slug[0] : req.query.slug)
     : (req.url || "").split("?")[0].split("/").filter(Boolean)[2]) || "";

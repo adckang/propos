@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { PROPERTIES, STATE_META } from '../../data/roomStateMockData.js';
+import { STATE_META } from '../../data/roomStateMockData.js';
 import { useMobile } from '../../hooks/useMobile.js';
 import { useMonthlyCalendar } from '../../hooks/useMonthlyCalendar.js';
 import { deriveSelectionScope, syncSelectionWithProperties } from '../../domain/selectionScopeDomain.js';
@@ -10,7 +10,7 @@ import MonthlyCalendar from './reporting/MonthlyCalendar.jsx';
 
 const ORDER = ['CLEANING', 'PRE_STAY_READY', 'OCCUPIED', 'VACANT'];
 
-export default function MonthlyView({ onSelectStatus, onNavigateToList, onSelectProperty, onBack, properties = PROPERTIES, syncBadge }) {
+export default function MonthlyView({ onSelectStatus, onNavigateToList, onSelectProperty, onBack, properties = [], syncBadge }) {
   const isMobile = useMobile();
   const [statusDetailsOpen, setStatusDetailsOpen] = useState(false);
   const [statsPeriod, setStatsPeriod] = useState('this_month');

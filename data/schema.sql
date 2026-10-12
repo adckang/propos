@@ -13,6 +13,10 @@ CREATE TABLE IF NOT EXISTS events (
   data          JSONB,
   blob_url      TEXT,
   notified_at   TIMESTAMPTZ,
+  source_system TEXT        NOT NULL DEFAULT 'HA_WATCHER',
+  source_ref    TEXT,
+  data_origin   TEXT        NOT NULL DEFAULT 'REAL'
+                            CHECK (data_origin IN ('REAL','SIMULATED')),
   status        TEXT        NOT NULL DEFAULT 'pending'
                             CHECK (status IN ('pending', 'complete', 'failed')),
   UNIQUE (property_id, type, device_time)

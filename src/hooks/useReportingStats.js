@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
  *
  * 서버가 준 값은 0이어도 그대로 반환한다 (가짜 수치로 대체하지 않음).
  * API 실패 시 stats=null + error 메시지 — 화면은 "데이터를 불러올 수 없어요"를 표시.
- * dev에서 백엔드 없이 UI를 볼 때의 견본 데이터는 vite.config.mjs의 /api/stats 스텁이 제공.
+ * demo 프로필의 견본 데이터는 공통 demoReportingService를 통해 같은 API 계약으로 제공.
  *
  * @param {string|null} period - null이면 fetch 스킵
  * @param {string[]|null} propertyIds - null=전체, [...]= 선택된 숙소 ID

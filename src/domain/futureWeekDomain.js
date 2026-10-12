@@ -48,15 +48,19 @@ export function countWeekCheckOuts(properties, weekStart, weekEnd) {
   return count;
 }
 
-/** 숙소 하나의 구간 내 체류 박수 (예약-구간 겹치는 일수, 구간 전체 박수를 넘지 않게 자름) */
+/** 숙소 하나의 구간 내 체류 박수 (겹치는 예약은 같은 날짜를 한 번만 센다) */
 function roomNightsOf(property, wsDay, weDay, weekDays) {
-  let roomNights = 0;
+  if (weekDays <= 0) return 0;
+  const occupiedDays = new Set();
   for (const r of (property.reservations ?? [])) {
     const ciDay = dayOf(r.checkIn);
     const coDay = dayOf(r.checkOut);
-    roomNights += Math.max(0, Math.min(coDay, weDay) - Math.max(ciDay, wsDay));
+    if (!Number.isFinite(ciDay) || !Number.isFinite(coDay) || coDay <= ciDay) continue;
+    const fromDay = Math.max(ciDay, wsDay);
+    const toDay = Math.min(coDay, weDay);
+    for (let day = fromDay; day < toDay; day++) occupiedDays.add(day);
   }
-  return Math.min(roomNights, weekDays); // 주 최대 박수 초과 방지
+  return occupiedDays.size;
 }
 
 /**

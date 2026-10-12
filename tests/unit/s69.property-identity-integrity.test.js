@@ -97,7 +97,7 @@ describe('CleaningManager.jsx — "숙소" 탭(PropertyPanel)은 이름을 더 �
     // 다만 위 테스트가 확인하듯 form.name은 useEffect가 불러온 값 그대로만 바뀌고
     // 사용자가 직접 편집할 방법이 없으므로 no-op으로 안전하다.
     const saveStart = block.indexOf('async function handleSave');
-    const saveEnd = block.indexOf('\n  async function handleSync', saveStart);
+    const saveEnd = block.indexOf('\n  async function handleServerSync', saveStart);
     const saveBlock = block.slice(saveStart, saveEnd);
     assert.match(saveBlock, /\.\.\.form,/);
   });

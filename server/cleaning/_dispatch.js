@@ -23,7 +23,7 @@ function randomToken() {
   return t;
 }
 
-export async function createNotif(db, { jobId, cleanerId, tier }) {
+export async function createNotif(db, { jobId, cleanerId, tier, dataOrigin = "REAL" }) {
   // 이미 존재하면 기존 레코드 반환 (멱등성 보장, 동시 호출 방어)
   const { rows: existing } = await db.query(
     `SELECT id, token FROM cleaning_notifs WHERE job_id=$1 AND cleaner_id=$2`,
@@ -36,10 +36,10 @@ export async function createNotif(db, { jobId, cleanerId, tier }) {
     const token = randomToken();
     try {
       const { rows } = await db.query(
-        `INSERT INTO cleaning_notifs (job_id, cleaner_id, tier, token)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO cleaning_notifs (job_id, cleaner_id, tier, token, data_origin)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING id, token`,
-        [jobId, cleanerId, tier, token]
+        [jobId, cleanerId, tier, token, dataOrigin]
       );
       return rows[0];
     } catch (e) {
@@ -115,6 +115,11 @@ export async function postSlack(text) {
  * @param {object} [opts.deleteBlocker] - PENDING → 첫 알림 전 블로커 삭제 콜백 (async fn(job))
  */
 export async function advanceJob(db, job, { deleteBlocker } = {}) {
+  // 시뮬레이션 일정은 실제 청소자·SMS·FCM·Slack·Google 캘린더를 절대 건드리지 않는다.
+  // 데이터 구조와 상태는 동일하게 유지하되 외부 부작용만 차단한다.
+  if (job?.data_origin === "SIMULATED") {
+    return { simulated: true, skippedExternalSideEffects: true };
+  }
   const nextStatus = {
     PENDING:           "NOTIFYING_VIP_1",
     NOTIFYING_VIP_1:  "NOTIFYING_VIP_2",
@@ -150,7 +155,7 @@ export async function advanceJob(db, job, { deleteBlocker } = {}) {
     return advanceJob(db, { ...job, status: nextStatus });
   }
 
-  const notif = await createNotif(db, { jobId: job.id, cleanerId: cleaner.id, tier });
+  const notif = await createNotif(db, { jobId: job.id, cleanerId: cleaner.id, tier, dataOrigin: job.data_origin });
   const calendarUrl = propCfg?.google_calendar_booking_url ?? `${BASE_URL}/c/${job.property_id}`;
   console.log(`[dispatch] calendarUrl=${calendarUrl} (propCfg.url=${propCfg?.google_calendar_booking_url ?? "null"})`);
   const dt = fmtDate(job.cleaning_start_at);
@@ -214,7 +219,7 @@ async function dispatchBulk(db, job, propertyName, propCfg) {
 
   for (const cleaner of cleaners) {
     try {
-      const notif = await createNotif(db, { jobId: job.id, cleanerId: cleaner.id, tier: "BULK" });
+      const notif = await createNotif(db, { jobId: job.id, cleanerId: cleaner.id, tier: "BULK", dataOrigin: job.data_origin });
       await notify(db, cleaner, {
         title: "[PROPOS] 청소 아르바이트 안내",
         body: `${propertyName} ${dt} 선착순`,
@@ -243,6 +248,7 @@ export async function sendCompletionSmsToRest(db, jobId, assignedCleanerId) {
     [jobId]
   );
   if (!job.length) return;
+  if (job[0].data_origin === "SIMULATED") return;
 
   const propertyName = job[0].prop_name ?? job[0].property_id;
   const date = new Date(job[0].cleaning_start_at).toISOString().slice(0, 10);

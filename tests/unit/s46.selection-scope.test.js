@@ -213,8 +213,8 @@ describe('PropertyListView — selectionScopeDomain 배선', () => {
     }
   });
 
-  test('propertyIds는 scope.propertyIds에서 온다 (인라인 재계산 금지)', () => {
-    assert.match(listViewSrc, /statsPropertyIds\s*=\s*scope\.propertyIds/);
+  test('전체 선택도 화면 숙소 ID를 명시해 DB의 숨은 레거시 숙소가 섞이지 않는다', () => {
+    assert.match(listViewSrc, /statsPropertyIds\s*=\s*noSelection\s*\?\s*\[\]\s*:\s*scope\.selectedIds/);
     assert.ok(!/selectedRooms\.size\s*===\s*properties\.length/.test(listViewSrc),
       '개수 비교로 전체 여부를 판단하는 인라인 로직이 남아 있음');
   });

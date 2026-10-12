@@ -257,7 +257,7 @@ function CleanersPanel() {
 
 // ── PropertyPanel ─────────────────────────────────────────────────────────────
 
-function PropertyPanel({ syncConfig, liveProperty }) {
+function PropertyPanel({ syncConfig, onDataChanged }) {
   const propertyId = syncConfig?.id ?? null;
   const [form, setForm] = useState({
     property_id: propertyId ?? '',
@@ -325,42 +325,6 @@ function PropertyPanel({ syncConfig, liveProperty }) {
     }
   }
 
-  async function handleSync() {
-    if (!saved) {
-      Toast.show('숙소 설정을 먼저 저장하세요.', 'w');
-      return;
-    }
-    const reservations = liveProperty?.reservations ?? [];
-    const today = new Date();
-    const checkouts = reservations
-      .filter(r => {
-        const co = r.checkOut instanceof Date ? r.checkOut : r.checkOut ? new Date(r.checkOut) : null;
-        return co && co > today;
-      })
-      .map(r => {
-        const co = r.checkOut instanceof Date ? r.checkOut : new Date(r.checkOut);
-        return { date: co.toISOString().slice(0, 10), uid: r.uid };
-      });
-
-    if (!checkouts.length) {
-      Toast.show('동기화할 미래 체크아웃이 없습니다. 대시보드에서 iCal을 먼저 연동하세요.', 'w');
-      return;
-    }
-
-    setSyncing(true);
-    try {
-      const result = await apiFetch('/api/cleaning/jobs', {
-        method: 'POST',
-        body: JSON.stringify({ property_id: form.property_id, checkouts }),
-      });
-      Toast.show(`청소 일정 동기화 완료 — 신규 ${result.created}건, 기존 ${result.skipped}건`, 's');
-    } catch (e) {
-      Toast.show('동기화 실패: ' + e.message, 'e');
-    } finally {
-      setSyncing(false);
-    }
-  }
-
   async function handleServerSync() {
     setSyncing(true);
     try {
@@ -368,6 +332,7 @@ function PropertyPanel({ syncConfig, liveProperty }) {
         method: 'POST',
         body: JSON.stringify({ property_id: propertyId }),
       });
+      await onDataChanged?.();
       Toast.show(`서버 iCal 동기화 완료 — 신규 ${result.created}건 생성`, 's');
     } catch (e) {
       Toast.show('서버 동기화 실패: ' + e.message, 'e');
@@ -404,13 +369,6 @@ function PropertyPanel({ syncConfig, liveProperty }) {
       setWatchLoading(false);
     }
   }
-
-  const reservations = liveProperty?.reservations ?? [];
-  const today = new Date();
-  const futureCount = reservations.filter(r => {
-    const co = r.checkOut instanceof Date ? r.checkOut : r.checkOut ? new Date(r.checkOut) : null;
-    return co && co > today;
-  }).length;
 
   const gmailWatchBlock = (
     <div style={{ background: '#fff', borderRadius: 12, padding: 20, border: '1px solid #e2e8f0' }}>
@@ -561,12 +519,12 @@ function PropertyPanel({ syncConfig, liveProperty }) {
           이미 등록된 일정은 건너뜁니다.
         </div>
 
-        {/* 방법 A: 서버 직접 iCal 폴링 (DB에 iCal URL 설정된 경우) */}
+        {/* 단일 서버 iCal 폴링 경로 */}
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
-            방법 A — 서버 직접 폴링
+            서버 동기화
             <span style={{ marginLeft: 6, fontWeight: 400, color: '#9ca3af' }}>
-              (DB에 iCal URL 저장된 경우 · 권장)
+              (운영 DB에 저장)
             </span>
           </div>
           <button onClick={handleServerSync} disabled={syncing || !icalAlreadySet} style={{
@@ -587,26 +545,6 @@ function PropertyPanel({ syncConfig, liveProperty }) {
           )}
         </div>
 
-        {/* 방법 B: 대시보드 파싱 결과 기반 (기존 방식) */}
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
-            방법 B — 대시보드 예약 기반
-            <span style={{ marginLeft: 6, fontWeight: 400, color: '#9ca3af' }}>
-              {futureCount > 0
-                ? <span style={{ color: '#2563eb' }}>{futureCount}건 감지됨</span>
-                : '(대시보드에서 iCal 연동 후 사용 가능)'}
-            </span>
-          </div>
-          <button onClick={handleSync} disabled={syncing || !saved || !futureCount} style={{
-            border: `1.5px solid ${saved && futureCount ? '#059669' : '#e2e8f0'}`,
-            borderRadius: 8,
-            background: saved && futureCount ? (syncing ? '#6ee7b7' : '#059669') : '#f3f4f6',
-            color: saved && futureCount ? '#fff' : '#9ca3af',
-            padding: '9px 24px', fontSize: 13, fontWeight: 700,
-            cursor: syncing || !saved || !futureCount ? 'not-allowed' : 'pointer',
-            fontFamily: 'inherit',
-          }}>{syncing ? '동기화 중...' : `청소 일정 동기화 (${futureCount}건)`}</button>
-        </div>
       </div>
 
       {gmailWatchBlock}
@@ -1530,7 +1468,7 @@ const TABS = [
   { key: 'test',     label: '🧪 테스트' },
 ];
 
-export default function CleaningManager({ syncConfig, liveProperty, onBack }) {
+export default function CleaningManager({ syncConfig, onBack, onDataChanged }) {
   const [tab, setTab] = useState('cleaners');
 
   return (
@@ -1573,7 +1511,7 @@ export default function CleaningManager({ syncConfig, liveProperty, onBack }) {
       <div style={{ padding: '24px 20px', maxWidth: 800, margin: '0 auto' }}>
         {tab === 'approval' && <WorkerApprovalPanel />}
         {tab === 'cleaners' && <CleanersPanel />}
-        {tab === 'property' && <PropertyPanel syncConfig={syncConfig} liveProperty={liveProperty} />}
+        {tab === 'property' && <PropertyPanel syncConfig={syncConfig} onDataChanged={onDataChanged} />}
         {tab === 'jobs'     && <JobsPanel />}
         {tab === 'test'     && <TestFlowPanel />}
       </div>

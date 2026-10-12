@@ -15,6 +15,7 @@ import { queryEvents, insertEvent } from "../../src/infrastructure/eventReposito
 import { validateEvent } from "../../src/domain/eventValidation.js";
 import { processEvent } from "../../src/application/eventService.js";
 import { notifyEvent } from "../../server/slackNotifier.js";
+import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const VALID_PERIODS = ["now","this_week","last_week","next_week","this_month","last_month","next_month"];
@@ -52,6 +53,10 @@ export default async function handler(req, res) {
   const action = (req.query?.slug
     ? (Array.isArray(req.query.slug) ? req.query.slug[0] : req.query.slug)
     : (req.url || "").split("?")[0].split("/").filter(Boolean)[2]) || "";
+
+  if (resolveServerDataProfile(process.env) === DATA_PROFILE.DEMO) {
+    return sendJson(res, 403, { error: "demo profile is read-only", dataProfile: "demo" });
+  }
 
   const db = new Pool({ connectionString: process.env.POSTGRES_URL });
 

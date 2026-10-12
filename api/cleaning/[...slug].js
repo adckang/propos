@@ -17,12 +17,14 @@ import {
   createBlockerEvent,
   deleteBlockerEvent,
   getNextMonthDates,
-  parseAllFutureCheckouts,
 } from "../../server/cleaning/_calendar.js";
 import { notify } from "../../server/cleaning/_notify.js";
 import { periodToRemainingRange } from "../../src/domain/periodDomain.js";
 import { validatePropertyName } from "../../src/domain/propertyIdentityDomain.js";
 import { renamePropertyId, PropertyRenameError } from "../../src/infrastructure/propertyRenameRepository.js";
+import { airbnbEventsToReservations, parseVEvents } from "../../src/domain/room-state/icalParser.js";
+import { getDemoCleaningStats, getDemoPropertyConfigs } from "../../src/application/demoReportingService.js";
+import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 
 const db = new Pool({ connectionString: process.env.POSTGRES_URL });
 
@@ -122,7 +124,36 @@ async function deleteCleaner(res, id) {
 }
 
 async function listProperties(res) {
-  const { rows } = await db.query(`SELECT * FROM property_cleaning_config ORDER BY name`);
+  const { rows } = await db.query(`
+    SELECT p.*,
+           COALESCE((
+             SELECT json_agg(json_build_object(
+               'uid', r.reservation_uid,
+               'guestName', r.guest_name,
+               'platform', r.platform,
+               'checkIn', r.check_in,
+               'checkOut', r.check_out,
+               'status', r.status,
+               'dataOrigin', r.data_origin,
+               'cleaningStatus', j.status,
+               'cleanerName', c.name,
+               'cleaningAt', j.cleaning_start_at,
+               'cleaningEnd', j.cleaning_end_at
+             ) ORDER BY r.check_in)
+             FROM property_reservations r
+             LEFT JOIN LATERAL (
+               SELECT * FROM cleaning_jobs cj
+                WHERE cj.property_id = r.property_id
+                  AND cj.reservation_uid = r.reservation_uid
+                ORDER BY cj.updated_at DESC
+                LIMIT 1
+             ) j ON true
+             LEFT JOIN cleaners c ON c.id = j.assigned_cleaner_id
+            WHERE r.property_id = p.property_id
+           ), '[]'::json) AS reservations
+      FROM property_cleaning_config p
+     ORDER BY p.name
+  `);
   return sendJson(res, 200, rows);
 }
 
@@ -172,17 +203,18 @@ async function upsertProperty(req, res) {
   let rows;
   try {
     ({ rows } = await db.query(
-      `INSERT INTO property_cleaning_config (property_id,name,checkout_hour,cleaning_duration_hours,google_calendar_id,google_calendar_booking_url,host_phone,ical_url,updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
-       ON CONFLICT (property_id) DO UPDATE SET
+    `INSERT INTO property_cleaning_config (property_id,name,checkout_hour,cleaning_duration_hours,google_calendar_id,google_calendar_booking_url,host_phone,ical_url,source_system,source_updated_at,updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,COALESCE((SELECT source_system FROM property_cleaning_config WHERE property_id=$1),'MANUAL'),NOW(),NOW())
+     ON CONFLICT (property_id) DO UPDATE SET
          name=COALESCE($2,property_cleaning_config.name),
          checkout_hour=COALESCE($3,property_cleaning_config.checkout_hour),
          cleaning_duration_hours=COALESCE($4,property_cleaning_config.cleaning_duration_hours),
          google_calendar_id=COALESCE($5,property_cleaning_config.google_calendar_id),
          google_calendar_booking_url=COALESCE($6,property_cleaning_config.google_calendar_booking_url),
          host_phone=COALESCE($7,property_cleaning_config.host_phone),
-         ical_url=COALESCE($8,property_cleaning_config.ical_url),
-         updated_at=NOW()
+       ical_url=COALESCE($8,property_cleaning_config.ical_url),
+       source_updated_at=NOW(),
+       updated_at=NOW()
        RETURNING *`,
       [property_id, name ?? null, checkout_hour ?? null, cleaning_duration_hours ?? null, google_calendar_id ?? null, google_calendar_booking_url ?? null, host_phone ?? null, ical_url ?? null]
     ));
@@ -205,6 +237,7 @@ async function runFollowupChecks() {
        SELECT sent_at FROM cleaning_notifs WHERE job_id=j.id ORDER BY sent_at DESC LIMIT 1
      ) n ON true
      WHERE j.status IN ('NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3')
+       AND j.data_origin = 'REAL'
        AND n.sent_at < NOW() - INTERVAL '1 hour'`
   );
   for (const job of vipJobs) {
@@ -218,6 +251,7 @@ async function runFollowupChecks() {
        SELECT MIN(sent_at) AS first_sent FROM cleaning_notifs WHERE job_id=j.id
      ) n ON true
      WHERE j.status IN ('NOTIFYING_BULK','BULK_REMINDED')
+       AND j.data_origin = 'REAL'
        AND n.first_sent < NOW() - INTERVAL '3 hours'`
   );
   for (const job of bulkJobs) {
@@ -288,9 +322,11 @@ async function syncJobs(req, res) {
     const source = diffDays <= 14 ? "SHORT_NOTICE" : "MONTHLY_BATCH";
     const checkoutAt = cleaning_start_at.toISOString();
     const { rowCount } = await db.query(
-      `INSERT INTO cleaning_jobs (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source)
-       VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (property_id,checkout_at) DO NOTHING`,
-      [property_id, uid ?? null, checkoutAt, checkoutAt, cleaning_end_at.toISOString(), source]
+      `INSERT INTO cleaning_jobs
+         (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source,data_origin,source_ref)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (property_id,checkout_at) DO NOTHING`,
+      [property_id, uid ?? null, checkoutAt, checkoutAt, cleaning_end_at.toISOString(), source, cfg.data_origin ?? "REAL", `api:syncJobs:${uid ?? checkoutAt}`]
     );
     if (rowCount > 0) {
       created++;
@@ -317,6 +353,9 @@ async function syncJobs(req, res) {
 async function dispatchJob(res, jobId) {
   const { rows: [job] } = await db.query(`SELECT * FROM cleaning_jobs WHERE id=$1`, [jobId]);
   if (!job) return sendJson(res, 404, { error: "일정 없음" });
+  if (job.data_origin === "SIMULATED") {
+    return sendJson(res, 409, { error: "시뮬레이션 일정은 외부 배정 발송을 하지 않습니다.", data_origin: "SIMULATED" });
+  }
   if (job.status !== "PENDING") return sendJson(res, 409, { error: `PENDING 상태가 아님 (현재: ${job.status})` });
   await advanceJob(db, job, { deleteBlocker: makeBlockerDeleter() });
   return sendJson(res, 200, { ok: true });
@@ -366,11 +405,12 @@ async function handleDecline(req, res, token) {
   if (!t || !/^[A-Z0-9]{6}$/.test(t)) return respond(404, "링크 오류", "유효하지 않은 링크입니다.");
   const { rows: [notif] } = await db.query(
     `SELECT n.id, n.job_id, n.cleaner_id, n.token, n.response,
-            j.status AS job_status, j.property_id, j.cleaning_start_at
+            j.status AS job_status, j.data_origin, j.property_id, j.cleaning_start_at
      FROM cleaning_notifs n JOIN cleaning_jobs j ON j.id=n.job_id WHERE n.token=$1`,
     [t]
   );
   if (!notif) return respond(404, "링크 오류", "링크를 찾을 수 없습니다.");
+  if (notif.data_origin === "SIMULATED") return respond(409, "시뮬레이션 일정", "시뮬레이션 일정은 외부 배정 처리를 하지 않습니다.");
   if (notif.response) return respond(200, "이미 처리됨", "이미 처리된 링크입니다.");
   if (notif.job_status === "CANCELLED")
     return respond(200, "취소된 일정", "해당 청소 일정은 이미 취소됐습니다. 감사합니다.");
@@ -438,7 +478,7 @@ async function getCleaningStats(req, res) {
   const needsRequest = parseInt(rows[0].needs_request, 10);
 
   if (!withItems) {
-    return sendJson(res, 200, { total, assigned, requesting, failed, needsRequest, unassigned: total - assigned });
+    return sendJson(res, 200, { total, assigned, requesting, failed, needsRequest, unassigned: total - assigned, dataProfile: resolveServerDataProfile(process.env) });
   }
 
   // items=true: 드릴다운용 개별 잡 목록 포함
@@ -447,7 +487,7 @@ async function getCleaningStats(req, res) {
   const [failedResult, needsRequestResult, itemResult] = await Promise.all([
     // 배정 실패: 청소자에게 몇 번 요청했고 몇 명이 거절했는지까지 (목록에서 "요청 5명 · 거절 2명 · 무응답 3명")
     db.query(
-      `SELECT j.property_id, j.checkout_at, j.updated_at, p.name AS property_name,
+      `SELECT j.property_id, j.checkout_at, j.updated_at, j.data_origin, p.name AS property_name,
               COALESCE(n.notified_count, 0) AS notified_count,
               COALESCE(n.declined_count, 0) AS declined_count
          FROM cleaning_jobs j
@@ -465,7 +505,7 @@ async function getCleaningStats(req, res) {
     ),
     // 배정 요청 필요(취소된 청소): 언제 취소됐는지(updated_at)
     db.query(
-      `SELECT j.property_id, j.checkout_at, j.updated_at, p.name AS property_name
+      `SELECT j.property_id, j.checkout_at, j.updated_at, j.data_origin, p.name AS property_name
          FROM cleaning_jobs j
          LEFT JOIN property_cleaning_config p ON p.property_id = j.property_id
         WHERE ${itemWhere} AND j.status = 'CANCELLED'
@@ -474,7 +514,7 @@ async function getCleaningStats(req, res) {
     ),
     // cleaner_name: 배정완료 건을 "숙소별 청소 담당자" 목록으로 보여줄 때 씀 (대시보드 캘린더)
     db.query(
-      `SELECT j.property_id, j.checkout_at, j.status, p.name AS property_name, c.name AS cleaner_name
+      `SELECT j.property_id, j.checkout_at, j.status, j.data_origin, p.name AS property_name, c.name AS cleaner_name
          FROM cleaning_jobs j
          LEFT JOIN property_cleaning_config p ON p.property_id = j.property_id
          LEFT JOIN cleaners c ON c.id = j.assigned_cleaner_id
@@ -488,11 +528,13 @@ async function getCleaningStats(req, res) {
   return sendJson(res, 200, {
     total, assigned, requesting, failed, needsRequest, unassigned: total - assigned,
     items,
+    dataProfile: resolveServerDataProfile(process.env),
     // COUNT(*) 는 pg 가 문자열로 돌려주므로 숫자로 바꿔 보낸다
     failedItems:       failedResult.rows.map(r => ({
       ...r,
       notified_count: Number(r.notified_count) || 0,
       declined_count: Number(r.declined_count) || 0,
+      data_origin: r.data_origin,
     })),
     needsRequestItems: needsRequestResult.rows,
   });
@@ -511,7 +553,7 @@ async function handleCalendarWebhook(req, res) {
   try { token = await getGoogleToken(); }
   catch (e) { console.error("[calendar-webhook] OAuth:", e.message); return res.status(500).end(); }
   const { rows: [propCfg] } = await db.query(
-    `SELECT * FROM property_cleaning_config WHERE google_calendar_id=$1`, [calendarId]
+    `SELECT * FROM property_cleaning_config WHERE google_calendar_id=$1 AND data_origin='REAL'`, [calendarId]
   );
   if (!propCfg) return res.status(200).end();
   // updatedMin: 최근 30분 이내에 생성/수정된 이벤트만 — 신규 예약 감지용
@@ -534,6 +576,7 @@ async function handleCalendarWebhook(req, res) {
     const { rows: [job] } = await db.query(
       `SELECT * FROM cleaning_jobs WHERE property_id=$1
        AND to_char(checkout_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') = $2
+       AND data_origin='REAL'
        AND status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED','ESCALATED')
        LIMIT 1`,
       [propCfg.property_id, eventDate]
@@ -606,8 +649,8 @@ async function handleGmailWebhook(req, res) {
 async function syncAllPropertiesIcal(db, filterPropertyId = null) {
   const { rows: properties } = await db.query(
     filterPropertyId
-      ? `SELECT * FROM property_cleaning_config WHERE ical_url IS NOT NULL AND property_id=$1`
-      : `SELECT * FROM property_cleaning_config WHERE ical_url IS NOT NULL`,
+      ? `SELECT * FROM property_cleaning_config WHERE data_origin='REAL' AND ical_url IS NOT NULL AND property_id=$1`
+      : `SELECT * FROM property_cleaning_config WHERE data_origin='REAL' AND ical_url IS NOT NULL`,
     filterPropertyId ? [filterPropertyId] : []
   );
   if (!properties.length) return;
@@ -627,7 +670,31 @@ async function syncAllPropertiesIcal(db, filterPropertyId = null) {
       continue;
     }
 
-    const checkouts = parseAllFutureCheckouts(icalText, now);
+    const parsedReservations = airbnbEventsToReservations(
+      parseVEvents(icalText),
+      prop.checkin_hour ?? 15,
+      prop.checkout_hour ?? 11,
+    );
+    const checkouts = parsedReservations.filter(r => r.checkOut.getTime() >= now);
+
+    for (const reservation of parsedReservations) {
+      await db.query(
+        `INSERT INTO property_reservations
+           (property_id,reservation_uid,guest_name,platform,check_in,check_out,status,source_system,source_ref,raw_data,data_origin,last_seen_at,updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,'ACTIVE','AIRBNB_ICAL',$7,$8,'REAL',NOW(),NOW())
+         ON CONFLICT (property_id,reservation_uid) DO UPDATE SET
+           guest_name=EXCLUDED.guest_name,
+           check_in=EXCLUDED.check_in,
+           check_out=EXCLUDED.check_out,
+           status='ACTIVE',
+           source_ref=EXCLUDED.source_ref,
+           raw_data=EXCLUDED.raw_data,
+           last_seen_at=NOW(),
+           updated_at=NOW()`,
+        [prop.property_id, reservation.uid || `${prop.property_id}:${reservation.checkIn.toISOString()}`, reservation.guestName, reservation.platform,
+         reservation.checkIn.toISOString(), reservation.checkOut.toISOString(), prop.ical_url, reservation],
+      );
+    }
 
     for (const { date, uid } of checkouts) {
       const { cleaning_start_at, cleaning_end_at } = calcCleaningTimes(
@@ -644,8 +711,8 @@ async function syncAllPropertiesIcal(db, filterPropertyId = null) {
 
       const { rowCount } = await db.query(
         `INSERT INTO cleaning_jobs
-           (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source,dispatch_after)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)
+           (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source,source_ref,data_origin,dispatch_after)
+         VALUES ($1,$2,$3,$4,$5,$6,$2,'REAL',$7)
          ON CONFLICT (property_id,checkout_at) DO NOTHING`,
         [prop.property_id, uid ?? null, cleaning_start_at.toISOString(),
          cleaning_start_at.toISOString(), cleaning_end_at.toISOString(), source, dispatchAfter]
@@ -692,7 +759,7 @@ async function handleIcalSync(req, res) {
 
   if (property_id) {
     const { rows: [prop] } = await db.query(
-      `SELECT * FROM property_cleaning_config WHERE property_id=$1`, [property_id]
+      `SELECT * FROM property_cleaning_config WHERE property_id=$1 AND data_origin='REAL'`, [property_id]
     );
     if (!prop) return sendJson(res, 404, { error: "숙소 없음" });
     if (!prop.ical_url) return sendJson(res, 400, { error: "ical_url 미설정 — 설정 저장 후 다시 시도하세요" });
@@ -722,8 +789,8 @@ async function bootstrapBlockers(req, res) {
   const { property_id, month, force } = b; // month: "YYYY-MM" (없으면 현재 달)
 
   const query = property_id
-    ? `SELECT * FROM property_cleaning_config WHERE property_id=$1 AND google_calendar_id IS NOT NULL`
-    : `SELECT * FROM property_cleaning_config WHERE google_calendar_id IS NOT NULL`;
+    ? `SELECT * FROM property_cleaning_config WHERE property_id=$1 AND data_origin='REAL' AND google_calendar_id IS NOT NULL`
+    : `SELECT * FROM property_cleaning_config WHERE data_origin='REAL' AND google_calendar_id IS NOT NULL`;
   const { rows: properties } = await db.query(query, property_id ? [property_id] : []);
   if (!properties.length)
     return sendJson(res, 404, { error: "숙소 없음 또는 google_calendar_id 미설정" });
@@ -809,6 +876,9 @@ async function cancelJob(req, res, jobId) {
     [jobId]
   );
   if (!job) return sendJson(res, 404, { error: "일정 없음" });
+  if (job.data_origin === "SIMULATED") {
+    return sendJson(res, 409, { error: "시뮬레이션 일정은 외부 취소 처리를 하지 않습니다.", data_origin: "SIMULATED" });
+  }
   if (["COMPLETED", "CANCELLED"].includes(job.status))
     return sendJson(res, 409, { error: `이미 ${job.status} 상태` });
 
@@ -1005,7 +1075,7 @@ async function handleCalendarScan(req, res) {
 
   // POST: ASSIGNED 업데이트
   const { rows: [propCfg] } = await db.query(
-    `SELECT * FROM property_cleaning_config WHERE google_calendar_id=$1`, [calendar_id]
+    `SELECT * FROM property_cleaning_config WHERE google_calendar_id=$1 AND data_origin='REAL'`, [calendar_id]
   );
   if (!propCfg) return sendJson(res, 404, { error: "숙소 미등록" });
 
@@ -1018,6 +1088,7 @@ async function handleCalendarScan(req, res) {
     const { rows: [job] } = await db.query(
       `SELECT * FROM cleaning_jobs WHERE property_id=$1
        AND to_char(checkout_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') = $2
+       AND data_origin='REAL'
        AND status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED','ESCALATED')
        LIMIT 1`,
       [propCfg.property_id, eventDate]
@@ -1082,6 +1153,27 @@ export default async function handler(req, res) {
     ? slug[1] : null;
   const id    = req.query?.id    ?? slugId ?? null;
   const token = req.query?.token ?? null;
+  const dataProfile = resolveServerDataProfile(process.env);
+
+  // demo 프로필은 운영 DB·Google Calendar·알림 채널을 절대 건드리지 않는다.
+  if (dataProfile === DATA_PROFILE.DEMO) {
+    if (resource === "properties" && req.method === "GET") {
+      return sendJson(res, 200, getDemoPropertyConfigs());
+    }
+    if (resource === "stats" && req.method === "GET") {
+      const rawIds = req.query?.property_ids ?? "";
+      const propertyIds = rawIds ? rawIds.split(",").map(value => value.trim()).filter(Boolean) : null;
+      const period = req.query?.period ?? "next_week";
+      const withItems = req.query?.items === "true";
+      try {
+        return sendJson(res, 200, getDemoCleaningStats(period, { propertyIds, withItems }));
+      } catch (error) {
+        return sendJson(res, 400, { error: error.message, dataProfile: "demo" });
+      }
+    }
+    return sendJson(res, 403, { error: "demo profile is read-only", dataProfile: "demo" });
+  }
+
   try {
     if (resource === "cleaners") {
       if (!id) {
@@ -1112,6 +1204,11 @@ export default async function handler(req, res) {
       const b = await readBody(req);
       if (b.status === "CANCELLED") return await cancelJob(req, res, id);
       if (b.status === "ASSIGNED") {
+        const { rows: [targetJob] } = await db.query(`SELECT data_origin FROM cleaning_jobs WHERE id=$1`, [id]);
+        if (!targetJob) return sendJson(res, 404, { error: "일정 없음" });
+        if (targetJob.data_origin === "SIMULATED") {
+          return sendJson(res, 409, { error: "시뮬레이션 일정은 외부 배정 처리를 하지 않습니다.", data_origin: "SIMULATED" });
+        }
         const { rows } = await db.query(
           `UPDATE cleaning_jobs SET status='ASSIGNED', assigned_cleaner_id=$1, google_event_id=$2, updated_at=NOW()
            WHERE id=$3 AND status!='ASSIGNED' RETURNING id, status`,
@@ -1127,6 +1224,9 @@ export default async function handler(req, res) {
         return sendJson(res, 200, { ok: true, job: rows[0] });
       }
       if (b.status === "PENDING" && b._test_reset) {
+        if (process.env.PROPOS_ENABLE_TEST_MUTATIONS !== "true") {
+          return sendJson(res, 403, { error: "test mutation is disabled" });
+        }
         // 테스트 전용: 잡을 PENDING으로 초기화 + 발송 내역 삭제
         await db.query(`DELETE FROM cleaning_notifs WHERE job_id=$1`, [id]);
         const { rows } = await db.query(

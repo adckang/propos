@@ -1,23 +1,20 @@
 # Current Task
 > 세션 시작 시 읽는다. 세션 끝날 때 업데이트한다.
-> 업데이트: 2026-07-11 | 마지막: Claude
+> 업데이트: 2026-10-12 | 실제 데이터 입력·조회 경로 일원화 검수 완료
 
 ## 목표
-캘린더 싱크 브라우저 실동작 확인.
-`npm run dev` → http://localhost:5173 → Room State Machine → ⚙ → URL 입력 → 저장 → **● LIVE HH:MM** 표시 확인.
+로컬과 운영이 동일한 Postgres 정본을 사용하고, 실제 예약 입력·청소 배정 상태가 화면에 동일하게 보이는지 검증한다.
+실제 예약 원본은 서버 `POST /api/cleaning/ical-sync`가 읽고, 화면은 `GET /api/cleaning/properties`를 읽는다.
 
-## 수정 가능 파일
+## 핵심 경계 파일
 ```
-src/application/calendarSyncService.js
-src/domain/room-state/icalParser.js
-src/data/roomStateMockData.js
 src/components/v2/RoomStateApp.jsx
-src/components/v2/DashboardView.jsx
-src/components/v2/PropertyListView.jsx
-src/components/v2/PropertyDetailView.jsx
-server/icalProxy.js  server/icalApiHandlers.js  api/ical.js
-tests/unit/s11~s13.*.test.js
-docs/current-task.md
+src/components/v2/CleaningManager.jsx
+api/cleaning/[...slug].js
+api/properties.js
+server/propertiesStore.js
+vite.config.mjs
+docs/data-architecture-and-simulator.md
 ```
 
 ## 수정 금지
@@ -26,26 +23,34 @@ docs/current-task.md
 ## Decided
 | 결정 | 내용 |
 |------|------|
-| iCal 프록시 | `/api/ical?url=...` 단일 경로. 외부 CORS 프록시 금지. |
-| 설정 저장 | localStorage `propos_calendar_sync`. URL 소스코드 커밋 금지. |
+| 예약 입력 | 서버 `POST /api/cleaning/ical-sync` 단일 경로. 브라우저가 iCal을 직접 읽지 않는다. |
+| 정본 저장 | Postgres `property_cleaning_config`·`property_reservations`·`cleaning_jobs` |
+| Pi 역할 | `/api/properties`는 `id/name/district/watcherId/devices` 워처 메타데이터만 저장·전달 |
+| 로컬/운영 | 기본 `HYBRID` 프로필과 동일한 `/api/cleaning/*` DB 핸들러 사용 |
 | 싱크 주기 | 마운트 1회 + 15분 인터벌 |
-| 데이터 합산 | `[liveProperty, ...PROPERTIES_MOCK]` 순서 고정 |
+| 데이터 구분 | 숙소·하위 행의 `data_origin` (`REAL`/`SIMULATED`)으로 구분 |
 
-## Undecided (구현 전 물어볼 것)
-- 싱크 실패 시 자동 재시도 여부
-- 두 번째 숙소 P002 목업 추가 여부
+## 검수 결과
+
+- `npm test`: 2,191개 통과
+- `npm run build`: 통과
+- `npm run test:smoke`: 통과
+- `npm run data:check`: 오류 0
+- `npm run data:check:db`: 오류 0, 파주201 레거시 작업 경고 15건(추적 보존)
+- `docs/data-architecture-and-simulator.md`가 저장 위치·관계·입력 경로·Pi 경계의 상세 정본이다.
 
 ## 싱크 실패 시 디버그 순서
-1. DevTools → Network → `/api/ical?url=...` 상태 코드 확인
-2. 200인데 싱크 실패 → 응답에 `BEGIN:VCALENDAR` 있는지 확인
-3. 404 → dev 서버 미실행
-4. 502 → `server/icalProxy.js` curl 폴백 로그 확인
+1. DevTools → Network → `POST /api/cleaning/ical-sync` 상태 코드 확인
+2. 성공 후 `GET /api/cleaning/properties` 응답에 파주201 `REAL` 행과 예약·청소상태가 있는지 확인
+3. `ical_url` 미설정이면 숙소 설정에서 DB 저장 후 재시도
+4. Pi가 오프라인이어도 DB 숙소·예약이 표시되는지 확인
 
 ## 다음 작업
-- [x] Google Calendar 청소 배정 현황 UI 통합 (buildLiveProperty + PropertyDetailView + DashboardView)
-- [ ] 브라우저 싱크 실동작 확인
-- [ ] 미커밋 파일 전체 커밋
-- [ ] Vercel 환경변수 주입 후 실배포 확인
+- [x] 실제 예약 입력·조회 경로를 서버/DB 한 경로로 통합
+- [x] Pi를 워처 메타데이터 전용 경계로 정리
+- [x] 자동 검수·생성 도구와 소스 계약 테스트 추가
+- [x] 관련 MD 문서 갱신 및 변경사항 커밋·푸시
+- [ ] 사용자 승인 후 Vercel 운영 배포 및 `proposonline.com` 브라우저 확인
 
 ---
 

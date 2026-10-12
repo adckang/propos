@@ -217,17 +217,21 @@ async function computeAggregateMetricsForRange(db, { from, to }, propertyIds, lo
 /** reportPeriod 기준 monthOffset달 전의 집계 지표 + 이벤트. */
 async function computeAggregateMonthMetrics(db, monthOffset, propertyIds, now) {
   const { from, to, monthKey } = monthsAgoRange(monthOffset, now.getTime());
-  const { events, metrics } = await computeAggregateMetricsForRange(db, { from, to }, propertyIds, "getMonthlyInsights");
-  return { period: monthKey, from, to, events, metrics };
+  // 이번 달은 완료 구간만 본다. 미래 checkout을 완료 이력의 실패 패턴으로 세지 않는다.
+  const effectiveTo = monthOffset === 0 ? new Date(Math.min(to.getTime(), now.getTime())) : to;
+  const { events, metrics } = await computeAggregateMetricsForRange(db, { from, to: effectiveTo }, propertyIds, "getMonthlyInsights");
+  return { period: monthKey, from, to: effectiveTo, events, metrics };
 }
 
 /** reportPeriod 기준 weekOffset주 전(그 주 월요일 KST)의 집계 지표 + 이벤트. */
 async function computeAggregateWeekMetrics(db, weekOffset, propertyIds, now) {
   const periodKey = periodForOffset("week", -weekOffset); // 0→this_week, 1→last_week, 2→weeks_ago_2 …
   const { from, to } = periodToDateRange(periodKey, now.getTime());
+  // 이번 주도 getStatsForPeriod와 같은 완료 시점(now)까지만 집계한다.
+  const effectiveTo = weekOffset === 0 ? new Date(Math.min(to.getTime(), now.getTime())) : to;
   const weekKey = toKstDateKey(from); // 그 주 월요일, KST
-  const { events, metrics } = await computeAggregateMetricsForRange(db, { from, to }, propertyIds, "getWeeklyInsights");
-  return { period: weekKey, from, to, events, metrics };
+  const { events, metrics } = await computeAggregateMetricsForRange(db, { from, to: effectiveTo }, propertyIds, "getWeeklyInsights");
+  return { period: weekKey, from, to: effectiveTo, events, metrics };
 }
 
 /**

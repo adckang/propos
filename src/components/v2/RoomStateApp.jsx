@@ -4,7 +4,7 @@ import PropertyListView from './PropertyListView';
 import PropertyDetailView from './PropertyDetailView';
 import CleaningManager from './CleaningManager';
 import { PROPERTIES } from '../../data/roomStateMockData';
-import { syncAirbnbReservations, syncGoogleCalendarSlots, buildLiveProperty, deriveCurrentState } from '../../application/calendarSyncService';
+import { buildLiveProperty, deriveCurrentState } from '../../application/calendarSyncService';
 import { getAreaData, callService } from '../../infrastructure/haBrowserClient';
 import { getWeatherByDistrict } from '../../infrastructure/weatherClient';
 import { OccupancyMonitor } from '../../application/occupancyMonitor';
@@ -12,6 +12,10 @@ import { getNextRoomState, isValidTransition, INITIAL_STATE } from '../../domain
 import { DEVICE_ROLE } from '../../domain/device-control/deviceRoles';
 import Toast from '../../utils/toast';
 import { canonicalPropertyId, planPropertyIdentity, validatePropertyName } from '../../domain/propertyIdentityDomain';
+import { DATA_PROFILE, normalizeDataProfile } from '../../config/dataProfile.js';
+
+const APP_DATA_PROFILE = normalizeDataProfile(import.meta.env.VITE_PROPOS_DATA_PROFILE, DATA_PROFILE.HYBRID);
+const USE_DEMO_DATA = APP_DATA_PROFILE === DATA_PROFILE.DEMO;
 
 // 기기 역할 한국어 레이블
 const DEVICE_ROLE_LABELS = {
@@ -49,7 +53,6 @@ function formatDeviceMap(devices = {}) {
 }
 
 const LS_KEY = 'propos_calendar_sync';
-const LS_PAST_RES_KEY = 'propos_past_reservations';
 
 function loadConfig() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || 'null'); }
@@ -59,38 +62,7 @@ function saveConfig(cfg) {
   localStorage.setItem(LS_KEY, JSON.stringify(cfg));
 }
 
-// 과거 예약 캐시 — iCal 피드에서 사라진 past reservation 보존
-function loadPastReservations() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(LS_PAST_RES_KEY) || '[]');
-    return raw.map(r => ({ ...r, checkIn: new Date(r.checkIn), checkOut: new Date(r.checkOut) }));
-  } catch { return []; }
-}
-function savePastReservations(reservations) {
-  const now = new Date();
-  // 과거 예약 + 현재 체류 중인 예약(나중에 과거가 될 수 있음)을 캐시에 보존.
-  // 오프라인 중 체크아웃이 발생하면 피드에서 사라지기 전에 캐시가 없으면 유실되므로
-  // active 예약도 함께 저장해둔다.
-  const toSave = reservations.filter(r =>
-    r.checkOut <= now ||                          // 완료된 과거 예약
-    (r.checkIn <= now && r.checkOut > now)        // 현재 체류 중 (안전망)
-  );
-  localStorage.setItem(LS_PAST_RES_KEY, JSON.stringify(toSave));
-}
-function mergePastReservations(freshFromFeed, now = new Date()) {
-  const cached = loadPastReservations();
-  const freshMap = new Map(freshFromFeed.map(r => [r.uid, r]));
-  // 캐시에 있는 과거/active 예약 중 피드에 없는 것만 보존 (피드 우선).
-  // 취소된 미래 예약은 캐시에 존재할 수 없음 — savePastReservations가
-  // checkOut <= now 또는 active 만 저장하기 때문에 미래 예약은 캐시 제외.
-  // 따라서 "취소된 미래 예약이 캐시에 남는" 버그는 발생하지 않음.
-  const onlyInCache = cached.filter(r => !freshMap.has(r.uid));
-  const merged = [...onlyInCache, ...freshFromFeed].sort((a, b) => a.checkIn - b.checkIn);
-  savePastReservations(merged);
-  return merged;
-}
-
-// Pi 파일에서 숙소 목록 로드 (PROPOS_WATCHER_URL → /api/properties)
+// Pi 워처 메타데이터 로드. 예약·iCal·청소 일정은 이 응답을 사용하지 않는다.
 async function fetchProperties() {
   try {
     const res = await fetch('/api/properties');
@@ -102,26 +74,19 @@ async function fetchProperties() {
   }
 }
 
-// 클라우드 청소 DB(property_cleaning_config)에서 등록된 숙소를 최후 폴백으로 조회한다.
-// Pi(위 fetchProperties, Cloudflare 터널 경유)도 못 찾고 이 브라우저에 로컬 캐시도 없으면
-// 숙소가 화면에 아예 안 보이던 문제(실사용 버그, 2026-09-29) — 청소 DB는 Pi/터널과 무관하게
-// 항상 인터넷으로 접속 가능하므로, 최소한 등록된 숙소의 이름·iCal 연동은 여기서 알 수 있다.
-// 여러 숙소가 등록돼 있으면 iCal이 연동된 첫 번째(실제 운영 중인) 숙소를 우선한다.
-async function fetchCloudProperty() {
+async function fetchCloudProperties() {
   try {
-    const res = await fetch('/api/cleaning/properties');
-    if (!res.ok) return null;
+    const res = await fetch('/api/cleaning/properties', { cache: 'no-store' });
+    if (!res.ok) return [];
     const rows = await res.json();
-    if (!Array.isArray(rows) || rows.length === 0) return null;
-    return rows.find(r => r.ical_url) ?? rows[0];
+    return Array.isArray(rows) ? rows : [];
   } catch {
-    return null;
+    return [];
   }
 }
 
-// 청소 DB 행(property_cleaning_config 컬럼)을 로컬/Pi 설정과 같은 모양으로 바꾼다.
-// district/watcherId/devices 등 Pi 전용 필드는 청소 DB에 없어 빈 값 — Pi가 안 잡히는 상황이라
-// 어차피 기기 제어는 불가능하고, 최소한 예약·청소 정보는 이 값으로도 화면에 뜰 수 있게 한다.
+// Postgres property_cleaning_config 행을 화면 모델로 변환한다.
+// Pi 워처 전용 district/watcherId/devices는 별도 메타데이터로 합친다.
 function cloudRowToConfig(row) {
   return {
     id: row.property_id,
@@ -129,7 +94,7 @@ function cloudRowToConfig(row) {
     district: '',
     watcherId: null,
     airbnbIcalUrl: row.ical_url || '',
-    googleCalIcalUrl: '',
+    googleCalendarId: row.google_calendar_id || '',
     checkInHour: 15,
     checkOutHour: row.checkout_hour ?? 11,
     cleaningDurationHours: row.cleaning_duration_hours ?? 2.5,
@@ -137,15 +102,61 @@ function cloudRowToConfig(row) {
   };
 }
 
-// Pi 파일에 숙소 목록 저장
+function cloudRowToLiveProperty(row) {
+  const reservations = (Array.isArray(row?.reservations) ? row.reservations : [])
+    .filter(item => item.status !== 'CANCELLED')
+    .map(item => ({
+      uid: item.uid,
+      guestName: item.guestName || '',
+      platform: item.platform || 'Airbnb',
+      checkIn: new Date(item.checkIn),
+      checkOut: new Date(item.checkOut),
+      ...(item.cleanerName ? { cleanerName: item.cleanerName } : {}),
+      ...(item.cleaningStatus ? { cleaningStatus: item.cleaningStatus } : {}),
+      ...(item.cleaningAt ? { cleaningAt: new Date(item.cleaningAt) } : {}),
+      ...(item.cleaningEnd ? { cleaningEnd: new Date(item.cleaningEnd) } : {}),
+    }))
+    .filter(item => Number.isFinite(item.checkIn.getTime()) && Number.isFinite(item.checkOut.getTime()));
+  const cleaningSlots = reservations
+    .filter(item => item.cleaningAt && item.cleaningEnd)
+    .map(item => ({
+      start: item.cleaningAt,
+      end: item.cleaningEnd,
+      cleanerName: item.cleanerName,
+      cleaningStatus: item.cleaningStatus,
+    }));
+  return {
+    ...buildLiveProperty({
+      id: row.property_id,
+      name: row.name,
+      district: row.district || '',
+      watcherId: null,
+      checkInHour: 15,
+      checkOutHour: row.checkout_hour ?? 11,
+      cleaningDurationHours: row.cleaning_duration_hours ?? 2.5,
+      sensors: null,
+    }, reservations, cleaningSlots),
+    dataOrigin: row.data_origin || 'REAL',
+    sourceSystem: row.source_system || null,
+  };
+}
+
+// Pi에는 워처 메타데이터만 저장한다. 실제 숙소·예약·iCal 값은 보내지 않는다.
 async function putProperties(list) {
   try {
+    const watcherProperties = list.map(property => ({
+      id: property.id,
+      name: property.name,
+      district: property.district || '',
+      watcherId: property.watcherId ?? null,
+      devices: property.devices && typeof property.devices === 'object' ? property.devices : {},
+    }));
     await fetch('/api/properties', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(list),
+      body: JSON.stringify(watcherProperties),
     });
-  } catch { /* Pi 미연결 시 무시 — localStorage 캐시 유지 */ }
+  } catch { /* Pi 미연결 시 무시 — Postgres 정본은 유지 */ }
 }
 
 // Vercel 청소 DB에 숙소 등록/갱신. 식별자 = 이름 (D-016) —
@@ -177,7 +188,6 @@ function SettingsModal({ config, onSave, onClose }) {
     district: '',
     watcherId: 'watcher1',
     airbnbIcalUrl: '',
-    googleCalIcalUrl: '',
     checkInHour: 15,
     checkOutHour: 11,
     cleaningDurationHours: 2.5,
@@ -195,15 +205,25 @@ function SettingsModal({ config, onSave, onClose }) {
 
   async function handleLoadServer() {
     setLoadingServer(true);
-    const list = await fetchProperties();
+    const [cloudRows, watcherRows] = await Promise.all([fetchCloudProperties(), fetchProperties()]);
     setLoadingServer(false);
-    const saved = list[0];
+    const savedRow = cloudRows.find(row => row.data_origin === 'REAL' && row.property_id === row.name && row.ical_url)
+      ?? cloudRows.find(row => row.data_origin === 'REAL' && row.ical_url)
+      ?? cloudRows.find(row => row.data_origin === 'REAL' && row.property_id === row.name);
+    const saved = savedRow ? cloudRowToConfig(savedRow) : null;
     if (!saved) {
-      Toast.show('Pi에 저장된 숙소 설정이 없습니다.', 'w');
+      Toast.show('운영 DB에 저장된 숙소 설정이 없습니다.', 'w');
       return;
     }
-    setForm(f => ({ ...f, ...saved, _uiDevices: formatDeviceMap(saved.devices ?? {}) }));
-    Toast.show('Pi에서 설정을 불러왔습니다. 저장을 눌러 적용하세요.', 's');
+    const watcher = watcherRows.find(item => item.id === saved.id || item.name === saved.name);
+    const merged = {
+      ...saved,
+      district: watcher?.district ?? saved.district,
+      watcherId: watcher?.watcherId ?? saved.watcherId,
+      devices: watcher?.devices ?? saved.devices,
+    };
+    setForm(f => ({ ...f, ...merged, _uiDevices: formatDeviceMap(merged.devices ?? {}) }));
+    Toast.show('운영 DB에서 설정을 불러왔습니다. 저장을 눌러 적용하세요.', 's');
   }
 
   return (
@@ -226,7 +246,6 @@ function SettingsModal({ config, onSave, onClose }) {
           { label: '지역 (선택)', key: 'district', type: 'text', placeholder: '파주 (시·군·구 제외)' },
           { label: 'Pi 워처 ID', key: 'watcherId', type: 'text', placeholder: 'watcher1' },
           { label: 'Airbnb iCal URL', key: 'airbnbIcalUrl', type: 'url', placeholder: 'https://www.airbnb.com/calendar/ical/...' },
-          { label: 'Google 캘린더 iCal URL (선택)', key: 'googleCalIcalUrl', type: 'url', placeholder: 'https://calendar.google.com/calendar/ical/...' },
         ].map(({ label, key, type, placeholder }) => (
           <div key={key} style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#4a5568', marginBottom: 5 }}>{label}</div>
@@ -465,13 +484,20 @@ export default function RoomStateApp({ onBack }) {
   const [detailDayOffset, setDetailDayOffset] = useState(null); // "발견된 패턴" 팝업에서 특정 날짜로 눌러 들어올 때만 채움 (D-028)
   const [selectedPropertyId, setSelectedPropertyId] = useState(null);
   const [showSettings, setShowSettings]   = useState(false);
-  const [syncConfig, setSyncConfig]       = useState(() => loadConfig());
+  const [syncConfig, setSyncConfig]       = useState(() => USE_DEMO_DATA ? null : loadConfig());
   const [liveProperty, setLiveProperty]     = useState(null);
+  const [dbPropertyRows, setDbPropertyRows] = useState([]);
   const [liveSensorReadings, setLiveSensorReadings] = useState(null);
   const [liveDevices, setLiveDevices]       = useState([]);
   const [liveWeather, setLiveWeather]       = useState(null);
   const [syncStatus, setSyncStatus]       = useState('idle');   // idle | syncing | ok | error
   const [lastSynced, setLastSynced]       = useState(null);
+
+  const refreshDbProperties = useCallback(async () => {
+    const rows = await fetchCloudProperties();
+    setDbPropertyRows(rows);
+    return rows;
+  }, []);
 
   // 모니터링 상태 — 서버(Pi watcher)에서 폴링, fallback으로 브라우저 로컬 실행
   const [monitorState, setMonitorState]         = useState(INITIAL_STATE);
@@ -482,37 +508,25 @@ export default function RoomStateApp({ onBack }) {
   // 날씨를 HA 폴링 클로저 안에서 읽기 위한 ref (stale closure 방지)
   const liveWeatherRef = useRef(null);
 
-  // 싱크 실행
+  // 서버 정본 동기화 실행. 브라우저는 iCal/Google 원본을 직접 읽지 않는다.
   const runSync = useCallback(async (cfg) => {
-    if (!cfg?.airbnbIcalUrl) return;
+    if (USE_DEMO_DATA || !cfg?.id || !cfg?.airbnbIcalUrl) return;
     setSyncStatus('syncing');
     try {
-      const freshReservations = await syncAirbnbReservations(cfg.airbnbIcalUrl, {
-        checkInHour:  cfg.checkInHour  ?? 15,
-        checkOutHour: cfg.checkOutHour ?? 11,
+      const syncResponse = await fetch('/api/cleaning/ical-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ property_id: canonicalPropertyId(cfg) }),
       });
+      if (!syncResponse.ok) throw new Error(await errorMessageOf(syncResponse));
 
-      // 과거 예약은 iCal 피드에서 제거되어도 로컬 캐시로 보존
-      const reservations = mergePastReservations(freshReservations);
+      const cloudRows = await refreshDbProperties();
+      const row = cloudRows.find(item => (
+        item.property_id === canonicalPropertyId(cfg) && item.data_origin === 'REAL'
+      ));
+      if (!row) throw new Error('운영 DB에서 REAL 숙소를 찾을 수 없습니다.');
 
-      let cleaningSlots = [];
-      if (cfg.googleCalIcalUrl) {
-        try { cleaningSlots = await syncGoogleCalendarSlots(cfg.googleCalIcalUrl); }
-        catch { /* Google Calendar 실패해도 Airbnb 데이터는 표시 */ }
-      }
-
-      const template = {
-        id:                   canonicalPropertyId(cfg), // 식별자 = ListView에 표시되는 숙소 이름 (D-016)
-        name:                 cfg.name || '내 숙소',
-        district:             cfg.district || '',
-        watcherId:            cfg.watcherId ?? null,
-        checkInHour:          cfg.checkInHour ?? 15,
-        checkOutHour:         cfg.checkOutHour ?? 11,
-        cleaningDurationHours: cfg.cleaningDurationHours ?? 2.5,
-        sensors:              null,
-      };
-
-      const live = buildLiveProperty(template, reservations, cleaningSlots);
+      const live = cloudRowToLiveProperty(row);
       setLiveProperty(live);
       setLastSynced(new Date());
       setSyncStatus('ok');
@@ -528,29 +542,46 @@ export default function RoomStateApp({ onBack }) {
       setSyncStatus('error');
       Toast.show(`캘린더 동기화 실패: ${error.message || '설정과 URL을 확인하세요.'}`, 'e');
     }
-  }, []);
+  }, [refreshDbProperties]);
 
-  // 마운트 시 Pi에서 숙소 설정 로드 — Pi가 source of truth, localStorage는 캐시
+  // 마운트 시 Postgres에서 REAL 숙소 설정·예약 정본을 로드한다.
+  // Pi는 같은 숙소의 HA 워처 메타데이터만 보조한다.
   useEffect(() => {
-    const local = loadConfig();
+    // 명시적인 demo 프로필만 정적 fixture를 사용한다. 기본 hybrid는 로컬/운영 모두 DB를 읽는다.
+    if (USE_DEMO_DATA) {
+      setSyncStatus('ok');
+      return undefined;
+    }
     let cancelled = false;
     (async () => {
-      const list  = await fetchProperties();
-      const piCfg = list[0]?.airbnbIcalUrl ? list[0] : null;
-      let cfg = piCfg ?? local;
-      let cloudRow = null;
-      // Pi도 못 찾고 이 브라우저에 로컬 캐시도 없으면 — 클라우드 청소 DB에 등록된 숙소로 최후 폴백
-      if (!cfg) {
-        cloudRow = await fetchCloudProperty();
-        if (cloudRow) cfg = cloudRowToConfig(cloudRow);
-      }
+      const [list, cloudRows]  = await Promise.all([fetchProperties(), fetchCloudProperties()]);
+      if (!cancelled) setDbPropertyRows(cloudRows);
+      const realRows = cloudRows.filter(row => row.data_origin === 'REAL');
+      const canonicalReal = realRows.find(row => row.property_id === row.name && row.ical_url)
+        ?? realRows.find(row => row.ical_url)
+        ?? realRows.find(row => row.property_id === row.name);
+      const piCfg = canonicalReal
+        ? list.find(item => item.id === canonicalReal.property_id || item.name === canonicalReal.name)
+        : null;
+      const cloudRow = canonicalReal ?? null;
+      let cfg = canonicalReal
+        ? {
+          ...cloudRowToConfig(canonicalReal),
+          district: piCfg?.district ?? '',
+          watcherId: piCfg?.watcherId ?? null,
+          devices: piCfg?.devices ?? {},
+        }
+        : null;
       if (!cfg || cancelled) return;
+      // 최초 화면은 마지막으로 저장된 Postgres 예약/배정값을 즉시 표시한다.
+      // 이후 runSync가 최신 iCal을 반영하되, 일시적인 원본 장애로 REAL 숙소 자체가
+      // 목록에서 사라지지는 않게 한다.
+      setLiveProperty(cloudRowToLiveProperty(canonicalReal));
 
       // 청소 DB 백필 + 식별자 정규화 (D-016). 저장된 id 가 이름과 다르면(레거시 prop_…)
       // 서버가 이력을 새 이름으로 이전한 뒤에만 정규 설정으로 바꾼다 — 실패하면 기존 설정 유지.
       if (cfg.airbnbIcalUrl) {
         const plan = planPropertyIdentity(cfg);
-        if (!cloudRow) cloudRow = await fetchCloudProperty();
         // 청소 DB(Postgres)가 정본(D-014) — 이미 이 이름으로 등록돼 있고 옮길 이력도 없으면
         // (previousId 없음) 쓰지 않고 정본 값을 그대로 반영만 한다. 안 그러면 이 브라우저가
         // 들고 있는(어쩌면 낡은) 체크아웃시각·청소시간·iCal 값이 열 때마다 정본을 덮어써서,
@@ -575,12 +606,10 @@ export default function RoomStateApp({ onBack }) {
         }
       }
 
-      // Pi/이전 결과가 로컬 캐시와 다르면 갱신
+      // Postgres 정본에서 읽은 설정만 화면 캐시에 반영한다.
       if (cancelled) return;
-      if (JSON.stringify(cfg) !== JSON.stringify(local)) {
-        saveConfig(cfg);
-        setSyncConfig(cfg);
-      }
+      saveConfig(cfg);
+      setSyncConfig(cfg);
     })();
     return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -822,22 +851,44 @@ export default function RoomStateApp({ onBack }) {
     );
   };
 
-  // 실 데이터 + 목업 데이터 병합 (실 데이터 맨 앞, HA 센서·기기·모니터링 상태 주입)
-  const mergedProperties = liveProperty
-    ? [{
-        ...liveProperty,
+  // 기본 hybrid 프로필은 DB의 REAL/SIMULATED 숙소를 같은 구조로 합친다.
+  // 명시적인 demo 프로필에서만 코드 fixture를 사용한다.
+  const dbProperties = dbPropertyRows
+    .map(cloudRowToLiveProperty)
+    .filter(property => property.id !== liveProperty?.id);
+  const liveDbRow = liveProperty
+    ? dbPropertyRows.find(row => row.property_id === liveProperty.id)
+    : null;
+  const liveDbProperty = liveDbRow ? cloudRowToLiveProperty(liveDbRow) : null;
+  const liveWithDbAssignments = liveProperty && liveDbProperty
+    ? {
+      ...liveProperty,
+      reservations: liveProperty.reservations.map(reservation => {
+        const dbReservation = liveDbProperty.reservations.find(item => item.uid === reservation.uid);
+        return dbReservation ? { ...reservation, ...dbReservation } : reservation;
+      }),
+      cleaningSlots: liveDbProperty.cleaningSlots,
+    }
+    : liveProperty;
+  const mergedProperties = USE_DEMO_DATA
+    ? PROPERTIES.map(property => ({ ...property, dataOrigin: 'SIMULATED', snapshotLog: [] }))
+    : [
+      ...dbProperties,
+      ...(liveWithDbAssignments ? [{
+        ...liveWithDbAssignments,
+        dataOrigin: 'REAL',
         sensorReadings: liveSensorReadings ?? liveProperty.sensorReadings,
         haDevices: liveDevices,
         // OCCUPIED 상태일 때 서버 워처(또는 로컬 모니터) subStatus로 덮어쓰기
-        subStatus: liveProperty.currentStatus === 'OCCUPIED'
+        subStatus: liveProperty.currentState?.mainStatus === 'OCCUPIED'
           ? monitorState.subStatus
           : liveProperty.subStatus,
         monitorState,
         lastMonitorEvent,
         serverWatcherActive,
         snapshotLog,
-      }, ...PROPERTIES.map(p => ({ ...p, snapshotLog: [] }))]
-    : PROPERTIES.map(p => ({ ...p, snapshotLog: [] }));
+      }] : []),
+    ];
 
   // ID로 항상 최신 mergedProperties에서 lookup → 폴링 업데이트가 즉시 반영됨
   const selectedProperty = mergedProperties.find(p => p.id === selectedPropertyId) ?? null;
@@ -847,8 +898,8 @@ export default function RoomStateApp({ onBack }) {
     currentView = (
       <CleaningManager
         syncConfig={syncConfig}
-        liveProperty={liveProperty}
         onBack={() => setView('dashboard')}
+        onDataChanged={refreshDbProperties}
       />
     );
   } else if (view === 'detail' && selectedProperty) {

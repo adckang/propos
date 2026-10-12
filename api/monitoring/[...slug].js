@@ -5,6 +5,8 @@
  * slug[0] = "config" | "state"
  */
 
+import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
+
 const WATCHER_URLS = (() => {
   try { return JSON.parse(process.env.PROPOS_WATCHER_URLS ?? "{}"); }
   catch { return {}; }
@@ -31,6 +33,9 @@ async function readBody(req) {
 }
 
 export default async function handler(req, res) {
+  if (resolveServerDataProfile(process.env) === DATA_PROFILE.DEMO) {
+    return sendJson(res, 403, { error: "demo profile cannot access the Pi watcher", dataProfile: "demo" });
+  }
   const action = (req.query?.slug
     ? (Array.isArray(req.query.slug) ? req.query.slug[0] : req.query.slug)
     : (req.url || "").split("?")[0].split("/").filter(Boolean)[2]) || "";

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { PROPERTIES, STATE_META, SEGMENT_COLORS, getGanttSegments } from '../../data/roomStateMockData';
+import { STATE_META, SEGMENT_COLORS, getGanttSegments } from '../../data/roomStateMockData';
 import { useMobile } from '../../hooks/useMobile';
 import { useReportingStats } from '../../hooks/useReportingStats';
 import ListViewFilter from './reporting/ListViewFilter';
@@ -135,7 +135,7 @@ function GanttBar({ seg, windowStart, windowMs, isDragging }) {
 
 export default function PropertyListView({
   initialFilter, initialDayOffset = null, initialOccupantIds = null,
-  onSelectProperty, onBack, properties = PROPERTIES,
+  onSelectProperty, onBack, properties = [],
 }) {
   const isMobile = useMobile();
   const [filter, setFilter] = useState(initialFilter || FILTER_ALL);
@@ -168,13 +168,13 @@ export default function PropertyListView({
     [windowOffset, listMode],
   );
 
-  // 선택 범위 — mode: none/partial/all, propertyIds: 없음=[] · 부분=배열 · 전체=null(필터 없음)
+  // 화면에 보이는 숙소 ID를 항상 명시해 DB의 레거시/테스트 숙소가 집계에 섞이지 않게 한다.
   const allIds = properties.map(p => p.id);
   const scope  = deriveSelectionScope(selectedRooms, allIds);
   const noSelection   = scope.mode === 'none';
   const allSelected   = scope.mode === 'all';
   const allCheckState = scope.mode;
-  const statsPropertyIds = scope.propertyIds;
+  const statsPropertyIds = noSelection ? [] : scope.selectedIds;
 
   // ALL 토글 핸들러 — partial/none → 전체선택, all → 전체해제
   function toggleAll() {

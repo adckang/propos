@@ -7,6 +7,8 @@
  *   PROPOS_WATCHER_URL   단일 URL 폴백 (기존 설정 하위 호환)
  */
 
+import { DATA_PROFILE, resolveServerDataProfile } from '../../src/config/dataProfile.js';
+
 const WATCHER_URLS = (() => {
   try { return JSON.parse(process.env.PROPOS_WATCHER_URLS ?? '{}'); }
   catch { return {}; }
@@ -19,6 +21,11 @@ function resolveWatcherUrl(watcherId) {
 }
 
 export default async function handler(req, res) {
+  if (resolveServerDataProfile(process.env) === DATA_PROFILE.DEMO) {
+    res.statusCode = 403;
+    res.end();
+    return;
+  }
   const watcherId = req.query?.watcherId ?? null;
   const WATCHER_URL = resolveWatcherUrl(watcherId);
 

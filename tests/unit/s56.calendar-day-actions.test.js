@@ -24,6 +24,7 @@ import {
   classifyDayCleaningItems,
   kstDayOffsetFromToday,
 } from '../../src/domain/monthlyCalendarDomain.js';
+import { getDemoCleaningStats } from '../../src/application/demoReportingService.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8');
@@ -377,70 +378,49 @@ describe('서버 — 청소 담당자 이름 (cleaner_name)', () => {
   });
 
   test('dev 스텁도 배정완료 항목에 cleaner_name을 채운다', () => {
-    const src = read('vite.config.mjs');
-    assert.match(src, /cleaner_name: \(status === "ASSIGNED" \|\| status === "COMPLETED"\) \? CLEANER_NAMES\[slot % CLEANER_NAMES\.length\] : null/);
+    const result = getDemoCleaningStats('next_month', { withItems: true, now: new Date('2026-09-24T03:00:00Z') });
+    const assigned = result.items.filter(item => item.status === 'ASSIGNED');
+    assert.ok(assigned.length > 0);
+    assert.ok(assigned.every(item => item.cleaner_name));
   });
 
   test('dev 스텁 — 목업 숙소도 상태가 다양하다 (80% 배정완료, 나머지 20%는 요청중/실패/재요청)', () => {
-    const src = read('vite.config.mjs');
-    const fn = src.slice(src.indexOf('"/api/cleaning/stats"'), src.indexOf('"/api/cleaning/properties"'));
-    assert.match(fn, /\{ upTo: 80, status: "ASSIGNED" \}/);
-    assert.match(fn, /\{ upTo: 90, status: "PENDING" \}/);
-    assert.match(fn, /\{ upTo: 95, status: "ESCALATED" \}/);
-    assert.match(fn, /\{ upTo: 100, status: "CANCELLED" \}/);
+    const result = getDemoCleaningStats('next_month', { withItems: true, now: new Date('2026-09-24T03:00:00Z') });
+    assert.deepEqual(new Set(result.items.map(item => item.status)), new Set(['ASSIGNED', 'PENDING', 'ESCALATED', 'CANCELLED']));
   });
 
   test('dev 스텁 — 같은 숙소·체크아웃이면 새로고침해도 항상 같은 상태 (결정적, 진짜 무작위 아님)', () => {
-    const src = read('vite.config.mjs');
-    assert.match(src, /const roll100 = \(str\) => \{/);
-    assert.match(src, /const statusFor = \(p, checkoutAt\) => \{/);
-    assert.match(src, /const roll = roll100\(`\$\{p\.id\}\|\$\{checkoutAt\.toISOString\(\)\}`\);/);
+    const options = { withItems: true, now: new Date('2026-09-24T03:00:00Z') };
+    assert.deepEqual(
+      getDemoCleaningStats('next_month', options),
+      getDemoCleaningStats('next_month', options),
+    );
   });
 
   test('dev 스텁 — 한 숙소가 그 기간에 여러 번 체크아웃하면 각각 잡을 만든다 (한 건도 빠지지 않게)', () => {
-    const src = read('vite.config.mjs');
-    assert.match(src, /const checkoutsInRange = \(p\) => \(p\.reservations \?\? \[\]\)/);
-    assert.match(src, /rooms\.flatMap\(\(\{ p \}\) => checkoutsInRange\(p\)\.map/);
+    const result = getDemoCleaningStats('next_month', { withItems: true, now: new Date('2026-09-24T03:00:00Z') });
+    const counts = new Map();
+    for (const item of result.items) counts.set(item.property_id, (counts.get(item.property_id) ?? 0) + 1);
+    assert.ok([...counts.values()].some(count => count > 1));
   });
 
   test('dev 스텁 — 배정완료/요청중/실패/요청필요 숫자는 items에서 그대로 센다 (합계가 항상 일치)', () => {
-    const src = read('vite.config.mjs');
-    const fn = src.slice(src.indexOf('"/api/cleaning/stats"'), src.indexOf('"/api/cleaning/properties"'));
-    assert.match(fn, /const assigned\s+= items\.filter\(i => i\.status === "ASSIGNED"\)\.length;/);
-    assert.match(fn, /const requesting\s+= items\.filter\(i => i\.status === "PENDING"\)\.length;/);
-    assert.match(fn, /const failed\s+= items\.filter\(i => i\.status === "ESCALATED"\)\.length;/);
-    assert.match(fn, /const needsRequest = items\.filter\(i => i\.status === "CANCELLED"\)\.length;/);
+    const result = getDemoCleaningStats('next_month', { withItems: true, now: new Date('2026-09-24T03:00:00Z') });
+    const count = status => result.items.filter(item => item.status === status).length;
+    assert.equal(result.assigned, count('ASSIGNED'));
+    assert.equal(result.requesting, count('PENDING'));
+    assert.equal(result.failed, count('ESCALATED'));
+    assert.equal(result.needsRequest, count('CANCELLED'));
+    assert.equal(result.total, result.assigned + result.requesting + result.failed);
+    assert.equal(result.items.length, result.total + result.needsRequest);
+    assert.equal(result.unassigned, result.requesting + result.failed);
   });
 });
 
-describe('roll100/statusFor 확률 분포 — 80%가 배정완료인지 실제로 재현해서 확인', () => {
-  test('roll100은 0~99 사이 값을 결정적으로 낸다 (같은 문자열 → 항상 같은 값)', () => {
-    const src = read('vite.config.mjs');
-    const match = src.match(/const roll100 = \(str\) => \{[\s\S]*?\n {8}\};/);
-    assert.ok(match, 'roll100 구현을 찾지 못함');
-    // eslint-disable-next-line no-new-func
-    const roll100 = new Function(`${match[0]}; return roll100;`)();
-    const a = roll100('P001|2026-10-01T02:00:00.000Z');
-    const b = roll100('P001|2026-10-01T02:00:00.000Z');
-    assert.equal(a, b);
-    assert.ok(a >= 0 && a < 100);
-  });
-
+describe('demo 청소 배정 분포 — 실제 API 결과 기준', () => {
   test('많은 표본에서 배정완료 비율이 대략 80%에 가깝다 (±10%p)', () => {
-    const src = read('vite.config.mjs');
-    const rollMatch = src.match(/const roll100 = \(str\) => \{[\s\S]*?\n {8}\};/);
-    const tableMatch = src.match(/const STATUS_TABLE = \[[\s\S]*?\n {8}\];/);
-    assert.ok(rollMatch && tableMatch, '분포 계산에 필요한 코드를 찾지 못함');
-    const { roll100, STATUS_TABLE } = new Function(`${rollMatch[0]}
-${tableMatch[0]}; return { roll100, STATUS_TABLE };`)();
-    let assignedCount = 0;
-    const N = 2000;
-    for (let i = 0; i < N; i++) {
-      const roll = roll100(`P${i % 37}|2026-1${i % 2}-${(i % 27) + 1}T0${i % 9}:00:00.000Z`);
-      const status = STATUS_TABLE.find(({ upTo }) => roll < upTo).status;
-      if (status === 'ASSIGNED') assignedCount++;
-    }
-    const ratio = assignedCount / N;
+    const result = getDemoCleaningStats('next_month', { withItems: true, now: new Date('2026-09-24T03:00:00Z') });
+    const ratio = result.assigned / result.items.length;
     assert.ok(ratio > 0.70 && ratio < 0.90, `배정완료 비율이 80%와 너무 다름: ${(ratio * 100).toFixed(1)}%`);
   });
 });

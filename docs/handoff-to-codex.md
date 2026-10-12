@@ -4,6 +4,8 @@
 > 작성: Claude (Sonnet 5 세션, 여러 세션에 걸쳐 누적). 원격 `main` @ `a4e1ccc` 까지 push 완료(Vercel 자동배포 반영 확인됨).
 > **먼저 읽을 것 (순서대로)**: `CLAUDE.md` → `.claude/rules/decisions.md` (D-004 ~ D-031, 특히 최근 D-020~D-031) → 이 문서
 
+> **2026-10-12 최신 정리:** 실제 예약 입력·조회는 Postgres 정본과 `POST /api/cleaning/ical-sync` 한 경로로 통합됐다. `RoomStateApp`은 DB 행을 먼저 표시한 뒤 서버 동기화 결과를 다시 읽으며, Pi `/api/properties`는 워처 메타데이터 전용이다. 상세 계약은 `docs/data-architecture-and-simulator.md`를 기준으로 본다.
+
 ---
 
 ## 0. 현재 상태 한눈에 (2026-09-29)

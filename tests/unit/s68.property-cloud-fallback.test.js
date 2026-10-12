@@ -1,25 +1,10 @@
 /**
- * s68 — propos.com에서 파주201이 안 보이던 문제 수정 (2026-09-29)
+ * s68 — 실제 캘린더 입력 경로 일원화 계약 (2026-10-12)
  *
- * 사용자 보고: "propos.com에선 파주201이 안 보여. 숙소 동기화 다시해도 이미 동일한 숙소가
- * 있다고 에러가 떠."
- *
- * 근본 원인 조사(프로덕션 DB 직접 조회, 읽기 전용):
- *   `property_cleaning_config`에 name="파주201"인 행이 3개(property_id가 전부 다름 —
- *   prop_1786259455129/paju201/prop_1783869222025) 있었고, D-016이 요구하는
- *   "property_id = 이름 그 자체"인 행은 하나도 없었다. `handoff-to-codex.md`(2026-09-19)에
- *   이미 "D-016 자동 이전이 실제 운영 DB에는 한 번도 실행된 적 없다"고 기록돼 있던 위험이
- *   실제로 터진 것 — 예견됐던 문제였다.
- *
- *   이 파일은 두 증상 중 "화면에 안 보임" 쪽의 코드 수정만 다룬다:
- *   RoomStateApp의 마운트 시 숙소 설정 로드는 Pi(`fetchProperties`, Cloudflare 터널 경유) →
- *   로컬 브라우저 캐시(localStorage) 순서로만 시도했다. 새 브라우저/기기에서 열면(로컬 캐시
- *   없음) + Pi가 안 잡히면(터널 문제 등) 숙소를 알 방법이 전혀 없었다. 클라우드 청소 DB
- *   (`property_cleaning_config`, Pi/터널과 무관하게 항상 인터넷 접속 가능)를 최후 폴백으로
- *   추가한다. ("이미 같은 숙소가 있다" 에러 쪽은 데이터 정리로 별도 해결 — 코드 버그 아님.)
- *
- * 레이어: L2 — 소스 계약 (RoomStateApp.jsx는 export되는 순수 함수가 없는 최상위 컴포넌트라
- * 이 세션의 기존 관례(s56/s64)와 동일하게 소스 검증으로 확인).
+ * Postgres(property_cleaning_config + property_reservations + cleaning_jobs)가 예약과
+ * 청소 일정의 정본이고, 브라우저는 서버 동기화 API를 호출한 뒤 DB를 읽는다. Pi는
+ * 워처 메타데이터만 제공한다. 이 테스트는 두 환경(local/Vercel)이 같은 경로를 쓰는지
+ * 소스 계약으로 고정한다.
  */
 
 import { describe, test } from 'node:test';
@@ -31,22 +16,25 @@ import path from 'node:path';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8');
 
-describe('RoomStateApp.jsx — 클라우드 청소 DB를 숙소 설정 로드의 최후 폴백으로 쓴다', () => {
+describe('RoomStateApp.jsx — Postgres 정본과 단일 서버 iCal 동기화 경로', () => {
   const src = read('src/components/v2/RoomStateApp.jsx');
 
-  test('fetchCloudProperty가 /api/cleaning/properties를 호출하고, 실패해도 null로 안전하게 처리한다', () => {
-    const start = src.indexOf('async function fetchCloudProperty');
+  test('fetchCloudProperties가 캐시를 우회해 운영 DB 숙소 행을 읽는다', () => {
+    const start = src.indexOf('async function fetchCloudProperties');
     const end = src.indexOf('\n}', start);
     const block = src.slice(start, end);
-    assert.match(block, /fetch\('\/api\/cleaning\/properties'\)/);
-    assert.match(block, /catch \{\s*\n\s*return null;/);
+    assert.match(block, /fetch\('\/api\/cleaning\/properties', \{ cache: 'no-store' \}\)/);
+    assert.match(block, /catch \{\s*\n\s*return \[\];/);
   });
 
-  test('여러 숙소가 등록돼 있으면 ical_url이 있는 행(실제 운영 중)을 우선한다', () => {
-    const start = src.indexOf('async function fetchCloudProperty');
-    const end = src.indexOf('\n}', start);
+  test('마운트 시 REAL 행만 사용하고 정규 ID+iCal 행을 최우선 선택한다', () => {
+    const start = src.indexOf('const realRows = cloudRows.filter');
+    const end = src.indexOf('const piCfg =', start);
     const block = src.slice(start, end);
-    assert.match(block, /rows\.find\(r => r\.ical_url\) \?\? rows\[0\]/);
+    assert.match(block, /cloudRows\.filter\(row => row\.data_origin === 'REAL'\)/);
+    assert.match(block, /realRows\.find\(row => row\.property_id === row\.name && row\.ical_url\)/);
+    assert.match(block, /\?\? realRows\.find\(row => row\.ical_url\)/);
+    assert.match(block, /\?\? realRows\.find\(row => row\.property_id === row\.name\)/);
   });
 
   test('cloudRowToConfig가 property_cleaning_config 컬럼을 로컬 설정 모양으로 옮긴다', () => {
@@ -60,21 +48,46 @@ describe('RoomStateApp.jsx — 클라우드 청소 DB를 숙소 설정 로드의
     assert.match(block, /cleaningDurationHours:\s*row\.cleaning_duration_hours \?\? 2\.5/);
   });
 
-  test('마운트 시 Pi도 못 찾고 로컬 캐시도 없을 때만(!cfg) 클라우드 폴백을 시도한다', () => {
-    const start = src.indexOf('// 마운트 시 Pi에서 숙소 설정 로드');
-    const end = src.indexOf('청소 DB 백필', start);
+  test('Pi 메타데이터는 DB 정본 행과 ID/이름으로만 결합한다', () => {
+    const start = src.indexOf('const piCfg =');
+    const end = src.indexOf('const cloudRow =', start);
     const block = src.slice(start, end);
-    assert.match(block, /let cfg = piCfg \?\? local;/);
-    assert.match(block, /let cloudRow = null;/);
-    assert.match(block, /if \(!cfg\) \{\s*\n\s*cloudRow = await fetchCloudProperty\(\);\s*\n\s*if \(cloudRow\) cfg = cloudRowToConfig\(cloudRow\);\s*\n\s*\}/);
-    // 폴백 다음에도 여전히 !cfg 가드가 있어야 — 클라우드에도 등록된 게 없으면 여전히 조용히 종료
-    assert.match(block, /if \(!cfg \|\| cancelled\) return;/);
+    assert.match(block, /list\.find\(item => item\.id === canonicalReal\.property_id \|\| item\.name === canonicalReal\.name\)/);
   });
 
-  test('클라우드 폴백으로 채운 cfg도 기존 D-016 식별자 정규화 경로를 그대로 탄다(전용 분기 불필요)', () => {
-    // cloudRowToConfig가 id=property_id, name=name을 그대로 쓰므로 planPropertyIdentity가
-    // previousId=null로 판정 — 별도 특별 처리 없이 기존 upsert 경로로 안전하게 합류한다.
-    assert.match(src, /if \(cfg\.airbnbIcalUrl\) \{\s*\n\s*const plan = planPropertyIdentity\(cfg\);/);
+  test('최초 화면은 마지막 DB 행을 즉시 표시하고, 원본 동기화 실패로 숙소를 숨기지 않는다', () => {
+    const start = src.indexOf('const cloudRow = canonicalReal ?? null;');
+    const end = src.indexOf('// 청소 DB 백필', start);
+    const block = src.slice(start, end);
+    assert.match(block, /setLiveProperty\(cloudRowToLiveProperty\(canonicalReal\)\)/);
+  });
+
+  test('runSync는 브라우저 iCal 파서가 아니라 서버 API를 호출하고 DB를 다시 읽는다', () => {
+    const start = src.indexOf('const runSync = useCallback');
+    const end = src.indexOf('\n  }, [refreshDbProperties]);', start);
+    const block = src.slice(start, end);
+    assert.match(block, /fetch\('\/api\/cleaning\/ical-sync'/);
+    assert.match(block, /body: JSON\.stringify\(\{ property_id: canonicalPropertyId\(cfg\) \}\)/);
+    assert.match(block, /const cloudRows = await refreshDbProperties\(\);/);
+    assert.match(block, /cloudRowToLiveProperty\(row\)/);
+    assert.doesNotMatch(src, /syncAirbnbReservations|syncGoogleCalendarSlots/);
+  });
+
+  test('Pi PUT에는 워처 메타데이터만 포함하고 iCal/예약 값을 보내지 않는다', () => {
+    const start = src.indexOf('async function putProperties');
+    const end = src.indexOf('\n}', start);
+    const block = src.slice(start, end);
+    assert.match(block, /id: property\.id/);
+    assert.match(block, /watcherId: property\.watcherId/);
+    assert.doesNotMatch(block, /airbnbIcalUrl|googleCalIcalUrl|reservations/);
+  });
+
+  test('서버 기본값 불러오기는 DB 청소설정과 Pi 워처 메타데이터를 함께 합친다', () => {
+    const start = src.indexOf('async function handleLoadServer');
+    const end = src.indexOf('\n  }\n\n  return (', start);
+    const block = src.slice(start, end);
+    assert.match(block, /Promise\.all\(\[fetchCloudProperties\(\), fetchProperties\(\)\]\)/);
+    assert.match(block, /devices: watcher\?\.devices \?\? saved\.devices/);
   });
 });
 
@@ -111,7 +124,8 @@ describe('RoomStateApp.jsx — 마운트 시 이미 정규 등록된 숙소는 P
     assert.match(elseBlock, /const res = await registerProperty\(plan\.config, plan\.previousId\)\.catch\(\(\) => null\);/);
   });
 
-  test('식별자 확인 전에 cloudRow를 이미 안 갖고 있으면(!cf 폴백을 안 탄 경우) 여기서 한 번 더 조회한다', () => {
-    assert.match(block, /if \(!cloudRow\) cloudRow = await fetchCloudProperty\(\);/);
+  test('정본 행이 없으면 마운트에서 조용히 종료하고 로컬 캐시를 정본으로 사용하지 않는다', () => {
+    assert.match(src, /if \(!cfg \|\| cancelled\) return;/);
+    assert.doesNotMatch(src, /fetchCloudProperty/);
   });
 });

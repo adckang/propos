@@ -11,7 +11,37 @@ CREATE TABLE IF NOT EXISTS property_cleaning_config (
   google_calendar_booking_url TEXT,
   host_phone                 TEXT,
   ical_url                   TEXT,            -- Airbnb iCal 폴링 URL (백엔드 전용, git 비공개)
+  data_origin                TEXT NOT NULL DEFAULT 'REAL'
+                             CHECK (data_origin IN ('REAL','SIMULATED')),
+  source_system              TEXT NOT NULL DEFAULT 'MANUAL',
+  source_ref                 TEXT,
+  source_updated_at          TIMESTAMPTZ,
+  created_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Airbnb/iCal 예약 원본. 실데이터와 시뮬레이션 데이터가 같은 저장 계약을 사용한다.
+CREATE TABLE IF NOT EXISTS property_reservations (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  property_id      TEXT NOT NULL REFERENCES property_cleaning_config(property_id),
+  reservation_uid  TEXT NOT NULL,
+  guest_name       TEXT,
+  platform         TEXT NOT NULL DEFAULT 'Airbnb',
+  check_in         TIMESTAMPTZ NOT NULL,
+  check_out        TIMESTAMPTZ NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'ACTIVE'
+                   CHECK (status IN ('ACTIVE','CANCELLED','BLOCKED')),
+  source_system    TEXT NOT NULL,
+  source_ref       TEXT,
+  raw_data         JSONB,
+  data_origin      TEXT NOT NULL DEFAULT 'REAL'
+                   CHECK (data_origin IN ('REAL','SIMULATED')),
+  first_seen_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (property_id, reservation_uid),
+  CHECK (check_out > check_in)
 );
 
 -- 청소자 목록
@@ -46,10 +76,19 @@ CREATE TABLE IF NOT EXISTS cleaning_jobs (
   google_blocker_event_id  TEXT,
   source              TEXT NOT NULL
                         CHECK (source IN ('MONTHLY_BATCH','SHORT_NOTICE')),
+  data_origin         TEXT NOT NULL DEFAULT 'REAL'
+                        CHECK (data_origin IN ('REAL','SIMULATED')),
+  source_ref          TEXT,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (property_id, checkout_at)
 );
+
+-- 예약이 먼저 원본 테이블에 존재해야 청소 일정이 생성된다.
+ALTER TABLE cleaning_jobs
+  ADD CONSTRAINT cleaning_jobs_reservation_fk
+  FOREIGN KEY (property_id, reservation_uid)
+  REFERENCES property_reservations(property_id, reservation_uid);
 
 -- 알림 발송 내역
 CREATE TABLE IF NOT EXISTS cleaning_notifs (
@@ -63,6 +102,8 @@ CREATE TABLE IF NOT EXISTS cleaning_notifs (
   response     TEXT CHECK (response IS NULL OR response IN ('DECLINED','DECLINED_AFTER_ASSIGNED')),
   response_at  TIMESTAMPTZ,
   channel      TEXT CHECK (channel IS NULL OR channel IN ('FCM','SMS','SMS_FALLBACK')),
+  data_origin  TEXT NOT NULL DEFAULT 'REAL'
+               CHECK (data_origin IN ('REAL','SIMULATED')),
   UNIQUE (job_id, cleaner_id)
 );
 
@@ -71,6 +112,8 @@ CREATE TABLE IF NOT EXISTS property_calendar_blockers (
   property_id TEXT    NOT NULL,
   block_date  DATE    NOT NULL,
   event_id    TEXT    NOT NULL,
+  data_origin TEXT    NOT NULL DEFAULT 'REAL'
+              CHECK (data_origin IN ('REAL','SIMULATED')),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (property_id, block_date)
 );

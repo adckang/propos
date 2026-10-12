@@ -1,6 +1,9 @@
 /**
- * calendarSyncService.js — iCal 싱크 + 숙소 상태 파생
- * 브라우저 전용. same-origin /api/ical 프록시를 1순위로 사용한다.
+ * calendarSyncService.js — iCal 파서 + 숙소 상태 파생
+ *
+ * 예약 원본을 운영 DB에 반영하는 책임은 server `/api/cleaning/ical-sync`에 있다.
+ * 아래 iCal 파서 함수는 도메인 테스트와 오프라인 도구에서 재사용할 수 있는 순수
+ * 변환 유틸리티로 유지하며, 운영 화면(RoomStateApp)은 직접 호출하지 않는다.
  */
 
 import {

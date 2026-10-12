@@ -13,6 +13,8 @@ import {
 } from "../src/application/reportingService.js";
 import { parsePropertyIds } from "../src/application/statsQueryParser.js";
 import { describePeriod, parseOffsetPeriod } from "../src/domain/periodDomain.js";
+import { getDemoDrilldown, getDemoMonthlyCalendar, getDemoStats } from "../src/application/demoReportingService.js";
+import { DATA_PROFILE, resolveServerDataProfile } from "../src/config/dataProfile.js";
 
 const VALID_STATS_PERIODS = [
   "now",
@@ -62,6 +64,33 @@ export default async function handler(req, res) {
 
   const route = statsRoute(req);
   const propertyIds = parsePropertyIds(req.query);
+  const dataProfile = resolveServerDataProfile(process.env);
+
+  // demo는 DB를 열지 않는다. 로컬/preview/명시적 demo 배포가 모두 같은 순수 데이터 서비스를 쓴다.
+  if (dataProfile === DATA_PROFILE.DEMO) {
+    if (route === "calendar") {
+      const period = req.query.period ?? "this_month";
+      if (!VALID_CALENDAR_PERIODS.has(period)) {
+        return res.status(400).json({ error: `invalid period: ${period}` });
+      }
+      return res.status(200).json(getDemoMonthlyCalendar(period, { propertyIds }));
+    }
+    if (route === "drilldown") {
+      const { period, metric } = req.query;
+      if (!period) return res.status(400).json({ error: "period is required" });
+      if (!metric) return res.status(400).json({ error: "metric is required" });
+      if (!isValidDrilldownPeriod(period)) return res.status(400).json({ error: `invalid period: ${period}` });
+      if (!VALID_DRILLDOWN_METRICS.includes(metric)) return res.status(400).json({ error: `invalid metric: ${metric}` });
+      return res.status(200).json(getDemoDrilldown(metric, period, { propertyIds }));
+    }
+    if (route !== "root") return res.status(404).json({ error: "Not Found" });
+    const period = req.query.period ?? "now";
+    if (!VALID_STATS_PERIODS.includes(period) && !parseOffsetPeriod(period)) {
+      return res.status(400).json({ error: `invalid period: ${period}` });
+    }
+    return res.status(200).json(getDemoStats(period, { propertyIds }));
+  }
+
   const db = new Pool({ connectionString: process.env.POSTGRES_URL });
 
   try {
@@ -71,7 +100,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: `invalid period: ${period}` });
       }
       const result = await getMonthlyCalendarData(period, { db, propertyIds });
-      return res.status(200).json(result);
+      return res.status(200).json({ ...result, dataProfile });
     }
 
     if (route === "drilldown") {
@@ -85,7 +114,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: `invalid metric: ${metric}` });
       }
       const result = await getDrilldownForMetric(metric, period, { db, propertyIds });
-      return res.status(200).json(result);
+      return res.status(200).json({ ...result, dataProfile });
     }
 
     if (route !== "root") {
@@ -118,7 +147,7 @@ export default async function handler(req, res) {
         result.insights = [];
       }
     }
-    return res.status(200).json(result);
+    return res.status(200).json({ ...result, dataProfile });
   } catch (err) {
     console.error(`[api/stats${route === "root" ? "" : `/${route}`}] error:`, err);
     return res.status(500).json({ error: "Internal server error" });
