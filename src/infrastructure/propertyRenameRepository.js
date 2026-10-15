@@ -20,7 +20,6 @@ const TABLES = [
   { table: "cleaning_jobs" },
   { table: "property_calendar_blockers" },
   { table: "events" },
-  { table: "monthly_summaries" }, // 환경에 따라 없을 수 있음 → presentTables 가 건너뜀
 ];
 
 export const RENAMED_TABLES = TABLES.map((t) => t.table);
@@ -42,7 +41,7 @@ async function presentTables(client) {
     [RENAMED_TABLES]
   );
   const present = new Set(rows.map((r) => r.table_name));
-  return TABLES.filter((t) => present.has(t.table)); // 없는 테이블(선택적 monthly_summaries 등)은 건너뜀
+  return TABLES.filter((t) => present.has(t.table)); // 없는 테이블은 건너뜀
 }
 
 async function countRows(client, tables, propertyId) {

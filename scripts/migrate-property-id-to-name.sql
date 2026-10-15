@@ -39,7 +39,5 @@ UPDATE cleaning_jobs             SET property_id = :'new' WHERE property_id = :'
 UPDATE property_calendar_blockers SET property_id = :'new' WHERE property_id = :'old';
 UPDATE events                    SET property_id = :'new' WHERE property_id = :'old';
 
--- monthly_summaries 테이블이 있는 환경에서만 (없으면 이 줄은 주석 유지):
--- UPDATE monthly_summaries SET property_id = :'new' WHERE property_id = :'old';
 
 \echo '--- 위 UPDATE 행 수가 [미리보기]와 맞는지 확인한 뒤 COMMIT;  이상하면 ROLLBACK; 을 입력하세요 ---'

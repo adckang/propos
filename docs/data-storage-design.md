@@ -75,21 +75,9 @@ CREATE INDEX idx_events_pending       ON events (status) WHERE status = 'pending
 - UUID 충돌 방지: `id` PRIMARY KEY
 - 의미 기반 중복 방지: Pi 크래시 후 재시도 시 같은 실제 이벤트가 새 UUID로 들어오는 경우를 차단.
 
-### 3-2. monthly_summaries 테이블
+### 3-2. ~~monthly_summaries 테이블~~ — 폐기 (2026-10-15)
 
-```sql
-CREATE TABLE monthly_summaries (
-  property_id        TEXT  NOT NULL,
-  month              DATE  NOT NULL,   -- 해당 월 1일. 예: 2026-08-01
-  check_ins          INT   NOT NULL DEFAULT 0,
-  check_outs         INT   NOT NULL DEFAULT 0,
-  anomaly_count      INT   NOT NULL DEFAULT 0,
-  energy_waste_count INT   NOT NULL DEFAULT 0,
-  PRIMARY KEY (property_id, month)
-);
-```
-
-90일이 지난 events 행을 여기로 집계 후 원본 삭제한다. (→ 섹션 8 참조)
+구현되지 않은 채(코드가 읽고 쓴 적 없음, 운영 DB 0행) 삭제했다. 일/주/월 리포트는 `events`·`cleaning_jobs` 원본에서 요청 시 계산한다. 90일 이후 압축 보관이 실제로 필요해지면 읽기 경로와 함께 새로 설계한다 (`data/migrate-drop-monthly-summaries.sql`, D-032).
 
 ---
 
@@ -298,8 +286,7 @@ Blob 파일은 삭제하지 않는다. Vercel Blob은 URL이 영구적이며 eve
 
 | 데이터 | 보존 | 처리 |
 |--------|------|------|
-| events (원본) | 90일 | 이후 monthly_summaries로 집계 후 삭제 |
-| monthly_summaries | 영구 | 삭제 안 함 |
+| events (원본) | 현재 무기한 | 90일 압축 보관(아카이브)은 미구현·미정 — §3-2 참고 |
 | Blob 스냅샷 | 영구 | 삭제 안 함 |
 
 ### 9-2. 월별 압축 Cron
@@ -308,7 +295,7 @@ Vercel Cron: 매월 1일 03:00 KST
 
 ```js
 // api/cron/archive-events.js
-// 1. 90일 이전 events → monthly_summaries로 INSERT ... ON CONFLICT DO UPDATE
+// (미구현·계획만 있음 — monthly_summaries 는 폐기됨) 90일 이전 events 압축 보관
 // 2. 집계된 events DELETE
 // 3. 결과 Slack 발송
 ```
@@ -373,7 +360,7 @@ npm install zod @vercel/postgres @vercel/kv @vercel/blob
 
 - [ ] `src/config/eventTypes.js` 생성
 - [ ] Vercel Postgres 생성 및 프로젝트 연결
-- [ ] Postgres 스키마 적용 (events, monthly_summaries)
+- [x] Postgres 스키마 적용 (events) — monthly_summaries 는 폐기
 - [ ] Vercel KV 생성 및 프로젝트 연결
 - [ ] Vercel Blob 생성 및 프로젝트 연결
 - [ ] `PROPOS_SLACK_WEBHOOK` Vercel 환경변수 추가

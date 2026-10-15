@@ -58,3 +58,13 @@ describe('property rename integrity (D-031 후속)', () => {
     assert.match(mig, /COALESCE\(j\.source_ref \|\| ' \| ', ''\) \|\| 'legacy_reservation_uid:'/);
   });
 });
+
+describe('monthly_summaries 폐기 (D-032 후속)', () => {
+  test('이름 변경 대상·스키마에 더 이상 없고, 폐기 마이그레이션은 행이 있으면 중단한다', () => {
+    assert.ok(!RENAMED_TABLES.includes('monthly_summaries'));
+    assert.ok(!/monthly_summaries/.test(read('data/schema.sql')));
+    const mig = read('data/migrate-drop-monthly-summaries.sql');
+    assert.match(mig, /RAISE EXCEPTION/);
+    assert.ok(!/DROP TABLE[^;]*CASCADE/i.test(mig), 'CASCADE 로 의존 객체를 같이 지우면 안 됨');
+  });
+});

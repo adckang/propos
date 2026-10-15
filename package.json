@@ -21,7 +21,9 @@
     "data:check:db": "node scripts/data-simulator.mjs check-db",
     "data:generate": "node scripts/data-simulator.mjs generate --synthetic",
     "test:smoke": "playwright test",
-    "prepare": "node scripts/setup-git-hooks.mjs"
+    "prepare": "node scripts/setup-git-hooks.mjs",
+    "erd": "node scripts/generate-erd.mjs",
+    "erd:check": "node scripts/generate-erd.mjs --check"
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",

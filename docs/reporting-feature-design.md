@@ -216,7 +216,7 @@ ISSUE_AND_ENERGY > ISSUE_COMPLAINT > ENERGY_WASTE > GOOD_CONDITION
 | 이상감지 | events 테이블 complaint + energy_waste 합산 |
 | 에너지 낭비 | events 테이블 `energy_waste_detected` 건수 |
 
-90일 이전은 monthly_summaries에서 읽음. (data-storage-design.md 섹션 9)
+현재는 보존 기간 제한 없이 events 에서 직접 계산한다. (90일 압축 보관은 미구현 — monthly_summaries 는 2026-10-15 폐기, data-storage-design.md §3-2)
 
 ### 3-4. 다음 주 / 다음 달 (계획)
 

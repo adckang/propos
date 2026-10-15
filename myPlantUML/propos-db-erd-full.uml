@@ -1,0 +1,194 @@
+@startuml PROPOS_DB_ERD_full
+' 자동 생성 파일 — 직접 고치지 말 것. 구조는 DB 카탈로그에서, 설명·색·배치는 scripts/erd.config.json 에서. 재생성: npm run erd
+' 읽는 방향: 위 → 아래 (부모 → 자식), 왼쪽 → 오른쪽
+
+!pragma layout smetana
+top to bottom direction
+
+skinparam defaultFontName "DM Sans"
+skinparam backgroundColor #f0f4f8
+skinparam shadowing false
+skinparam linetype ortho
+skinparam ArrowColor #475569
+skinparam ArrowThickness 1.4
+skinparam roundCorner 8
+skinparam entity {
+  BackgroundColor #ffffff
+  BorderColor #94a3b8
+  FontColor #1e293b
+}
+skinparam note {
+  BackgroundColor #fefce8
+  BorderColor #d97706
+  FontColor #78350f
+}
+
+title PROPOS DB 관계도 (전체 칼럼)\n<size:12><color:#475569>● PK 기본키   ◆ FK 외래키   ◇ UQ 유니크   (복합키는 * 가 여러 개)</color></size>
+
+entity "property_cleaning_config\n<size:11>숙소 마스터 (정본)</size>" as property_cleaning_config #e0f2fe {
+  * property_id : text  ● PK
+  --
+  name : text  ◇ UQ
+  checkout_hour : integer
+  cleaning_duration_hours : double precision
+  google_calendar_id : text (null)
+  google_calendar_booking_url : text (null)
+  updated_at : timestamp with time zone
+  host_phone : text (null)
+  ical_url : text (null)
+  data_origin : text
+  source_system : text
+  source_ref : text (null)
+  source_updated_at : timestamp with time zone (null)
+  created_at : timestamp with time zone
+  ..
+  CHECK ((data_origin = ANY (ARRAY['REAL'::text, 'SIMULATED'::text])))
+}
+
+entity "cleaners\n<size:11>청소 담당자 마스터</size>" as cleaners #e0f2fe {
+  * id : uuid  ● PK
+  --
+  name : text (null)
+  phone : text  ◇ UQ
+  email : text  ◇ UQ
+  tier : text
+  active : boolean
+  notes : text (null)
+  created_at : timestamp with time zone
+  fcm_token : text (null)
+  fcm_token_at : timestamp with time zone (null)
+  app_installed_at : timestamp with time zone (null)
+  last_seen_at : timestamp with time zone (null)
+  fcm_status : text (null)
+  ..
+  CHECK (((fcm_status IS NULL) OR (fcm_status = ANY (ARRAY['uninstalled'::text, 'active'::te
+  CHECK ((tier = ANY (ARRAY['VIP_1'::text, 'VIP_2'::text, 'VIP_3'::text, 'BULK'::text])))
+}
+
+entity "property_calendar_blockers\n<size:11>캘린더 차단 일정</size>" as property_calendar_blockers #ecfccb {
+  * property_id : text  ● PK  ◆ FK → property_cleaning_config
+  * block_date : date  ● PK
+  --
+  event_id : text
+  created_at : timestamp with time zone
+  data_origin : text
+  ..
+  CHECK ((data_origin = ANY (ARRAY['REAL'::text, 'SIMULATED'::text])))
+}
+
+entity "events\n<size:11>IoT 이벤트 로그</size>" as events #ecfccb {
+  * id : uuid  ● PK
+  --
+  property_id : text  ◆ FK → property_cleaning_config  ◇ UQ(복합)
+  type : text  ◇ UQ(복합)
+  is_soft : boolean
+  device_time : timestamp with time zone  ◇ UQ(복합)
+  server_time : timestamp with time zone
+  data : jsonb (null)
+  blob_url : text (null)
+  notified_at : timestamp with time zone (null)
+  status : text
+  data_origin : text
+  source_system : text
+  source_ref : text (null)
+  ..
+  ◇ UQ (property_id, type, device_time)
+  CHECK ((data_origin = ANY (ARRAY['REAL'::text, 'SIMULATED'::text])))
+  CHECK ((status = ANY (ARRAY['pending'::text, 'complete'::text, 'failed'::text])))
+}
+
+entity "property_reservations\n<size:11>예약 원본 (iCal)</size>" as property_reservations #ecfccb {
+  * id : uuid  ● PK
+  --
+  property_id : text  ◆ FK → property_cleaning_config  ◇ UQ(복합)
+  reservation_uid : text  ◇ UQ(복합)
+  guest_name : text (null)
+  platform : text
+  check_in : timestamp with time zone
+  check_out : timestamp with time zone
+  status : text
+  source_system : text
+  source_ref : text (null)
+  raw_data : jsonb (null)
+  data_origin : text
+  first_seen_at : timestamp with time zone
+  last_seen_at : timestamp with time zone
+  created_at : timestamp with time zone
+  updated_at : timestamp with time zone
+  ..
+  ◇ UQ (property_id, reservation_uid)
+  CHECK ((check_out > check_in))
+  CHECK ((data_origin = ANY (ARRAY['REAL'::text, 'SIMULATED'::text])))
+  CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'CANCELLED'::text, 'BLOCKED'::text])))
+}
+
+entity "cleaning_jobs\n<size:11>청소 일정 (상태머신)</size>" as cleaning_jobs #fef3c7 {
+  * id : uuid  ● PK
+  --
+  property_id : text  ◆ FK → property_cleaning_config  ◆ FK → property_reservations  ◇ UQ(복합)
+  reservation_uid : text (null)  ◆ FK → property_reservations
+  checkout_at : timestamp with time zone  ◇ UQ(복합)
+  cleaning_start_at : timestamp with time zone
+  cleaning_end_at : timestamp with time zone (null)
+  dispatch_after : timestamp with time zone
+  status : text
+  assigned_cleaner_id : uuid (null)  ◆ FK → cleaners
+  google_event_id : text (null)
+  source : text
+  created_at : timestamp with time zone
+  updated_at : timestamp with time zone
+  google_blocker_event_id : text (null)
+  data_origin : text
+  source_ref : text (null)
+  ..
+  ◇ UQ (property_id, checkout_at)
+  CHECK ((data_origin = ANY (ARRAY['REAL'::text, 'SIMULATED'::text])))
+  CHECK ((source = ANY (ARRAY['MONTHLY_BATCH'::text, 'SHORT_NOTICE'::text])))
+  CHECK ((status = ANY (ARRAY['PENDING'::text, 'NOTIFYING_VIP_1'::text, 'NOTIFYING_VIP_2'::t
+}
+
+entity "cleaning_notifs\n<size:11>알림 발송 내역 · 연결 테이블</size>" as cleaning_notifs #fce7f3 {
+  * id : uuid  ● PK
+  --
+  job_id : uuid  ◆ FK → cleaning_jobs  ◇ UQ(복합)
+  cleaner_id : uuid  ◆ FK → cleaners  ◇ UQ(복합)
+  tier : text
+  token : character(6)  ◇ UQ
+  sent_at : timestamp with time zone
+  reminded_at : timestamp with time zone (null)
+  response : text (null)
+  response_at : timestamp with time zone (null)
+  channel : text (null)
+  data_origin : text
+  ..
+  ◇ UQ (job_id, cleaner_id)
+  CHECK (((channel IS NULL) OR (channel = ANY (ARRAY['FCM'::text, 'SMS'::text, 'SMS_FALLBACK
+  CHECK ((data_origin = ANY (ARRAY['REAL'::text, 'SIMULATED'::text])))
+  CHECK (((response IS NULL) OR (response = ANY (ARRAY['DECLINED'::text, 'DECLINED_AFTER_ASS
+}
+
+property_cleaning_config ||-down-o{ property_calendar_blockers : "property_id\n1 : N\nON UPDATE CASCADE"
+property_cleaning_config ||-down-o{ events : "property_id\n1 : N\nON UPDATE CASCADE"
+property_cleaning_config ||-down-o{ property_reservations : "property_id\n1 : N\nON UPDATE CASCADE"
+cleaners |o-down-o{ cleaning_jobs : "assigned_cleaner_id\n0..1 : N\nON UPDATE NO ACTION"
+property_cleaning_config ||-down-o{ cleaning_jobs : "property_id\n1 : N\nON UPDATE CASCADE"
+property_reservations |o-down-o{ cleaning_jobs : "복합 FK (property_id, reservation_uid)\n0..1 : N\nON UPDATE CASCADE · DEFERRABLE"
+cleaners ||-down-o{ cleaning_notifs : "cleaner_id\n1 : N\nON UPDATE NO ACTION"
+cleaning_jobs ||-down-o{ cleaning_notifs : "job_id\n1 : N\nON UPDATE NO ACTION · ON DELETE CASCADE"
+
+note right of cleaning_notifs
+  **연결 테이블 (N:M 해소)**
+  cleaners ↔ cleaning_jobs 는 원래 다대다.
+  UQ (job_id, cleaner_id) 로 중복을 차단.
+end note
+
+legend right
+  |= 선 |= 의미 |
+  | 실선 | DB 가 강제하는 FK |
+  | 점선 | FK 없음 (코드가 지키는 논리 관계) |
+  | 두 줄(‖) | 정확히 1 |
+  | o | 0 또는 1 (선택) |
+  | 까마귀발 | 0개 이상 (여러 개) |
+endlegend
+
+@enduml

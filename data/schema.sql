@@ -30,13 +30,3 @@ CREATE INDEX IF NOT EXISTS idx_events_type_time
 
 CREATE INDEX IF NOT EXISTS idx_events_pending
   ON events (status) WHERE status = 'pending';
-
-CREATE TABLE IF NOT EXISTS monthly_summaries (
-  property_id        TEXT  NOT NULL,
-  month              DATE  NOT NULL,  -- 항상 해당 달 1일
-  check_ins          INT   NOT NULL DEFAULT 0,
-  check_outs         INT   NOT NULL DEFAULT 0,
-  anomaly_count      INT   NOT NULL DEFAULT 0,
-  energy_waste_count INT   NOT NULL DEFAULT 0,
-  PRIMARY KEY (property_id, month)
-);

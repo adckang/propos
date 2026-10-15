@@ -1,0 +1,49 @@
+{
+  "_설명": "ERD 의 사람 몫: 한글 설명(label)·색(color)·배치(row=위→아래, col=왼→오른). 구조(칼럼·키·FK·카디널리티)는 DB 카탈로그에서 자동 도출되므로 여기에 적지 않는다.",
+  "schema": "public",
+  "tables": {
+    "property_cleaning_config": {
+      "label": "숙소 마스터 (정본)",
+      "color": "#e0f2fe",
+      "row": 0,
+      "col": 1
+    },
+    "cleaners": {
+      "label": "청소 담당자 마스터",
+      "color": "#e0f2fe",
+      "row": 0,
+      "col": 4
+    },
+    "property_calendar_blockers": {
+      "label": "캘린더 차단 일정",
+      "color": "#ecfccb",
+      "row": 1,
+      "col": 0
+    },
+    "events": {
+      "label": "IoT 이벤트 로그",
+      "color": "#ecfccb",
+      "row": 1,
+      "col": 1
+    },
+    "property_reservations": {
+      "label": "예약 원본 (iCal)",
+      "color": "#ecfccb",
+      "row": 1,
+      "col": 2
+    },
+    "cleaning_jobs": {
+      "label": "청소 일정 (상태머신)",
+      "color": "#fef3c7",
+      "row": 2,
+      "col": 3
+    },
+    "cleaning_notifs": {
+      "label": "알림 발송 내역",
+      "color": "#fce7f3",
+      "row": 3,
+      "col": 3
+    }
+  },
+  "logicalRelations": []
+}
