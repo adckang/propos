@@ -27,6 +27,7 @@ import { airbnbEventsToReservations, parseVEvents } from "../../src/domain/room-
 import { getDemoCleaningStats, getDemoPropertyConfigs } from "../../src/application/demoReportingService.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 
+import { guardOperator } from "../../server/auth/operatorAuth.js";
 const db = new Pool({ connectionString: process.env.POSTGRES_URL });
 
 const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
@@ -1152,6 +1153,8 @@ async function registerGmailWatch(req, res) {
   return sendJson(res, 200, { ok: true, historyId: result.historyId, expiration: result.expiration });
 }
 
+export const PUBLIC_CLEANING_RESOURCES = new Set(["c", "d", "calendar-webhook", "gmail-webhook"]);
+
 export default async function handler(req, res) {
   const slug = parseSlug(req);
   const [resource] = slug;
@@ -1180,6 +1183,10 @@ export default async function handler(req, res) {
     }
     return sendJson(res, 403, { error: "demo profile is read-only", dataProfile: "demo" });
   }
+
+  // D-033: 운영자 전용. 로그인 없이 열어 두는 곳은 사람이 아닌/링크 호출자뿐 —
+  //   c·d(청소 담당자 문자 링크, 토큰으로 보호), calendar-webhook·gmail-webhook(구글, 자체 시크릿)
+  if (!PUBLIC_CLEANING_RESOURCES.has(resource) && !guardOperator(req, res)) return;
 
   try {
     if (resource === "cleaners") {

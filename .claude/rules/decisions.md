@@ -6,6 +6,20 @@
 
 ## 현재 활성 결정
 
+## [D-033] 운영자 로그인 도입 — 인증 없이 열려 있던 API 보호 (2026-10-15 확정, 기본 off로 배포)
+- **결정**: D-031이 "범위 밖"으로 미뤘던 미인증 노출을 해결한다. 운영 사이트(`www.proposonline.com`)에서 로그인 없이 `/api/cleaning/cleaners`(청소 담당자 전화·이메일·푸시 토큰), `/api/cleaning/properties`(호스트 전화·**Airbnb 캘린더 비밀 URL**·게스트 이름), `/api/cleaning/jobs`, `/api/ha/states`, `/api/stats`가 200으로 열려 있음을 실제 확인했다. 쓰기도 열려 있다(코드 확인; 쓰기 요청은 보내지 않음): 담당자 추가·삭제, 숙소 설정 덮어쓰기, 청소 요청 SMS 발송, 일정 배정, `/api/ha/service`(허용 목록·인증 없이 HA 서비스 호출).
+  1. **운영자 1명 비밀번호 로그인 → 서명된 HttpOnly·Secure·SameSite=Strict 쿠키**(12시간). 쿠키라서 브라우저가 알아서 보내므로 기존 fetch 호출은 거의 안 고친다 — 비밀이 번들에 들어가지 않는다.
+  2. **보호 대상**: 청소 API 전부(아래 예외 제외), `ha/*`, `stats`, `events` 조회(GET), `monitoring`, `properties`, `camera/snapshot`, `ical`, `config`(iCal URL이 들어 있을 수 있음). **로그인 없이 열어 두는 것**: 청소 담당자 문자 링크 `c`·`d`(토큰), 구글 웹훅, 크론(기존 `CRON_SECRET`), Pi 이벤트 쓰기(기존 `PROPOS_PI_SECRET`), 날씨, 담당자 앱 `workers`.
+  3. **단계적 적용 — `PROPOS_AUTH_MODE`**: `off`(기본, 동작 변화 없음) → `log`(통과시키되 로그인 없는 호출을 경고로 기록) → `enforce`(401). 코드를 배포해도 환경변수를 켜기 전에는 아무것도 바뀌지 않아 운영자가 갇힐 위험이 없다. enforce인데 비밀번호·서명키(16자 이상)가 없으면 **전부 거절**(설정 실수로 열리는 것보다 닫히는 쪽이 안전).
+  4. **프런트**: `AuthGate`가 앱 전체를 감싼다. `/api/auth/me`가 `required:true & authenticated:false`면 로그인 화면, 어느 API든 401이 오면 로그인 화면으로 복귀. off/log이거나 인증 API가 없는 개발 서버면 그대로 열림.
+- **스스로 리뷰하며 고친 것**: 처음 권장안("쓰기·SMS·스마트홈만 먼저 인증 + 읽기 응답에서 전화번호·토큰 제거")은 성립하지 않았다 — 브라우저에 박힌 키는 공개와 같고, 운영자 화면이 그 값을 편집에 쓰므로 로그인 없이는 둘 다 불가능. 로그인이 핵심이고 "응답에서 필드 제거"는 불필요(로그인한 운영자는 봐야 함)로 정정.
+- **구현 제약**: Vercel Hobby 함수 12개 한도에 이미 걸려 있어(api 함수 파일 12개) 새 `api/auth` 파일을 만들지 않고 `api/config.js`가 `?action=`을 받게 하고 `vercel.json` rewrite(`/api/auth/:action`)로 연결. 로그인 시도 제한은 인스턴스별 메모리(5회/10분/IP) — 완전하지 않은 최선책이라 비밀번호는 충분히 길게.
+- **버린 대안**: 공유 비밀키를 프런트에 두기(번들에서 꺼내 쓸 수 있어 무의미) / Vercel 배포 보호(유료 가능성·크론·웹훅·Pi 예외 처리 필요) / 읽기 응답 필드 제거만(위 이유).
+- **구현**: `server/auth/operatorAuth.js`(순수 함수: 모드·토큰·쿠키·문지기·로그인 경로), 각 `api/*` 핸들러에 `guardOperator`, `api/config.js`·`vercel.json`(로그인 경로), `src/components/AuthGate.jsx`·`src/main.jsx`. 테스트 `tests/unit/s76.operator-auth.test.js`(36개: 모드별 동작·위조/만료 토큰·시도 제한·적용 범위 소스 계약). 실제 핸들러를 enforce로 호출해 보호 대상은 DB에 닿기 전 401, 문자 링크(`d`)는 통과, `/api/auth/me`는 열림을 확인.
+- **켜는 법(운영자 작업)**: Vercel 환경변수 `PROPOS_ADMIN_PASSWORD`(길게), `PROPOS_SESSION_SECRET`(`openssl rand -hex 32`), 먼저 `PROPOS_AUTH_MODE=log`로 재배포해 어떤 호출이 로그인 없이 오는지 로그 확인 → 문제 없으면 `enforce`. 되돌리기는 값을 `off`로 바꾸고 재배포.
+- **이번에 못 고친 남은 노출(별도 작업)**: ① `POST /api/events`(Pi 이벤트 수신)에 인증이 없다 — 누구나 가짜 이벤트를 넣거나 Slack 알림을 일으킬 수 있음. Pi 워처가 보내는 방식과 맞춰야 해서 보류. ② `POST /api/workers/register`는 전화번호만 알면 그 담당자의 푸시 토큰을 덮어쓸 수 있음(전화번호는 이번 조치 전까지 공개돼 있었음). ③ `CRON_SECRET` 미설정(코드가 "값이 있을 때만 검사"). ④ 이미 노출됐던 값(호스트 전화, 캘린더 비밀 URL, 담당자 연락처·푸시 토큰)은 유출됐을 수 있으므로 Airbnb 캘린더 URL 재발급을 고려.
+- **재검토 시점**: enforce 전환 후 로그에서 로그인 없이 오는 정당한 호출자가 새로 발견되면 허용 목록에 추가.
+
 ## [D-032] 숙소 이름 변경이 FK에 막히던 결함 — ON UPDATE CASCADE + 레거시 고아 uid 정리 (2026-10-15 확정)
 - **결정**: D-031 후속 정합성 점검에서, 최근(커밋 65266fb) 추가된 FK 5개(`events_property_fk`, `cleaning_jobs_property_fk`, `cleaning_jobs_reservation_fk`, `property_calendar_blockers_property_fk`, `property_reservations_property_fk`)가 기본값(NO ACTION)이라 D-016의 "이름 변경 = 한 트랜잭션 이전"을 어떤 순서로도 불가능하게 만든다는 걸 확인했다(의도가 아니라 누락 — 문서·코드 어디에도 rename을 막으려는 흔적 없음, FK의 원래 목적은 "신규 입력 시 숙소 존재 보장"). 아래로 고쳤다.
   1. 5개 FK 모두 `ON UPDATE CASCADE`(`ON DELETE`는 그대로 — 삭제 방어 유지). `renamePropertyId`는 레지스트리(부모)를 먼저 UPDATE하고 하위는 CASCADE에 맡기며, 보고하는 `moved` 행 수는 사전 집계값 기준.

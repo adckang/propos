@@ -45,6 +45,10 @@ docs/data-architecture-and-simulator.md
 - `data:check:db` 경고 15건(REAL_LEGACY_JOB_UID_MISSING)은 의도된 상태
 - 아직 커밋·푸시 안 함 (코드/SQL/테스트 변경 있음)
 
+## 2026-10-15 운영자 로그인 (D-033)
+- 코드 배포 완료 시 `PROPOS_AUTH_MODE` 기본 off → 동작 변화 없음. 켜는 법·남은 노출은 D-033 참고
+- 운영자 작업 필요: Vercel 환경변수 3개 설정 후 log → enforce
+
 ## 싱크 실패 시 디버그 순서
 1. DevTools → Network → `POST /api/cleaning/ical-sync` 상태 코드 확인
 2. 성공 후 `GET /api/cleaning/properties` 응답에 파주201 `REAL` 행과 예약·청소상태가 있는지 확인

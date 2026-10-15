@@ -16,6 +16,7 @@ import { describePeriod, parseOffsetPeriod } from "../src/domain/periodDomain.js
 import { getDemoDrilldown, getDemoMonthlyCalendar, getDemoStats } from "../src/application/demoReportingService.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../src/config/dataProfile.js";
 
+import { guardOperator } from "../server/auth/operatorAuth.js";
 const VALID_STATS_PERIODS = [
   "now",
   "yesterday", "today", "tomorrow",
@@ -65,6 +66,7 @@ export default async function handler(req, res) {
   const route = statsRoute(req);
   const propertyIds = parsePropertyIds(req.query);
   const dataProfile = resolveServerDataProfile(process.env);
+  if (dataProfile !== DATA_PROFILE.DEMO && !guardOperator(req, res)) return; // D-033
 
   // demo는 DB를 열지 않는다. 로컬/preview/명시적 demo 배포가 모두 같은 순수 데이터 서비스를 쓴다.
   if (dataProfile === DATA_PROFILE.DEMO) {

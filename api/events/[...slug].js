@@ -17,6 +17,7 @@ import { processEvent } from "../../src/application/eventService.js";
 import { notifyEvent } from "../../server/slackNotifier.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 
+import { guardOperator } from "../../server/auth/operatorAuth.js";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const VALID_PERIODS = ["now","this_week","last_week","next_week","this_month","last_month","next_month"];
 
@@ -57,6 +58,8 @@ export default async function handler(req, res) {
   if (resolveServerDataProfile(process.env) === DATA_PROFILE.DEMO) {
     return sendJson(res, 403, { error: "demo profile is read-only", dataProfile: "demo" });
   }
+  // D-033: 조회(GET)는 운영자만. POST(Pi 워처 이벤트 수신)·write(PROPOS_PI_SECRET)는 기계 호출이라 제외
+  if (req.method === "GET" && !guardOperator(req, res)) return;
 
   const db = new Pool({ connectionString: process.env.POSTGRES_URL });
 

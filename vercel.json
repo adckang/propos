@@ -8,6 +8,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/auth/:action",
+      "destination": "/api/config?action=:action"
+    },
+    {
       "source": "/api/stats/calendar",
       "destination": "/api/stats?slug=calendar"
     },
