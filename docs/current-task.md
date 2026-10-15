@@ -49,6 +49,10 @@ docs/data-architecture-and-simulator.md
 - 코드 배포 완료 시 `PROPOS_AUTH_MODE` 기본 off → 동작 변화 없음. 켜는 법·남은 노출은 D-033 참고
 - 운영자 작업 필요: Vercel 환경변수 3개 설정 후 log → enforce
 
+## 2026-10-15 다중 운영자 (D-034)
+- 코드·테스트 완료, 독립 리뷰 반영, **운영 DB에 `operators`·`operator_properties` 적용 완료**, ERD 갱신 완료
+- 운영자 화면이 관리자 전용 API 를 부르면 403 — 운영자 계정으로 화면 end-to-end 확인과 403 조용히 처리 필요
+
 ## 싱크 실패 시 디버그 순서
 1. DevTools → Network → `POST /api/cleaning/ical-sync` 상태 코드 확인
 2. 성공 후 `GET /api/cleaning/properties` 응답에 파주201 `REAL` 행과 예약·청소상태가 있는지 확인

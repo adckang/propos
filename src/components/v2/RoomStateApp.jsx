@@ -94,6 +94,8 @@ function cloudRowToConfig(row) {
     district: '',
     watcherId: null,
     airbnbIcalUrl: row.ical_url || '',
+    // 운영자에겐 서버가 주소를 안 주고(D-034) 설정 여부만 준다 — 동기화는 서버가 DB 의 주소로 하므로 이것만 있으면 돈다
+    icalConfigured: !!(row.ical_url || row.ical_configured),
     googleCalendarId: row.google_calendar_id || '',
     checkInHour: 15,
     checkOutHour: row.checkout_hour ?? 11,
@@ -510,7 +512,7 @@ export default function RoomStateApp({ onBack }) {
 
   // 서버 정본 동기화 실행. 브라우저는 iCal/Google 원본을 직접 읽지 않는다.
   const runSync = useCallback(async (cfg) => {
-    if (USE_DEMO_DATA || !cfg?.id || !cfg?.airbnbIcalUrl) return;
+    if (USE_DEMO_DATA || !cfg?.id || !(cfg?.airbnbIcalUrl || cfg?.icalConfigured)) return;
     setSyncStatus('syncing');
     try {
       const syncResponse = await fetch('/api/cleaning/ical-sync', {

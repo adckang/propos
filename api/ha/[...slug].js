@@ -8,7 +8,7 @@ import {
 } from "../../server/haApiHandlers.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 
-import { guardOperator } from "../../server/auth/operatorAuth.js";
+import { guardAdmin } from "../../server/auth/operatorAuth.js";
 const HANDLERS = {
   service:    handleVercelService,
   state:      handleVercelState,
@@ -25,7 +25,7 @@ export default async function handler(req, res) {
     res.end(JSON.stringify({ error: "demo profile cannot access Home Assistant", dataProfile: "demo" }));
     return;
   }
-  if (!guardOperator(req, res)) return; // D-033: 스마트홈 제어·상태는 운영자만
+  if (!guardAdmin(req, res)) return; // D-033: 스마트홈 제어·상태는 운영자만
   const action = (req.query?.slug
     ? (Array.isArray(req.query.slug) ? req.query.slug[0] : req.query.slug)
     : (req.url || "").split("?")[0].split("/").filter(Boolean)[2]) || "";

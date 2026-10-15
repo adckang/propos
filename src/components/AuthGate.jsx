@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import OperatorManager from "./OperatorManager";
+
 
 // 운영자 로그인 문지기 (D-033). 서버가 로그인을 요구(enforce)할 때만 로그인 화면을 보여준다.
 // off/log 모드이거나 /api/auth/me 가 없으면(로컬 개발 서버) 앱이 그대로 열린다 — 배포해도 동작이 바뀌지 않는다.
@@ -44,6 +46,7 @@ const S = {
 };
 
 function LoginScreen({ onDone }) {
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -57,7 +60,7 @@ function LoginScreen({ onDone }) {
       const res = await fetch("/api/auth/login", {
         method: "POST", credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ email, password }), // 이메일이 비어 있으면 관리자 로그인
       });
       if (res.ok) { setPassword(""); onDone(); return; }
       const body = await res.json().catch(() => ({}));
@@ -75,6 +78,10 @@ function LoginScreen({ onDone }) {
         <h1 style={S.title}>PROPOS 운영자 로그인</h1>
         <p style={S.sub}>운영자만 접근할 수 있어요.</p>
         <input
+          style={S.input} type="email" autoComplete="username" placeholder="이메일 (관리자는 비워 두세요)"
+          value={email} onChange={(e) => setEmail(e.target.value)} aria-label="이메일" maxLength={254}
+        />
+        <input
           style={S.input} type="password" autoComplete="current-password" autoFocus
           placeholder="비밀번호" value={password} onChange={(e) => setPassword(e.target.value)}
           aria-label="비밀번호" maxLength={200}
@@ -91,6 +98,8 @@ function LoginScreen({ onDone }) {
 export default function AuthGate({ children }) {
   const [state, setState] = useState("checking"); // checking | login | open
   const [required, setRequired] = useState(false);
+  const [role, setRole] = useState("admin");
+  const [managing, setManaging] = useState(false);
   const [epoch, setEpoch] = useState(0); // 로그인 직후 화면을 새로 마운트해 데이터를 다시 받는다
 
   useEffect(() => {
@@ -99,24 +108,38 @@ export default function AuthGate({ children }) {
     fetchAuthState().then((s) => {
       if (!alive) return;
       setRequired(!!s.required);
+      setRole(s.role === "operator" ? "operator" : "admin");
       setState(s.required && !s.authenticated ? "login" : "open");
     });
-    const onAuthRequired = () => setState("login");
+    const onAuthRequired = () => { setManaging(false); setState("login"); }; // 세션이 끝나면 관리 창도 닫는다(다음 로그인 사람에게 남지 않게)
     window.addEventListener(AUTH_EVENT, onAuthRequired);
     return () => { alive = false; window.removeEventListener(AUTH_EVENT, onAuthRequired); };
   }, []);
 
   const logout = useCallback(async () => {
     try { await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }); } catch { /* 쿠키는 만료로도 사라짐 */ }
+    setManaging(false);
     setState("login");
   }, []);
 
   if (state === "checking") return null;
-  if (state === "login") return <LoginScreen onDone={() => { setRequired(true); setEpoch((n) => n + 1); setState("open"); }} />;
+  if (state === "login") {
+    return <LoginScreen onDone={async () => {
+      const s = await fetchAuthState(); // 방금 로그인한 사람이 관리자인지 운영자인지
+      setRequired(true); setRole(s.role === "admin" ? "admin" : "operator"); // 확인에 실패하면 최소 권한(운영자)으로 본다
+      setEpoch((n) => n + 1); setState("open");
+    }} />;
+  }
   return (
-    <div key={epoch}>
-      {children}
-      {required ? <button type="button" style={S.logout} onClick={logout}>로그아웃</button> : null}
-    </div>
+    <>
+      {/* div 로 감싸지 않는다 — 앱 레이아웃(height:100% 등)을 바꾸지 않기 위해 Fragment */}
+      <Fragment key={epoch}>
+        {children}
+        {/* 로그인이 필수일 때만(= 인증을 켠 뒤) 보인다. off/log 상태에서는 화면이 전혀 바뀌지 않는다. */}
+        {required && role === "admin" ? <button type="button" style={{ ...S.logout, right: 90 }} onClick={() => setManaging(true)}>운영자 관리</button> : null}
+        {required ? <button type="button" style={S.logout} onClick={logout}>로그아웃</button> : null}
+        {managing && required && role === "admin" ? <OperatorManager onClose={() => setManaging(false)} /> : null}
+      </Fragment>
+    </>
   );
 }

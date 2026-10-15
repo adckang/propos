@@ -40,6 +40,13 @@ entity "cleaners\n<size:11>청소 담당자 마스터</size>" as cleaners #e0f2f
   … 그 밖의 칼럼 10개 (전체 버전 참고)
 }
 
+entity "operators\n<size:11>운영자 계정 (로그인)</size>" as operators #ede9fe {
+  * id : uuid  ● PK
+  --
+  email : text  ◇ UQ
+  … 그 밖의 칼럼 4개 (전체 버전 참고)
+}
+
 entity "property_calendar_blockers\n<size:11>캘린더 차단 일정</size>" as property_calendar_blockers #ecfccb {
   * property_id : text  ● PK  ◆ FK → property_cleaning_config
   * block_date : date  ● PK
@@ -65,6 +72,12 @@ entity "property_reservations\n<size:11>예약 원본 (iCal)</size>" as property
   … 그 밖의 칼럼 13개 (전체 버전 참고)
   ..
   ◇ UQ (property_id, reservation_uid)
+}
+
+entity "operator_properties\n<size:11>운영자 ↔ 숙소 배정 · 연결 테이블</size>" as operator_properties #ede9fe {
+  * operator_id : uuid  ● PK  ◆ FK → operators
+  * property_id : text  ● PK  ◆ FK → property_cleaning_config
+  … 그 밖의 칼럼 1개 (전체 버전 참고)
 }
 
 entity "cleaning_jobs\n<size:11>청소 일정 (상태머신)</size>" as cleaning_jobs #fef3c7 {
@@ -93,11 +106,19 @@ entity "cleaning_notifs\n<size:11>알림 발송 내역 · 연결 테이블</size
 property_cleaning_config ||-down-o{ property_calendar_blockers : "property_id\n1 : N"
 property_cleaning_config ||-down-o{ events : "property_id\n1 : N"
 property_cleaning_config ||-down-o{ property_reservations : "property_id\n1 : N"
+operators ||-down-o{ operator_properties : "operator_id\n1 : N\nON DELETE CASCADE"
+property_cleaning_config ||-down-o{ operator_properties : "property_id\n1 : N\nON DELETE CASCADE"
 cleaners |o-down-o{ cleaning_jobs : "assigned_cleaner_id\n0..1 : N"
 property_cleaning_config ||-down-o{ cleaning_jobs : "property_id\n1 : N"
 property_reservations |o-down-o{ cleaning_jobs : "복합 FK (property_id, reservation_uid)\n0..1 : N\nDEFERRABLE"
 cleaners ||-down-o{ cleaning_notifs : "cleaner_id\n1 : N"
 cleaning_jobs ||-down-o{ cleaning_notifs : "job_id\n1 : N\nON DELETE CASCADE"
+
+note right of operator_properties
+  **연결 테이블 (N:M 해소)**
+  operators ↔ property_cleaning_config 는 원래 다대다.
+  UQ (operator_id, property_id) 로 중복을 차단.
+end note
 
 note right of cleaning_notifs
   **연결 테이블 (N:M 해소)**

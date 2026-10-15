@@ -43,7 +43,7 @@ describe('property rename integrity (D-031 후속)', () => {
 
   test('FK 는 ON UPDATE CASCADE (스키마·마이그레이션 모두)', () => {
     const schema = read('data/schema-cleaning.sql');
-    assert.equal((schema.match(/ON UPDATE CASCADE/g) || []).length, 3);
+    assert.equal((schema.match(/ON UPDATE CASCADE/g) || []).length, 4); // 예약·청소 FK 3 + operator_properties(D-034) 1
     const mig = read('data/migrate-property-fk-cascade.sql');
     for (const name of ['property_reservations_property_fk', 'cleaning_jobs_property_fk', 'cleaning_jobs_reservation_fk',
       'property_calendar_blockers_property_fk', 'events_property_fk']) {

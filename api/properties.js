@@ -11,7 +11,7 @@
 import { getDemoPropertyConfigs } from '../src/application/demoReportingService.js';
 import { DATA_PROFILE, resolveServerDataProfile } from '../src/config/dataProfile.js';
 
-import { guardOperator } from '../server/auth/operatorAuth.js';
+import { guardAdmin } from '../server/auth/operatorAuth.js';
 const WATCHER_URLS = (() => {
   try { return JSON.parse(process.env.PROPOS_WATCHER_URLS ?? '{}'); }
   catch { return {}; }
@@ -57,7 +57,7 @@ export default async function handler(req, res) {
     }
     return sendJson(res, 403, { error: 'demo profile is read-only', dataProfile: 'demo' });
   }
-  if (!guardOperator(req, res)) return; // D-033: 숙소 목록·워처 설정
+  if (!guardAdmin(req, res)) return; // D-033: 숙소 목록·워처 설정
 
   const watcherId = req.query?.watcherId ?? null;
   const WATCHER_URL = resolveWatcherUrl(watcherId);

@@ -17,7 +17,8 @@ import { processEvent } from "../../src/application/eventService.js";
 import { notifyEvent } from "../../server/slackNotifier.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 
-import { guardOperator } from "../../server/auth/operatorAuth.js";
+import { requireScope } from "../../server/auth/operatorAuth.js";
+import { canAccessProperty, scopeQueryIds } from "../../server/auth/operatorAccounts.js";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const VALID_PERIODS = ["now","this_week","last_week","next_week","this_month","last_month","next_month"];
 
@@ -58,8 +59,6 @@ export default async function handler(req, res) {
   if (resolveServerDataProfile(process.env) === DATA_PROFILE.DEMO) {
     return sendJson(res, 403, { error: "demo profile is read-only", dataProfile: "demo" });
   }
-  // D-033: 조회(GET)는 운영자만. POST(Pi 워처 이벤트 수신)·write(PROPOS_PI_SECRET)는 기계 호출이라 제외
-  if (req.method === "GET" && !guardOperator(req, res)) return;
 
   const db = new Pool({ connectionString: process.env.POSTGRES_URL });
 
@@ -106,6 +105,11 @@ export default async function handler(req, res) {
     // GET only beyond this point
     if (req.method !== "GET") return sendJson(res, 405, { error: "Method Not Allowed" });
 
+    // D-033/D-034: 조회(GET)는 로그인한 사람만, 그리고 그 사람 몫의 숙소만.
+    // (POST 수신·write 는 Pi 워처 같은 기계 호출이라 위에서 이미 처리 — 기존 PROPOS_PI_SECRET 방식 유지)
+    const scope = await requireScope(req, res, db);
+    if (!scope) return;
+
     // GET /api/events/history
     if (action === "history") {
       const { period = "this_week", property_id, limit = "50" } = req.query;
@@ -121,14 +125,15 @@ export default async function handler(req, res) {
       } else {
         range = getPeriodRange(period);
       }
-      const events = await queryEvents(db, range, property_id || null);
+      const events = await queryEvents(db, range, scopeQueryIds(scope, property_id ? [property_id] : null));
       return sendJson(res, 200, { events: events.slice(0, limitNum), total: events.length });
     }
 
     // GET /api/events/:uuid
     if (UUID_RE.test(action)) {
       const result = await db.query("SELECT * FROM events WHERE id = $1", [action]);
-      if (result.rows.length === 0) return sendJson(res, 404, { error: "Event not found" });
+      // 허용 밖 숙소의 이벤트는 "없는 것"과 똑같이 404 (존재 여부도 알려주지 않는다)
+      if (result.rows.length === 0 || !canAccessProperty(scope, result.rows[0].property_id)) return sendJson(res, 404, { error: "Event not found" });
       return sendJson(res, 200, result.rows[0]);
     }
 

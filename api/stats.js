@@ -16,7 +16,8 @@ import { describePeriod, parseOffsetPeriod } from "../src/domain/periodDomain.js
 import { getDemoDrilldown, getDemoMonthlyCalendar, getDemoStats } from "../src/application/demoReportingService.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../src/config/dataProfile.js";
 
-import { guardOperator } from "../server/auth/operatorAuth.js";
+import { requireScope } from "../server/auth/operatorAuth.js";
+import { scopeQueryIds } from "../server/auth/operatorAccounts.js";
 const VALID_STATS_PERIODS = [
   "now",
   "yesterday", "today", "tomorrow",
@@ -64,9 +65,8 @@ export default async function handler(req, res) {
   }
 
   const route = statsRoute(req);
-  const propertyIds = parsePropertyIds(req.query);
+  let propertyIds = parsePropertyIds(req.query);
   const dataProfile = resolveServerDataProfile(process.env);
-  if (dataProfile !== DATA_PROFILE.DEMO && !guardOperator(req, res)) return; // D-033
 
   // demo는 DB를 열지 않는다. 로컬/preview/명시적 demo 배포가 모두 같은 순수 데이터 서비스를 쓴다.
   if (dataProfile === DATA_PROFILE.DEMO) {
@@ -96,6 +96,11 @@ export default async function handler(req, res) {
   const db = new Pool({ connectionString: process.env.POSTGRES_URL });
 
   try {
+    // D-033/D-034: 먼저 누구인지 확인하고, 볼 수 있는 숙소만 조회한다 (요청한 property_ids 와의 교집합)
+    const scope = await requireScope(req, res, db);
+    if (!scope) return;
+    propertyIds = scopeQueryIds(scope, propertyIds);
+
     if (route === "calendar") {
       const period = req.query.period ?? "this_month";
       if (!VALID_CALENDAR_PERIODS.has(period)) {

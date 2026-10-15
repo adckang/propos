@@ -36,6 +36,10 @@
       "destination": "/api/cleaning/d?token=:token&slug=d"
     },
     {
+      "source": "/api/cleaning/operators/:id",
+      "destination": "/api/cleaning/operators?id=:id&slug=operators"
+    },
+    {
       "source": "/api/cleaning/cleaners/:id",
       "destination": "/api/cleaning/cleaners?id=:id&slug=cleaners"
     },

@@ -9,7 +9,7 @@
 
 import { DATA_PROFILE, resolveServerDataProfile } from '../../src/config/dataProfile.js';
 
-import { guardOperator } from "../../server/auth/operatorAuth.js";
+import { guardAdmin } from "../../server/auth/operatorAuth.js";
 const WATCHER_URLS = (() => {
   try { return JSON.parse(process.env.PROPOS_WATCHER_URLS ?? '{}'); }
   catch { return {}; }
@@ -27,7 +27,7 @@ export default async function handler(req, res) {
     res.end();
     return;
   }
-  if (!guardOperator(req, res)) return; // D-033: CCTV 스냅샷은 운영자만
+  if (!guardAdmin(req, res)) return; // D-033: CCTV 스냅샷은 운영자만
   const watcherId = req.query?.watcherId ?? null;
   const WATCHER_URL = resolveWatcherUrl(watcherId);
 

@@ -27,8 +27,12 @@ import { airbnbEventsToReservations, parseVEvents } from "../../src/domain/room-
 import { getDemoCleaningStats, getDemoPropertyConfigs } from "../../src/application/demoReportingService.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 
-import { guardOperator } from "../../server/auth/operatorAuth.js";
-const db = new Pool({ connectionString: process.env.POSTGRES_URL });
+import { requireAdminSession, requireScope } from "../../server/auth/operatorAuth.js";
+import { createOperator, listOperators, updateOperator } from "../../server/auth/operatorAdmin.js";
+import { canAccessProperty, isAdminScope, scopeQueryIds } from "../../server/auth/operatorAccounts.js";
+let db = new Pool({ connectionString: process.env.POSTGRES_URL });
+/** 테스트 전용: 핸들러를 가짜 DB 로 실행해 숙소 범위 제한을 검증한다 */
+export function _setDbForTest(fake) { db = fake; }
 
 const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 const GMAIL_API    = "https://gmail.googleapis.com/gmail/v1";
@@ -65,9 +69,21 @@ function htmlPage(title, body) {
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f5f5f5}.box{background:#fff;border-radius:12px;padding:40px 32px;max-width:360px;text-align:center;box-shadow:0 2px 16px rgba(0,0,0,.1)}h2{margin:0 0 12px;font-size:1.2rem;color:#111}p{margin:0;color:#555;font-size:.95rem;line-height:1.6}</style></head><body><div class="box"><h2>${title}</h2><p>${body}</p></div></body></html>`;
 }
 
-async function listCleaners(res) {
+async function listCleaners(res, scope) {
+  const order = `ORDER BY CASE tier WHEN 'VIP_1' THEN 1 WHEN 'VIP_2' THEN 2 WHEN 'VIP_3' THEN 3 ELSE 4 END, name`;
+  if (isAdminScope(scope)) {
+    const { rows } = await db.query(`SELECT * FROM cleaners ${order}`);
+    return sendJson(res, 200, rows);
+  }
+  // D-034: 운영자에게는 "내 숙소 일정에 배정되었거나 알림이 나간" 담당자만, 연락처 중심으로(푸시 토큰·이메일·관리자 메모 제외)
   const { rows } = await db.query(
-    `SELECT * FROM cleaners ORDER BY CASE tier WHEN 'VIP_1' THEN 1 WHEN 'VIP_2' THEN 2 WHEN 'VIP_3' THEN 3 ELSE 4 END, name`
+    `SELECT id, name, phone, tier, active FROM cleaners
+      WHERE id IN (
+        SELECT assigned_cleaner_id FROM cleaning_jobs WHERE property_id = ANY($1::text[]) AND assigned_cleaner_id IS NOT NULL
+        UNION
+        SELECT n.cleaner_id FROM cleaning_notifs n JOIN cleaning_jobs j ON j.id = n.job_id WHERE j.property_id = ANY($1::text[])
+      ) ${order}`,
+    [scopeQueryIds(scope)]
   );
   return sendJson(res, 200, rows);
 }
@@ -125,9 +141,19 @@ async function deleteCleaner(res, id) {
   return sendJson(res, 200, { ok: true });
 }
 
-async function listProperties(res) {
+async function listProperties(res, scope, req) {
+  const restrict = !isAdminScope(scope);
+  // ?view=names: 계정 관리 화면의 체크박스처럼 이름만 필요할 때 — 예약·캘린더 주소를 싣지 않는 가벼운 목록
+  if (req?.query?.view === "names") {
+    const { rows } = await db.query(
+      `SELECT property_id, name, data_origin FROM property_cleaning_config ${restrict ? "WHERE property_id = ANY($1::text[])" : ""} ORDER BY name`,
+      restrict ? [scopeQueryIds(scope)] : []
+    );
+    return sendJson(res, 200, rows);
+  }
   const { rows } = await db.query(`
     SELECT p.*,
+           (p.ical_url IS NOT NULL AND p.ical_url <> '') AS ical_configured, -- 운영자에겐 주소 대신 설정 여부만 알려준다
            COALESCE((
              SELECT json_agg(json_build_object(
                'uid', r.reservation_uid,
@@ -154,9 +180,14 @@ async function listProperties(res) {
             WHERE r.property_id = p.property_id
            ), '[]'::json) AS reservations
       FROM property_cleaning_config p
+     ${restrict ? "WHERE p.property_id = ANY($1::text[])" : ""}
      ORDER BY p.name
-  `);
-  return sendJson(res, 200, rows);
+  `, restrict ? [scopeQueryIds(scope)] : []);
+  // D-034: 운영자에게는 숙소 설정값(호스트 전화·캘린더 주소·구글 캘린더)을 내려주지 않는다 — 관리자만 수정·열람
+  const visible = restrict
+    ? rows.map(({ host_phone, ical_url, google_calendar_id, google_calendar_booking_url, ...safe }) => safe)
+    : rows;
+  return sendJson(res, 200, visible);
 }
 
 // 이전한 숙소의 KV 캐시(상태·일별 리포트)는 이전 이름 키로 남아 있으므로 정리 — 새 이름으로 재생성된다
@@ -271,15 +302,18 @@ async function runFollowupChecks() {
   }
 }
 
-async function listJobs(req, res) {
+async function listJobs(req, res, scope) {
   // jobs 조회 시 타임아웃 체크 편승 실행 (외부 크론 불필요)
   runFollowupChecks().catch(e => console.error("[listJobs] followup:", e.message));
 
   const status = req.query?.status ?? null;
   const limit  = Math.min(parseInt(req.query?.limit) || 50, 200);
   const vals = [];
-  let where = "";
-  if (status) { where = "WHERE j.status=$1"; vals.push(status); }
+  const conds = [];
+  if (status) { vals.push(status); conds.push(`j.status=$${vals.length}`); }
+  const scoped = scopeQueryIds(scope); // D-034: 관리자=null(전체), 운영자=배정된 숙소만
+  if (scoped) { vals.push(scoped); conds.push(`j.property_id = ANY($${vals.length}::text[])`); }
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
   const { rows } = await db.query(
     `SELECT j.*, p.name AS property_name, c.name AS cleaner_name
      FROM cleaning_jobs j
@@ -291,7 +325,7 @@ async function listJobs(req, res) {
   return sendJson(res, 200, rows);
 }
 
-async function getJob(res, id) {
+async function getJob(res, id, scope) {
   const { rows: [job] } = await db.query(
     `SELECT j.*, p.name AS property_name, c.name AS cleaner_name
      FROM cleaning_jobs j
@@ -299,9 +333,13 @@ async function getJob(res, id) {
      LEFT JOIN cleaners c ON c.id = j.assigned_cleaner_id WHERE j.id=$1`,
     [id]
   );
-  if (!job) return sendJson(res, 404, { error: "일정 없음" });
+  if (!job || !canAccessProperty(scope, job.property_id)) return sendJson(res, 404, { error: "일정 없음" });
+  // token 은 공개 링크(/d/:token)로 담당자를 대신해 거절할 수 있는 자격증명이라 운영자에게는 내려주지 않는다
+  const notifColumns = isAdminScope(scope)
+    ? "n.*"
+    : "n.id, n.job_id, n.cleaner_id, n.tier, n.sent_at, n.reminded_at, n.response, n.response_at, n.channel";
   const { rows: notifs } = await db.query(
-    `SELECT n.*, cl.name AS cleaner_name, cl.phone FROM cleaning_notifs n
+    `SELECT ${notifColumns}, cl.name AS cleaner_name, cl.phone FROM cleaning_notifs n
      JOIN cleaners cl ON cl.id = n.cleaner_id WHERE n.job_id=$1 ORDER BY n.sent_at`,
     [id]
   );
@@ -352,9 +390,9 @@ async function syncJobs(req, res) {
   return sendJson(res, 200, { ok: true, created, skipped });
 }
 
-async function dispatchJob(res, jobId) {
+async function dispatchJob(res, jobId, scope) {
   const { rows: [job] } = await db.query(`SELECT * FROM cleaning_jobs WHERE id=$1`, [jobId]);
-  if (!job) return sendJson(res, 404, { error: "일정 없음" });
+  if (!job || !canAccessProperty(scope, job.property_id)) return sendJson(res, 404, { error: "일정 없음" });
   if (job.data_origin === "SIMULATED") {
     return sendJson(res, 409, { error: "시뮬레이션 일정은 외부 배정 발송을 하지 않습니다.", data_origin: "SIMULATED" });
   }
@@ -442,7 +480,7 @@ async function handleDecline(req, res, token) {
 // ── 청소 배정 통계 ───────────────────────────────────────────────────────────
 // 레포트 [예정] 섹션(FutureMatrixPanel)의 청소 배정 4분류·드릴다운에 사용
 
-async function getCleaningStats(req, res) {
+async function getCleaningStats(req, res, scope) {
   if (req.method !== "GET") return res.status(405).end();
   const period    = req.query?.period;
   const withItems = req.query?.items === "true";
@@ -452,7 +490,8 @@ async function getCleaningStats(req, res) {
 
   // 선택 숙소 필터 — null=전체, 배열=부분 선택
   const rawIds = req.query?.property_ids ?? "";
-  const filterIds = rawIds ? rawIds.split(",").map(s => s.trim()).filter(Boolean) : null;
+  // D-034: 요청한 숙소와 허용된 숙소의 교집합 (관리자는 요청 그대로, 요청이 없으면 전체)
+  const filterIds = scopeQueryIds(scope, rawIds ? rawIds.split(",").map(s => s.trim()).filter(Boolean) : null);
 
   // 기본 필터 조건 (날짜 범위 + 선택 숙소)
   let baseWhere = "checkout_at >= $1 AND checkout_at < $2";
@@ -760,10 +799,14 @@ async function syncAllPropertiesIcal(db, filterPropertyId = null) {
 
 // ── iCal 수동 동기화 트리거 ───────────────────────────────────────
 
-async function handleIcalSync(req, res) {
+async function handleIcalSync(req, res, scope) {
   if (req.method !== "POST") return res.status(405).end();
   const b = await readBody(req);
   const { property_id } = b;
+  // D-034: 운영자는 자기 숙소만 동기화한다 (숙소 지정 없는 "전체 동기화"는 관리자 전용)
+  if (!isAdminScope(scope) && (!property_id || !canAccessProperty(scope, property_id))) {
+    return sendJson(res, 404, { error: "숙소 없음" });
+  }
 
   if (property_id) {
     const { rows: [prop] } = await db.query(
@@ -874,7 +917,7 @@ async function bootstrapBlockers(req, res) {
 
 // ── 예약 취소: 상태 CANCELLED + 블로커 재생성 ────────────────────
 
-async function cancelJob(req, res, jobId) {
+async function cancelJob(req, res, jobId, scope) {
   if (req.method !== "PATCH") return res.status(405).end();
   const { rows: [job] } = await db.query(
     `SELECT j.*, p.google_calendar_id, p.checkout_hour, p.cleaning_duration_hours
@@ -883,7 +926,7 @@ async function cancelJob(req, res, jobId) {
      WHERE j.id=$1`,
     [jobId]
   );
-  if (!job) return sendJson(res, 404, { error: "일정 없음" });
+  if (!job || !canAccessProperty(scope, job.property_id)) return sendJson(res, 404, { error: "일정 없음" });
   if (job.data_origin === "SIMULATED") {
     return sendJson(res, 409, { error: "시뮬레이션 일정은 외부 취소 처리를 하지 않습니다.", data_origin: "SIMULATED" });
   }
@@ -1155,6 +1198,13 @@ async function registerGmailWatch(req, res) {
 
 export const PUBLIC_CLEANING_RESOURCES = new Set(["c", "d", "calendar-webhook", "gmail-webhook"]);
 
+// 운영자(숙소 제한 계정)에게 열어 주는 경로 — 여기에 없으면 관리자 전용(새 경로를 깜빡해도 새지 않는다).
+// 숙소 범위는 각 핸들러가 scope 로 제한한다. PATCH jobs 는 취소만(수동 배정은 관리자 — 담당자 전체 목록이 필요하므로).
+export const OPERATOR_ALLOWED = new Set([
+  "GET properties", "GET jobs", "GET stats", "GET cleaners",
+  "POST dispatch", "PATCH jobs", "POST ical-sync",
+]);
+
 export default async function handler(req, res) {
   const slug = parseSlug(req);
   const [resource] = slug;
@@ -1184,39 +1234,61 @@ export default async function handler(req, res) {
     return sendJson(res, 403, { error: "demo profile is read-only", dataProfile: "demo" });
   }
 
-  // D-033: 운영자 전용. 로그인 없이 열어 두는 곳은 사람이 아닌/링크 호출자뿐 —
-  //   c·d(청소 담당자 문자 링크, 토큰으로 보호), calendar-webhook·gmail-webhook(구글, 자체 시크릿)
-  if (!PUBLIC_CLEANING_RESOURCES.has(resource) && !guardOperator(req, res)) return;
-
   try {
+    // D-033/D-034: 먼저 "누구인지" 확인한다. 로그인 없이 열어 두는 곳은 사람이 아닌/링크 호출자뿐 —
+    //   c·d(청소 담당자 문자 링크, 토큰으로 보호), calendar-webhook·gmail-webhook(구글, 자체 시크릿)
+    let scope = null;
+    if (!PUBLIC_CLEANING_RESOURCES.has(resource)) {
+      scope = await requireScope(req, res, db);
+      if (!scope) return;
+      // 기본 거부: 운영자(숙소 제한 계정)는 OPERATOR_ALLOWED 에 적힌 것만 가능, 나머지는 관리자 전용
+      if (!isAdminScope(scope) && !OPERATOR_ALLOWED.has(`${req.method} ${resource}`)) {
+        return sendJson(res, 403, { error: "관리자만 할 수 있어요", code: "FORBIDDEN" });
+      }
+    }
     if (resource === "cleaners") {
       if (!id) {
-        if (req.method === "GET")  return await listCleaners(res);
+        if (req.method === "GET")  return await listCleaners(res, scope);
         if (req.method === "POST") return await createCleaner(req, res);
       } else {
         if (req.method === "PATCH")  return await updateCleaner(req, res, id);
         if (req.method === "DELETE") return await deleteCleaner(res, id);
       }
     }
+    if (resource === "operators") {
+      // 계정 관리: 인증 모드(off/log)와 무관하게 **진짜 관리자 세션**이 있어야 한다 — 로그인을 켜기 전에
+      // 누구나 영구 계정을 만들거나 남의 비밀번호를 재설정하는 일을 막는다. (운영자는 OPERATOR_ALLOWED 에 없어 위에서 403)
+      if (!requireAdminSession(req, res)) return;
+      if (!id) {
+        if (req.method === "GET")  return await listOperators(db, res);
+        if (req.method === "POST") return await createOperator(db, await readBody(req), res);
+      } else if (req.method === "PATCH") {
+        return await updateOperator(db, await readBody(req), res, id);
+      }
+    }
     if (resource === "properties") {
-      if (req.method === "GET")  return await listProperties(res);
+      if (req.method === "GET")  return await listProperties(res, scope, req);
       if (req.method === "POST") return await upsertProperty(req, res);
     }
     if (resource === "jobs") {
       if (!id) {
-        if (req.method === "GET")  return await listJobs(req, res);
+        if (req.method === "GET")  return await listJobs(req, res, scope);
         if (req.method === "POST") return await syncJobs(req, res);
       } else {
-        if (req.method === "GET") return await getJob(res, id);
+        if (req.method === "GET") return await getJob(res, id, scope);
       }
     }
     if (resource === "dispatch") {
       const jobId = id ?? (await readBody(req)).job_id;
-      if (req.method === "POST" && jobId) return await dispatchJob(res, jobId);
+      if (req.method === "POST" && jobId) return await dispatchJob(res, jobId, scope);
     }
     if (resource === "jobs" && id && req.method === "PATCH") {
       const b = await readBody(req);
-      if (b.status === "CANCELLED") return await cancelJob(req, res, id);
+      // 기본 거부: 운영자는 취소(CANCELLED)만 가능. 그 밖의 모든 상태 변경(수동 배정·초기화 등)은 관리자 전용
+      if (!isAdminScope(scope) && b.status !== "CANCELLED") {
+        return sendJson(res, 403, { error: "관리자만 할 수 있어요", code: "FORBIDDEN" });
+      }
+      if (b.status === "CANCELLED") return await cancelJob(req, res, id, scope);
       if (b.status === "ASSIGNED") {
         const { rows: [targetJob] } = await db.query(`SELECT data_origin FROM cleaning_jobs WHERE id=$1`, [id]);
         if (!targetJob) return sendJson(res, 404, { error: "일정 없음" });
@@ -1254,9 +1326,9 @@ export default async function handler(req, res) {
         return sendJson(res, 200, { ok: true, job: rows[0] });
       }
     }
-    if (resource === "stats")     return await getCleaningStats(req, res);
+    if (resource === "stats")     return await getCleaningStats(req, res, scope);
     if (resource === "bootstrap") return await bootstrapBlockers(req, res);
-    if (resource === "ical-sync")    return await handleIcalSync(req, res);
+    if (resource === "ical-sync")    return await handleIcalSync(req, res, scope);
     if (resource === "gmail-watch")      return await registerGmailWatch(req, res);
     if (resource === "calendar-watch")   return await registerCalendarWatch(req, res);
     if (resource === "blocker-cleanup")  return await handleBlockerCleanup(req, res);

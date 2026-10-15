@@ -43,6 +43,18 @@
       "color": "#fce7f3",
       "row": 3,
       "col": 3
+    },
+    "operators": {
+      "label": "운영자 계정 (로그인)",
+      "color": "#ede9fe",
+      "row": 0,
+      "col": 6
+    },
+    "operator_properties": {
+      "label": "운영자 ↔ 숙소 배정",
+      "color": "#ede9fe",
+      "row": 1,
+      "col": 5
     }
   },
   "logicalRelations": []
