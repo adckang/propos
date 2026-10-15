@@ -110,24 +110,24 @@ DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'property_reservations_property_fk') THEN
     ALTER TABLE property_reservations ADD CONSTRAINT property_reservations_property_fk
-      FOREIGN KEY (property_id) REFERENCES property_cleaning_config(property_id) NOT VALID;
+      FOREIGN KEY (property_id) REFERENCES property_cleaning_config(property_id) ON UPDATE CASCADE NOT VALID;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'cleaning_jobs_property_fk') THEN
     ALTER TABLE cleaning_jobs ADD CONSTRAINT cleaning_jobs_property_fk
-      FOREIGN KEY (property_id) REFERENCES property_cleaning_config(property_id) NOT VALID;
+      FOREIGN KEY (property_id) REFERENCES property_cleaning_config(property_id) ON UPDATE CASCADE NOT VALID;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'cleaning_jobs_reservation_fk') THEN
     ALTER TABLE cleaning_jobs ADD CONSTRAINT cleaning_jobs_reservation_fk
       FOREIGN KEY (property_id, reservation_uid)
-      REFERENCES property_reservations(property_id, reservation_uid) NOT VALID;
+      REFERENCES property_reservations(property_id, reservation_uid) ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED NOT VALID;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'property_calendar_blockers_property_fk') THEN
     ALTER TABLE property_calendar_blockers ADD CONSTRAINT property_calendar_blockers_property_fk
-      FOREIGN KEY (property_id) REFERENCES property_cleaning_config(property_id) NOT VALID;
+      FOREIGN KEY (property_id) REFERENCES property_cleaning_config(property_id) ON UPDATE CASCADE NOT VALID;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'events_property_fk') THEN
     ALTER TABLE events ADD CONSTRAINT events_property_fk
-      FOREIGN KEY (property_id) REFERENCES property_cleaning_config(property_id) NOT VALID;
+      FOREIGN KEY (property_id) REFERENCES property_cleaning_config(property_id) ON UPDATE CASCADE NOT VALID;
   END IF;
 END $$;
 

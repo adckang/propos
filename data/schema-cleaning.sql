@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS property_cleaning_config (
 -- Airbnb/iCal 예약 원본. 실데이터와 시뮬레이션 데이터가 같은 저장 계약을 사용한다.
 CREATE TABLE IF NOT EXISTS property_reservations (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  property_id      TEXT NOT NULL REFERENCES property_cleaning_config(property_id),
+  property_id      TEXT NOT NULL REFERENCES property_cleaning_config(property_id) ON UPDATE CASCADE,
   reservation_uid  TEXT NOT NULL,
   guest_name       TEXT,
   platform         TEXT NOT NULL DEFAULT 'Airbnb',
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS cleaners (
 -- 청소 일정
 CREATE TABLE IF NOT EXISTS cleaning_jobs (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  property_id         TEXT NOT NULL,
+  property_id         TEXT NOT NULL REFERENCES property_cleaning_config(property_id) ON UPDATE CASCADE,
   reservation_uid     TEXT,
   checkout_at         TIMESTAMPTZ NOT NULL,
   cleaning_start_at   TIMESTAMPTZ NOT NULL,
@@ -88,7 +88,8 @@ CREATE TABLE IF NOT EXISTS cleaning_jobs (
 ALTER TABLE cleaning_jobs
   ADD CONSTRAINT cleaning_jobs_reservation_fk
   FOREIGN KEY (property_id, reservation_uid)
-  REFERENCES property_reservations(property_id, reservation_uid);
+  REFERENCES property_reservations(property_id, reservation_uid) ON UPDATE CASCADE
+  DEFERRABLE INITIALLY DEFERRED;
 
 -- 알림 발송 내역
 CREATE TABLE IF NOT EXISTS cleaning_notifs (

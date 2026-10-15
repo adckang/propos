@@ -15,6 +15,8 @@
 \echo '--- [미리보기] 이전 식별자가 가진 행 수 ---'
 SELECT 'property_cleaning_config'  AS tbl, COUNT(*) AS rows FROM property_cleaning_config  WHERE property_id = :'old'
 UNION ALL
+SELECT 'property_reservations',            COUNT(*)         FROM property_reservations     WHERE property_id = :'old'
+UNION ALL
 SELECT 'cleaning_jobs',                    COUNT(*)         FROM cleaning_jobs             WHERE property_id = :'old'
 UNION ALL
 SELECT 'property_calendar_blockers',       COUNT(*)         FROM property_calendar_blockers WHERE property_id = :'old'
@@ -30,6 +32,9 @@ UPDATE property_cleaning_config
    SET property_id = :'new', name = :'new', updated_at = NOW()
  WHERE property_id = :'old';
 
+-- property_reservations / cleaning_jobs 는 FK ON UPDATE CASCADE 로 위 UPDATE 때 이미 따라온다.
+-- (CASCADE 가 없는 DB 라면 먼저 data/migrate-property-fk-cascade.sql 을 적용할 것)
+UPDATE property_reservations     SET property_id = :'new' WHERE property_id = :'old';
 UPDATE cleaning_jobs             SET property_id = :'new' WHERE property_id = :'old';
 UPDATE property_calendar_blockers SET property_id = :'new' WHERE property_id = :'old';
 UPDATE events                    SET property_id = :'new' WHERE property_id = :'old';

@@ -6,6 +6,19 @@
 
 ## 현재 활성 결정
 
+## [D-032] 숙소 이름 변경이 FK에 막히던 결함 — ON UPDATE CASCADE + 레거시 고아 uid 정리 (2026-10-15 확정)
+- **결정**: D-031 후속 정합성 점검에서, 최근(커밋 65266fb) 추가된 FK 5개(`events_property_fk`, `cleaning_jobs_property_fk`, `cleaning_jobs_reservation_fk`, `property_calendar_blockers_property_fk`, `property_reservations_property_fk`)가 기본값(NO ACTION)이라 D-016의 "이름 변경 = 한 트랜잭션 이전"을 어떤 순서로도 불가능하게 만든다는 걸 확인했다(의도가 아니라 누락 — 문서·코드 어디에도 rename을 막으려는 흔적 없음, FK의 원래 목적은 "신규 입력 시 숙소 존재 보장"). 아래로 고쳤다.
+  1. 5개 FK 모두 `ON UPDATE CASCADE`(`ON DELETE`는 그대로 — 삭제 방어 유지). `renamePropertyId`는 레지스트리(부모)를 먼저 UPDATE하고 하위는 CASCADE에 맡기며, 보고하는 `moved` 행 수는 사전 집계값 기준.
+  2. `renamePropertyId`의 이전 대상에 `property_reservations` 추가(예약 이력이 옛 이름에 남던 누락).
+  3. 복합 FK `cleaning_jobs_reservation_fk`는 `DEFERRABLE INITIALLY DEFERRED` — CASCADE가 cleaning_jobs를 property_reservations보다 먼저 옮기기 때문에 검사를 트랜잭션 끝으로 미뤄야 한다(운영 DB 리허설에서 확인).
+  4. 레거시 청소 작업 15건(파주201, 가리키는 예약이 `property_reservations`에 없음 — iCal이 지난 예약을 더 이상 주지 않아 복원 불가)은 이름 변경 시 키가 바뀌며 복합 FK에 걸려 변경 전체를 막는다. `reservation_uid`를 NULL로 비움.
+  5. 운영 DB 적용 후 숙소 FK 4개 + 복합 FK 모두 `VALIDATE`(고아 행 0건 확인).
+- **이유**: 사용자 요청 — 숙소 데이터 저장 구조의 정합성 개선(D-031 연장). 운영 DB 리허설(적용→파주201 임시 이름 변경→건수 비교→롤백)로 예약 16/청소 31/차단 75/이벤트 2건이 전부 따라옴을 확인한 뒤 실제 적용.
+- **버린 대안**: 복합 FK 제거(방안 X) — 데이터를 안 건드리지만 "청소 작업은 존재하는 예약을 가리킨다"는 DB 보장이 사라짐 / DEFERRABLE만 적용 — 레거시 15건이 여전히 걸려 rename 실패(리허설 확인) / 레거시 행을 가짜 예약으로 채움 — 없는 데이터를 지어내는 것.
+- **⚠️ 사고 기록(정직성)**: 레거시 15건의 원래 uid를 `source_ref`에 보존한다고 했으나, 해당 칸에 이미 `legacy:cleaning_job:<id>`가 있어 `COALESCE(source_ref, …)`가 기존 값을 유지하는 바람에 **uid가 보존되지 않고 운영 DB에서 유실**됐다(리허설은 rename 성공만 검증하고 보존 여부는 확인하지 않음). 복구는 Neon PITR만 가능. 영향: 청소 상태·날짜는 그대로, "어느 예약에서 생겼는지" 연결만 없음(mock/미수집 청소 정보라 사용자가 수용). 마이그레이션 파일은 `source_ref || ' | legacy_reservation_uid:' || uid`로 이어붙이도록 고쳤고 회귀 테스트 추가. 교훈: 데이터를 옮기는 마이그레이션 리허설은 "동작"뿐 아니라 "보존된 값"까지 단언할 것.
+- **구현**: `src/infrastructure/propertyRenameRepository.js`, `data/migrate-property-fk-cascade.sql`(신규), `data/schema-cleaning.sql`, `data/migrate-source-aware-data.sql`, `scripts/migrate-property-id-to-name.sql`. 테스트: `tests/unit/s74.property-rename-integrity.test.js`(신규), `tests/unit/s47.property-identity.test.js`(예약 테이블 반영). `npm test` 2196개 통과.
+- **재검토 시점**: `data:check:db`의 "reservation_uid 없음" 경고 15건은 의도된 상태. 실제 청소 데이터를 가져오게 되면(예약 백필) 그때 재정리. 다음 점검 후보: D-031에서 보류한 `api/cleaning/*` 미인증 노출.
+
 ## [D-031] 숙소 정보 저장 구조 — 정본/슬레이브 하이어라키 정리 + DB 무결성 보강 (2026-09-29 확정)
 - **결정**: propos.com에서 실제 운영 숙소(파주201)가 안 보이고 재동기화하면 "이미 있다" 에러가 뜨던 사고를 계기로, 숙소 정보가 거치는 저장 구조 전체(브라우저 localStorage / 라즈베리파이 로컬 파일 / Postgres `property_cleaning_config`)를 중복·하이어라키·무결성·유니크·권한 관점에서 점검하고 아래 4가지를 고쳤다.
   1. **화면에 아예 안 보이던 문제**: `RoomStateApp.jsx` 마운트 시 숙소 설정 로드가 라즈베리파이(Cloudflare 터널 경유) → 이 브라우저 localStorage 순서로만 시도해서, 둘 다 없으면(새 브라우저/기기) 숙소를 알 방법이 없었다. `fetchCloudProperty()`(신규) — Postgres 청소 DB(`GET /api/cleaning/properties`, 파이/터널과 무관하게 항상 접속 가능)를 최후 폴백으로 추가.

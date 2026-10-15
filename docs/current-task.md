@@ -1,6 +1,6 @@
 # Current Task
 > 세션 시작 시 읽는다. 세션 끝날 때 업데이트한다.
-> 업데이트: 2026-10-12 | 실제 데이터 입력·조회 경로 일원화 검수 완료
+> 업데이트: 2026-10-15 | 숙소 이름 변경 FK 결함 수정(D-032) — 운영 DB 적용 완료, 커밋 전
 
 ## 목표
 로컬과 운영이 동일한 Postgres 정본을 사용하고, 실제 예약 입력·청소 배정 상태가 화면에 동일하게 보이는지 검증한다.
@@ -38,6 +38,12 @@ docs/data-architecture-and-simulator.md
 - `npm run data:check`: 오류 0
 - `npm run data:check:db`: 오류 0, 파주201 레거시 작업 경고 15건(추적 보존)
 - `docs/data-architecture-and-simulator.md`가 저장 위치·관계·입력 경로·Pi 경계의 상세 정본이다.
+
+## 2026-10-15 정합성 개선 (D-032)
+- FK 5개 `ON UPDATE CASCADE` 적용·검증 완료(운영 DB), 복합 FK는 DEFERRABLE
+- 레거시 청소 작업 15건 `reservation_uid` 비움 — 원래 uid는 유실(D-032 사고 기록 참고)
+- `data:check:db` 경고 15건(REAL_LEGACY_JOB_UID_MISSING)은 의도된 상태
+- 아직 커밋·푸시 안 함 (코드/SQL/테스트 변경 있음)
 
 ## 싱크 실패 시 디버그 순서
 1. DevTools → Network → `POST /api/cleaning/ical-sync` 상태 코드 확인

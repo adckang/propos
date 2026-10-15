@@ -1,7 +1,10 @@
 /**
  * 숙소 식별자 이전 — 이름 변경 / 레거시(prop_…) → 이름 (D-016)
  *
- * property_id TEXT 컬럼을 가진 테이블(FK 없음)을 한 트랜잭션에서 옮긴다.
+ * property_id TEXT 컬럼을 가진 테이블을 한 트랜잭션에서 옮긴다.
+ * FK(→ property_cleaning_config.property_id)는 ON UPDATE CASCADE 이므로 레지스트리를 먼저 바꾸면
+ * 하위 행이 DB에서 함께 따라온다 (data/migrate-property-fk-cascade.sql). 그래도 아래 UPDATE 를 남겨
+ * FK 가 없는 환경(레거시 events 등)도 같은 코드로 옮긴다.
  * db는 인자로 주입 ({ connect() → { query, release } } — pg Pool 인터페이스).
  *
  * 안전 규칙
@@ -13,6 +16,7 @@
 // property_id 컬럼을 가진 테이블. 레지스트리는 name 컬럼도 새 이름으로 맞춘다.
 const TABLES = [
   { table: "property_cleaning_config", set: "property_id = $2, name = $2, updated_at = NOW()" },
+  { table: "property_reservations" }, // cleaning_jobs 의 복합 FK 가 참조 — 환경에 따라 없을 수 있음
   { table: "cleaning_jobs" },
   { table: "property_calendar_blockers" },
   { table: "events" },
@@ -90,14 +94,15 @@ export async function renamePropertyId(db, from, to, { dryRun = false } = {}) {
       return { ok: true, dryRun: true, wouldMove: counts };
     }
 
-    const moved = {};
+    // 레지스트리(부모)가 tables 의 첫 항목 — FK CASCADE 가 하위 행을 먼저 옮기므로 이후 UPDATE 의
+    // rowCount 는 0 일 수 있다. 옮겨진 행 수는 사전 집계(counts)를 기준으로 보고한다.
     for (const { table, set } of tables) {
-      const res = await client.query(
+      await client.query(
         `UPDATE ${table} SET ${set ?? "property_id = $2"} WHERE property_id = $1`,
         [from, to]
       );
-      moved[table] = res.rowCount ?? 0;
     }
+    const moved = counts;
 
     await client.query("COMMIT");
     return { ok: true, moved };
