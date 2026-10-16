@@ -9,9 +9,10 @@
  *          기기와 무관한 서비스 도메인(notify·script·shell_command 등) 호출.
  */
 
-// 운영자가 제어할 수 없게 막는 기기 도메인. 사용자 결정(D-035)으로 "자기 숙소의 모든 기기 제어"를 허용해 비워 둔다.
-// 도어락 같은 민감 기기를 막으려면 여기에 'lock', 'alarm_control_panel' 등을 추가한다.
-export const OPERATOR_BLOCKED_DOMAINS = Object.freeze([]);
+// 운영자가 제어할 수 없게 막는 도메인. 사용자 결정(D-035)은 "자기 숙소의 모든 **기기** 제어"이므로 도어락 등 기기는 열어 두지만,
+// script·automation·scene 은 기기가 아니라 HA 안에서 임의 동작(다른 숙소의 기기 포함)을 실행하는 묶음이라 영역에 배정돼 있어도
+// 영역 소속만으로는 영향 범위가 제한되지 않는다 → 기본 차단. 도어락 같은 민감 기기도 막으려면 'lock', 'alarm_control_panel' 등을 추가한다.
+export const OPERATOR_BLOCKED_DOMAINS = Object.freeze(['script', 'automation', 'scene']);
 
 const SAFE_IDENT = /^[a-z0-9_]+$/;
 const ISO_START = /^\d{4}-\d{2}-\d{2}[T ][0-9:.+\-Z]{1,30}$/; // 이력 조회 시작 시각(ISO). 그 밖의 값은 쿼리 조작에 쓰일 수 있어 거절
@@ -26,10 +27,11 @@ const MAX_ENTITIES = 200;          // 서비스 호출 한 번에 지정할 수 
 const MAX_STATES_REQUEST = 5000;   // 상태 조회 요청 크기의 상식적 상한 — 영역 전체 기기를 한 번에 묻는 화면이 있어 200 으로 막으면 안 된다(실제 제한은 "전부 내 영역 기기")
 
 import { areaEntitiesTemplate, AREA_NAME_FORBIDDEN } from '../../src/domain/haAreaTemplate.js';
+import { MAX_PROPERTY_NAME_LENGTH } from '../../src/domain/propertyIdentityDomain.js';
 export { areaEntitiesTemplate }; // 화면과 서버가 같은 문자열을 쓰도록 한 곳에서 만든다
 
 /** 영역 이름이 템플릿에 안전하게 들어갈 수 있는가 */
-export const isSafeAreaName = (name) => typeof name === 'string' && name.length > 0 && name.length <= 60 && !AREA_NAME_FORBIDDEN.test(name);
+export const isSafeAreaName = (name) => typeof name === 'string' && name.length > 0 && name.length <= MAX_PROPERTY_NAME_LENGTH && !AREA_NAME_FORBIDDEN.test(name);
 
 const deny = (error) => ({ ok: false, status: 403, error, code: 'FORBIDDEN' });
 const allow = { ok: true };
@@ -43,12 +45,16 @@ export async function allowedEntitySet(scope, getAreaEntityIds) {
 
 /**
  * data 안 어디에든 "다른 기기를 가리키는 값"이 있으면 모두 허용 기기여야 한다 (group_members 같은 필드로 우회 방지).
- * HA 는 값을 정규화해서 받아들이므로(소문자화, 쉼표로 이은 목록) 검사도 같은 정규화를 한 뒤 비교하고, 객체의 **키**도 본다.
+ * 값을 쪼개서(공백·쉼표 처리) 비교하면 HA(Python)와 검사(JS)의 공백 정의가 달라 틈이 생긴다(예: U+001C 로 감싼 id) —
+ * 그래서 문자열에서 **entity id 모양의 부분 문자열을 전부 뽑아**(대소문자 무시) 하나라도 허용 목록에 없으면 거절한다.
+ * 객체의 키도 같은 방식으로 본다. 대가: `song.mp3` 처럼 id 모양인 일반 값도 거절된다(조명·스위치 제어에는 영향 없음, 닫는 쪽).
  */
+const ENTITY_SUBSTRING = /[a-z][a-z0-9_]*\.[a-z0-9_]+/gi;
 function foreignEntityRef(value, allowed, depth = 0) {
   if (depth > 6) return true; // 너무 깊은 구조는 거절
   if (typeof value === 'string') {
-    return value.split(',').some((part) => { const t = part.trim().toLowerCase(); return ENTITY_ID.test(t) && !allowed.has(t); });
+    for (const m of value.matchAll(ENTITY_SUBSTRING)) if (!allowed.has(m[0].toLowerCase())) return true;
+    return false;
   }
   if (Array.isArray(value)) return value.some((v) => foreignEntityRef(v, allowed, depth + 1));
   if (value && typeof value === 'object') {

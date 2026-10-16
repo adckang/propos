@@ -108,8 +108,25 @@ describe('HA 규칙 — 자기 숙소 영역 안에서만', () => {
     const down = async () => [];
     assert.equal((await authorizeOperatorHa({ scope, action: 'state', query: { entityId: 'light.a' }, getAreaEntityIds: down })).ok, false);
   });
-  test('도어락 같은 기기 도메인 차단 목록은 사용자 결정(모든 기기 제어)으로 비어 있다 — 바꾸는 자리가 한 곳', () => {
-    assert.deepEqual([...OPERATOR_BLOCKED_DOMAINS], []);
+  test('차단 도메인: script·automation·scene 은 기본 차단(기기가 아니라 다른 숙소 기기까지 움직일 수 있는 묶음), 도어락 등 기기는 사용자 결정으로 열려 있다 — 바꾸는 자리가 한 곳', async () => {
+    assert.deepEqual([...OPERATOR_BLOCKED_DOMAINS].sort(), ['automation', 'scene', 'script']);
+    const get = async () => ['script.reset_all', 'scene.night', 'automation.leave', 'lock.front', 'light.a'];
+    const call = (domain, service, entity_id) => authorizeOperatorHa({ scope, action: 'service', getAreaEntityIds: get, body: { domain, service, data: { entity_id } } });
+    for (const [d, sv, id] of [['script', 'turn_on', 'script.reset_all'], ['scene', 'turn_on', 'scene.night'], ['automation', 'trigger', 'automation.leave']]) {
+      assert.equal((await call(d, sv, id)).ok, false, id);
+    }
+    assert.equal((await call('light', 'turn_on', 'light.a')).ok, true);
+    assert.equal((await call('lock', 'unlock', 'lock.front')).ok, true, '도어락은 사용자 결정(모든 기기 제어)으로 열려 있다 — 막으려면 OPERATOR_BLOCKED_DOMAINS 에 추가');
+  });
+  test('★ 다른 기기 참조 검사는 공백 정의에 의존하지 않는다: U+001C 같은 문자로 감싼 id 도, 문장 속 id 도 잡는다 (HA 는 Python strip 으로 정리한다)', async () => {
+    const mp = { all: false, propertyIds: ['파주201'] };
+    const get = async (a) => (a === '파주201' ? ['group.x', 'light.a'] : ['light.other']);
+    const call = (data) => authorizeOperatorHa({ scope: mp, action: 'service', getAreaEntityIds: get, body: { domain: 'group', service: 'set', data } });
+    for (const sneaky of ['\u001clight.other', 'light.other\u0085', '\u001flight.other\u001e', 'a,\u001clight.other', 'x light.other y', 'LIGHT.OTHER']) {
+      assert.equal((await call({ entity_id: 'group.x', entities: sneaky })).ok, false, JSON.stringify(sneaky));
+    }
+    assert.equal((await call({ entity_id: 'group.x', entities: 'light.a' })).ok, true);
+    assert.equal((await call({ entity_id: 'group.x', brightness: 100, transition: '1.5' })).ok, true);
   });
   test('이력 조회: start 는 ISO 시각이어야 한다 (쿼리 조작용 값을 거절)', async () => {
     const h = (start) => ask({ action: 'history', query: { entityId: 'light.a', start } });
@@ -163,6 +180,13 @@ describe('HA 규칙 — 자기 숙소 영역 안에서만', () => {
     assert.match(server, /from '\.\.\/\.\.\/src\/domain\/haAreaTemplate\.js'/);
     assert.equal(areaEntitiesTemplate('파주201'), "{{ area_entities('파주201') | list | tojson }}");
   });
+  test('이미 저장된 이름은 그대로 허용한다 — 규칙이 생기기 전 숙소의 다른 설정 저장을 막지 않는다(새로 만들거나 이름을 바꿀 때만 적용)', () => {
+    assert.equal(validatePropertyName("Joe's 201").ok, false);
+    assert.equal(validatePropertyName("Joe's 201", { unchangedFrom: "Joe's 201" }).ok, true);
+    assert.equal(validatePropertyName("Joe's 202", { unchangedFrom: "Joe's 201" }).ok, false); // 이름을 바꾸면 적용
+    assert.equal(validatePropertyName('a,b', { unchangedFrom: 'a,b' }).ok, false);              // 다른 규칙(쉼표)은 grandfather 대상이 아니다
+    assert.equal(validatePropertyName('x'.repeat(61), { unchangedFrom: 'x'.repeat(61) }).ok, false);
+  });
   test('숙소 이름 규칙이 HA 영역 이름 검사와 같다: 따옴표·역슬래시·중괄호가 든 이름은 만들 수 없다', () => {
     for (const name of ["O'Brien 2호", 'A"B', 'a\\b', 'a{b', 'a}b']) {
       assert.equal(validatePropertyName(name).ok, false, name);
@@ -215,12 +239,23 @@ describe('워처(모니터링·CCTV) 범위', () => {
     ];
     assert.equal(operatorMayUseWatcher({ all: false, propertyIds: ['파주201'] }, separate, 'watcher1', resolve), true);
   });
+  test('★ fetch 가 동기적으로 예외를 던져도 진행 중 표시가 영원히 남지 않아 워처가 회복되면 다시 조회된다', async () => {
+    let throwSync = true; let calls = 0; let t = 0;
+    const fetchImpl = (url) => { calls += 1; if (throwSync) throw new Error('sync boom'); return Promise.resolve({ ok: true, json: async () => [{ id: 'A', watcherId: 'w1' }] }); };
+    const lookup = createWatcherPropertyLookup({ getUrls: () => ['http://x'], fetchImpl, ttlMs: 1000, failBackoffMs: 100, staleMs: 10_000, now: () => t, log: () => {} });
+    assert.deepEqual(await lookup(), []);
+    throwSync = false; t = 5000;
+    assert.equal((await lookup()).length, 1, '회복된 워처는 다시 조회돼 목록에 나타나야 한다');
+    assert.ok(calls >= 2);
+  });
   test('워처 주소 해석: 맵 → 없는 이름은 기본 워처로 폴백 → 아무것도 없으면 null (호출 시점의 환경을 읽는다)', () => {
     const env = { PROPOS_WATCHER_URLS: '{"w1":"http://a"}', PROPOS_WATCHER_URL: 'http://def' };
     assert.equal(resolveWatcherUrl('w1', env), 'http://a');
     assert.equal(resolveWatcherUrl('nope', env), 'http://def');
     assert.equal(resolveWatcherUrl(null, env), 'http://def');
     assert.equal(resolveWatcherUrl('w1', {}), null);
+    for (const proto of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) assert.equal(resolveWatcherUrl(proto, env), 'http://def', proto); // 상속 멤버를 주소로 쓰지 않는다
+    assert.equal(resolveWatcherUrl('w1', { PROPOS_WATCHER_URLS: '{"w1":123}', PROPOS_WATCHER_URL: 'http://def' }), 'http://def'); // 문자열이 아닌 값은 무시
   });
   test('워처 주소 파싱: 맵+기본, 중복 제거, 잘못된 JSON 은 빈 값', () => {
     const r = parseWatcherUrls({ PROPOS_WATCHER_URLS: '{"a":"http://x","b":"http://x","c":"http://y"}', PROPOS_WATCHER_URL: 'http://z' });
@@ -504,5 +539,62 @@ describe('실제 핸들러: /api/monitoring 과 /api/camera/snapshot', () => {
   test('CCTV: 관리자는 전부, 익명은 401', async () => {
     assert.equal((await callCam({ query: { watcherId: 'watcher2' }, cookie: adminCookie() })).statusCode, 200);
     assert.equal((await callCam({ query: { watcherId: 'watcher1' } })).statusCode, 401);
+  });
+});
+
+describe('코드 계약 (리뷰 반영)', () => {
+  const read = (f) => readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8');
+  test('화면: 서버가 거절한 자동화에 "종료 중/실행 중" 성공 토스트를 띄우지 않는다 (호출이 성공한 뒤에만 안내)', () => {
+    const r = read('src/components/v2/RoomStateApp.jsx');
+    assert.match(r, /callService\('homeassistant', 'turn_off', \{ area_id: syncConfig\.name \}\)\s*\.then\(\(\) => Toast\.show\('퇴실 확인/);
+    assert.match(r, /callService\('homeassistant', 'turn_on', \{ area_id: syncConfig\.name \}\)\s*\.then\(\(\) => Toast\.show\('입실 준비/);
+  });
+  test('공용 DB 풀: 연결 오류 리스너가 있고, 접속 주소가 없으면 localhost 로 붙지 않고 명시적으로 실패한다', () => {
+    const d = read('server/auth/authDb.js');
+    assert.match(d, /pool\.on\('error'/);
+    assert.match(d, /if \(!process\.env\.POSTGRES_URL\) throw/);
+  });
+  test('HA 영역 조회: 제한 시간에 실제 요청을 취소(AbortSignal)하고 시간 경쟁도 함께 쓴다 / renderHaTemplate 가 신호를 받는다', () => {
+    const h = read('api/ha/[...slug].js');
+    assert.match(h, /signal: AbortSignal\.timeout\(AREA_LOOKUP_TIMEOUT_MS\)/);
+    assert.match(h, /withTimeout\(renderHaTemplate\(/);
+    assert.match(read('server/haProxy.js'), /renderHaTemplate\(template, \{ signal \} = \{\}\)/);
+  });
+  test('모니터링·CCTV: 값싼 형식 검사(워처 id 문자열)를 워처 목록 조회보다 먼저 한다 / CCTV path 는 문자열로 강제', () => {
+    const m = read('api/monitoring/[...slug].js');
+    assert.ok(m.indexOf('typeof wantedWatcher !== "string"') < m.indexOf('await watcherLookup()'));
+    const c = read('api/camera/snapshot.js');
+    assert.ok(c.indexOf("typeof watcherId !== 'string'") < c.indexOf('await watcherLookup()'));
+    assert.match(c, /typeof req\.query\?\.path === 'string'/);
+  });
+  test('서버 숙소 저장: 이미 저장된 이름이면 HA 템플릿 금지 문자 규칙을 적용하지 않는다', () => {
+    assert.match(read('api/cleaning/[...slug].js'), /validatePropertyName\(name, \{ unchangedFrom: savedRow\?\.name \}\)/);
+  });
+});
+
+describe('실제 핸들러: 입력 방어', () => {
+  let cam;
+  beforeEach(async () => { cam = await import('../../api/camera/snapshot.js'); _setAuthDbForTest(fakeDb()); stubFetch(() => ({ ...jsonReply({}), headers: { get: () => 'image/jpeg' } })); });
+  afterEach(() => { cam._setForTest(); restoreFetch(); });
+  test('CCTV: path 를 두 번 보내 배열이 돼도 500 이 아니라 400', async () => {
+    cam._setForTest({ db: fakeDb(), lookup: async () => [{ id: '파주201', watcherId: 'watcher1', sourceUrl: 'http://pi.test' }] });
+    const res = mkRes();
+    await cam.default(mkReq({ url: '/api/camera/snapshot', query: { watcherId: 'watcher1', path: ['/local/snapshots/a.jpg', 'b'] }, cookie: opCookie() }), res);
+    assert.equal(res.statusCode, 400);
+  });
+  test('CCTV·모니터링: 워처 id 가 없는 운영자 요청은 워처 목록 조회까지 가지 않고 거절', async () => {
+    let lookups = 0;
+    const lookup = async () => { lookups += 1; return []; };
+    cam._setForTest({ db: fakeDb(), lookup });
+    const res = mkRes();
+    await cam.default(mkReq({ url: '/api/camera/snapshot', query: { path: '/local/snapshots/a.jpg' }, cookie: opCookie() }), res);
+    assert.equal(res.statusCode, 403);
+    const mon = await import('../../api/monitoring/[...slug].js');
+    mon._setForTest({ db: fakeDb(), lookup });
+    const res2 = mkRes();
+    await mon.default(mkReq({ url: '/api/monitoring/state', query: { slug: ['state'] }, cookie: opCookie() }), res2);
+    mon._setForTest();
+    assert.equal(res2.statusCode, 403);
+    assert.equal(lookups, 0);
   });
 });

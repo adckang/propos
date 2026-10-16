@@ -25,21 +25,22 @@ const HANDLERS = {
 // 숙소 영역(= 숙소 이름, D-016)에 속한 기기 목록. 폴링마다 HA 를 두드리지 않도록 짧게 캐시한다.
 // 진행 중인 조회는 합쳐서 기다리고(동시 요청이 각자 HA 를 두드리지 않게), **실패는 캐시하지 않는다**(HA 가 한 번 흔들렸다고
 // 30초 동안 "이 숙소의 기기가 아니에요"로 보이면 권한 문제로 오해된다 — 실패는 예외로 올려 503 으로 응답한다).
-const AREA_TTL_MS = 30_000;
-let AREA_LOOKUP_TIMEOUT_MS = 5_000;
-/** 테스트 전용: 제한 시간 조정 */
-export function _setAreaTimeoutForTest(ms) { AREA_LOOKUP_TIMEOUT_MS = ms ?? 5_000; }
-// HA 가 응답하지 않아도 깔끔한 503 으로 끝나도록 영역 조회에 제한 시간을 둔다(플랫폼이 먼저 함수를 끊으면 504 가 된다)
+const AREA_TTL_MS = 60_000; // 화면의 폴링 주기(30초)보다 길게 — 같은 주기마다 영역 조회가 한 번 더 HA 를 두드리지 않게
+// 취소 신호(실제 fetch 는 따른다)와 시간 경쟁을 함께 쓴다 — 신호를 무시하는 구현(프록시·테스트 대역)에서도 반드시 끝나도록.
 function withTimeout(promise, ms) {
   let timer;
   const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`HA 응답 없음(${ms}ms)`)), ms); });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
+let AREA_LOOKUP_TIMEOUT_MS = 5_000; // HA 가 응답하지 않아도 깔끔한 503 으로 끝나도록(플랫폼이 먼저 끊으면 504)
+/** 테스트 전용: 제한 시간 조정 */
+export function _setAreaTimeoutForTest(ms) { AREA_LOOKUP_TIMEOUT_MS = ms ?? 5_000; }
 const areaCache = new Map(); // areaName -> { at, promise }
 function haAreaEntityIds(areaName) {
   const hit = areaCache.get(areaName);
   if (hit && Date.now() - hit.at < AREA_TTL_MS) return hit.promise;
-  const promise = withTimeout(renderHaTemplate(areaEntitiesTemplate(areaName)), AREA_LOOKUP_TIMEOUT_MS).then((raw) => {
+  // 제한 시간이 지나면 응답만 포기하는 게 아니라 HA 로 나간 요청 자체를 끊는다(멈춘 HA 에 끊기지 않은 요청이 쌓이지 않게)
+  const promise = withTimeout(renderHaTemplate(areaEntitiesTemplate(areaName), { signal: AbortSignal.timeout(AREA_LOOKUP_TIMEOUT_MS) }), AREA_LOOKUP_TIMEOUT_MS).then((raw) => {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) throw new Error("영역 기기 목록이 배열이 아님");
     return parsed.filter((x) => typeof x === "string");

@@ -65,12 +65,13 @@ export async function getHaState(entityId) {
   return await parseJsonSafe(response);
 }
 
-export async function renderHaTemplate(template) {
+export async function renderHaTemplate(template, { signal } = {}) {
   if (!template) throw new Error("template is required");
   const response = await fetch(`${HA_BASE}/api/template`, {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ template }),
+    ...(signal ? { signal } : {}),
   });
   if (!response.ok) {
     const text = await parseTextSafe(response);

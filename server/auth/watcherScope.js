@@ -20,7 +20,8 @@ const normUrl = (u) => String(u ?? '').replace(/\/$/, '');
 /** watcherId → 실제로 호출할 주소. (주소 맵에 없는 이름은 기본 워처로 폴백 — 기존 동작. 그래서 운영자 검사는 이 결과 주소를 쓴다) */
 export function resolveWatcherUrl(watcherId, env = process.env) {
   const { byId, defaultUrl } = parseWatcherUrls(env);
-  if (watcherId && byId[watcherId]) return byId[watcherId];
+  // 'constructor'·'__proto__' 같은 이름이 객체의 상속 멤버를 돌려주지 않도록 자기 속성인 문자열 주소만 인정한다
+  if (typeof watcherId === 'string' && watcherId && Object.hasOwn(byId, watcherId) && typeof byId[watcherId] === 'string' && byId[watcherId]) return byId[watcherId];
   return defaultUrl ?? null;
 }
 
@@ -57,7 +58,8 @@ export function createWatcherPropertyLookup({ getUrls = () => parseWatcherUrls()
     const stale = () => (st.good && t - st.good.at < staleMs ? st.good.list : []); // 오래된 목록은 쓰지 않는다 — 꺼진 워처의 숙소는 안 보이는 쪽이 안전
     if (st.failAt != null && t - st.failAt < failBackoffMs) return stale();
     if (st.inflight) return st.inflight;
-    st.inflight = (async () => {
+    const run = (async () => {
+      await null; // 동기 예외가 나도 아래 try/finally 가 st.inflight 대입 **뒤에** 실행되게 한다(대입 전에 비워져 영원히 남는 문제 방지)
       try {
         const r = await fetchImpl(`${key}/api/properties`, { signal: AbortSignal.timeout(timeoutMs) });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -72,7 +74,8 @@ export function createWatcherPropertyLookup({ getUrls = () => parseWatcherUrls()
         return stale();
       } finally { st.inflight = null; }
     })();
-    return st.inflight;
+    st.inflight = run;
+    return run;
   }
   return async function lookup() {
     return (await Promise.all(getUrls().map(loadOne))).flat();

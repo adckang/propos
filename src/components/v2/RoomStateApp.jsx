@@ -651,8 +651,10 @@ export default function RoomStateApp({ onBack }) {
 
       // check_out_detected: HA Area 전체 기기 종료
       if (event.type === 'check_out_detected' && syncConfig?.name) {
-        callService('homeassistant', 'turn_off', { area_id: syncConfig.name }).catch(() => {});
-        Toast.show('퇴실 확인 — 모든 기기 종료 중', 'i');
+        // 호출이 실제로 성공했을 때만 알린다 — 운영자 계정은 서버가 거절(403)하는데 "종료 중"이라고 뜨면 거짓 안내가 된다
+        callService('homeassistant', 'turn_off', { area_id: syncConfig.name })
+          .then(() => Toast.show('퇴실 확인 — 모든 기기 종료 중', 'i'))
+          .catch(() => {});
       }
     }
   }
@@ -813,13 +815,14 @@ export default function RoomStateApp({ onBack }) {
   // PRE_STAY_READY 진입 시 HA 입실 준비 씬 실행
   useEffect(() => {
     if (monitorState.mainStatus !== 'PRE_STAY_READY' || !syncConfig?.name) return;
-    callService('homeassistant', 'turn_on', { area_id: syncConfig.name }).catch(() => {});
-    Toast.show('입실 준비 시작 — HA 씬 실행 중', 'i');
+    callService('homeassistant', 'turn_on', { area_id: syncConfig.name })
+      .then(() => Toast.show('입실 준비 시작 — HA 씬 실행 중', 'i'))
+      .catch(() => {});
   }, [monitorState.mainStatus]);
 
   const handleSaveSettings = async (form) => {
     // 이름은 곧 ID (D-016) — 쉼표 등 키로 쓸 수 없는 이름은 저장하지 않는다
-    const nameCheck = validatePropertyName(form.name);
+    const nameCheck = validatePropertyName(form.name, { unchangedFrom: syncConfig?.name }); // 이미 저장된 이름은 그대로 허용
     if (!nameCheck.ok) { Toast.show(nameCheck.reason, 'e'); return; }
 
     // form.id = 변경 전 식별자(레거시 prop_… 또는 이전 이름). 다르면 서버가 이력을 새 이름으로 함께 이전

@@ -205,7 +205,10 @@ async function upsertProperty(req, res) {
   const b = await readBody(req);
   const { property_id, name, previous_property_id, dry_run, checkout_hour, cleaning_duration_hours, google_calendar_id, google_calendar_booking_url, host_phone, ical_url } = b;
   if (!property_id || !name) return sendJson(res, 400, { error: "property_id, name 필수" });
-  const nameCheck = validatePropertyName(name);
+  // 이미 이 이름으로 저장된 숙소는 HA 템플릿 금지 문자 규칙을 적용하지 않는다(규칙이 생기기 전 숙소의 다른 설정 저장까지 막지 않도록).
+  // 새로 만들거나 이름을 바꿀 때(저장된 이름과 다를 때)만 적용된다.
+  const { rows: [savedRow] } = await db.query(`SELECT name FROM property_cleaning_config WHERE property_id = $1`, [property_id]);
+  const nameCheck = validatePropertyName(name, { unchangedFrom: savedRow?.name });
   if (!nameCheck.ok) return sendJson(res, 400, { error: nameCheck.reason });
 
   // 식별자 = 이름 (D-016): 같은 이름을 다른 property_id 가 쓰면 중복 등록 — 이전 트랜잭션 전에 검사

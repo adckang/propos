@@ -32,7 +32,8 @@ export default async function handler(req, res) {
   const watcherId = req.query?.watcherId ?? null;
   if (!isAdminScope(scope)) {
     // 이름표(watcherId)만이 아니라, 우리가 실제로 호출할 주소가 "그 숙소를 보고한 워처"와 같아야 한다
-    if (!operatorMayUseWatcher(scope, await watcherLookup(), watcherId, resolveWatcherUrl)) { res.statusCode = 403; res.end(); return; }
+    // 값싼 형식 검사를 먼저 — 워처 id 가 없는 요청이 DB·워처 조회까지 가지 않게
+    if (typeof watcherId !== 'string' || !watcherId || !operatorMayUseWatcher(scope, await watcherLookup(), watcherId, resolveWatcherUrl)) { res.statusCode = 403; res.end(); return; }
   }
   const WATCHER_URL = resolveWatcherUrl(watcherId);
 
@@ -42,7 +43,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const path = req.query?.path ?? '';
+  const path = typeof req.query?.path === 'string' ? req.query.path : ''; // 같은 파라미터를 두 번 보내면 배열이 된다
   if (!path.startsWith('/local/snapshots/') || path.includes('..')) {
     res.statusCode = 400;
     res.end();

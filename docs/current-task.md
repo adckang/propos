@@ -55,7 +55,7 @@ docs/data-architecture-and-simulator.md
 
 ## 2026-10-16 운영자 스마트홈·CCTV (D-035)
 - 운영자에게 자기 숙소의 스마트홈(보기+제어)·모니터링·CCTV를 숙소 범위로 열었다 — 코드·테스트 완료
-- ⚠️ 도어락 등 민감 기기 제어는 `OPERATOR_BLOCKED_DOMAINS`(현재 비어 있음, 사용자 선택)
+- ⚠️ 운영자 화면에는 기기별 켜기/끄기 UI가 없어 사실상 보기 전용(서버는 기기별 제어 허용). 도어락 등 기기 제어는 열려 있고 `script/automation/scene`만 기본 차단 — `OPERATOR_BLOCKED_DOMAINS`
 
 ## 싱크 실패 시 디버그 순서
 1. DevTools → Network → `POST /api/cleaning/ical-sync` 상태 코드 확인

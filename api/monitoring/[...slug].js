@@ -47,7 +47,9 @@ export default async function handler(req, res) {
   if (!isAdminScope(scope)) {
     if (!(action === "state" && req.method === "GET")) return sendJson(res, 403, { error: "관리자만 할 수 있어요", code: "FORBIDDEN" });
     // 이름표(watcherId)만이 아니라, 우리가 실제로 호출할 주소가 "그 숙소를 보고한 워처"와 같아야 한다
-    if (!operatorMayUseWatcher(scope, await watcherLookup(), req.query?.watcherId, resolveWatcherUrl)) {
+    const wantedWatcher = req.query?.watcherId;
+    // 값싼 형식 검사를 먼저 — 워처 id 가 없는 요청(5초마다 오는 폴링)이 워처 목록 조회까지 가지 않게
+    if (typeof wantedWatcher !== "string" || !wantedWatcher || !operatorMayUseWatcher(scope, await watcherLookup(), wantedWatcher, resolveWatcherUrl)) {
       return sendJson(res, 403, { error: "이 숙소의 워처가 아니에요", code: "FORBIDDEN" });
     }
   }
