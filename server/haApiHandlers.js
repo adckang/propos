@@ -139,11 +139,12 @@ export async function handleVercelAllStates(req, res) {
 
 export async function handleVercelHistory(req, res) {
   try {
-    const params = new URLSearchParams(
-      typeof req.query === 'object'
-        ? Object.entries(req.query).map(([k, v]) => `${k}=${v}`).join('&')
-        : ''
-    );
+    // 쿼리 전체를 인코딩 없이 이어붙여 다시 파싱하면, 다른 파라미터 값에 섞인 "&entityId=…" 가 진짜 entityId 를 덮어쓴다
+    // (운영자 검사가 본 값과 실제 조회 값이 달라지는 우회). entityId·start 두 개만 정확히 꺼내 인코딩해서 쓴다.
+    const q = typeof req.query === 'object' && req.query ? req.query : {};
+    const params = new URLSearchParams();
+    if (typeof q.entityId === 'string') params.set('entityId', q.entityId);
+    if (typeof q.start === 'string') params.set('start', q.start);
     sendJson(res, 200, await handleHistory(params));
   } catch (error) {
     sendJson(res, 500, { error: error.message || "Unknown error" });

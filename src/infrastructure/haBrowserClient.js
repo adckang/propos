@@ -1,3 +1,5 @@
+import { areaEntitiesTemplate } from "../domain/haAreaTemplate.js";
+
 async function requestJson(path, options = {}) {
   const response = await fetch(path, {
     ...options,
@@ -198,9 +200,7 @@ function buildMonitoringSnapshot(readings, devices, allStates) {
  * monitoringSnapshot: OccupancyMonitor 입력 형태
  */
 export async function getAreaData(areaName) {
-  const raw = await renderTemplate(
-    `{{ area_entities('${areaName}') | list | tojson }}`
-  );
+  const raw = await renderTemplate(areaEntitiesTemplate(areaName));
   let entityIds;
   try { entityIds = JSON.parse(raw); } catch { return null; }
   if (!Array.isArray(entityIds) || entityIds.length === 0) return null;

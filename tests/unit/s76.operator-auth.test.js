@@ -199,6 +199,17 @@ describe('requireScope — 먼저 누구인지 확인하고 볼 수 있는 숙�
     assert.equal(await requireScope(reqWith(opToken()), res, reset, env()), null); // 옛 해시 지문으로 발급된 토큰
     assert.equal(res.statusCode, 401);
   });
+  test('★ DB 연결 팩토리는 운영자 세션일 때만 호출된다 (관리자·off·로그인 없음에서는 연결을 만들지 않는다)', async () => {
+    let made = 0;
+    const factory = () => { made += 1; return fakeDb(); };
+    await requireScope(reqWith(createSessionToken(env())), fakeRes(), factory, env());                      // 관리자
+    await requireScope(reqWith(null), fakeRes(), factory, env({ PROPOS_AUTH_MODE: 'off' }));                 // off
+    await requireScope(reqWith(null), fakeRes(), factory, env());                                           // 로그인 없음(401)
+    await requireScope(reqWith(null), fakeRes(), factory, env({ PROPOS_AUTH_MODE: 'log' }), Date.now(), () => {}); // log
+    assert.equal(made, 0);
+    await requireScope(reqWith(opToken()), fakeRes(), factory, env());                                      // 운영자
+    assert.equal(made, 1);
+  });
   test('왕복 1회: 상태와 배정을 한 쿼리로 읽는다 (두 번 읽는 틈이 없다)', async () => {
     const db = fakeDb();
     await requireScope(reqWith(opToken()), fakeRes(), db, env());
@@ -298,13 +309,29 @@ describe('로그인 경로 (me/login/logout)', () => {
 });
 
 describe('적용 범위 계약 (소스)', () => {
-  const ADMIN_ONLY = ['api/ha/[...slug].js', 'api/camera/snapshot.js', 'api/monitoring/[...slug].js', 'api/properties.js', 'api/ical.js', 'api/config.js'];
+  // D-035: 스마트홈·CCTV·모니터링·숙소 메타데이터는 운영자에게 "자기 숙소 범위" 안에서 열렸다(아래 별도 계약). 여기는 여전히 관리자 전용.
+  const ADMIN_ONLY = ['api/ical.js', 'api/config.js'];
   for (const f of ADMIN_ONLY) {
     test(`${f} 는 관리자 전용 문지기를 쓴다`, () => {
       const s = read(f);
       assert.match(s, /import \{[^}]*guardAdmin[^}]*\} from ['"][./]+server\/auth\/operatorAuth\.js['"]/);
       assert.match(s, /guardAdmin\(req, res\)/);
       assert.ok(!/guardOperator/.test(s), '옛 이름 잔존');
+    });
+  }
+  test('저장(PUT)·설정 전송 같은 쓰기는 여전히 관리자 전용: 숙소 메타데이터 PUT', () => {
+    const p = read('api/properties.js');
+    assert.match(p, /if \(req\.method === 'PUT'\) \{\s*if \(!guardAdmin\(req, res\)\) return;/);
+  });
+  for (const f of ['api/ha/[...slug].js', 'api/camera/snapshot.js', 'api/monitoring/[...slug].js', 'api/properties.js']) {
+    test(`${f} 는 먼저 신원을 확인하고 운영자는 자기 숙소 범위로 제한한다 (D-035)`, () => {
+      const s = read(f);
+      assert.match(s, /import \{[^}]*requireScope[^}]*\} from ['"][./]+server\/auth\/operatorAuth\.js['"]/);
+      // DB 연결은 함수로 넘긴다 — 운영자 세션일 때만 만들어진다(관리자·인증 꺼짐 상태에서는 연결을 만들지 않는다)
+      assert.match(s, /await requireScope\(req, res, getAuthDb\)/);
+      assert.ok(!/requireScope\(req, res, getAuthDb\(\)\)/.test(s), '함수를 넘겨야 한다 — getAuthDb() 로 즉시 호출하면 매 요청마다 연결을 만든다');
+      assert.ok(!/new Pool\(/.test(s), '연결 생성 코드를 파일마다 복사하지 않고 공용 authDb 를 쓴다');
+      assert.ok(!/guardOperator/.test(s));
     });
   }
   for (const f of ['api/stats.js', 'api/events/[...slug].js', 'api/cleaning/[...slug].js']) {

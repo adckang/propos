@@ -157,7 +157,7 @@ export async function requireScope(req, res, db, env = process.env, nowMs = Date
     reply(res, 401, { error: '로그인이 필요해요', code: 'AUTH_REQUIRED' });
     return null;
   }
-  const scope = await resolveScope(session, db);
+  const scope = await resolveScope(session, db); // db 가 함수면 resolveScope 가 운영자 세션일 때만 호출한다(관리자는 연결을 만들지 않는다)
   if (!scope) { reply(res, 401, { error: '로그인이 필요해요', code: 'AUTH_REQUIRED' }); return null; } // 정지·삭제된 계정
   return scope;
 }

@@ -53,6 +53,10 @@ docs/data-architecture-and-simulator.md
 - 코드·테스트 완료, 독립 리뷰 반영, **운영 DB에 `operators`·`operator_properties` 적용 완료**, ERD 갱신 완료
 - 운영자 화면이 관리자 전용 API 를 부르면 403 — 운영자 계정으로 화면 end-to-end 확인과 403 조용히 처리 필요
 
+## 2026-10-16 운영자 스마트홈·CCTV (D-035)
+- 운영자에게 자기 숙소의 스마트홈(보기+제어)·모니터링·CCTV를 숙소 범위로 열었다 — 코드·테스트 완료
+- ⚠️ 도어락 등 민감 기기 제어는 `OPERATOR_BLOCKED_DOMAINS`(현재 비어 있음, 사용자 선택)
+
 ## 싱크 실패 시 디버그 순서
 1. DevTools → Network → `POST /api/cleaning/ical-sync` 상태 코드 확인
 2. 성공 후 `GET /api/cleaning/properties` 응답에 파주201 `REAL` 행과 예약·청소상태가 있는지 확인

@@ -9,17 +9,14 @@
 
 import { DATA_PROFILE, resolveServerDataProfile } from '../../src/config/dataProfile.js';
 
-import { guardAdmin } from "../../server/auth/operatorAuth.js";
-const WATCHER_URLS = (() => {
-  try { return JSON.parse(process.env.PROPOS_WATCHER_URLS ?? '{}'); }
-  catch { return {}; }
-})();
-const DEFAULT_WATCHER_URL = process.env.PROPOS_WATCHER_URL;
+import { requireScope } from '../../server/auth/operatorAuth.js';
+import { isAdminScope } from '../../server/auth/operatorAccounts.js';
+import { createWatcherPropertyLookup, operatorMayUseWatcher, resolveWatcherUrl } from '../../server/auth/watcherScope.js';
+import { _setAuthDbForTest, getAuthDb } from '../../server/auth/authDb.js';
 
-function resolveWatcherUrl(watcherId) {
-  if (watcherId && WATCHER_URLS[watcherId]) return WATCHER_URLS[watcherId];
-  return DEFAULT_WATCHER_URL ?? null;
-}
+let watcherLookup = createWatcherPropertyLookup();
+/** 테스트 전용 주입 */
+export function _setForTest({ db: fakeDb, lookup } = {}) { _setAuthDbForTest(fakeDb); watcherLookup = lookup ?? createWatcherPropertyLookup(); }
 
 export default async function handler(req, res) {
   if (resolveServerDataProfile(process.env) === DATA_PROFILE.DEMO) {
@@ -27,8 +24,16 @@ export default async function handler(req, res) {
     res.end();
     return;
   }
-  if (!guardAdmin(req, res)) return; // D-033: CCTV 스냅샷은 운영자만
+  // D-033/D-035: 관리자는 제한 없음. 운영자는 "자기 숙소에 연결된 워처"의 스냅샷만(워처 id 를 명시해야 한다).
+  let scope;
+  try { scope = await requireScope(req, res, getAuthDb); }
+  catch (err) { console.error('[camera] 신원 확인 실패:', err.message); res.statusCode = 503; res.end(); return; }
+  if (!scope) return;
   const watcherId = req.query?.watcherId ?? null;
+  if (!isAdminScope(scope)) {
+    // 이름표(watcherId)만이 아니라, 우리가 실제로 호출할 주소가 "그 숙소를 보고한 워처"와 같아야 한다
+    if (!operatorMayUseWatcher(scope, await watcherLookup(), watcherId, resolveWatcherUrl)) { res.statusCode = 403; res.end(); return; }
+  }
   const WATCHER_URL = resolveWatcherUrl(watcherId);
 
   if (!WATCHER_URL) {
@@ -52,7 +57,9 @@ export default async function handler(req, res) {
     const buf = Buffer.from(await r.arrayBuffer());
     res.setHeader('Content-Type', r.headers.get('content-type') || 'image/jpeg');
     res.setHeader('Content-Length', buf.length);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+    // 로그인한 사람에게만 주는 CCTV 이미지라 공용 캐시에 남기지 않는다(로그아웃·계정 정지·숙소 배정 해제 뒤에도 24시간 남던 문제)
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.setHeader('Vary', 'Cookie');
     res.statusCode = 200;
     res.end(buf);
   } catch {

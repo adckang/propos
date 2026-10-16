@@ -11,17 +11,12 @@
 import { getDemoPropertyConfigs } from '../src/application/demoReportingService.js';
 import { DATA_PROFILE, resolveServerDataProfile } from '../src/config/dataProfile.js';
 
-import { guardAdmin } from '../server/auth/operatorAuth.js';
-const WATCHER_URLS = (() => {
-  try { return JSON.parse(process.env.PROPOS_WATCHER_URLS ?? '{}'); }
-  catch { return {}; }
-})();
-const DEFAULT_WATCHER_URL = process.env.PROPOS_WATCHER_URL;
+import { guardAdmin, requireScope } from '../server/auth/operatorAuth.js';
+import { canAccessProperty, isAdminScope } from '../server/auth/operatorAccounts.js';
 
-function resolveWatcherUrl(watcherId) {
-  if (watcherId && WATCHER_URLS[watcherId]) return WATCHER_URLS[watcherId];
-  return DEFAULT_WATCHER_URL ?? null;
-}
+import { _setAuthDbForTest, getAuthDb } from '../server/auth/authDb.js';
+export { _setAuthDbForTest };
+import { resolveWatcherUrl } from '../server/auth/watcherScope.js';
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -57,7 +52,15 @@ export default async function handler(req, res) {
     }
     return sendJson(res, 403, { error: 'demo profile is read-only', dataProfile: 'demo' });
   }
-  if (!guardAdmin(req, res)) return; // D-033: 숙소 목록·워처 설정
+  // D-033/D-035: 저장(PUT)은 관리자만. 조회(GET)는 운영자에게도 열되 자기 숙소의 메타데이터(watcherId·기기 목록)만.
+  let scope = null;
+  if (req.method === 'PUT') {
+    if (!guardAdmin(req, res)) return;
+  } else {
+    try { scope = await requireScope(req, res, getAuthDb); }
+    catch (err) { console.error('[properties] 신원 확인 실패:', err.message); return sendJson(res, 503, { error: '잠시 후 다시 시도해주세요' }); }
+    if (!scope) return;
+  }
 
   const watcherId = req.query?.watcherId ?? null;
   const WATCHER_URL = resolveWatcherUrl(watcherId);
@@ -76,8 +79,14 @@ export default async function handler(req, res) {
     }
     const r = await fetch(upstream, options);
     const body = await r.json().catch(() => ({}));
+    if (req.method === 'GET' && scope && !isAdminScope(scope)) {
+      // 운영자에게는 워처의 오류 메시지·다른 숙소 정보를 내려주지 않는다: 자기 숙소 항목만, 배열이 아니면 빈 목록
+      const mine = r.ok && Array.isArray(body) ? body.filter((p) => p && canAccessProperty(scope, p.id)) : [];
+      return sendJson(res, 200, mine);
+    }
     sendJson(res, r.status, body);
   } catch (err) {
-    sendJson(res, 502, { error: err.message });
+    // 운영자에게는 워처 주소가 담길 수 있는 오류 메시지를 내려주지 않는다
+    sendJson(res, 502, { error: scope && !isAdminScope(scope) ? '워처에 연결할 수 없어요' : err.message });
   }
 }

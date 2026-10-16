@@ -99,7 +99,7 @@ export async function resolveScope(session, db) {
   if (!session) return null;
   if (session.role === 'admin') return ADMIN_SCOPE;
   if (session.role === 'operator' && session.sub) {
-    const access = await loadOperatorAccess(db, session.sub);
+    const access = await loadOperatorAccess(typeof db === 'function' ? db() : db, session.sub); // db 는 객체 또는 연결 팩토리 — 운영자일 때만 연결
     if (!access) return null;
     if (!session.ph || session.ph !== passwordFingerprint(access.passwordHash)) return null;
     return { all: false, propertyIds: access.propertyIds };
