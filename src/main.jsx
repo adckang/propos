@@ -6,6 +6,7 @@ import publicConfig from "./config/publicConfig.js";
 import App from "./components/App";
 import AuthGate from "./components/AuthGate";
 import PrivacyPolicy from "./components/PrivacyPolicy";
+import TermsOfService from "./components/TermsOfService";
 import { initClarity } from "./lib/analytics.js";
 import "./styles/main.css";
 import "./utils/toast";
@@ -20,6 +21,9 @@ function Root() {
   const publicPath = window.location.pathname.replace(/\/+$/, "") || "/";
   if (publicPath === "/privacy-policy" || publicPath === "/privacy") {
     return <PrivacyPolicy />;
+  }
+  if (publicPath === "/terms-of-service" || publicPath === "/terms") {
+    return <TermsOfService />;
   }
 
   return (
