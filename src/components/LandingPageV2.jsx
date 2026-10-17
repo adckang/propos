@@ -776,11 +776,11 @@ export default function LandingPageV2({ onEnterApp, onSwitchVersion }) {
             PROP<span style={{ color: "#3b82f6" }}>OS</span>
           </div>
           <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
-            {["서비스 소개", "이용약관", "개인정보처리방침", "문의하기"].map(l => (
-              <a key={l} href="#" style={{ fontSize: 13, color: "#64748b", textDecoration: "none" }}
+            {[['서비스 소개', '#'], ['이용약관', '#'], ['개인정보처리방침', '/privacy-policy'], ['문의하기', '#']].map(([label, href]) => (
+              <a key={label} href={href} style={{ fontSize: 13, color: "#64748b", textDecoration: "none" }}
                 onMouseEnter={e => e.currentTarget.style.color = "#94a3b8"}
                 onMouseLeave={e => e.currentTarget.style.color = "#64748b"}
-              >{l}</a>
+              >{label}</a>
             ))}
           </div>
           <div style={{ fontSize: 12, color: "#334155" }}>© 2026 PROPOS. All rights reserved.</div>
