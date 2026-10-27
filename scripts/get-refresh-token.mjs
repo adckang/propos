@@ -38,14 +38,19 @@ const authUrl =
   `&response_type=code` +
   `&scope=${encodeURIComponent(SCOPES)}` +
   `&access_type=offline` +
-  `&prompt=consent`;
+  // select_account: 브라우저에 이미 로그인된 다른 계정으로 자동 진행되지 않고 계정 선택 화면을 강제로 띄움
+  `&prompt=${encodeURIComponent("select_account consent")}` +
+  `&login_hint=${encodeURIComponent("bnb.paju@gmail.com")}`;
 
 console.log("\n🚀 브라우저를 여는 중...");
+console.log("↳ 자동으로 열린 창이 원치 않는 계정으로 들어가면, 이 URL을 복사해서 시크릿창(쪽)에 직접 붙여넣어 보세요:");
+console.log(authUrl + "\n");
 exec(`open "${authUrl}"`);
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost:9876");
   const code = url.searchParams.get("code");
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
   if (!code) { res.end("code 없음"); return; }
 
   res.end("<h2>인증 완료! 터미널을 확인하세요.</h2>");
@@ -67,9 +72,10 @@ const server = http.createServer(async (req, res) => {
 
   if (data.refresh_token) {
     console.log("\n✅ Refresh Token 발급 완료!\n");
-    console.log("아래 값을 Vercel 환경변수 GOOGLE_REFRESH_TOKEN에 붙여넣으세요:\n");
+    console.log("⚠️ 이 토큰은 bnb.paju@gmail.com(캘린더용)입니다.");
+    console.log("아래 값을 Vercel 환경변수 GOOGLE_CALENDAR_REFRESH_TOKEN에 붙여넣으세요 (GOOGLE_REFRESH_TOKEN 아님!):\n");
     console.log(data.refresh_token);
-    console.log("\n그리고 .env.local의 GOOGLE_REFRESH_TOKEN도 교체하세요.");
+    console.log("\n그리고 .env.local의 GOOGLE_CALENDAR_REFRESH_TOKEN도 교체하세요.");
   } else {
     console.error("\n❌ 토큰 교환 실패:", JSON.stringify(data, null, 2));
   }
