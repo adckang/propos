@@ -14,17 +14,7 @@
 
 import { sendPush } from "./_push.js";
 import { sendSms } from "./_sms.js";
-
-const SLACK_WEBHOOK = process.env.PROPOS_SLACK_WEBHOOK;
-
-async function postSlackInternal(text) {
-  if (!SLACK_WEBHOOK) return;
-  await fetch(SLACK_WEBHOOK, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
-  }).catch(() => {});
-}
+import { postSlack } from "./_slack.js";
 
 async function handleFcmFailure(db, cleaner, errorCode) {
   if (errorCode === "UNREGISTERED") {
@@ -32,7 +22,7 @@ async function handleFcmFailure(db, cleaner, errorCode) {
       `UPDATE cleaners SET fcm_status='unregistered' WHERE id=$1`,
       [cleaner.id]
     ).catch(() => {});
-    await postSlackInternal(
+    await postSlack(
       `[PROPOS] ⚠️ ${cleaner.name ?? cleaner.phone ?? cleaner.id} 앱 삭제 감지 — 푸시 전달 실패`
     );
   } else if (errorCode === "INVALID_ARGUMENT") {
@@ -40,7 +30,7 @@ async function handleFcmFailure(db, cleaner, errorCode) {
       `UPDATE cleaners SET fcm_status='invalid' WHERE id=$1`,
       [cleaner.id]
     ).catch(() => {});
-    await postSlackInternal(
+    await postSlack(
       `[PROPOS] ⚠️ ${cleaner.name ?? cleaner.phone ?? cleaner.id} FCM 토큰 오류 — 재설치 필요`
     );
   } else {

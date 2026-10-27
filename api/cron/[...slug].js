@@ -25,6 +25,9 @@ import {
 import { getStatsForPeriod } from "../../src/application/reportingService.js";
 import { countPeriodEvents } from "../../src/domain/reportingDomain.js";
 import { queryEvents } from "../../src/infrastructure/eventRepository.js";
+import { reportTokenFailure, markRenewed, checkStaleness } from "../../server/cleaning/_tokenHealth.js";
+
+const WATCH_STALE_MS = 6 * 24 * 60 * 60 * 1000; // 7일 만료 전 1일 여유를 두고 경고
 
 const DASHBOARD_URL =
   process.env.PROPOS_BASE_URL ||
@@ -48,7 +51,7 @@ function makeCronBlockerDeleter(db) {
       [job.property_id, date]
     );
     if (blocker.length && cfg?.google_calendar_id) {
-      const gTok = await getGoogleToken();
+      const gTok = await getGoogleToken(kv);
       await deleteBlockerEvent(cfg.google_calendar_id, blocker[0].event_id, gTok);
     }
   };
@@ -127,9 +130,10 @@ async function handleDailyResult(db, res) {
 // ── 월간 청소 배치 ─────────────────────────────────────────
 
 async function handleMonthlyClean(db, res) {
-  // Google OAuth (실패해도 iCal 파트는 계속 시도)
+  // Google OAuth 실패해도 iCal 파트(cleaning_jobs 생성)는 계속 진행한다.
+  // 실패 시 알림은 getGoogleToken(kv) 내부(_tokenHealth.js)가 Slack으로 일괄 처리한다.
   let gToken = null;
-  try { gToken = await getGoogleToken(); }
+  try { gToken = await getGoogleToken(kv); }
   catch (e) { console.error("[monthly-clean] Google OAuth 실패:", e.message); }
 
   const nextMonthDates = getNextMonthDates();
@@ -443,12 +447,21 @@ export default async function handler(req, res) {
       const nullRes = { status: () => ({ json: () => {} }), json: () => {} };
       const ran = [];
 
-      await handleDailyPlan(db, nullRes);         ran.push("daily-plan");
-      await handleWorkerHealthCheck(db, nullRes);  ran.push("worker-health-check");
-      await handleCleaningFollowup(db, nullRes);   ran.push("cleaning-followup");
+      // 각 단계를 개별 try/catch로 격리한다 — 하나가 실패해도 나머지(특히 아래 매일
+      // 돌아가야 하는 staleness 사전경고)가 계속 실행되게 하기 위함. 예전엔 여기서 하나가
+      // throw하면 전체가 바깥 catch로 빠져서 그날 staleness 점검 자체가 아예 안 돌았다.
+      try { await handleDailyPlan(db, nullRes); ran.push("daily-plan"); }
+      catch (e) { console.error("[morning] daily-plan 실패:", e.message); }
+
+      try { await handleWorkerHealthCheck(db, nullRes); ran.push("worker-health-check"); }
+      catch (e) { console.error("[morning] worker-health-check 실패:", e.message); }
+
+      try { await handleCleaningFollowup(db, nullRes); ran.push("cleaning-followup"); }
+      catch (e) { console.error("[morning] cleaning-followup 실패:", e.message); }
 
       if (kstDay === 15) {
-        await handleMonthlyClean(db, nullRes);     ran.push("monthly-cleaning");
+        try { await handleMonthlyClean(db, nullRes); ran.push("monthly-cleaning"); }
+        catch (e) { console.error("[morning] monthly-cleaning 실패:", e.message); }
       }
 
       // Gmail Watch 7일 만료 → 매주 월요일 자동 갱신
@@ -457,24 +470,27 @@ export default async function handler(req, res) {
           const GMAIL_API = "https://gmail.googleapis.com/gmail/v1";
           const topicName = process.env.GOOGLE_PUBSUB_TOPIC;
           if (topicName) {
-            const gToken = await getGmailToken();
+            const gToken = await getGmailToken(kv);
             const r = await fetch(`${GMAIL_API}/users/me/watch`, {
               method: "POST",
               headers: { "Content-Type": "application/json", Authorization: `Bearer ${gToken}` },
               body: JSON.stringify({ topicName, labelIds: ["INBOX"], labelFilterBehavior: "INCLUDE" }),
             });
-            if (r.ok) {
-              const w = await r.json();
-              if (w.expiration) {
-                const ttlSec = Math.floor((Number(w.expiration) - Date.now()) / 1000) + 3600;
-                await kv.set("gmail_watch_expiration", w.expiration, { ex: ttlSec }).catch(() => {});
-              }
-              await postSlack(`[PROPOS] 📬 Gmail Watch 자동 갱신 완료 (만료: ${new Date(Number(w.expiration)).toISOString().slice(0, 10)})`);
-              ran.push("gmail-watch-renewed");
+            if (!r.ok) throw new Error(`Gmail watch API ${r.status}`);
+            const w = await r.json();
+            if (w.expiration) {
+              const ttlSec = Math.floor((Number(w.expiration) - Date.now()) / 1000) + 3600;
+              await kv.set("gmail_watch_expiration", w.expiration, { ex: ttlSec }).catch(() => {});
             }
+            // 갱신 자체(API 응답 ok)는 성공했으므로, 이후 메시지 포맷팅이 실패해도 markRenewed는 지킨다.
+            await markRenewed(kv, "gmail_watch");
+            const expLabel = w.expiration ? new Date(Number(w.expiration)).toISOString().slice(0, 10) : "알 수 없음";
+            await postSlack(`[PROPOS] 📬 Gmail Watch 자동 갱신 완료 (만료: ${expLabel})`);
+            ran.push("gmail-watch-renewed");
           }
         } catch (e) {
           console.error("[morning] Gmail Watch 갱신 실패:", e.message);
+          await reportTokenFailure(kv, "gmail_watch", "Gmail Watch 갱신", e);
         }
 
         // Calendar Watch 7일 만료 → 매주 월요일 자동 갱신 (GAP-001 fix)
@@ -484,7 +500,7 @@ export default async function handler(req, res) {
             `SELECT DISTINCT google_calendar_id FROM property_cleaning_config WHERE google_calendar_id IS NOT NULL`
           );
           if (calProps.length) {
-            const calToken = await getGoogleToken();
+            const calToken = await getGoogleToken(kv);
             const webhookUrl = `${DASHBOARD_URL}/api/cleaning/calendar-webhook`;
             const calSecret = process.env.GOOGLE_WEBHOOK_SECRET ?? "";
             let calWatchCount = 0;
@@ -503,14 +519,24 @@ export default async function handler(req, res) {
               );
               if (r.ok) calWatchCount++;
             }
+            // 전부 성공해야만 markRenewed 하면, 숙소가 늘어 캘린더가 여러 개일 때 하나만 계속
+            // 깨져있어도 markRenewed가 영원히 안 돼서 staleness 경고가 매일 영구 오탐으로 남는다.
+            // 여기선 "갱신 메커니즘(토큰·API) 자체가 살아있었는지"만 추적하고, 캘린더별 성공률은
+            // 바로 아래 Slack 메시지(비율 표시)로 이미 드러난다.
+            await markRenewed(kv, "calendar_watch");
             await postSlack(`[PROPOS] 📅 Calendar Watch 자동 갱신 완료 (${calWatchCount}/${calProps.length}개 캘린더)`);
             ran.push("calendar-watch-renewed");
           }
         } catch (e) {
           console.error("[morning] Calendar Watch 갱신 실패:", e.message);
-          await postSlack(`[PROPOS] ⚠️ Calendar Watch 갱신 실패: ${e.message}`).catch(() => {});
+          await reportTokenFailure(kv, "calendar_watch", "Calendar Watch 갱신", e);
         }
       }
+
+      // 매일: Watch 갱신이 몇 주 전부터 조용히 계속 실패해도 7일 만료 전에 미리 알리기
+      // (위 블록은 월요일에만 시도하므로, 그 시도 자체가 매번 조용히 실패하는 경우를 여기서 잡는다)
+      await checkStaleness(kv, "gmail_watch", "Gmail Watch", WATCH_STALE_MS);
+      await checkStaleness(kv, "calendar_watch", "Calendar Watch", WATCH_STALE_MS);
 
       return res.status(200).json({ ok: true, ran });
     }

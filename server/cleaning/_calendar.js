@@ -4,6 +4,8 @@
  * Vercel 함수 수에 포함되지 않도록 server/ 아래에 둔다.
  */
 
+import { reportTokenFailure, reportTokenSuccess } from "./_tokenHealth.js";
+
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 
@@ -27,23 +29,36 @@ async function fetchGoogleToken(refreshToken) {
 }
 
 // Calendar 전용 (bnb.paju — GOOGLE_CALENDAR_REFRESH_TOKEN)
-export async function getGoogleToken() {
+// kv: 호출부가 넘겨주는 @vercel/kv 인스턴스(토큰 상태 추적용, _tokenHealth.js로 전달만 함).
+export async function getGoogleToken(kv) {
   if (_gToken && Date.now() < _gExpiry - 60_000) return _gToken;
-  const { token, expiry } = await fetchGoogleToken(
-    process.env.GOOGLE_CALENDAR_REFRESH_TOKEN ?? process.env.GOOGLE_REFRESH_TOKEN
-  );
-  _gToken = token; _gExpiry = expiry;
-  return _gToken;
+  try {
+    const { token, expiry } = await fetchGoogleToken(
+      process.env.GOOGLE_CALENDAR_REFRESH_TOKEN ?? process.env.GOOGLE_REFRESH_TOKEN
+    );
+    _gToken = token; _gExpiry = expiry;
+    await reportTokenSuccess(kv, "google_calendar", "Google Calendar 토큰");
+    return _gToken;
+  } catch (e) {
+    await reportTokenFailure(kv, "google_calendar", "Google Calendar 토큰 발급", e);
+    throw e;
+  }
 }
 
 // Gmail Watch 전용 (nam5821 — GOOGLE_REFRESH_TOKEN)
-export async function getGmailToken() {
+export async function getGmailToken(kv) {
   if (_gmailToken && Date.now() < _gmailExpiry - 60_000) return _gmailToken;
-  const { token, expiry } = await fetchGoogleToken(
-    process.env.GOOGLE_REFRESH_TOKEN ?? process.env.GOOGLE_CALENDAR_REFRESH_TOKEN
-  );
-  _gmailToken = token; _gmailExpiry = expiry;
-  return _gmailToken;
+  try {
+    const { token, expiry } = await fetchGoogleToken(
+      process.env.GOOGLE_REFRESH_TOKEN ?? process.env.GOOGLE_CALENDAR_REFRESH_TOKEN
+    );
+    _gmailToken = token; _gmailExpiry = expiry;
+    await reportTokenSuccess(kv, "google_gmail", "Gmail 토큰");
+    return _gmailToken;
+  } catch (e) {
+    await reportTokenFailure(kv, "google_gmail", "Gmail 토큰 발급", e);
+    throw e;
+  }
 }
 
 /**

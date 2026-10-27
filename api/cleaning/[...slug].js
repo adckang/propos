@@ -380,7 +380,7 @@ async function syncJobs(req, res) {
       );
       if (blocker.length && cfg.google_calendar_id) {
         try {
-          const gTok = await getGoogleToken();
+          const gTok = await getGoogleToken(kv);
           await deleteBlockerEvent(cfg.google_calendar_id, blocker[0].event_id, gTok);
         } catch (e) {
           console.error(`[syncJobs] 블로커 삭제 실패 (${property_id}/${date}):`, e.message);
@@ -416,7 +416,7 @@ function makeBlockerDeleter() {
       [job.property_id, date]
     );
     if (blocker.length && cfg?.google_calendar_id) {
-      const gTok = await getGoogleToken();
+      const gTok = await getGoogleToken(kv);
       await deleteBlockerEvent(cfg.google_calendar_id, blocker[0].event_id, gTok);
     }
   };
@@ -594,7 +594,7 @@ async function handleCalendarWebhook(req, res) {
   const calendarId = uriMatch ? decodeURIComponent(uriMatch[1]) : "";
   if (!calendarId) return res.status(400).json({ error: "calendarId 없음" });
   let token;
-  try { token = await getGoogleToken(); }
+  try { token = await getGoogleToken(kv); }
   catch (e) { console.error("[calendar-webhook] OAuth:", e.message); return res.status(500).end(); }
   const { rows: [propCfg] } = await db.query(
     `SELECT * FROM property_cleaning_config WHERE google_calendar_id=$1 AND data_origin='REAL'`, [calendarId]
@@ -662,7 +662,7 @@ async function handleGmailWebhook(req, res) {
   const { historyId } = payload;
   if (!historyId) return res.status(200).end();
   try {
-    const token = await getGmailToken();
+    const token = await getGmailToken(kv);
     const histRes = await fetch(
       `${GMAIL_API}/users/me/history?startHistoryId=${historyId}&historyTypes=messageAdded`,
       { headers: { Authorization: `Bearer ${token}` } }
@@ -701,7 +701,7 @@ async function syncAllPropertiesIcal(db, filterPropertyId = null) {
 
   const now = Date.now();
   let gToken = null;
-  try { gToken = await getGoogleToken(); } catch { /* OAuth 실패 → 블로커 삭제 스킵 */ }
+  try { gToken = await getGoogleToken(kv); } catch { /* OAuth 실패 → 블로커 삭제 스킵 */ }
 
   for (const prop of properties) {
     let icalText;
@@ -865,7 +865,7 @@ async function bootstrapBlockers(req, res) {
   }
 
   let gToken;
-  try { gToken = await getGoogleToken(); }
+  try { gToken = await getGoogleToken(kv); }
   catch (e) { return sendJson(res, 500, { error: `Google OAuth 실패: ${e.message}` }); }
 
   // force: Google Calendar 이벤트 삭제 → DB 레코드 삭제 → 재생성
@@ -966,7 +966,7 @@ async function cancelJob(req, res, jobId, scope) {
   // ASSIGNED 상태 취소 시 청소자 구글 캘린더 이벤트 삭제 (GAP-003 fix)
   if (job.status === "ASSIGNED" && job.google_event_id && job.google_calendar_id) {
     try {
-      const gTok = await getGoogleToken();
+      const gTok = await getGoogleToken(kv);
       await fetch(
         `${CALENDAR_API}/calendars/${encodeURIComponent(job.google_calendar_id)}/events/${job.google_event_id}`,
         { method: "DELETE", headers: { Authorization: `Bearer ${gTok}` } }
@@ -980,7 +980,7 @@ async function cancelJob(req, res, jobId, scope) {
   let newBlockerEventId = null;
   if (job.google_calendar_id) {
     try {
-      const gTok = await getGoogleToken();
+      const gTok = await getGoogleToken(kv);
       const date = new Date(job.cleaning_start_at).toISOString().slice(0, 10);
       const eventId = await createBlockerEvent(
         job.google_calendar_id, date,
@@ -1013,7 +1013,7 @@ async function registerCalendarWatch(req, res) {
   const calendarId = body.calendar_id;
   if (!calendarId) return sendJson(res, 400, { error: "calendar_id 필수" });
   let token;
-  try { token = await getGoogleToken(); }
+  try { token = await getGoogleToken(kv); }
   catch (e) { return sendJson(res, 500, { error: `Google OAuth 실패: ${e.message}` }); }
   const webhookUrl = `${BASE_URL}/api/cleaning/calendar-webhook`;
   const channelId = `propos-cal-${calendarId.replace(/[^a-z0-9]/gi, "-")}-${Date.now()}`;
@@ -1046,7 +1046,7 @@ async function handleBlockerCleanup(req, res) {
   const { calendar_id, month } = await readBody(req);
   if (!calendar_id) return sendJson(res, 400, { error: "calendar_id 필수" });
   let gToken;
-  try { gToken = await getGoogleToken(); }
+  try { gToken = await getGoogleToken(kv); }
   catch (e) { return sendJson(res, 500, { error: `Google OAuth 실패: ${e.message}` }); }
 
   const ym = month && /^\d{4}-\d{2}$/.test(month) ? month : null;
@@ -1093,7 +1093,7 @@ async function handleCalendarScan(req, res) {
     ? await readBody(req) : req.query ?? {};
   if (!calendar_id) return sendJson(res, 400, { error: "calendar_id 필수" });
   let gToken;
-  try { gToken = await getGoogleToken(); }
+  try { gToken = await getGoogleToken(kv); }
   catch (e) { return sendJson(res, 500, { error: `Google OAuth 실패: ${e.message}` }); }
 
   // date 지정 시 해당 날짜 범위로 조회 (maxResults 제한 우회)
@@ -1182,7 +1182,7 @@ async function registerGmailWatch(req, res) {
   const topicName = process.env.GOOGLE_PUBSUB_TOPIC;
   if (!topicName) return sendJson(res, 500, { error: "GOOGLE_PUBSUB_TOPIC 환경변수 없음" });
   let token;
-  try { token = await getGmailToken(); }
+  try { token = await getGmailToken(kv); }
   catch (e) { return sendJson(res, 500, { error: `Google OAuth 실패: ${e.message}` }); }
   const r = await fetch(`${GMAIL_API}/users/me/watch`, {
     method: "POST",

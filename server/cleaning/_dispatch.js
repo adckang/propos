@@ -5,7 +5,6 @@
 
 import { notify } from "./_notify.js";
 
-const SLACK_WEBHOOK = process.env.PROPOS_SLACK_WEBHOOK;
 const BASE_URL =
   process.env.PROPOS_BASE_URL ||
   (process.env.VERCEL_PROJECT_PRODUCTION_URL
@@ -97,16 +96,8 @@ export function buildSmsComplete(propertyName, date) {
   return `[PROPOS] ${propertyName} ${date} 청소가 배정 완료됐습니다. 감사합니다.`;
 }
 
-// ── Slack ──────────────────────────────────────────────────
-
-export async function postSlack(text) {
-  if (!SLACK_WEBHOOK) return;
-  await fetch(SLACK_WEBHOOK, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
-  }).catch((e) => console.error("Slack 발송 실패:", e.message));
-}
+// Slack → _slack.js 로 이동 (re-export for backwards compat)
+export { postSlack } from "./_slack.js";
 
 // ── 핵심 dispatch 함수들 ────────────────────────────────────
 
