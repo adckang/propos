@@ -20,6 +20,7 @@ import {
   getNextMonthDates,
 } from "../../server/cleaning/_calendar.js";
 import { notify } from "../../server/cleaning/_notify.js";
+import { markRenewed } from "../../server/cleaning/_tokenHealth.js";
 import { periodToRemainingRange } from "../../src/domain/periodDomain.js";
 import { validatePropertyName } from "../../src/domain/propertyIdentityDomain.js";
 import { renamePropertyId, PropertyRenameError } from "../../src/infrastructure/propertyRenameRepository.js";
@@ -1008,6 +1009,21 @@ async function cancelJob(req, res, jobId, scope) {
 // ── Calendar Watch 등록 ─────────────────────────────────────
 
 async function registerCalendarWatch(req, res) {
+  // GET: 저장된 만료일 반환 (Gmail Watch와 같은 패턴). 캘린더가 여러 개일 수 있어
+  // calendar_id별로 저장 — registerGmailWatch는 메일함이 하나뿐이라 전역 키 하나로 충분하지만
+  // 캘린더는 숙소마다 다를 수 있다(크론의 전체 캘린더 루프와 같은 전제).
+  if (req.method === "GET") {
+    const calendarId = req.query?.calendar_id;
+    if (!calendarId) return sendJson(res, 200, { ok: true, status: "unknown" });
+    try {
+      const exp = await kv.get(`calendar_watch_expiration:${calendarId}`);
+      if (!exp) return sendJson(res, 200, { ok: true, status: "unknown" });
+      const expired = Date.now() > Number(exp);
+      return sendJson(res, 200, { ok: true, status: expired ? "expired" : "active", expiration: exp });
+    } catch (e) {
+      return sendJson(res, 200, { ok: true, status: "unknown" });
+    }
+  }
   if (req.method !== "POST") return res.status(405).end();
   const body = await readBody(req);
   const calendarId = body.calendar_id;
@@ -1034,6 +1050,14 @@ async function registerCalendarWatch(req, res) {
   );
   const result = await r.json();
   if (!r.ok) return sendJson(res, 502, { error: "Calendar Watch 등록 실패", detail: result });
+  // 만료일 KV에 저장 (7일 + 1시간 여유로 TTL 설정) — registerGmailWatch와 같은 패턴.
+  if (result.expiration) {
+    const ttlSec = Math.floor((Number(result.expiration) - Date.now()) / 1000) + 3600;
+    await kv.set(`calendar_watch_expiration:${calendarId}`, result.expiration, { ex: ttlSec }).catch(() => {});
+  }
+  // 수동 재등록도 "성공 갱신"으로 기록 — 안 하면 자동 갱신(isRenewalDue)이 몇 주 끊겨 있던 동안의
+  // staleness 경고(checkStaleness)가 이 수동 복구 이후에도 다음 날까지 계속 오탐으로 남는다.
+  await markRenewed(kv, "calendar_watch");
   return sendJson(res, 200, { ok: true, channelId: result.id, expiration: result.expiration, webhookUrl });
 }
 
@@ -1196,6 +1220,8 @@ async function registerGmailWatch(req, res) {
     const ttlSec = Math.floor((Number(result.expiration) - Date.now()) / 1000) + 3600;
     await kv.set("gmail_watch_expiration", result.expiration, { ex: ttlSec }).catch(() => {});
   }
+  // 수동 재등록도 "성공 갱신"으로 기록 — registerCalendarWatch와 같은 이유.
+  await markRenewed(kv, "gmail_watch");
   return sendJson(res, 200, { ok: true, historyId: result.historyId, expiration: result.expiration });
 }
 

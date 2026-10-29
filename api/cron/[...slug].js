@@ -25,7 +25,7 @@ import {
 import { getStatsForPeriod } from "../../src/application/reportingService.js";
 import { countPeriodEvents } from "../../src/domain/reportingDomain.js";
 import { queryEvents } from "../../src/infrastructure/eventRepository.js";
-import { reportTokenFailure, markRenewed, checkStaleness } from "../../server/cleaning/_tokenHealth.js";
+import { reportTokenFailure, markRenewed, checkStaleness, isRenewalDue } from "../../server/cleaning/_tokenHealth.js";
 
 const WATCH_STALE_MS = 6 * 24 * 60 * 60 * 1000; // 7일 만료 전 1일 여유를 두고 경고
 
@@ -443,7 +443,6 @@ export default async function handler(req, res) {
     if (action === "morning") {
       const kstNow = new Date(Date.now() + 9 * 3600000);
       const kstDay = kstNow.getUTCDate();
-      const kstDayOfWeek = kstNow.getUTCDay(); // 0=일, 1=월 ...
       const nullRes = { status: () => ({ json: () => {} }), json: () => {} };
       const ran = [];
 
@@ -464,8 +463,13 @@ export default async function handler(req, res) {
         catch (e) { console.error("[morning] monthly-cleaning 실패:", e.message); }
       }
 
-      // Gmail Watch 7일 만료 → 매주 월요일 자동 갱신
-      if (kstDayOfWeek === 1) {
+      // Gmail Watch 7일 만료 → 마지막 성공 갱신으로부터 WATCH_STALE_MS 이상 지났으면 매일 재시도.
+      // (예전엔 "매주 월요일에만" 시도했는데, 그 월요일 시도가 하필 OAuth 리프레시 토큰 장애와
+      //  겹쳐 실패하면 다음 시도가 꼬박 일주일 뒤라 그 사이 채널이 완전히 만료되고도 아무도
+      //  자동으로 재시도하지 않았다 — 실제로 겪은 사고. 요일 대신 "경과 시간"으로 판단하면
+      //  평소엔 주 1회꼴로 돌지만, 한 번 실패해도 다음 날부터 매일 재시도해 토큰이 복구되는
+      //  즉시 스스로 다시 구독된다 — 수동 재등록이 더는 필요 없다.)
+      if (await isRenewalDue(kv, "gmail_watch", WATCH_STALE_MS)) {
         try {
           const GMAIL_API = "https://gmail.googleapis.com/gmail/v1";
           const topicName = process.env.GOOGLE_PUBSUB_TOPIC;
@@ -492,8 +496,10 @@ export default async function handler(req, res) {
           console.error("[morning] Gmail Watch 갱신 실패:", e.message);
           await reportTokenFailure(kv, "gmail_watch", "Gmail Watch 갱신", e);
         }
+      }
 
-        // Calendar Watch 7일 만료 → 매주 월요일 자동 갱신 (GAP-001 fix)
+      // Calendar Watch — 같은 이유로 동일하게 경과 시간 기준 재시도 (GAP-001 fix, 요일 의존 제거)
+      if (await isRenewalDue(kv, "calendar_watch", WATCH_STALE_MS)) {
         try {
           const CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
           const { rows: calProps } = await db.query(

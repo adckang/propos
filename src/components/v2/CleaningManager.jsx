@@ -370,6 +370,83 @@ function PropertyPanel({ syncConfig, onDataChanged }) {
     }
   }
 
+  const [calWatchStatus, setCalWatchStatus] = useState(null);
+  const [calWatchLoading, setCalWatchLoading] = useState(false);
+  const calendarId = form.google_calendar_id;
+
+  useEffect(() => {
+    if (!calendarId) { setCalWatchStatus(null); return; }
+    apiFetch(`/api/cleaning/calendar-watch?calendar_id=${encodeURIComponent(calendarId)}`).then(res => {
+      if (res.status === 'unknown') return;
+      const exp = res.expiration ? new Date(Number(res.expiration)) : null;
+      const expStr = exp ? exp.toLocaleString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+      setCalWatchStatus({ ok: res.status === 'active', expiration: expStr, expired: res.status === 'expired' });
+    }).catch(() => {});
+  }, [calendarId]);
+
+  async function handleRegisterCalendarWatch() {
+    setCalWatchLoading(true);
+    setCalWatchStatus(null);
+    try {
+      const result = await apiFetch('/api/cleaning/calendar-watch', {
+        method: 'POST',
+        body: JSON.stringify({ calendar_id: calendarId }),
+      });
+      const exp = result.expiration ? new Date(Number(result.expiration)) : null;
+      const expStr = exp ? exp.toLocaleString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '알 수 없음';
+      setCalWatchStatus({ ok: true, expiration: expStr });
+      Toast.show(`Calendar Watch 등록 완료 — ${expStr}까지 유효`, 's');
+    } catch (e) {
+      setCalWatchStatus({ ok: false, error: e.message });
+      Toast.show('Calendar Watch 등록 실패: ' + e.message, 'e');
+    } finally {
+      setCalWatchLoading(false);
+    }
+  }
+
+  const calendarWatchBlock = (
+    <div style={{ background: '#fff', borderRadius: 12, padding: 20, border: '1px solid #e2e8f0' }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: '#1a202c', marginBottom: 4 }}>
+        Calendar Watch 상태
+      </div>
+      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 14, lineHeight: 1.6 }}>
+        구글 캘린더 변경(청소 배정 반영) 감지용. 7일마다 만료되며 매일 자동 갱신을 시도합니다.
+        배정이 캘린더엔 있는데 화면엔 미배정으로 보이면 아래에서 수동 재등록하세요.
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <button onClick={handleRegisterCalendarWatch} disabled={calWatchLoading || !calendarId} style={{
+          border: '1.5px solid #2563eb',
+          borderRadius: 8,
+          background: !calendarId ? '#f3f4f6' : (calWatchLoading ? '#93c5fd' : '#2563eb'),
+          color: !calendarId ? '#9ca3af' : '#fff',
+          padding: '9px 24px', fontSize: 13, fontWeight: 700,
+          cursor: calWatchLoading || !calendarId ? 'not-allowed' : 'pointer',
+          fontFamily: 'inherit',
+        }}>
+          {calWatchLoading ? '등록 중...' : 'Calendar Watch 재등록'}
+        </button>
+        {!calendarId && (
+          <span style={{ fontSize: 12, color: '#f59e0b' }}>
+            위 Google Calendar ID를 입력 후 설정 저장 필요
+          </span>
+        )}
+        {calWatchStatus && (
+          <span style={{
+            fontSize: 13,
+            color: calWatchStatus.expired ? '#dc2626' : calWatchStatus.ok ? '#059669' : '#dc2626',
+            fontWeight: 600,
+          }}>
+            {calWatchStatus.expired
+              ? '❌ 만료됨 — 재등록이 필요해요'
+              : calWatchStatus.ok
+                ? `✅ 정상 — ${calWatchStatus.expiration}까지 유효`
+                : `❌ 실패: ${calWatchStatus.error}`}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
   const gmailWatchBlock = (
     <div style={{ background: '#fff', borderRadius: 12, padding: 20, border: '1px solid #e2e8f0' }}>
       <div style={{ fontSize: 14, fontWeight: 700, color: '#1a202c', marginBottom: 4 }}>
@@ -548,6 +625,7 @@ function PropertyPanel({ syncConfig, onDataChanged }) {
       </div>
 
       {gmailWatchBlock}
+      {calendarWatchBlock}
     </div>
   );
 }

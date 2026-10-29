@@ -80,7 +80,7 @@ process.env.KV_REST_API_TOKEN = 'fake-token';
 installFetchMock(); // _tokenHealth.js를 import하는 순간 _slack.js가 webhook URL을 캡처하므로 import 전에 설치
 
 const { kv } = await import('@vercel/kv'); // _tokenHealth.js에 인자로 주입할 실제 kv 클라이언트(가짜 fetch 경유)
-const { reportTokenFailure, reportTokenSuccess, markRenewed, checkStaleness } =
+const { reportTokenFailure, reportTokenSuccess, markRenewed, checkStaleness, isRenewalDue } =
   await import('../../server/cleaning/_tokenHealth.js');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -194,6 +194,34 @@ describe('_tokenHealth — markRenewed / checkStaleness: 갱신 지연 사전 �
   });
 });
 
+describe('_tokenHealth — isRenewalDue: "지금 시도해야 하는지" (요일 대신 경과 시간 기반 재시도 게이트)', () => {
+  beforeEach(installFetchMock);
+
+  test('기록이 전혀 없으면(최초 배포 등) true — 한 번도 안 갱신됐으면 시도해야 함', async () => {
+    assert.equal(await isRenewalDue(kv, 'watchY', 6 * DAY_MS), true);
+  });
+
+  test('막 갱신됨 → false (threshold 이내)', async () => {
+    await markRenewed(kv, 'watchY');
+    assert.equal(await isRenewalDue(kv, 'watchY', 6 * DAY_MS), false);
+  });
+
+  test('threshold 초과 → true (매주 1회꼴로 자연히 다시 시도하게 됨)', async () => {
+    kvStore.set('token_health:watchY:last_renewed_at', Date.now() - 6.5 * DAY_MS);
+    assert.equal(await isRenewalDue(kv, 'watchY', 6 * DAY_MS), true);
+  });
+
+  test('(재발 방지 핵심) 갱신 시도가 계속 실패해도(markRenewed 호출 안 됨) 다음 날에도 계속 true로 남는다', async () => {
+    // 월요일에만 시도하던 옛 방식의 결함: 그날 시도가 실패하면 다음 시도가 일주일 뒤였다.
+    // isRenewalDue는 "성공 갱신" 기준이라 실패가 계속되는 한 매일 다시 true — 매일 재시도된다.
+    kvStore.set('token_health:watchY:last_renewed_at', Date.now() - 6.5 * DAY_MS);
+    assert.equal(await isRenewalDue(kv, 'watchY', 6 * DAY_MS), true, '하루 1일차 실패 가정');
+    // markRenewed를 호출하지 않은 채(= 그날 갱신 시도가 실패) 하루 더 지남
+    kvStore.set('token_health:watchY:last_renewed_at', Date.now() - 7.5 * DAY_MS);
+    assert.equal(await isRenewalDue(kv, 'watchY', 6 * DAY_MS), true, '이틀째도 여전히 재시도 대상이어야 함');
+  });
+});
+
 // ── L2: 실제 호출부가 이 레이어를 거치는지 소스 계약으로 확인 ──────────────────
 describe('소스 계약 — getGoogleToken/getGmailToken이 kv를 주입받아 _tokenHealth를 거친다', () => {
   const src = read('server/cleaning/_calendar.js');
@@ -240,6 +268,51 @@ describe('소스 계약 — api/cleaning/[...slug].js의 모든 호출부가 kv�
   });
 });
 
+describe('소스 계약 — registerCalendarWatch가 Gmail Watch와 같은 모양으로 GET 상태 조회를 지원한다', () => {
+  const src = read('api/cleaning/[...slug].js');
+  const fnMatch = src.match(/async function registerCalendarWatch[\s\S]*?\n}\n/);
+
+  test('registerCalendarWatch 함수를 찾을 수 있다', () => {
+    assert.ok(fnMatch, 'registerCalendarWatch 함수를 찾지 못함');
+  });
+
+  test('GET이면 calendar_id별 저장된 만료일로 상태(unknown/active/expired)를 반환한다', () => {
+    const body = fnMatch[0];
+    assert.match(body, /if \(req\.method === "GET"\)/);
+    assert.match(body, /req\.query\?\.calendar_id/);
+    assert.match(body, /kv\.get\(`calendar_watch_expiration:\$\{calendarId\}`\)/);
+  });
+
+  test('POST 성공 시 calendar_id별로 만료일을 KV에 저장한다(캘린더가 여러 개여도 서로 안 섞임)', () => {
+    const body = fnMatch[0];
+    assert.match(body, /kv\.set\(`calendar_watch_expiration:\$\{calendarId\}`, result\.expiration/);
+  });
+});
+
+describe('소스 계약 — CleaningManager.jsx에 Gmail Watch와 짝을 이루는 Calendar Watch 재등록 버튼이 있다', () => {
+  const src = read('src/components/v2/CleaningManager.jsx');
+
+  test('calendarWatchBlock이 /api/cleaning/calendar-watch를 GET(상태조회)·POST(재등록) 둘 다로 호출한다', () => {
+    assert.match(src, /apiFetch\(`\/api\/cleaning\/calendar-watch\?calendar_id=/, 'GET 상태 조회 호출이 없음');
+    assert.match(src, /apiFetch\('\/api\/cleaning\/calendar-watch', \{\s*\n\s*method: 'POST'/, 'POST 재등록 호출이 없음');
+  });
+
+  test('"Calendar Watch 재등록" 버튼 레이블이 실제로 렌더링된다', () => {
+    assert.match(src, /Calendar Watch 재등록/);
+  });
+
+  test('calendar_id(form.google_calendar_id)가 비어있으면 버튼이 비활성화되고 안내 문구가 보인다', () => {
+    const blockMatch = src.match(/const calendarWatchBlock = \([\s\S]*?\n  \);/);
+    assert.ok(blockMatch, 'calendarWatchBlock 정의를 찾지 못함');
+    assert.match(blockMatch[0], /disabled=\{calWatchLoading \|\| !calendarId\}/);
+    assert.match(blockMatch[0], /Google Calendar ID를 입력 후 설정 저장 필요/);
+  });
+
+  test('calendarWatchBlock이 실제로 렌더링된다(gmailWatchBlock 바로 뒤)', () => {
+    assert.match(src, /\{gmailWatchBlock\}\s*\n\s*\{calendarWatchBlock\}/);
+  });
+});
+
 describe('소스 계약 — api/cron/[...slug].js의 Watch 갱신이 kv를 주입받아 레이어를 거친다', () => {
   const src = read('api/cron/[...slug].js');
 
@@ -248,8 +321,30 @@ describe('소스 계약 — api/cron/[...slug].js의 Watch 갱신이 kv를 주�
     assert.doesNotMatch(src, /getGmailToken\(\)/);
   });
 
-  test('_tokenHealth에서 reportTokenFailure/markRenewed/checkStaleness를 import한다', () => {
+  test('_tokenHealth에서 reportTokenFailure/markRenewed/checkStaleness/isRenewalDue를 import한다', () => {
     assert.match(src, /from\s*["']\.\.\/\.\.\/server\/cleaning\/_tokenHealth\.js["']/);
+    assert.match(src, /isRenewalDue/, 'isRenewalDue import가 없으면 재발방지 게이트 자체가 없다는 뜻');
+  });
+
+  test('(재발방지) 요일(kstDayOfWeek) 의존이 완전히 제거됐다 — 특정 요일의 장애가 일주일간 방치되던 원인', () => {
+    assert.doesNotMatch(
+      src,
+      /kstDayOfWeek/,
+      '요일 기반 게이트가 남아있으면, 그 요일에 하필 토큰이 죽었을 때 다음 시도까지 일주일이 걸리는 결함이 재발한다'
+    );
+  });
+
+  test('(재발방지) Gmail Watch·Calendar Watch 갱신이 각자 isRenewalDue(kv, name, WATCH_STALE_MS)로 독립 게이트된다', () => {
+    assert.match(
+      src,
+      /if \(await isRenewalDue\(kv, "gmail_watch", WATCH_STALE_MS\)\) \{/,
+      'Gmail Watch 블록이 경과시간 기반 게이트를 거치지 않으면, 실패 후 다음 날 자동 재시도가 안 됨'
+    );
+    assert.match(
+      src,
+      /if \(await isRenewalDue\(kv, "calendar_watch", WATCH_STALE_MS\)\) \{/,
+      'Calendar Watch 블록이 경과시간 기반 게이트를 거치지 않으면, 실패 후 다음 날 자동 재시도가 안 됨'
+    );
   });
 
   test('Gmail Watch 갱신 실패 시 reportTokenFailure(kv, "gmail_watch", ...) 호출', () => {

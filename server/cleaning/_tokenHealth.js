@@ -80,6 +80,23 @@ export async function markRenewed(kv, name) {
 }
 
 /**
+ * 주기 갱신형 연동(예: 7일마다 갱신해야 하는 Watch 채널)을 "지금 시도해야 하는지" 판단.
+ * 기록이 없으면(최초 배포 등) true — 한 번도 안 갱신됐으면 당연히 시도해야 한다.
+ * checkStaleness(경고용, 기록 없으면 건너뜀)와 반대로 이 함수는 "시도 여부" 판단이라
+ * 기록 없음을 안전하게 true로 다룬다. 호출 자체가 실패해도 true(시도해보는 쪽이 안전).
+ */
+export async function isRenewalDue(kv, name, thresholdMs) {
+  try {
+    const lastRenewed = await kv.get(`token_health:${name}:last_renewed_at`);
+    if (!lastRenewed) return true;
+    return Date.now() - Number(lastRenewed) > thresholdMs;
+  } catch (e) {
+    console.error(`[token-health] ${name} 갱신 필요 여부 확인 실패:`, e.message);
+    return true;
+  }
+}
+
+/**
  * 주기 갱신형 연동(예: 7일마다 갱신해야 하는 Watch 채널)이 staleMs 이상 갱신 안 됐으면
  * 사전 경고(reportTokenFailure와 같은 throttle 재사용, 별도 name으로 상태 분리).
  * 기록이 아예 없으면(처음 배포 등) 조용히 건너뛴다 — 오탐 방지.
