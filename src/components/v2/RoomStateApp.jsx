@@ -624,6 +624,16 @@ export default function RoomStateApp({ onBack }) {
     return () => clearInterval(interval);
   }, [syncConfig, runSync]);
 
+  // 디테일뷰 진입 시 청소 배정(cleaningSlots) 새로고침 — dbPropertyRows는 앱이 처음 열릴 때
+  // 한 번 + 15분 주기로만 갱신되는데, 캘린더뷰(MonthlyCalendar)는 자기 자신이 볼 때마다 따로
+  // 다시 받아오는 것과 달라서 "같은 데이터인데 화면마다 다르게 보임" 문제가 있었다
+  // (관리자가 콘솔로 청소 배정을 직접 복구한 뒤 캘린더뷰는 바로 반영됐는데 디테일뷰는
+  // 15분 뒤에야 반영된 사례로 발견). 디테일뷰도 열 때마다 최신값을 받아오게 맞춘다.
+  useEffect(() => {
+    if (USE_DEMO_DATA || view !== 'detail') return;
+    refreshDbProperties();
+  }, [view, refreshDbProperties]);
+
   // ── HA 폴링 헬퍼 ──────────────────────────────────────────────────────────
   function buildSnap(haSnap) {
     const w = liveWeatherRef.current;
