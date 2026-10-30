@@ -171,9 +171,15 @@ async function listProperties(res, scope, req) {
              ) ORDER BY r.check_in)
              FROM property_reservations r
              LEFT JOIN LATERAL (
+               -- reservation_uid가 아니라 체크아웃 "날짜"로 매칭한다(handleCalendarScan/
+               -- handleCalendarWebhook과 동일 규칙) — Airbnb iCal이 같은 예약을 다른 uid로
+               -- 다시 내보내 property_reservations에 중복 행이 생겨도(실사용 중 발견, 2026-10-30)
+               -- 실제로는 하나뿐인 cleaning_jobs를 양쪽 다 정확히 찾는다. uid로만 매칭하면
+               -- 중복 행 중 하나는 영원히 못 찾아 "미배정"으로 잘못 보인다.
                SELECT * FROM cleaning_jobs cj
                 WHERE cj.property_id = r.property_id
-                  AND cj.reservation_uid = r.reservation_uid
+                  AND to_char(cj.checkout_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+                    = to_char(r.check_out AT TIME ZONE 'UTC', 'YYYY-MM-DD')
                 ORDER BY cj.updated_at DESC
                 LIMIT 1
              ) j ON true
