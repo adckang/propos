@@ -619,23 +619,28 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
 
   const recentSegs = useMemo(() => getWindowSegments(property, PAST_HOURS, FUTURE_HOURS), [property]);
 
-  // CLEANING 세그먼트 → 청소 슬롯 직접 매핑 (시간 겹침 기준)
-  // reservation.cleaningStatus 경유 시 현재 입실중 예약의 체크아웃 후 청소가 누락됨
+  // CLEANING 세그먼트 → 그 체크아웃을 만든 예약 자신의 cleaningStatus (체크아웃 "시각" 동일성으로 역매칭)
+  // addResCycles/buildFutureSegments가 세그먼트를 cursor=reservation.checkOut에서 시작시키므로
+  // seg.start는 정확히 그 예약의 checkOut과 같다.
+  // 예전엔 cleaning_jobs가 자체 계산한 청소 시작 시각(체크아웃시각 설정 기준, 예: 매일 11시 KST)과
+  // 겹치는 시간대가 있는지로 찾았는데, 예약의 실제(raw iCal) 체크아웃 시각이 그 계산된 시각과
+  // 다른 경우가 많아(최대 9시간 차이, 실데이터 확인) 거의 항상 안 겹쳐서 실제로는 배정된 청소도
+  // 디테일뷰에서만 전부 "미배정"으로 잘못 보였다 — 실사용 중 발견, 2026-10-30.
   const cleaningInfoMap = useMemo(() => {
     const map = new Map();
-    const slots = property.cleaningSlots || [];
-    if (!slots.length) return map;
+    const reservations = property.reservations || [];
+    if (!reservations.length) return map;
     for (const seg of recentSegs) {
       if (seg.mainStatus !== 'CLEANING' || !seg.isFuture) continue;
-      const slot = slots.find(s => s.start < seg.end && s.end > seg.start);
-      if (slot) {
-        map.set(seg, { cleaningStatus: 'ASSIGNED', cleanerName: slot.cleanerName, cleaningAt: slot.start, cleaningEnd: slot.end });
+      const res = reservations.find(r => r.checkOut && r.checkOut.getTime() === seg.start.getTime());
+      if (res?.cleaningStatus) {
+        map.set(seg, { cleaningStatus: res.cleaningStatus, cleanerName: res.cleanerName, cleaningAt: res.cleaningAt, cleaningEnd: res.cleaningEnd });
       } else {
         map.set(seg, { cleaningStatus: 'UNASSIGNED' });
       }
     }
     return map;
-  }, [recentSegs, property.cleaningSlots]);
+  }, [recentSegs, property.reservations]);
 
   const presentMainStatuses = useMemo(() => {
     const seen = new Set();

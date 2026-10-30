@@ -204,6 +204,12 @@ export function buildLiveProperty(template, reservations, cleaningSlots = []) {
 
   // 모든 미래 예약에 청소 슬롯 정보 매핑
   const enrichedFutureRes = futureRes.map((r, i) => {
+    // 예약 자신이 이미 cleaningStatus를 들고 있으면(Postgres 정본에서 체크아웃 날짜로 매칭된
+    // 값) 그대로 쓴다 — cleaningSlots 겹침으로 다시 계산하면, 슬롯 시각(cleaning_jobs가
+    // 체크아웃시각 설정 기준으로 계산한 시각)과 예약의 실제(raw iCal) 체크아웃 시각이 서로
+    // 달라(실데이터 확인, 최대 9시간 차이 나는 경우 있음) 거의 항상 안 겹쳐서, 이미 맞게
+    // 채워진 배정 상태를 "미배정"으로 잘못 덮어썼다 — 실사용 중 발견, 2026-10-30.
+    if (r.cleaningStatus) return r;
     if (!cleaningSlots.length) return r;
     const prevCheckout = i === 0
       ? (activeRes?.checkOut ?? reservations.filter(rv => rv.checkOut <= now).at(-1)?.checkOut)
