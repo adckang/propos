@@ -100,7 +100,9 @@ describe("Calendar Webhook — attendee 이메일 처리", () => {
 describe("Calendar Webhook — 조건부 배정 UPDATE", () => {
   // 실제 DB 없이 로직 시뮬레이션
   function simulateConditionalAssign(job, newCleanerId) {
-    if (job.status === "ASSIGNED") return { assigned: false, reason: "already_assigned" };
+    if (job.status === "ASSIGNED" && job.assigned_cleaner_id) {
+      return { assigned: false, reason: "already_assigned" };
+    }
     job.status = "ASSIGNED";
     job.assigned_cleaner_id = newCleanerId;
     return { assigned: true };
@@ -120,6 +122,13 @@ describe("Calendar Webhook — 조건부 배정 UPDATE", () => {
     assert.ok(!result.assigned);
     assert.equal(result.reason, "already_assigned");
     assert.equal(job.assigned_cleaner_id, "c-1"); // 기존 배정 유지
+  });
+
+  test("ASSIGNED지만 담당자 ID가 비어 있으면 기존 작업을 복구", () => {
+    const job = { id: "j2-repair", status: "ASSIGNED", assigned_cleaner_id: null };
+    const result = simulateConditionalAssign(job, "c-2");
+    assert.ok(result.assigned);
+    assert.equal(job.assigned_cleaner_id, "c-2");
   });
 
   test("NOTIFYING_VIP_1 상태 → 배정 성공", () => {
@@ -219,10 +228,10 @@ describe("cleaning_jobs 스키마 — 구글 이벤트 컬럼 구분", () => {
     assert.ok(requiredColumns.includes("google_event_id"), "신규 컬럼 마이그레이션 추가 필요");
   });
 
-  test("미등록 이메일 attendee → assigned_cleaner_id=NULL, google_event_id 저장", () => {
-    const updateValues = [null, "evt_id_abc", "job_uuid"];
-    // $1=assigned_cleaner_id(null), $2=google_event_id, $3=job_id
-    assert.equal(updateValues[0], null);
-    assert.ok(typeof updateValues[1] === "string");
+  test("미등록 이메일 attendee → 작업을 ASSIGNED로 저장하지 않음", () => {
+    const cleaner = null;
+    const shouldPersistAssignment = Boolean(cleaner);
+    // 담당자를 찾지 못한 경우에는 google_event_id도 함께 저장하지 않는다.
+    assert.equal(shouldPersistAssignment, false);
   });
 });

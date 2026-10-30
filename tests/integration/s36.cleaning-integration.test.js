@@ -295,16 +295,16 @@ describe("IT-S36-06 미등록 이메일 Calendar Webhook fallback", () => {
     const { rows: [cleaner] } = await db.query(
       `SELECT * FROM cleaners WHERE email=$1`, [attendeeEmail]
     );
-    const { rows: updated } = await db.query(
-      `UPDATE cleaning_jobs SET status='ASSIGNED',assigned_cleaner_id=$1,google_event_id=$2,updated_at=NOW()
-       WHERE id=$3 AND status!='ASSIGNED' RETURNING id`,
-      [cleaner?.id ?? null, "evt-123", jobId]
-    );
-    if (!updated.length) return "no-update";
     if (!cleaner) {
       await postSlack(`[PROPOS] ⚠️ 미등록 이메일: ${attendeeEmail} — 수동 확인 필요`);
-      return "unregistered";
+      return "unregistered-no-update";
     }
+    const { rows: updated } = await db.query(
+      `UPDATE cleaning_jobs SET status='ASSIGNED',assigned_cleaner_id=$1,google_event_id=$2,updated_at=NOW()
+       WHERE id=$3 AND (status!='ASSIGNED' OR assigned_cleaner_id IS NULL) RETURNING id`,
+      [cleaner.id, "evt-123", jobId]
+    );
+    if (!updated.length) return "no-update";
     return "assigned";
   }
 
@@ -313,7 +313,6 @@ describe("IT-S36-06 미등록 이메일 Calendar Webhook fallback", () => {
     const db = {
       query: async (sql, params) => {
         if (sql.includes("SELECT * FROM cleaners")) return { rows: [] }; // 미등록
-        if (sql.includes("UPDATE cleaning_jobs")) return { rows: [{ id: params[2] }] };
         return { rows: [] };
       },
     };
@@ -321,7 +320,7 @@ describe("IT-S36-06 미등록 이메일 Calendar Webhook fallback", () => {
       db, "unknown@gmail.com", "job-1",
       (msg) => slackMessages.push(msg)
     );
-    assert.equal(result, "unregistered");
+    assert.equal(result, "unregistered-no-update");
     assert.equal(slackMessages.length, 1);
     assert.ok(slackMessages[0].includes("⚠️ 미등록 이메일: unknown@gmail.com"));
     assert.ok(slackMessages[0].includes("수동 확인 필요"));
@@ -332,7 +331,7 @@ describe("IT-S36-06 미등록 이메일 Calendar Webhook fallback", () => {
     const db = {
       query: async (sql, params) => {
         if (sql.includes("SELECT * FROM cleaners"))
-          return { rows: [{ id: "c-1", name: "홍길동", email: params[0] }] };
+          return { rows: [{ id: "c-1", name: "홍길동", email: "registered@gmail.com" }] };
         if (sql.includes("UPDATE cleaning_jobs"))
           return { rows: [{ id: params[2] }] };
         return { rows: [] };
@@ -350,7 +349,7 @@ describe("IT-S36-06 미등록 이메일 Calendar Webhook fallback", () => {
     const slackMessages = [];
     const db = {
       query: async (sql) => {
-        if (sql.includes("SELECT * FROM cleaners")) return { rows: [] };
+        if (sql.includes("SELECT * FROM cleaners")) return { rows: [{ id: "c-1", name: "홍길동", email: "someone@gmail.com" }] };
         if (sql.includes("UPDATE cleaning_jobs")) return { rows: [] }; // already assigned
         return { rows: [] };
       },
@@ -360,6 +359,23 @@ describe("IT-S36-06 미등록 이메일 Calendar Webhook fallback", () => {
       (msg) => slackMessages.push(msg)
     );
     assert.equal(result, "no-update");
+    assert.equal(slackMessages.length, 0);
+  });
+
+  test("ASSIGNED + 담당자 NULL → 등록된 담당자로 복구 업데이트", async () => {
+    const slackMessages = [];
+    const db = {
+      query: async (sql, params) => {
+        if (sql.includes("SELECT * FROM cleaners")) return { rows: [{ id: "c-1", name: "홍길동", email: "registered@gmail.com" }] };
+        if (sql.includes("UPDATE cleaning_jobs")) return { rows: [{ id: params[2] }] };
+        return { rows: [] };
+      },
+    };
+    const result = await handleCalendarAttendee(
+      db, "registered@gmail.com", "job-repair",
+      (msg) => slackMessages.push(msg)
+    );
+    assert.equal(result, "assigned");
     assert.equal(slackMessages.length, 0);
   });
 });

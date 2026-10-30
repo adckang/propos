@@ -25,6 +25,7 @@ import { periodToRemainingRange } from "../../src/domain/periodDomain.js";
 import { validatePropertyName } from "../../src/domain/propertyIdentityDomain.js";
 import { renamePropertyId, PropertyRenameError } from "../../src/infrastructure/propertyRenameRepository.js";
 import { airbnbEventsToReservations, parseVEvents } from "../../src/domain/room-state/icalParser.js";
+import { attendeeEmailsForCleaner, matchCleanerAttendee } from "../../src/domain/calendarAssignmentDomain.js";
 import { getDemoCleaningStats, getDemoPropertyConfigs } from "../../src/application/demoReportingService.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 
@@ -87,6 +88,21 @@ async function listCleaners(res, scope) {
     [scopeQueryIds(scope)]
   );
   return sendJson(res, 200, rows);
+}
+
+async function resolveCalendarCleaner(evt) {
+  const organizerEmail = evt.organizer?.email ?? "bnb.paju@gmail.com";
+  const candidateEmails = attendeeEmailsForCleaner(evt.attendees, organizerEmail);
+  if (!candidateEmails.length) return { attendeeEmail: null, cleaner: null };
+  const { rows: cleaners } = await db.query(
+    `SELECT * FROM cleaners WHERE lower(trim(email)) = ANY($1::text[])`,
+    [candidateEmails],
+  );
+  const matched = matchCleanerAttendee(evt.attendees, cleaners, organizerEmail);
+  return {
+    attendeeEmail: matched?.email ?? candidateEmails[0],
+    cleaner: matched?.cleaner ?? null,
+  };
 }
 
 async function createCleaner(req, res) {
@@ -618,31 +634,36 @@ async function handleCalendarWebhook(req, res) {
   for (const evt of events) {
     // propos=blocker 속성이 있으면 PROPOS 블로커 이벤트 → 건너뜀
     if (evt.extendedProperties?.private?.propos === "blocker") continue;
-    const attendeeEmail = evt.attendees?.[0]?.email?.toLowerCase();
+    const { attendeeEmail, cleaner } = await resolveCalendarCleaner(evt);
     if (!attendeeEmail) continue;
     // 예약 이벤트의 날짜로 해당 날짜 cleaning_job만 매칭
     const eventDate = (evt.start?.dateTime ?? evt.start?.date ?? "").slice(0, 10);
     if (!eventDate) continue;
-    const { rows: [cleaner] } = await db.query(`SELECT * FROM cleaners WHERE email=$1`, [attendeeEmail]);
     const { rows: [job] } = await db.query(
       `SELECT * FROM cleaning_jobs WHERE property_id=$1
        AND to_char(checkout_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') = $2
        AND data_origin='REAL'
-       AND status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED','ESCALATED')
+       AND (
+         status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED','ESCALATED')
+         OR (status = 'ASSIGNED' AND assigned_cleaner_id IS NULL)
+       )
        LIMIT 1`,
       [propCfg.property_id, eventDate]
     );
     if (!job) continue;
+    if (!cleaner) {
+      await postSlack(`[PROPOS] ⚠️ 미등록 이메일: ${attendeeEmail} — 수동 확인 필요`);
+      continue;
+    }
     const { rows: updated } = await db.query(
       `UPDATE cleaning_jobs SET status='ASSIGNED',assigned_cleaner_id=$1,google_event_id=$2,updated_at=NOW()
-       WHERE id=$3 AND status!='ASSIGNED' RETURNING id`,
-      [cleaner?.id ?? null, evt.id, job.id]
+       WHERE id=$3 AND (status!='ASSIGNED' OR assigned_cleaner_id IS NULL) RETURNING id`,
+      [cleaner.id, evt.id, job.id]
     );
     if (!updated.length) continue;
     const date = new Date(job.cleaning_start_at).toISOString().slice(0, 10);
-    if (cleaner) await sendCompletionSmsToRest(db, job.id, cleaner.id).catch(() => {});
-    await postSlack(`[PROPOS] ✅ ${propCfg.name} ${date} 청소 배정 완료 (${cleaner?.name ?? attendeeEmail})`);
-    if (!cleaner) await postSlack(`[PROPOS] ⚠️ 미등록 이메일: ${attendeeEmail} — 수동 확인 필요`);
+    await sendCompletionSmsToRest(db, job.id, cleaner.id).catch(() => {});
+    await postSlack(`[PROPOS] ✅ ${propCfg.name} ${date} 청소 배정 완료 (${cleaner.name})`);
   }
   return res.status(200).end();
 }
@@ -1165,28 +1186,35 @@ async function handleCalendarScan(req, res) {
 
   const results = [];
   for (const evt of filtered) {
-    const attendeeEmail = evt.attendees[0].email.toLowerCase();
+    const { attendeeEmail, cleaner } = await resolveCalendarCleaner(evt);
+    if (!attendeeEmail) continue;
     const eventDate = (evt.start?.dateTime ?? evt.start?.date ?? "").slice(0, 10);
     if (date && eventDate !== date) continue;
-    const { rows: [cleaner] } = await db.query(`SELECT * FROM cleaners WHERE email=$1`, [attendeeEmail]);
     const { rows: [job] } = await db.query(
       `SELECT * FROM cleaning_jobs WHERE property_id=$1
        AND to_char(checkout_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') = $2
        AND data_origin='REAL'
-       AND status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED','ESCALATED')
+       AND (
+         status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED','ESCALATED')
+         OR (status = 'ASSIGNED' AND assigned_cleaner_id IS NULL)
+       )
        LIMIT 1`,
       [propCfg.property_id, eventDate]
     );
     if (!job) { results.push({ eventDate, attendeeEmail, result: "job 없음" }); continue; }
+    if (!cleaner) {
+      results.push({ eventDate, attendeeEmail, result: "미등록 담당자" });
+      await postSlack(`[PROPOS] ⚠️ 미등록 청소담당자: ${attendeeEmail}`);
+      continue;
+    }
     const { rows: updated } = await db.query(
       `UPDATE cleaning_jobs SET status='ASSIGNED',assigned_cleaner_id=$1,google_event_id=$2,updated_at=NOW()
-       WHERE id=$3 AND status!='ASSIGNED' RETURNING id`,
-      [cleaner?.id ?? null, evt.id, job.id]
+       WHERE id=$3 AND (status!='ASSIGNED' OR assigned_cleaner_id IS NULL) RETURNING id`,
+      [cleaner.id, evt.id, job.id]
     );
     if (updated.length) {
-      results.push({ eventDate, attendeeEmail, cleaner: cleaner?.name ?? "미등록", result: "ASSIGNED" });
-      if (!cleaner) await postSlack(`[PROPOS] ⚠️ 미등록 청소담당자: ${attendeeEmail}`);
-      else await postSlack(`[PROPOS] ✅ ${propCfg.name} ${eventDate} 청소 배정 (${cleaner.name})`);
+      results.push({ eventDate, attendeeEmail, cleaner: cleaner.name, result: "ASSIGNED" });
+      await postSlack(`[PROPOS] ✅ ${propCfg.name} ${eventDate} 청소 배정 (${cleaner.name})`);
     } else {
       results.push({ eventDate, attendeeEmail, result: "이미 ASSIGNED" });
     }
