@@ -129,4 +129,48 @@ describe('PropertyDetailView.jsx — cleaningInfoMap이 체크아웃 시각 동�
   test('찾은 예약 자신의 cleaningStatus를 그대로 쓴다(재계산 없음)', () => {
     assert.match(fnMatch[0], /cleaningStatus:\s*res\.cleaningStatus/);
   });
+
+  test('(2차 리뷰로 발견한 회귀 수정) 정확히 일치하는 예약이 없으면(지금 진행 중인 세그먼트는' +
+       ' 시작 시각이 "지금"으로 잘림) 가장 최근에 체크아웃한 예약으로 폴백한다', () => {
+    assert.match(
+      fnMatch[0],
+      /\?\?\s*lastCheckedOut/,
+      '폴백이 없으면 "지금 한창 청소 중"인 숙소가 실제론 배정돼 있어도 항상 미배정으로 잘못 보인다' +
+      ' — 가장 눈에 띄는 케이스라 리뷰에서 지적된 치명적 회귀'
+    );
+  });
+
+  test('(2차 리뷰로 발견) lastCheckedOut은 체크아웃 시각 정렬이 아니라 deriveTimeline과 같은' +
+       ' "체크인 순서 배열의 마지막 지난 예약" 방식으로 골라야 한다', () => {
+    // 체크아웃 시각으로 다시 정렬(.sort(...checkOut...))하면, 예약이 겹쳐 있을 때(D-031에서도
+    // 확인된 실제 현상) deriveTimeline이 "지금 청소 중"으로 보는 예약과 서로 달라질 수 있다.
+    assert.doesNotMatch(
+      fnMatch[0],
+      /\.sort\(\(a,\s*b\)\s*=>\s*b\.checkOut/,
+      '체크아웃 시각 기준으로 다시 정렬하면 안 됨 — property.reservations가 이미 체크인 순으로' +
+      ' 정렬돼 있고(서버가 ORDER BY check_in으로 내려줌), deriveTimeline도 그 순서의 마지막 지난' +
+      ' 예약을 쓴다. 정렬 기준이 다르면 겹치는 예약에서 서로 다른 예약을 "지금"으로 가리킨다'
+    );
+    assert.match(
+      fnMatch[0],
+      /pastReservations\[pastReservations\.length\s*-\s*1\]/,
+      'deriveTimeline(pastRes[pastRes.length-1])과 같은 선택 방식이어야 함'
+    );
+  });
+
+  test('(1차 리뷰로 발견한 회귀 수정) cleaningStatus 필드가 전혀 없는 숙소(목업/데모)는' +
+       ' 매칭을 아예 돌리지 않는다 — 전부 "미배정"으로 잘못 보이는 걸 막음', () => {
+    assert.doesNotMatch(
+      fnMatch[0],
+      /if \(!reservations\.length\) return map;/,
+      '예약 개수만 보고 통과시키면, cleaningStatus 필드 자체가 없는 목업 숙체(P001~P020 등)도' +
+      ' 전부 매칭을 돌려서 모든 예약이 가짜 "미배정" 배지를 달게 된다(D-020이 명시적으로' +
+      ' 없앴던 목업 노이즈가 되돌아옴, 실제 PROPERTIES 데이터로 재현 확인됨)'
+    );
+    assert.match(
+      fnMatch[0],
+      /const tracksCleaning = reservations\.some\(r => r\.cleaningStatus != null\);\s*\n\s*if \(!tracksCleaning\) return map;/,
+      '예약 중 cleaningStatus 필드를 하나라도 들고 있는 숙소(=실제 운영 숙소)만 매칭을 돌려야 함'
+    );
+  });
 });

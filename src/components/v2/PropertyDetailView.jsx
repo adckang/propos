@@ -626,13 +626,27 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
   // 겹치는 시간대가 있는지로 찾았는데, 예약의 실제(raw iCal) 체크아웃 시각이 그 계산된 시각과
   // 다른 경우가 많아(최대 9시간 차이, 실데이터 확인) 거의 항상 안 겹쳐서 실제로는 배정된 청소도
   // 디테일뷰에서만 전부 "미배정"으로 잘못 보였다 — 실사용 중 발견, 2026-10-30.
+  // 지금 한창 진행 중인 청소 세그먼트는(buildFutureSegments의 CLEANING 분기) 시작 시각이
+  // "지금"으로 고정돼(push()가 과거 시각을 now로 잘라냄) 더 이상 그 예약의 실제 체크아웃
+  // 시각과 같지 않다 — 그럴 땐 체크아웃이 지난 예약 중 가장 최근 것으로 대신 찾는다. 이때
+  // "가장 최근"은 deriveTimeline/deriveCurrentState가 "지금 청소 중"을 판단할 때 쓰는 것과
+  // 정확히 같은 방식(체크인 순서로 정렬된 배열의 마지막 지난 예약)으로 골라야 한다 — 체크아웃
+  // 시각 기준 정렬로 따로 고르면, 예약이 겹쳐 있을 때(D-031에서도 확인된 실제 데이터 현상)
+  // 둘이 서로 다른 예약을 "지금 청소 중"으로 가리켜 틀린 담당자/상태가 뜰 수 있다
+  // (/code-review 2차 리뷰로 발견, 2026-10-30).
+  // 목업 숙소(cleaningStatus 필드 자체가 없음)는 이 매칭을 아예 안 돈다 — 돌리면 전부
+  // "미배정"으로 잘못 보여서 D-020이 없앴던 가짜 경고 노이즈가 되돌아온다(1차 리뷰로 발견).
   const cleaningInfoMap = useMemo(() => {
     const map = new Map();
     const reservations = property.reservations || [];
-    if (!reservations.length) return map;
+    const tracksCleaning = reservations.some(r => r.cleaningStatus != null);
+    if (!tracksCleaning) return map;
+    const nowMs = Date.now();
+    const pastReservations = reservations.filter(r => r.checkOut && r.checkOut.getTime() <= nowMs);
+    const lastCheckedOut = pastReservations[pastReservations.length - 1] ?? null;
     for (const seg of recentSegs) {
       if (seg.mainStatus !== 'CLEANING' || !seg.isFuture) continue;
-      const res = reservations.find(r => r.checkOut && r.checkOut.getTime() === seg.start.getTime());
+      const res = reservations.find(r => r.checkOut && r.checkOut.getTime() === seg.start.getTime()) ?? lastCheckedOut;
       if (res?.cleaningStatus) {
         map.set(seg, { cleaningStatus: res.cleaningStatus, cleanerName: res.cleanerName, cleaningAt: res.cleaningAt, cleaningEnd: res.cleaningEnd });
       } else {
