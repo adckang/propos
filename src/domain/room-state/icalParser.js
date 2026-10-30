@@ -64,6 +64,26 @@ export function parseIcalDate(str) {
   );
 }
 
+const KST_OFFSET_HOURS = 9;
+
+/**
+ * "로컬 자정"으로 해석된 날짜(parseIcalDate의 DATE 분기 결과)의 연/월/일에 KST 기준 시각을
+ * 붙여 정확한 UTC Date로 만든다. setHours()는 그 값을 "서버 프로세스가 돌고 있는 시간대"
+ * 기준으로 바꾸는데, Vercel 서버는 UTC로 돌아서 "체크인 15시(KST)"가 "15시 UTC"(=KST 자정,
+ * 9시간 밀림)로 잘못 저장되는 사고가 있었다(실사용 중 발견 — 캘린더뷰·디테일뷰 모두 체크인이
+ * 자정으로, 체크아웃이 오후 8시로 보임, 2026-10-30). 로컬 시간대와 무관하게 항상 같은 결과가
+ * 나오도록 Date.UTC + 명시적 오프셋으로 직접 계산한다(KST는 서머타임 없음, 연중 UTC+9 고정).
+ * src/domain/periodDomain.js에도 같은 +9h 변환(kstMidnight)이 따로 있다 — 이 파일은 의도적으로
+ * "외부 의존성 없음"(위 파일 상단 설명)이라 그쪽을 import하지 않고 여기 자체로 둔다. KST
+ * 오프셋 자체는 사실상 바뀔 일이 없는 상수라(서머타임 없음) 중복의 실제 드리프트 위험은 낮다.
+ */
+function kstWallClockToUtc(localMidnight, hour) {
+  return new Date(Date.UTC(
+    localMidnight.getFullYear(), localMidnight.getMonth(), localMidnight.getDate(),
+    hour - KST_OFFSET_HOURS, 0, 0, 0,
+  ));
+}
+
 /**
  * Airbnb VEVENT 배열 → 예약 객체 배열 (checkIn 오름차순 정렬).
  *
@@ -73,8 +93,8 @@ export function parseIcalDate(str) {
  *  - SUMMARY = "Reserved" (예약됨) / "Airbnb (Not available)" (차단)
  *
  * @param {object[]} events       parseVEvents() 반환값
- * @param {number}   checkInHour  기본 체크인 시각 (0-23, 기본 15)
- * @param {number}   checkOutHour 기본 체크아웃 시각 (0-23, 기본 11)
+ * @param {number}   checkInHour  기본 체크인 시각(KST, 0-23, 기본 15)
+ * @param {number}   checkOutHour 기본 체크아웃 시각(KST, 0-23, 기본 11)
  */
 export function airbnbEventsToReservations(events, checkInHour = 15, checkOutHour = 11) {
   const results = [];
@@ -87,8 +107,8 @@ export function airbnbEventsToReservations(events, checkInHour = 15, checkOutHou
     const endDay   = parseIcalDate(e.DTEND);
     if (!startDay || !endDay) continue;
 
-    const checkIn  = new Date(startDay); checkIn.setHours(checkInHour, 0, 0, 0);
-    const checkOut = new Date(endDay);   checkOut.setHours(checkOutHour, 0, 0, 0);
+    const checkIn  = kstWallClockToUtc(startDay, checkInHour);
+    const checkOut = kstWallClockToUtc(endDay, checkOutHour);
 
     // DESCRIPTION에서 예약 코드 및 전화번호 뒷자리 추출
     const desc         = (e.DESCRIPTION || '').replace(/\\n/g, '\n');
