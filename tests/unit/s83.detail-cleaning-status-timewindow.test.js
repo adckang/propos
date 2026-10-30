@@ -190,9 +190,9 @@ describe('calendarSyncService.js — lastPastReservation (체크아웃이 지난
   });
 
   test('(3차 리뷰 핵심) 예약이 겹쳐 있을 때(체크아웃 시각이 아니라) 체크인 순서상 마지막 것을' +
-       ' 고른다 — deriveCurrentState가 "지금 청소 중"으로 보는 예약과 반드시 같아야 함', () => {
-    // A는 체크아웃이 더 늦지만(10/27) 체크인 순서상 B보다 앞(10/18) — 배열은 이미 체크인 순 정렬
-    // (서버가 ORDER BY check_in으로 내려줌, D-016/listProperties)이라고 가정.
+       ' 고른다 — deriveCurrentState가 "지금 청소 중"으로 보는 예약과 반드시 같은 결과를 낸다', () => {
+    // A는 B를 통째로 감싸는 더 긴 숙박(체크인 더 이름 10/18, 체크아웃 더 늦음 10/27) — 배열은
+    // 이미 체크인 순 정렬(서버가 ORDER BY check_in으로 내려줌, D-016/listProperties)이라고 가정.
     const reservations = [
       res('2026-10-18T00:00:00Z', '2026-10-27T00:00:00Z', 'A_longer_but_earlier_checkin'),
       res('2026-10-20T00:00:00Z', '2026-10-24T00:00:00Z', 'B_shorter_but_later_checkin'),
@@ -200,10 +200,15 @@ describe('calendarSyncService.js — lastPastReservation (체크아웃이 지난
     const picked = lastPastReservation(reservations, now);
     assert.equal(picked.tag, 'B_shorter_but_later_checkin', 'checkOut 기준으로 고르면 A가 뽑히는데, 그건 deriveCurrentState와 달라짐');
 
-    // deriveCurrentState가 실제로 같은 예약을 "지금(청소 가능성 있는) 마지막"으로 보는지 교차 확인
-    const state = deriveCurrentState(reservations, now, 2.5);
-    // B의 체크아웃(10/24)로부터 2.5시간 이내가 아니라 CLEANING은 아니지만, 적어도 A를 기준으로
-    // 판단하지 않는다는 것(= pastRes의 마지막이 B)은 cleanEnd 계산 경로로 간접 확인된다.
-    assert.notEqual(state.mainStatus, 'OCCUPIED'); // 둘 다 과거라 OCCUPIED일 리 없음 — 가드
+    // 두 선택이 실제로 다른 결과를 내는 시점으로 교차 확인: A 체크아웃(10/27) 1시간 뒤는
+    // A 기준이면 청소중(2.5시간 이내)이지만, B 체크아웃(10/24)으로부터는 사흘이 지나 청소중이
+    // 아니다 — lastPastReservation이 (버그처럼) A를 골랐다면 이 시점에 CLEANING이어야 한다.
+    const soonAfterA = new Date('2026-10-27T01:00:00Z');
+    const state = deriveCurrentState(reservations, soonAfterA, 2.5);
+    assert.notEqual(
+      state.mainStatus, 'CLEANING',
+      'A를 기준으로 판단했다면(체크아웃 정렬 버그) 이 시점엔 CLEANING이어야 하는데 아니라면' +
+      ' lastPastReservation이 deriveCurrentState와 다른 예약을 고르고 있다는 뜻'
+    );
   });
 });
