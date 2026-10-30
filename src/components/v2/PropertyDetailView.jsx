@@ -983,7 +983,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
                     whiteSpace: 'nowrap',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
                   }}>
-                    {isAssigned ? res.cleanerName : '미배정'}
+                    {isAssigned ? (res.cleanerName || '담당자 미정') : '미배정'}
                   </span>
                 </div>
               );

@@ -212,3 +212,18 @@ describe('calendarSyncService.js — lastPastReservation (체크아웃이 지난
     );
   });
 });
+
+describe('PropertyDetailView.jsx — 배정은 됐지만(ASSIGNED) 담당자 이름이 없을 때 빈 칸 대신' +
+         ' "담당자 미정"을 보여준다', () => {
+  // 실사용 중 발견(2026-10-30): 구글 캘린더에 초대된 이메일이 "청소자" 목록에 등록 안 돼
+  // 있으면 assigned_cleaner_id가 null인 채로 status만 ASSIGNED가 된다(calendar-scan도 이런
+  // 경우 "미등록"으로 표시). 화면이 cleanerName을 그대로 렌더링하던 때는 null이 아무것도
+  // 안 보이는 빈 칸으로 떴다 — 배정됐는데 아무 정보도 없어 보이는 게 혼란스러웠다. 캘린더뷰
+  // (MonthlyCalendar.jsx의 AssignedCleanerRow)는 이미 "담당자 미정"으로 폴백하고 있어서
+  // 그 표현을 그대로 맞췄다.
+  const src = read('src/components/v2/PropertyDetailView.jsx');
+
+  test('cleanerName이 없으면(미등록 담당자) "담당자 미정"으로 폴백한다', () => {
+    assert.match(src, /isAssigned \? \(res\.cleanerName \|\| '담당자 미정'\) : '미배정'/);
+  });
+});
