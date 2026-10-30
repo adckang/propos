@@ -457,6 +457,12 @@ describe('독립 코드 리뷰 반영 (D-034) — 회귀 방지', () => {
     assert.match(r, /icalConfigured: !!\(row\.ical_url \|\| row\.ical_configured\)/);
     assert.match(r, /!\(cfg\?\.airbnbIcalUrl \|\| cfg\?\.icalConfigured\)/);
     assert.match(read('api/cleaning/[...slug].js'), /\(p\.ical_url IS NOT NULL AND p\.ical_url <> ''\) AS ical_configured/);
+    // PropertyPanel의 수동 서버 동기화도 운영자 응답(ical_configured)으로 활성화되어야 한다.
+    assert.match(
+      read('src/components/v2/CleaningManager.jsx'),
+      /setIcalAlreadySet\(!!\(found\.ical_url \|\| found\.ical_configured\)\)/,
+      '운영자에게 숨긴 ical_url만 검사하면 서버 동기화 버튼이 영구히 비활성화된다'
+    );
   });
   test('계정 관리 화면은 가벼운 이름 목록만 받는다 (예약·게스트·캘린더 주소를 내려받지 않는다)', () => {
     assert.match(read('src/components/OperatorManager.jsx'), /\/api\/cleaning\/properties\?view=names/);

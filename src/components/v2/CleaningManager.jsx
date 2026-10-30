@@ -280,7 +280,10 @@ function PropertyPanel({ syncConfig, onDataChanged }) {
       const found = list.find(p => p.property_id === propertyId);
       if (found) {
         setSaved(true);
-        setIcalAlreadySet(!!found.ical_url);
+        // 운영자는 보안상 실제 URL 대신 ical_configured만 받는다.
+        // DB에 URL이 있어도 found.ical_url이 제거된 응답이면 수동 서버 동기화 버튼이
+        // 비활성화되던 문제를 막는다. 실제 URL은 동기화 요청 때 서버가 DB에서 읽는다.
+        setIcalAlreadySet(!!(found.ical_url || found.ical_configured));
         setForm({
           property_id: found.property_id,
           name: found.name,
