@@ -830,6 +830,66 @@ async function syncAllPropertiesIcal(db, filterPropertyId = null) {
 
 // ── iCal 수동 동기화 트리거 ───────────────────────────────────────
 
+async function repairCalendarAssignments(propertyId) {
+  const { rows: [property] } = await db.query(
+    `SELECT property_id, google_calendar_id FROM property_cleaning_config
+      WHERE property_id=$1 AND data_origin='REAL'`,
+    [propertyId],
+  );
+  if (!property?.google_calendar_id) return { scanned: 0, repaired: 0 };
+
+  const { rows: jobs } = await db.query(
+    `SELECT id, checkout_at FROM cleaning_jobs
+      WHERE property_id=$1 AND data_origin='REAL'
+        AND status='ASSIGNED' AND assigned_cleaner_id IS NULL
+      ORDER BY checkout_at`,
+    [property.property_id],
+  );
+  if (!jobs.length) return { scanned: 0, repaired: 0 };
+
+  const timestamps = jobs.map((job) => new Date(job.checkout_at).getTime());
+  const timeMin = new Date(Math.min(...timestamps) - 24 * 3600_000).toISOString();
+  const timeMax = new Date(Math.max(...timestamps) + 24 * 3600_000).toISOString();
+  const token = await getGoogleToken(kv);
+  const params = new URLSearchParams({
+    timeMin,
+    timeMax,
+    singleEvents: 'true',
+    showDeleted: 'false',
+    maxResults: '250',
+  });
+  const eventsResponse = await fetch(
+    `${CALENDAR_API}/calendars/${encodeURIComponent(property.google_calendar_id)}/events?${params}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!eventsResponse.ok) throw new Error(`Calendar 조회 실패 (${eventsResponse.status})`);
+  const { items = [] } = await eventsResponse.json();
+  const { rows: cleaners } = await db.query(
+    `SELECT id, name, email FROM cleaners WHERE email IS NOT NULL AND email <> ''`,
+  );
+  const jobsByDate = new Map(jobs.map((job) => [new Date(job.checkout_at).toISOString().slice(0, 10), job]));
+  let repaired = 0;
+  for (const event of items) {
+    if (event.extendedProperties?.private?.propos === 'blocker') continue;
+    if (!Array.isArray(event.attendees) || !event.attendees.length) continue;
+    const eventDate = (event.start?.dateTime ?? event.start?.date ?? '').slice(0, 10);
+    const job = jobsByDate.get(eventDate);
+    if (!job) continue;
+    const organizerEmail = event.organizer?.email ?? 'bnb.paju@gmail.com';
+    if (!attendeeEmailsForCleaner(event.attendees, organizerEmail).length) continue;
+    const matched = matchCleanerAttendee(event.attendees, cleaners, organizerEmail);
+    if (!matched) continue;
+    const { rowCount } = await db.query(
+      `UPDATE cleaning_jobs
+          SET assigned_cleaner_id=$1, google_event_id=$2, updated_at=NOW()
+        WHERE id=$3 AND status='ASSIGNED' AND assigned_cleaner_id IS NULL`,
+      [matched.cleaner.id, event.id, job.id],
+    );
+    repaired += rowCount;
+  }
+  return { scanned: items.length, repaired };
+}
+
 async function handleIcalSync(req, res, scope) {
   if (req.method !== "POST") return res.status(405).end();
   const b = await readBody(req);
@@ -860,7 +920,16 @@ async function handleIcalSync(req, res, scope) {
   };
 
   await syncAllPropertiesIcal(countingDb, property_id ?? null);
-  return sendJson(res, 200, { ok: true, property_id: property_id ?? "all", created });
+  let assignmentRepair = { scanned: 0, repaired: 0 };
+  if (property_id) {
+    try {
+      assignmentRepair = await repairCalendarAssignments(property_id);
+    } catch (e) {
+      console.error(`[ical-sync] Calendar 담당자 복구 실패 (${property_id}):`, e.message);
+      assignmentRepair = { scanned: 0, repaired: 0, error: e.message };
+    }
+  }
+  return sendJson(res, 200, { ok: true, property_id: property_id ?? "all", created, assignmentRepair });
 }
 
 // ── 부트스트랩: 현재 달(또는 지정 월) 블로커 일괄 생성 ────────────
