@@ -12,6 +12,7 @@ import DailyActivityReportPanel from './reporting/DailyActivityReportPanel.jsx';
 import { futureSummaryFor } from '../../domain/futureWeekDomain.js';
 import { periodForOffset, periodToDateRange, describePeriod } from '../../domain/periodDomain.js';
 import { toKstDateKey } from '../../domain/monthlyCalendarDomain.js';
+import { lastPastReservation } from '../../application/calendarSyncService.js';
 
 const PAST_HOURS    = 7 * 24;      // 현재 시각 이전 7일 (168h)
 const FUTURE_HOURS  = 7 * 24;      // 현재 시각 이후 7일 (168h)
@@ -630,10 +631,9 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
   // "지금"으로 고정돼(push()가 과거 시각을 now로 잘라냄) 더 이상 그 예약의 실제 체크아웃
   // 시각과 같지 않다 — 그럴 땐 체크아웃이 지난 예약 중 가장 최근 것으로 대신 찾는다. 이때
   // "가장 최근"은 deriveTimeline/deriveCurrentState가 "지금 청소 중"을 판단할 때 쓰는 것과
-  // 정확히 같은 방식(체크인 순서로 정렬된 배열의 마지막 지난 예약)으로 골라야 한다 — 체크아웃
-  // 시각 기준 정렬로 따로 고르면, 예약이 겹쳐 있을 때(D-031에서도 확인된 실제 데이터 현상)
-  // 둘이 서로 다른 예약을 "지금 청소 중"으로 가리켜 틀린 담당자/상태가 뜰 수 있다
-  // (/code-review 2차 리뷰로 발견, 2026-10-30).
+  // 반드시 같은 기준이어야 하므로(따로 구현하면 예약이 겹쳐 있을 때 — D-031에서도 확인된
+  // 실제 데이터 현상 — 서로 다른 예약을 "지금"으로 가리켜 틀린 담당자/상태가 뜰 수 있다,
+  // /code-review 2차 리뷰로 발견) 같은 함수(lastPastReservation)를 그대로 재사용한다.
   // 목업 숙소(cleaningStatus 필드 자체가 없음)는 이 매칭을 아예 안 돈다 — 돌리면 전부
   // "미배정"으로 잘못 보여서 D-020이 없앴던 가짜 경고 노이즈가 되돌아온다(1차 리뷰로 발견).
   const cleaningInfoMap = useMemo(() => {
@@ -641,9 +641,7 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
     const reservations = property.reservations || [];
     const tracksCleaning = reservations.some(r => r.cleaningStatus != null);
     if (!tracksCleaning) return map;
-    const nowMs = Date.now();
-    const pastReservations = reservations.filter(r => r.checkOut && r.checkOut.getTime() <= nowMs);
-    const lastCheckedOut = pastReservations[pastReservations.length - 1] ?? null;
+    const lastCheckedOut = lastPastReservation(reservations, new Date());
     for (const seg of recentSegs) {
       if (seg.mainStatus !== 'CLEANING' || !seg.isFuture) continue;
       const res = reservations.find(r => r.checkOut && r.checkOut.getTime() === seg.start.getTime()) ?? lastCheckedOut;

@@ -82,6 +82,18 @@ function getPreStaySubStatus(checkIn, now) {
 }
 
 /**
+ * 체크인 순서로 정렬된 예약 배열에서 "체크아웃이 지난 것 중 가장 최근(배열상 마지막)" 것을 고른다.
+ * deriveCurrentState·deriveTimeline이 "지금 무슨 상태인지"를 판단하는 기준점과, PropertyDetailView의
+ * cleaningInfoMap이 "지금 청소 중인 세그먼트는 누구 예약인지" 되짚는 기준점이 반드시 같아야 한다
+ * (따로 구현하면, 예약이 겹쳐 있을 때 — D-031에서도 확인된 실제 현상 — 서로 다른 예약을
+ * "지금"으로 가리켜 틀린 상태/담당자가 뜰 수 있다) — 그래서 한 곳에만 둔다.
+ */
+export function lastPastReservation(reservations, now) {
+  const pastRes = reservations.filter(r => r.checkOut <= now);
+  return pastRes[pastRes.length - 1] ?? null;
+}
+
+/**
  * 예약 배열 + 현재 시각 → 현재 상태 파생.
  * 청소 윈도우: 체크아웃 후 cleanDurationHours 시간 이내.
  */
@@ -89,8 +101,7 @@ export function deriveCurrentState(reservations, now = new Date(), cleanDuration
   const activeRes = reservations.find(r => r.checkIn <= now && r.checkOut > now);
   if (activeRes) return { mainStatus: 'OCCUPIED', subStatus: 'GOOD_CONDITION' };
 
-  const pastRes = reservations.filter(r => r.checkOut <= now);
-  const lastRes = pastRes[pastRes.length - 1];
+  const lastRes = lastPastReservation(reservations, now);
   if (lastRes) {
     const cleanEnd = getCleaningEndFromReservation(lastRes, cleanDurationHours);
     if (cleanEnd > now) return { mainStatus: 'CLEANING', subStatus: 'CLEANING_IN_PROGRESS' };
@@ -129,8 +140,7 @@ export function deriveTimeline(reservations, cleanDurationHours = 2.5) {
     }];
   }
 
-  const past    = reservations.filter(r => r.checkOut <= now);
-  const lastRes = past[past.length - 1];
+  const lastRes = lastPastReservation(reservations, now);
   const nextRes = reservations
     .filter(r => r.checkIn > now)
     .sort((a, b) => a.checkIn - b.checkIn)[0];
