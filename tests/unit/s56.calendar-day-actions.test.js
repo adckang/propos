@@ -13,7 +13,7 @@
  * 레이어: L1 = 실제 함수 import / L2 = 실제 소스 파일 계약(readFileSync).
  */
 
-import { describe, test } from 'node:test';
+import { after, describe, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -24,7 +24,11 @@ import {
   classifyDayCleaningItems,
   kstDayOffsetFromToday,
 } from '../../src/domain/monthlyCalendarDomain.js';
-import { getDemoCleaningStats } from '../../src/application/demoReportingService.js';
+
+// 실행일이 바뀌어도 9월 기준 조회에 9월 기준 예약 fixture를 사용한다.
+mock.timers.enable({ apis: ['Date'], now: new Date('2026-09-24T03:00:00Z') });
+after(() => mock.timers.reset());
+const { getDemoCleaningStats } = await import('../../src/application/demoReportingService.js');
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8');

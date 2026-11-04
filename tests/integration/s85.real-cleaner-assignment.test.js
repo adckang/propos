@@ -15,6 +15,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
+import { calendarCleaningTimes, attendeeEmailsForCleaner } from '../../src/domain/calendarAssignmentDomain.js';
 
 function loadLocalEnv() {
   try {
@@ -164,18 +165,25 @@ test('실Google API: 파주201 배정 이벤트의 참석자 순서와 cleaners 
       showDeleted: 'false',
       maxResults: '250',
     });
-    const eventsResponse = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(property.google_calendar_id)}/events?${params}`,
-      { headers: { Authorization: `Bearer ${tokenBody.access_token}` } },
-    );
-    const eventsBody = await eventsResponse.json();
-    assert.ok(eventsResponse.ok, `Google Calendar 조회 실패 (${eventsResponse.status})`);
+    const calendarEvents = [];
+    let nextPageToken;
+    do {
+      if (nextPageToken) params.set('pageToken', nextPageToken);
+      const eventsResponse = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(property.google_calendar_id)}/events?${params}`,
+        { headers: { Authorization: `Bearer ${tokenBody.access_token}` } },
+      );
+      const eventsBody = await eventsResponse.json();
+      assert.ok(eventsResponse.ok, `Google Calendar 조회 실패 (${eventsResponse.status})`);
+      calendarEvents.push(...(eventsBody.items ?? []));
+      nextPageToken = eventsBody.nextPageToken;
+    } while (nextPageToken);
 
     const { rows: cleanerRows } = await pool.query(
       `SELECT lower(trim(email)) AS email FROM cleaners WHERE email IS NOT NULL AND email <> ''`
     );
     const cleanerEmails = new Set(cleanerRows.map(row => row.email));
-    const events = (eventsBody.items ?? [])
+    const events = calendarEvents
       .filter(event => event.extendedProperties?.private?.propos !== 'blocker')
       .filter(event => Array.isArray(event.attendees) && event.attendees.length > 0);
     const firstMatches = events.filter(event => cleanerEmails.has(String(event.attendees[0].email ?? '').toLowerCase())).length;
@@ -185,12 +193,33 @@ test('실Google API: 파주201 배정 이벤트의 참석자 순서와 cleaners 
       event.attendees.some(attendee => cleanerEmails.has(String(attendee.email ?? '').toLowerCase()))
     ).length;
 
+    // 날짜가 같다는 이유로 다른 예약을 연결하지 않는다. 저장된 이벤트 ID와 원본 시각을 검수한다.
+    const { rows: assignedJobs } = await pool.query(`
+      SELECT j.google_event_id,j.checkout_at,j.cleaning_start_at,j.cleaning_end_at,c.email
+      FROM cleaning_jobs j LEFT JOIN cleaners c ON c.id=j.assigned_cleaner_id
+      WHERE j.property_id=$1 AND j.data_origin='REAL' AND j.status='ASSIGNED'
+    `, ['파주201']);
+    assert.ok(assignedJobs.length > 0, '원본과 대조할 배정 작업이 없습니다.');
+    let matchingTimes = 0;
+    for (const job of assignedJobs) {
+      const event = events.find(item => item.id === job.google_event_id);
+      assert.ok(event && event.status !== 'cancelled', '배정 작업이 현재 유효한 Google 이벤트와 연결되지 않았습니다.');
+      const emails = attendeeEmailsForCleaner(event.attendees, event.organizer?.email);
+      assert.ok(emails.includes(job.email?.trim().toLowerCase()), '배정 담당자와 Google 참석자가 다릅니다.');
+      const times = calendarCleaningTimes(event, job.checkout_at);
+      assert.ok(times, 'Google 청소 예약 시각이 유효하지 않거나 체크아웃과 충돌합니다.');
+      assert.equal(new Date(job.cleaning_start_at).toISOString(), times.cleaning_start_at, 'DB 청소 시작과 Google 예약 시작이 다릅니다.');
+      assert.equal(new Date(job.cleaning_end_at).toISOString(), times.cleaning_end_at, 'DB 청소 종료와 Google 예약 종료가 다릅니다.');
+      matchingTimes++;
+    }
+
     console.log(JSON.stringify({
       calendarEventsWithAttendees: events.length,
       cleanersWithEmail: cleanerEmails.size,
       firstAttendeeMatchesCleaner: firstMatches,
       anyAttendeeMatchesCleaner: anyMatches,
       firstAttendeeMissesButLaterAttendeeMatches: firstMissesButAnyMatches,
+      assignedJobsMatchedToSourceTimes: matchingTimes,
     }));
   } finally {
     await pool.end();

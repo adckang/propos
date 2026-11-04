@@ -34,6 +34,8 @@
 
 Gmail Watch와 Google Calendar 연동은 신규 예약 감지·블로커 보조 트리거일 뿐, 화면의 예약 정본을 대체하지 않는다. 동기화 실패 시 기존 Postgres 행을 임의로 삭제하거나 `미배정`으로 재생성하지 않는다.
 
+청소 배정의 담당자와 확정 시작·종료 시각은 Google 예약 이벤트를 원본으로 삼아 `cleaning_jobs`에 반영한다. `checkout_at`은 Airbnb 숙박 예약의 퇴실 키로 보존한다. 예를 들어 퇴실 11:00에 청소 예약이 12:00~15:00이면, `checkout_at`은 11:00이고 `cleaning_start_at`·`cleaning_end_at`은 각각 12:00·15:00이다. 배정 전 기본 청소시간과 확정 예약 시각을 혼동해 퇴실 키를 변경하지 않는다.
+
 ## Raspberry Pi의 책임 경계
 
 Pi의 `/api/properties`와 `data/properties-config.json`은 Home Assistant 워처용 `id`, `name`, `district`, `watcherId`, `devices`만 저장한다. 예약, iCal URL, 청소작업은 저장하지 않는다.
@@ -90,8 +92,16 @@ cleaners (id) ─┬─< cleaning_jobs.assigned_cleaner_id
 - 청소 작업 33건 중 ASSIGNED 21건은 Google 이벤트 ID가 있었지만 담당자 ID가 비어 있었다. 원본 참석자 이메일과 `cleaners.email` 불일치가 원인이었다.
 - Google 원본의 이름·예약 이메일과 전화번호 근거를 대조하고 사용자 승인을 받아 담당자 이메일 1건 및 기존 배정 21건의 담당자 연결을 정정했다. 10월 8일은 취소된 이벤트 참조를 현재 유효한 이벤트 ID로 교체했다.
 - 복구 후 실DB 검수에서 담당자 ID/이름 누락은 0건이다. 실제 API 함수와 운영 DB를 연결한 검수에서 10월 배정 9건 모두 이름을 반환했다. 같은 응답을 사용한 데스크톱·모바일 상세 타임라인에서도 이름을 확인했다.
-- 배정 상태·일시·예약은 변경하지 않았다. DB 청소 시각(11:00~14:00)과 Google 원본 시각(12:00~15:00)의 차이는 별도 검토 대상으로 남아 있다.
+- 담당자 연결 복구 시점에는 배정 상태·일시·예약을 변경하지 않았다. 이후 시간 정합성 후속 작업에서 사용자 승인에 따라 21건의 청소 시각만 Google 원본 12:00~15:00로 정정했고 퇴실 11:00과 기존 관계를 보존했다.
 - `google_event_id` 존재만으로 화면의 담당자 이름까지 보장되지는 않는다. `cleaning_jobs.assigned_cleaner_id → cleaners.id` 연결과 Google 예약 이메일 일치도 검수해야 한다. `RUN_LIVE_DB=1 node --test tests/integration/s85.real-cleaner-assignment.test.js`가 담당자 연결 누락을 실패로 판정한다.
+
+시간 정합성 검수는 다음 경계를 포함한다.
+
+- Webhook·수동 Scan·iCal 담당자 복구가 모두 같은 `calendarCleaningTimes` 검증을 사용한다. 시간대가 없는 시각, 종일 이벤트, 취소·블로커, 종료 역전, 퇴실 전 시작은 반영하지 않는다. 날짜 매칭은 KST 기준이다.
+- 기존 배정의 시각 갱신은 저장된 이벤트 ID·담당자와 일치할 때만 허용한다. 담당자 누락 복구에서 후보가 여럿이면 추측하지 않는다. 반복 동기화는 같은 값을 다시 쓰지 않으며 시간만 갱신할 때 배정 알림을 재발송하지 않는다.
+- `s88.calendar-cleaning-times.test.js`는 실제 API 함수에 가짜 I/O를 주입해 원본 시각 반영·잘못된 입력 거부·연결 보존을 검수한다.
+- `RUN_LIVE_DB=1 node --test tests/integration/s89.calendar-cleaning-times.test.js`는 실제 Postgres 스키마를 복제한 세션 임시 테이블에서 같은 UPDATE SQL·중복 실행·동시 완료 보존을 검사한다. 운영 행은 변경하지 않으며 종료 시 ROLLBACK한다.
+- 유효한 Calendar 자격증명이 있는 실행 환경에서 `RUN_LIVE_DB=1 RUN_LIVE_GOOGLE=1 node --test tests/integration/s85.real-cleaner-assignment.test.js`를 실행하면 실제 배정과 Google 원본의 담당자·이벤트 ID·시작·종료 일치까지 검수한다. 토큰은 실행 환경에만 설정하며 커밋하지 않는다.
 
 ## 자동 검수·생성 도구
 

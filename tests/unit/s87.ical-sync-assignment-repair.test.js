@@ -4,7 +4,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { parse } from "@babel/parser";
-import { attendeeEmailsForCleaner, matchCleanerAttendee } from "../../src/domain/calendarAssignmentDomain.js";
+import { attendeeEmailsForCleaner, matchCleanerAttendee, calendarCleaningTimes } from "../../src/domain/calendarAssignmentDomain.js";
+import { toKstDateKey } from "../../server/cleaning/_dispatch.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const source = readFileSync(path.join(ROOT, "api/cleaning/[...slug].js"), "utf8");
@@ -44,11 +45,12 @@ describe("iCal 수동 동기화 — 기존 Calendar 담당자 복구 연결", ()
     assert.match(block, /repairCalendarAssignments/);
   });
 
-  test("복구 대상은 REAL 숙소의 ASSIGNED + assigned_cleaner_id NULL 작업으로 제한한다", () => {
+  test("복구 대상은 REAL의 ASSIGNED이며 기존 연결은 같은 담당자·이벤트만 갱신한다", () => {
     const block = functionBlock("repairCalendarAssignments", "handleIcalSync");
     assert.match(block, /data_origin='REAL'/);
     assert.match(block, /status='ASSIGNED'/);
     assert.match(block, /assigned_cleaner_id IS NULL/);
+    assert.match(block, /assigned_cleaner_id=\$1 AND google_event_id=\$2/);
   });
 
   test("담당자 복구 실패가 iCal 예약 동기화 전체를 실패시키지 않는다", () => {
@@ -72,11 +74,12 @@ describe("실제 복구 함수 — Google 이벤트와 DB 담당자 연결", () 
       getGoogleToken: async () => "fixture-token", kv: {}, CALENDAR_API: "https://example.invalid",
       fetch: async () => ({ ok: true, json: async () => ({ items: [{
         id: "fixture-event", start: { dateTime: "2026-10-30T11:00:00+09:00" },
+        end: { dateTime: "2026-10-30T14:00:00+09:00" },
         summary: "검증숙소 청소일정 (검증담당자)",
         organizer: { email: "host@example.invalid" },
         attendees: [{ email: "host@example.invalid" }, { email: "cleaner@example.invalid" }],
       }] }) }),
-      attendeeEmailsForCleaner, matchCleanerAttendee,
+      attendeeEmailsForCleaner, matchCleanerAttendee, calendarCleaningTimes, toKstDateKey,
     });
     return { result: await repair("fixture-property"), writes };
   }
@@ -84,7 +87,7 @@ describe("실제 복구 함수 — Google 이벤트와 DB 담당자 연결", () 
   test("주최자 다음에 있는 등록 담당자를 실제 UPDATE 인자로 전달한다", async () => {
     const { result, writes } = await runRepair([{ id: "fixture-cleaner", name: "검증담당자", email: "cleaner@example.invalid" }]);
     assert.deepEqual(result, { scanned: 1, repaired: 1 });
-    assert.deepEqual(writes, [["fixture-cleaner", "fixture-event", "fixture-job"]]);
+    assert.deepEqual(writes, [["fixture-cleaner", "fixture-event", "fixture-job", "2026-10-30T02:00:00.000Z", "2026-10-30T05:00:00.000Z"]]);
   });
 
   test("실제 누락 사례: 제목의 이름이 같아도 등록 이메일이 다르면 복구되지 않는다", async () => {

@@ -2,22 +2,13 @@
  * s70 — demo/real 데이터 프로필 경계와 공통 데모 데이터 무결성.
  */
 
-import { describe, test } from 'node:test';
+import { after, describe, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-import statsHandler from '../../api/stats.js';
 import icalHandler from '../../api/ical.js';
-import {
-  DEMO_PROPERTY_IDS,
-  getDemoCleaningStats,
-  getDemoDrilldown,
-  getDemoMonthlyCalendar,
-  getDemoPropertyConfigs,
-  getDemoStats,
-} from '../../src/application/demoReportingService.js';
 import {
   DATA_PROFILE,
   normalizeDataProfile,
@@ -30,6 +21,15 @@ import { periodToDateRange } from '../../src/domain/periodDomain.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = relativePath => readFileSync(path.join(ROOT, relativePath), 'utf8');
 const NOW = new Date('2026-09-24T03:00:00Z');
+
+// 합계 0건끼리 비교해 통과하지 않도록 예약 생성 시계와 조회 시계를 고정한다.
+mock.timers.enable({ apis: ['Date'], now: NOW });
+after(() => mock.timers.reset());
+const {
+  DEMO_PROPERTY_IDS, getDemoCleaningStats, getDemoDrilldown,
+  getDemoMonthlyCalendar, getDemoPropertyConfigs, getDemoStats,
+} = await import('../../src/application/demoReportingService.js');
+const { default: statsHandler } = await import('../../api/stats.js');
 
 function jsonResponse() {
   return {
@@ -76,6 +76,7 @@ describe('공통 demo 데이터 — 항목, 합계, 필터, 출처가 일치한�
 
   test('청소 통계 합계는 항목에서 재계산한 값과 정확히 같다', () => {
     const result = getDemoCleaningStats('next_month', { withItems: true, now: NOW });
+    assert.ok(result.items.length > 0, '예약 fixture와 조회 기간이 어긋나 빈 결과를 검수하면 안 됨');
     const count = status => result.items.filter(item => item.status === status).length;
     assert.equal(result.assigned, count('ASSIGNED'));
     assert.equal(result.requesting, count('PENDING'));
@@ -93,6 +94,7 @@ describe('공통 demo 데이터 — 항목, 합계, 필터, 출처가 일치한�
   test('숙소 필터 밖의 항목·인사이트는 응답에 섞이지 않는다', () => {
     const selected = ['P003'];
     const cleaning = getDemoCleaningStats('next_month', { propertyIds: selected, withItems: true, now: NOW });
+    assert.ok(cleaning.items.length > 0, '선택한 숙소에 실제로 검수할 항목이 있어야 함');
     const stats = getDemoStats('this_month', { propertyIds: selected, now: NOW });
     assert.ok(cleaning.items.every(item => selected.includes(item.property_id)));
     assert.ok((stats.insights ?? []).every(insight => !insight.propertyId || selected.includes(insight.propertyId)));

@@ -9,7 +9,7 @@
  * 레이어: L1 = 실제 함수 import / L2 = 실제 소스 파일 계약(readFileSync).
  */
 
-import { describe, test } from 'node:test';
+import { after, describe, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -38,7 +38,11 @@ import {
   buildCleaningIssueRows,
 } from '../../src/domain/violationDetailDomain.js';
 import { getDrilldownForMetric } from '../../src/application/reportingService.js';
-import { getDemoCleaningStats, getDemoDrilldown } from '../../src/application/demoReportingService.js';
+
+// 상대 날짜 예약은 import 때 생성된다. 조회 시각과 같은 시계로 fixture를 만든다.
+mock.timers.enable({ apis: ['Date'], now: new Date('2026-09-21T03:00:00Z') });
+after(() => mock.timers.reset());
+const { getDemoCleaningStats, getDemoDrilldown } = await import('../../src/application/demoReportingService.js');
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8');

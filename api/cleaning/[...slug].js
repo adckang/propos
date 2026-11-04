@@ -25,7 +25,7 @@ import { periodToRemainingRange } from "../../src/domain/periodDomain.js";
 import { validatePropertyName } from "../../src/domain/propertyIdentityDomain.js";
 import { renamePropertyId, PropertyRenameError } from "../../src/infrastructure/propertyRenameRepository.js";
 import { airbnbEventsToReservations, parseVEvents } from "../../src/domain/room-state/icalParser.js";
-import { attendeeEmailsForCleaner, matchCleanerAttendee } from "../../src/domain/calendarAssignmentDomain.js";
+import { attendeeEmailsForCleaner, matchCleanerAttendee, calendarCleaningTimes } from "../../src/domain/calendarAssignmentDomain.js";
 import { getDemoCleaningStats, getDemoPropertyConfigs } from "../../src/application/demoReportingService.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 
@@ -634,36 +634,48 @@ async function handleCalendarWebhook(req, res) {
   for (const evt of events) {
     // propos=blocker 속성이 있으면 PROPOS 블로커 이벤트 → 건너뜀
     if (evt.extendedProperties?.private?.propos === "blocker") continue;
+    const times = calendarCleaningTimes(evt);
+    if (!times) continue;
     const { attendeeEmail, cleaner } = await resolveCalendarCleaner(evt);
     if (!attendeeEmail) continue;
     // 예약 이벤트의 날짜로 해당 날짜 cleaning_job만 매칭
-    const eventDate = (evt.start?.dateTime ?? evt.start?.date ?? "").slice(0, 10);
+    const eventDate = times.date;
     if (!eventDate) continue;
     const { rows: [job] } = await db.query(
       `SELECT * FROM cleaning_jobs WHERE property_id=$1
-       AND to_char(checkout_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') = $2
+       AND to_char(checkout_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD') = $2
        AND data_origin='REAL'
        AND (
          status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED','ESCALATED')
-         OR (status = 'ASSIGNED' AND assigned_cleaner_id IS NULL)
+         OR (status = 'ASSIGNED' AND (assigned_cleaner_id IS NULL OR google_event_id=$3))
        )
        LIMIT 1`,
-      [propCfg.property_id, eventDate]
+      [propCfg.property_id, eventDate, evt.id]
     );
     if (!job) continue;
     if (!cleaner) {
       await postSlack(`[PROPOS] ⚠️ 미등록 이메일: ${attendeeEmail} — 수동 확인 필요`);
       continue;
     }
+    if (!calendarCleaningTimes(evt, job.checkout_at)) continue;
+    if (job.status === 'ASSIGNED' && job.assigned_cleaner_id
+        && (job.assigned_cleaner_id !== cleaner.id || job.google_event_id !== evt.id)) continue;
     const { rows: updated } = await db.query(
-      `UPDATE cleaning_jobs SET status='ASSIGNED',assigned_cleaner_id=$1,google_event_id=$2,updated_at=NOW()
-       WHERE id=$3 AND (status!='ASSIGNED' OR assigned_cleaner_id IS NULL) RETURNING id`,
-      [cleaner.id, evt.id, job.id]
+      `UPDATE cleaning_jobs SET status='ASSIGNED',assigned_cleaner_id=$1,google_event_id=$2,
+         cleaning_start_at=$4,cleaning_end_at=$5,updated_at=NOW()
+       WHERE id=$3 AND data_origin='REAL' AND status=$6
+         AND (status!='ASSIGNED' OR assigned_cleaner_id IS NULL OR (assigned_cleaner_id=$1 AND google_event_id=$2))
+         AND checkout_at <= $4::timestamptz
+         AND (status!='ASSIGNED' OR assigned_cleaner_id IS DISTINCT FROM $1 OR google_event_id IS DISTINCT FROM $2
+              OR cleaning_start_at IS DISTINCT FROM $4::timestamptz OR cleaning_end_at IS DISTINCT FROM $5::timestamptz)
+       RETURNING id`,
+      [cleaner.id, evt.id, job.id, times.cleaning_start_at, times.cleaning_end_at, job.status]
     );
     if (!updated.length) continue;
-    const date = new Date(job.cleaning_start_at).toISOString().slice(0, 10);
-    await sendCompletionSmsToRest(db, job.id, cleaner.id).catch(() => {});
-    await postSlack(`[PROPOS] ✅ ${propCfg.name} ${date} 청소 배정 완료 (${cleaner.name})`);
+    if (job.status !== 'ASSIGNED' || !job.assigned_cleaner_id) {
+      await sendCompletionSmsToRest(db, job.id, cleaner.id).catch(() => {});
+      await postSlack(`[PROPOS] ✅ ${propCfg.name} ${eventDate} 청소 배정 완료 (${cleaner.name})`);
+    }
   }
   return res.status(200).end();
 }
@@ -839,9 +851,9 @@ async function repairCalendarAssignments(propertyId) {
   if (!property?.google_calendar_id) return { scanned: 0, repaired: 0 };
 
   const { rows: jobs } = await db.query(
-    `SELECT id, checkout_at FROM cleaning_jobs
+    `SELECT id, checkout_at, assigned_cleaner_id, google_event_id, cleaning_start_at, cleaning_end_at FROM cleaning_jobs
       WHERE property_id=$1 AND data_origin='REAL'
-        AND status='ASSIGNED' AND assigned_cleaner_id IS NULL
+        AND status='ASSIGNED'
       ORDER BY checkout_at`,
     [property.property_id],
   );
@@ -858,32 +870,49 @@ async function repairCalendarAssignments(propertyId) {
     showDeleted: 'false',
     maxResults: '250',
   });
-  const eventsResponse = await fetch(
-    `${CALENDAR_API}/calendars/${encodeURIComponent(property.google_calendar_id)}/events?${params}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  if (!eventsResponse.ok) throw new Error(`Calendar 조회 실패 (${eventsResponse.status})`);
-  const { items = [] } = await eventsResponse.json();
+  const items = [];
+  let nextPageToken;
+  do {
+    if (nextPageToken) params.set('pageToken', nextPageToken);
+    const eventsResponse = await fetch(
+      `${CALENDAR_API}/calendars/${encodeURIComponent(property.google_calendar_id)}/events?${params}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!eventsResponse.ok) throw new Error(`Calendar 조회 실패 (${eventsResponse.status})`);
+    const page = await eventsResponse.json();
+    items.push(...(page.items ?? []));
+    nextPageToken = page.nextPageToken;
+  } while (nextPageToken);
   const { rows: cleaners } = await db.query(
     `SELECT id, name, email FROM cleaners WHERE email IS NOT NULL AND email <> ''`,
   );
-  const jobsByDate = new Map(jobs.map((job) => [new Date(job.checkout_at).toISOString().slice(0, 10), job]));
+  const candidates = items.flatMap(event => {
+    const times = calendarCleaningTimes(event);
+    if (!times || !Array.isArray(event.attendees) || !event.attendees.length) return [];
+    const matched = matchCleanerAttendee(event.attendees, cleaners, event.organizer?.email ?? 'bnb.paju@gmail.com');
+    return matched ? [{ event, times, cleaner: matched.cleaner }] : [];
+  });
   let repaired = 0;
-  for (const event of items) {
-    if (event.extendedProperties?.private?.propos === 'blocker') continue;
-    if (!Array.isArray(event.attendees) || !event.attendees.length) continue;
-    const eventDate = (event.start?.dateTime ?? event.start?.date ?? '').slice(0, 10);
-    const job = jobsByDate.get(eventDate);
-    if (!job) continue;
-    const organizerEmail = event.organizer?.email ?? 'bnb.paju@gmail.com';
-    if (!attendeeEmailsForCleaner(event.attendees, organizerEmail).length) continue;
-    const matched = matchCleanerAttendee(event.attendees, cleaners, organizerEmail);
-    if (!matched) continue;
+  for (const job of jobs) {
+    const matches = candidates.filter(({ event, times, cleaner }) => (
+      times.date === toKstDateKey(job.checkout_at)
+      && (!job.assigned_cleaner_id || (event.id === job.google_event_id && cleaner.id === job.assigned_cleaner_id))
+      && calendarCleaningTimes(event, job.checkout_at)
+    ));
+    if (matches.length !== 1) continue;
+    const { event, times, cleaner } = matches[0];
+    if (job.assigned_cleaner_id === cleaner.id && job.google_event_id === event.id
+        && new Date(job.cleaning_start_at).getTime() === Date.parse(times.cleaning_start_at)
+        && new Date(job.cleaning_end_at).getTime() === Date.parse(times.cleaning_end_at)) continue;
     const { rowCount } = await db.query(
       `UPDATE cleaning_jobs
-          SET assigned_cleaner_id=$1, google_event_id=$2, updated_at=NOW()
-        WHERE id=$3 AND status='ASSIGNED' AND assigned_cleaner_id IS NULL`,
-      [matched.cleaner.id, event.id, job.id],
+          SET assigned_cleaner_id=$1, google_event_id=$2, cleaning_start_at=$4, cleaning_end_at=$5, updated_at=NOW()
+        WHERE id=$3 AND data_origin='REAL' AND status='ASSIGNED'
+          AND (assigned_cleaner_id IS NULL OR (assigned_cleaner_id=$1 AND google_event_id=$2))
+          AND checkout_at <= $4::timestamptz
+          AND (assigned_cleaner_id IS DISTINCT FROM $1 OR google_event_id IS DISTINCT FROM $2
+               OR cleaning_start_at IS DISTINCT FROM $4::timestamptz OR cleaning_end_at IS DISTINCT FROM $5::timestamptz)`,
+      [cleaner.id, event.id, job.id, times.cleaning_start_at, times.cleaning_end_at],
     );
     repaired += rowCount;
   }
@@ -1255,20 +1284,22 @@ async function handleCalendarScan(req, res) {
 
   const results = [];
   for (const evt of filtered) {
+    const times = calendarCleaningTimes(evt);
+    if (!times) continue;
     const { attendeeEmail, cleaner } = await resolveCalendarCleaner(evt);
     if (!attendeeEmail) continue;
-    const eventDate = (evt.start?.dateTime ?? evt.start?.date ?? "").slice(0, 10);
+    const eventDate = times.date;
     if (date && eventDate !== date) continue;
     const { rows: [job] } = await db.query(
       `SELECT * FROM cleaning_jobs WHERE property_id=$1
-       AND to_char(checkout_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') = $2
+       AND to_char(checkout_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD') = $2
        AND data_origin='REAL'
        AND (
          status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED','ESCALATED')
-         OR (status = 'ASSIGNED' AND assigned_cleaner_id IS NULL)
+         OR (status = 'ASSIGNED' AND (assigned_cleaner_id IS NULL OR google_event_id=$3))
        )
        LIMIT 1`,
-      [propCfg.property_id, eventDate]
+      [propCfg.property_id, eventDate, evt.id]
     );
     if (!job) { results.push({ eventDate, attendeeEmail, result: "job 없음" }); continue; }
     if (!cleaner) {
@@ -1276,14 +1307,25 @@ async function handleCalendarScan(req, res) {
       await postSlack(`[PROPOS] ⚠️ 미등록 청소담당자: ${attendeeEmail}`);
       continue;
     }
+    if (!calendarCleaningTimes(evt, job.checkout_at)) continue;
+    if (job.status === 'ASSIGNED' && job.assigned_cleaner_id
+        && (job.assigned_cleaner_id !== cleaner.id || job.google_event_id !== evt.id)) continue;
     const { rows: updated } = await db.query(
-      `UPDATE cleaning_jobs SET status='ASSIGNED',assigned_cleaner_id=$1,google_event_id=$2,updated_at=NOW()
-       WHERE id=$3 AND (status!='ASSIGNED' OR assigned_cleaner_id IS NULL) RETURNING id`,
-      [cleaner.id, evt.id, job.id]
+      `UPDATE cleaning_jobs SET status='ASSIGNED',assigned_cleaner_id=$1,google_event_id=$2,
+         cleaning_start_at=$4,cleaning_end_at=$5,updated_at=NOW()
+       WHERE id=$3 AND data_origin='REAL' AND status=$6
+         AND (status!='ASSIGNED' OR assigned_cleaner_id IS NULL OR (assigned_cleaner_id=$1 AND google_event_id=$2))
+         AND checkout_at <= $4::timestamptz
+         AND (status!='ASSIGNED' OR assigned_cleaner_id IS DISTINCT FROM $1 OR google_event_id IS DISTINCT FROM $2
+              OR cleaning_start_at IS DISTINCT FROM $4::timestamptz OR cleaning_end_at IS DISTINCT FROM $5::timestamptz)
+       RETURNING id`,
+      [cleaner.id, evt.id, job.id, times.cleaning_start_at, times.cleaning_end_at, job.status]
     );
     if (updated.length) {
       results.push({ eventDate, attendeeEmail, cleaner: cleaner.name, result: "ASSIGNED" });
-      await postSlack(`[PROPOS] ✅ ${propCfg.name} ${eventDate} 청소 배정 (${cleaner.name})`);
+      if (job.status !== 'ASSIGNED' || !job.assigned_cleaner_id) {
+        await postSlack(`[PROPOS] ✅ ${propCfg.name} ${eventDate} 청소 배정 (${cleaner.name})`);
+      }
     } else {
       results.push({ eventDate, attendeeEmail, result: "이미 ASSIGNED" });
     }

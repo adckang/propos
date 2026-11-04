@@ -74,8 +74,8 @@ describe('Calendar Webhook/Scan — 담당자 없는 ASSIGNED 오염 방지 및 
       functionBlock('handleCalendarScan', 'registerGmailWatch'),
     ];
     for (const block of blocks) {
-      assert.match(block, /status\s*=\s*'ASSIGNED'\s+AND\s+assigned_cleaner_id\s+IS\s+NULL/);
-      assert.match(block, /assigned_cleaner_id\s+IS\s+NULL\)\s+RETURNING id/);
+      assert.match(block, /status\s*=\s*'ASSIGNED'\s+AND\s+\(assigned_cleaner_id\s+IS\s+NULL/);
+      assert.match(block, /status!='ASSIGNED' OR assigned_cleaner_id IS NULL OR \(assigned_cleaner_id=\$1 AND google_event_id=\$2\)/);
     }
   });
 
