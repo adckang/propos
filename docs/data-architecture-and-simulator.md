@@ -36,6 +36,8 @@ Gmail Watch와 Google Calendar 연동은 신규 예약 감지·블로커 보조 
 
 청소 배정의 담당자와 확정 시작·종료 시각은 Google 예약 이벤트를 원본으로 삼아 `cleaning_jobs`에 반영한다. `checkout_at`은 Airbnb 숙박 예약의 퇴실 키로 보존한다. 예를 들어 퇴실 11:00에 청소 예약이 12:00~15:00이면, `checkout_at`은 11:00이고 `cleaning_start_at`·`cleaning_end_at`은 각각 12:00·15:00이다. 배정 전 기본 청소시간과 확정 예약 시각을 혼동해 퇴실 키를 변경하지 않는다.
 
+현재 상태 예측과 상세·리스트의 청소 구간 계산도 같은 예약의 `cleaningAt`·`cleaningEnd`를 우선한다. 위 사례는 11:00~12:00 대기, 12:00~15:00 진행으로 표시한다. `cleaningCheckoutAt`은 화면 세그먼트에 보존하는 원래 퇴실 키이며 DB의 키를 변경하지 않는다. 대기/진행 분할·현재 시각 클리핑 후에도 그 예약의 담당자를 찾고 인디케이터는 진행 구간에 한 번만 표시한다. 이 계약은 s90에서 실제 함수와 담당자 매핑을 실행해 검수한다.
+
 ## Raspberry Pi의 책임 경계
 
 Pi의 `/api/properties`와 `data/properties-config.json`은 Home Assistant 워처용 `id`, `name`, `district`, `watcherId`, `devices`만 저장한다. 예약, iCal URL, 청소작업은 저장하지 않는다.

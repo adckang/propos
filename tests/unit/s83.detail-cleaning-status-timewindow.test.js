@@ -27,6 +27,9 @@
  *      그대로 쓴다(세그먼트는 애초에 그 예약의 checkOut에서 시작하도록 만들어지므로 항상
  *      정확히 일치한다 — 폴백용 겹침 계산 자체가 불필요해짐).
  *
+ * 2026-11-04 추가: 예약 시각에 따라 대기/진행을 나누면서 진행 시작은 checkOut과 달라졌다.
+ * 분할·클리핑 전 퇴실 키를 cleaningCheckoutAt에 보존해 같은 예약을 찾는다(s90 실행 검증).
+ *
  * 레이어: L1 — buildLiveProperty 실제 호출(①). L2 — PropertyDetailView.jsx 소스 계약(②).
  */
 
@@ -105,7 +108,7 @@ describe('buildLiveProperty — 예약이 이미 cleaningStatus를 들고 있으
   });
 });
 
-describe('PropertyDetailView.jsx — cleaningInfoMap이 체크아웃 시각 동일성으로 예약 자신의 cleaningStatus를 읽는다 (②)', () => {
+describe('PropertyDetailView.jsx — cleaningInfoMap이 체크아웃 키 동일성으로 예약 자신의 cleaningStatus를 읽는다 (②)', () => {
   const src = read('src/components/v2/PropertyDetailView.jsx');
   const fnMatch = src.match(/const cleaningInfoMap = useMemo\(\(\) => \{[\s\S]*?\}, \[recentSegs, property\.reservations\]\);/);
 
@@ -122,8 +125,9 @@ describe('PropertyDetailView.jsx — cleaningInfoMap이 체크아웃 시각 동�
     );
   });
 
-  test('세그먼트 시작 시각과 예약의 checkOut이 정확히 같은 예약을 찾는다', () => {
-    assert.match(fnMatch[0], /r\.checkOut\.getTime\(\)\s*===\s*seg\.start\.getTime\(\)/);
+  test('분할·클리핑 전 체크아웃 키와 예약의 checkOut이 같은 예약을 찾는다', () => {
+    assert.match(fnMatch[0], /const checkoutAt = seg\.cleaningCheckoutAt \?\? seg\.start/);
+    assert.match(fnMatch[0], /r\.checkOut\.getTime\(\)\s*===\s*checkoutAt\.getTime\(\)/);
   });
 
   test('찾은 예약 자신의 cleaningStatus를 그대로 쓴다(재계산 없음)', () => {
@@ -134,7 +138,7 @@ describe('PropertyDetailView.jsx — cleaningInfoMap이 체크아웃 시각 동�
        ' 시작 시각이 "지금"으로 잘림) 가장 최근에 체크아웃한 예약으로 폴백한다', () => {
     assert.match(
       fnMatch[0],
-      /\?\?\s*lastCheckedOut/,
+      /\?\?\s*\(seg\.cleaningCheckoutAt \? null : lastCheckedOut\)/,
       '폴백이 없으면 "지금 한창 청소 중"인 숙소가 실제론 배정돼 있어도 항상 미배정으로 잘못 보인다' +
       ' — 가장 눈에 띄는 케이스라 리뷰에서 지적된 치명적 회귀'
     );

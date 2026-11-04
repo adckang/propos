@@ -1,4 +1,5 @@
 // roomStateMockData.js — Room State Machine UI 전용 목업 데이터
+import { reservationCleaningWindow } from '../domain/cleaningScheduleDomain.js';
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
@@ -697,10 +698,20 @@ export const SEGMENT_COLORS = {
 
 // ── 미래 상태 예측 세그먼트 생성 (예약 데이터 기반) ───────────────────────────
 
+function appendCleaningSegments(push, reservation, cursor, durationHours) {
+  const window = reservationCleaningWindow(reservation, durationHours);
+  const start = window?.start ?? cursor;
+  const end = window?.end ?? new Date(cursor.getTime() + durationHours * 3_600_000);
+  const checkoutAt = reservation?.checkOut;
+  if (start > cursor) push('CLEANING', 'CLEANING_PENDING', cursor, start, checkoutAt);
+  push('CLEANING', 'CLEANING_IN_PROGRESS', new Date(Math.max(cursor.getTime(), start.getTime())), end, checkoutAt);
+  return new Date(Math.max(cursor.getTime(), end.getTime()));
+}
+
 function addResCycles(push, property, firstRes, cursor, windowEnd) {
   const cleanH = property.cleaningDurationHours ?? 2.5;
   const all    = property.reservations
-    ? property.reservations.filter(r => r.checkIn > cursor && r.checkIn < windowEnd)
+    ? property.reservations.filter(r => r.checkIn >= cursor && r.checkIn < windowEnd)
                            .sort((a, b) => a.checkIn - b.checkIn)
     : (firstRes && firstRes.checkIn > cursor ? [firstRes] : []);
 
@@ -714,9 +725,7 @@ function addResCycles(push, property, firstRes, cursor, windowEnd) {
     if (cursor < optEnd) { push('PRE_STAY_READY', 'OPTIMIZING', cursor, optEnd); cursor = optEnd; }
     if (cursor < ci)     { push('PRE_STAY_READY', 'OPTIMIZED',  cursor, ci);    cursor = new Date(ci); }
     if (co && co > cursor) { push('OCCUPIED', 'GOOD_CONDITION',         cursor, co);       cursor = new Date(co); }
-    const cleanEnd = new Date(cursor.getTime() + cleanH * 3600000);
-    push('CLEANING', 'CLEANING_IN_PROGRESS', cursor, cleanEnd);
-    cursor = cleanEnd;
+    cursor = appendCleaningSegments(push, r, cursor, cleanH);
   }
   return cursor;
 }
@@ -731,11 +740,13 @@ function buildFutureSegments(property, windowEnd) {
   let cursor = new Date(now);
   const cleanH = property.cleaningDurationHours ?? 2.5;
 
-  const push = (mainStatus, subStatus, start, end) => {
+  const push = (mainStatus, subStatus, start, end, checkoutAt) => {
     const s = start < now ? now : start;
     const e = end > windowEnd ? windowEnd : end;
     if (s >= e) return;
-    segs.push({ mainStatus, subStatus, start: new Date(s), end: new Date(e), isFuture: true });
+    segs.push({ mainStatus, subStatus, start: new Date(s), end: new Date(e), isFuture: true,
+      ...(checkoutAt ? { cleaningCheckoutAt: new Date(checkoutAt) } : {}),
+    });
   };
 
   switch (currentSeg.mainStatus) {
@@ -744,20 +755,25 @@ function buildFutureSegments(property, windowEnd) {
       if (!co || co <= now) break;
       push('OCCUPIED', currentSeg.subStatus, cursor, co);
       cursor = new Date(co);
-      const cleanEnd = new Date(cursor.getTime() + cleanH * 3600000);
-      push('CLEANING', 'CLEANING_IN_PROGRESS', cursor, cleanEnd);
-      cursor = cleanEnd;
+      cursor = appendCleaningSegments(push, reservation, cursor, cleanH);
       cursor = addResCycles(push, property, null, cursor, windowEnd);
       push('VACANT', 'CLEANING_FINISHED', cursor, windowEnd);
       break;
     }
     case 'CLEANING': {
-      const cleanDone = new Date(now.getTime() + cleanH * 3600000);
-      push('CLEANING', currentSeg.subStatus, cursor, cleanDone);
-      cursor = cleanDone;
+      const cleaningReservation = currentSeg.cleaningCheckoutAt
+        ? property.reservations?.find(r => r.checkOut?.getTime() === currentSeg.cleaningCheckoutAt.getTime())
+        : null;
+      if (cleaningReservation) {
+        cursor = appendCleaningSegments(push, cleaningReservation, cursor, cleanH);
+      } else {
+        const cleanDone = new Date(now.getTime() + cleanH * 3600000);
+        push('CLEANING', currentSeg.subStatus, cursor, cleanDone);
+        cursor = cleanDone;
+      }
       const ci = reservation?.checkIn;
       const co = reservation?.checkOut;
-      if (ci && ci > cursor && ci < windowEnd) {
+      if (ci && ci >= cursor && ci < windowEnd) {
         const prepAt = new Date(Math.max(cursor.getTime(), ci.getTime() - 3600000));
         const optEnd = new Date(ci.getTime() - 0.5 * 3600000);
         push('VACANT', 'CLEANING_FINISHED', cursor, prepAt);
@@ -765,9 +781,7 @@ function buildFutureSegments(property, windowEnd) {
         if (cursor < optEnd) { push('PRE_STAY_READY', 'OPTIMIZING', cursor, optEnd); cursor = optEnd; }
         if (cursor < ci)     { push('PRE_STAY_READY', 'OPTIMIZED', cursor, ci);      cursor = new Date(ci); }
         if (co && co > cursor) { push('OCCUPIED', 'GOOD_CONDITION', cursor, co); cursor = new Date(co); }
-        const c2 = new Date(cursor.getTime() + cleanH * 3600000);
-        push('CLEANING', 'CLEANING_IN_PROGRESS', cursor, c2);
-        cursor = c2;
+        cursor = appendCleaningSegments(push, reservation, cursor, cleanH);
       }
       cursor = addResCycles(push, property, null, cursor, windowEnd);
       push('VACANT', 'CLEANING_FINISHED', cursor, windowEnd);
@@ -780,9 +794,7 @@ function buildFutureSegments(property, windowEnd) {
       cursor = new Date(ci);
       const co = reservation?.checkOut;
       if (co && co > cursor) { push('OCCUPIED', 'GOOD_CONDITION', cursor, co); cursor = new Date(co); }
-      const cleanEnd = new Date(cursor.getTime() + cleanH * 3600000);
-      push('CLEANING', 'CLEANING_IN_PROGRESS', cursor, cleanEnd);
-      cursor = cleanEnd;
+      cursor = appendCleaningSegments(push, reservation, cursor, cleanH);
       cursor = addResCycles(push, property, null, cursor, windowEnd);
       push('VACANT', 'CLEANING_FINISHED', cursor, windowEnd);
       break;
@@ -802,9 +814,7 @@ function buildFutureSegments(property, windowEnd) {
       if (cursor < ci)     { push('PRE_STAY_READY', 'OPTIMIZED', cursor, ci);      cursor = new Date(ci); }
       const co = reservation?.checkOut;
       if (co && co > cursor) { push('OCCUPIED', 'GOOD_CONDITION', cursor, co); cursor = new Date(co); }
-      const cleanEnd = new Date(cursor.getTime() + cleanH * 3600000);
-      push('CLEANING', 'CLEANING_IN_PROGRESS', cursor, cleanEnd);
-      cursor = cleanEnd;
+      cursor = appendCleaningSegments(push, reservation, cursor, cleanH);
       cursor = addResCycles(push, property, null, cursor, windowEnd);
       push('VACANT', 'CLEANING_FINISHED', cursor, windowEnd);
       break;

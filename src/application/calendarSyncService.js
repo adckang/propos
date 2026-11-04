@@ -11,6 +11,7 @@ import {
   airbnbEventsToReservations,
   gcalEventsToCleaningSlots,
 } from '../domain/room-state/icalParser.js';
+import { reservationCleaningWindow } from '../domain/cleaningScheduleDomain.js';
 
 const PROXIES = [
   url => `/api/ical?url=${encodeURIComponent(url)}`,
@@ -66,11 +67,6 @@ export async function syncGoogleCalendarSlots(icalUrl) {
   return gcalEventsToCleaningSlots(events);
 }
 
-function getCleaningEndFromReservation(reservation, cleanDurationHours) {
-  if (!reservation?.checkOut) return null;
-  return new Date(reservation.checkOut.getTime() + cleanDurationHours * 3600000);
-}
-
 // 스펙: 체크인 정확히 1시간 전에 checkin_prep_time_reached 발생
 function getPrepStart(checkIn) {
   return new Date(checkIn.getTime() - 3600000);
@@ -95,7 +91,7 @@ export function lastPastReservation(reservations, now) {
 
 /**
  * 예약 배열 + 현재 시각 → 현재 상태 파생.
- * 청소 윈도우: 체크아웃 후 cleanDurationHours 시간 이내.
+ * 예약된 청소 시작 전에는 대기, 예약 종료 전까지는 진행 구간으로 예측한다.
  */
 export function deriveCurrentState(reservations, now = new Date(), cleanDurationHours = 2.5) {
   const activeRes = reservations.find(r => r.checkIn <= now && r.checkOut > now);
@@ -103,8 +99,11 @@ export function deriveCurrentState(reservations, now = new Date(), cleanDuration
 
   const lastRes = lastPastReservation(reservations, now);
   if (lastRes) {
-    const cleanEnd = getCleaningEndFromReservation(lastRes, cleanDurationHours);
-    if (cleanEnd > now) return { mainStatus: 'CLEANING', subStatus: 'CLEANING_IN_PROGRESS' };
+    const cleaning = reservationCleaningWindow(lastRes, cleanDurationHours);
+    if (cleaning.end > now) return {
+      mainStatus: 'CLEANING',
+      subStatus: now < cleaning.start ? 'CLEANING_PENDING' : 'CLEANING_IN_PROGRESS',
+    };
   }
 
   const nextRes = reservations
@@ -146,21 +145,25 @@ export function deriveTimeline(reservations, cleanDurationHours = 2.5) {
     .sort((a, b) => a.checkIn - b.checkIn)[0];
 
   if (lastRes) {
-    const cleanEnd = getCleaningEndFromReservation(lastRes, cleanDurationHours);
+    const { start: cleanStart, end: cleanEnd } = reservationCleaningWindow(lastRes, cleanDurationHours);
+    const cleaningSegments = [
+      ...(cleanStart > lastRes.checkOut ? [{ mainStatus: 'CLEANING', subStatus: 'CLEANING_PENDING', start: lastRes.checkOut, end: cleanStart, cleaningCheckoutAt: lastRes.checkOut }] : []),
+      { mainStatus: 'CLEANING', subStatus: 'CLEANING_IN_PROGRESS', start: cleanStart, end: cleanEnd, cleaningCheckoutAt: lastRes.checkOut },
+    ];
     if (cleanEnd > now) {
       return [
         { mainStatus: 'OCCUPIED', subStatus: 'GOOD_CONDITION', start: lastRes.checkIn, end: lastRes.checkOut },
-        { mainStatus: 'CLEANING', subStatus: 'CLEANING_IN_PROGRESS', start: lastRes.checkOut, end: null },
+        ...cleaningSegments.filter(seg => seg.start <= now).map(seg => ({ ...seg, end: seg.end > now ? null : seg.end })),
       ];
     }
 
     if (nextRes) {
-      const prepStart = getPrepStart(nextRes.checkIn);
+      const prepStart = new Date(Math.max(cleanEnd.getTime(), getPrepStart(nextRes.checkIn).getTime()));
       if (now >= prepStart) {
         const subStatus = getPreStaySubStatus(nextRes.checkIn, now);
         return [
           { mainStatus: 'OCCUPIED', subStatus: 'GOOD_CONDITION', start: lastRes.checkIn, end: lastRes.checkOut },
-          { mainStatus: 'CLEANING', subStatus: 'CLEANING_IN_PROGRESS', start: lastRes.checkOut, end: cleanEnd },
+          ...cleaningSegments,
           { mainStatus: 'VACANT', subStatus: 'CLEANING_FINISHED', start: cleanEnd, end: prepStart },
           { mainStatus: 'PRE_STAY_READY', subStatus, start: prepStart, end: null },
         ].filter(seg => seg.end === null || seg.end > seg.start);
@@ -169,7 +172,7 @@ export function deriveTimeline(reservations, cleanDurationHours = 2.5) {
 
     return [
       { mainStatus: 'OCCUPIED', subStatus: 'GOOD_CONDITION', start: lastRes.checkIn, end: lastRes.checkOut },
-      { mainStatus: 'CLEANING', subStatus: 'CLEANING_IN_PROGRESS', start: lastRes.checkOut, end: cleanEnd },
+      ...cleaningSegments,
       { mainStatus: 'VACANT', subStatus: 'CLEANING_FINISHED', start: cleanEnd, end: null },
     ];
   }

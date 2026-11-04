@@ -89,8 +89,8 @@ function mergeGanttSegments(segs) {
   const merged = [];
   for (const seg of sorted) {
     const last = merged[merged.length - 1];
-    // isFuture 경계를 넘어서 merge하지 않음 — 색상이 달라야 함
-    if (last && last.mainStatus === seg.mainStatus && !!last.isFuture === !!seg.isFuture) {
+    // 대기/진행과 과거/미래 경계는 각각의 색상을 보존한다.
+    if (last && last.mainStatus === seg.mainStatus && last.subStatus === seg.subStatus && !!last.isFuture === !!seg.isFuture) {
       last.end = seg.end;
     } else {
       merged.push({ ...seg });

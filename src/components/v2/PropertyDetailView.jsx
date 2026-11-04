@@ -620,22 +620,8 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
 
   const recentSegs = useMemo(() => getWindowSegments(property, PAST_HOURS, FUTURE_HOURS), [property]);
 
-  // CLEANING 세그먼트 → 그 체크아웃을 만든 예약 자신의 cleaningStatus (체크아웃 "시각" 동일성으로 역매칭)
-  // addResCycles/buildFutureSegments가 세그먼트를 cursor=reservation.checkOut에서 시작시키므로
-  // seg.start는 정확히 그 예약의 checkOut과 같다.
-  // 예전엔 cleaning_jobs가 자체 계산한 청소 시작 시각(체크아웃시각 설정 기준, 예: 매일 11시 KST)과
-  // 겹치는 시간대가 있는지로 찾았는데, 예약의 실제(raw iCal) 체크아웃 시각이 그 계산된 시각과
-  // 다른 경우가 많아(최대 9시간 차이, 실데이터 확인) 거의 항상 안 겹쳐서 실제로는 배정된 청소도
-  // 디테일뷰에서만 전부 "미배정"으로 잘못 보였다 — 실사용 중 발견, 2026-10-30.
-  // 지금 한창 진행 중인 청소 세그먼트는(buildFutureSegments의 CLEANING 분기) 시작 시각이
-  // "지금"으로 고정돼(push()가 과거 시각을 now로 잘라냄) 더 이상 그 예약의 실제 체크아웃
-  // 시각과 같지 않다 — 그럴 땐 체크아웃이 지난 예약 중 가장 최근 것으로 대신 찾는다. 이때
-  // "가장 최근"은 deriveTimeline/deriveCurrentState가 "지금 청소 중"을 판단할 때 쓰는 것과
-  // 반드시 같은 기준이어야 하므로(따로 구현하면 예약이 겹쳐 있을 때 — D-031에서도 확인된
-  // 실제 데이터 현상 — 서로 다른 예약을 "지금"으로 가리켜 틀린 담당자/상태가 뜰 수 있다,
-  // /code-review 2차 리뷰로 발견) 같은 함수(lastPastReservation)를 그대로 재사용한다.
-  // 목업 숙소(cleaningStatus 필드 자체가 없음)는 이 매칭을 아예 안 돈다 — 돌리면 전부
-  // "미배정"으로 잘못 보여서 D-020이 없앴던 가짜 경고 노이즈가 되돌아온다(1차 리뷰로 발견).
+  // 대기/진행 분할·현재 시각 클리핑 후에도 원래 체크아웃 키로 배정을 찾는다.
+  // 인디케이터는 진행 구간에 한 번만 그린다. 키가 없는 기존 구간만 최근 퇴실로 폴백한다.
   const cleaningInfoMap = useMemo(() => {
     const map = new Map();
     const reservations = property.reservations || [];
@@ -643,8 +629,10 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
     if (!tracksCleaning) return map;
     const lastCheckedOut = lastPastReservation(reservations, new Date());
     for (const seg of recentSegs) {
-      if (seg.mainStatus !== 'CLEANING' || !seg.isFuture) continue;
-      const res = reservations.find(r => r.checkOut && r.checkOut.getTime() === seg.start.getTime()) ?? lastCheckedOut;
+      if (seg.mainStatus !== 'CLEANING' || seg.subStatus !== 'CLEANING_IN_PROGRESS' || !seg.isFuture) continue;
+      const checkoutAt = seg.cleaningCheckoutAt ?? seg.start;
+      const res = reservations.find(r => r.checkOut && r.checkOut.getTime() === checkoutAt.getTime())
+        ?? (seg.cleaningCheckoutAt ? null : lastCheckedOut);
       if (res?.cleaningStatus) {
         map.set(seg, { cleaningStatus: res.cleaningStatus, cleanerName: res.cleanerName, cleaningAt: res.cleaningAt, cleaningEnd: res.cleaningEnd });
       } else {
