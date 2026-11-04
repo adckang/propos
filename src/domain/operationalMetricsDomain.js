@@ -1,7 +1,7 @@
 /**
  * operationalMetricsDomain — 7개 운영 지표("완료" 섹션)의 정의·계산·요약 문장을 한 곳에서 관리.
  *
- * EventMatrixPanel(표 렌더링)과 generateSummary/SelectedPropertyReport(요약 문장) 양쪽이 이
+ * EventMatrixPanel(표 렌더링)과 generateSummary/PeriodReport(요약 문장) 양쪽이 이
  * 파일을 공유한다 — 표에 뜨는 라벨·숫자와 그 위 요약 문장이 항상 같은 숫자를 말하게 하기 위함.
  * (사용자 요청 2026-09-25: "진짜 담당자가 보고하는 느낌으로" 요약 문장 + 표 워딩 개선 — D-026)
  */

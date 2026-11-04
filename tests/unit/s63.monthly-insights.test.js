@@ -406,10 +406,4 @@ describe('SummaryBanner — insights를 서머리 하부의 독립 펼침 항목
   });
 });
 
-describe('SelectedPropertyReport — useReportingStats의 insights를 SummaryBanner로 그대로 전달', () => {
-  const src = read('src/components/v2/reporting/SelectedPropertyReport.jsx');
-  test('insights를 구조분해하고 SummaryBanner에 prop으로 넘긴다', () => {
-    assert.match(src, /const \{ stats: periodStats, summary, insights, loading: periodLoading \} = useReportingStats/);
-    assert.match(src, /<SummaryBanner[^>]*insights=\{insights\}/);
-  });
-});
+// 대시보드·리스트뷰·숙소 상세가 통계 훅의 insights 를 요약 배너로 그대로 넘기는지는 s92 D 가 렌더링으로 검증한다.

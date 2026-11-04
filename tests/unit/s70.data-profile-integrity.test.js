@@ -30,6 +30,7 @@ const {
   getDemoMonthlyCalendar, getDemoPropertyConfigs, getDemoStats,
 } = await import('../../src/application/demoReportingService.js');
 const { default: statsHandler } = await import('../../api/stats.js');
+const { callHandler } = await import('../helpers/apiHandler.js');
 
 function jsonResponse() {
   return {
@@ -129,33 +130,16 @@ describe('공통 demo 데이터 — 항목, 합계, 필터, 출처가 일치한�
 
 describe('API 경계 — demo는 공통 서비스만 읽고 실제 캘린더는 차단한다', () => {
   test('/api/stats demo 응답은 필터된 공통 데이터와 동일하다', async () => {
-    const previous = process.env.PROPOS_DATA_PROFILE;
-    process.env.PROPOS_DATA_PROFILE = 'demo';
-    try {
-      const req = { method: 'GET', query: { period: 'now', property_ids: 'P001' }, url: '/api/stats?period=now&property_ids=P001' };
-      const res = jsonResponse();
-      await statsHandler(req, res);
-      assert.equal(res.statusCode, 200);
-      assert.deepEqual(res.body, getDemoStats('now', { propertyIds: ['P001'] }));
-      assert.equal(res.body.dataProfile, 'demo');
-    } finally {
-      if (previous === undefined) delete process.env.PROPOS_DATA_PROFILE;
-      else process.env.PROPOS_DATA_PROFILE = previous;
-    }
+    const res = await callHandler(statsHandler, '/api/stats?period=now&property_ids=P001', { env: { PROPOS_DATA_PROFILE: 'demo' } });
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.json, getDemoStats('now', { propertyIds: ['P001'] }));
+    assert.equal(res.json.dataProfile, 'demo');
   });
 
   test('/api/ical은 demo에서 실제 Airbnb·Google 원본을 읽지 않는다', async () => {
-    const previous = process.env.PROPOS_DATA_PROFILE;
-    process.env.PROPOS_DATA_PROFILE = 'demo';
-    try {
-      const res = jsonResponse();
-      await icalHandler({ method: 'GET', query: {} }, res);
-      assert.equal(res.statusCode, 403);
-      assert.equal(res.body.dataProfile, 'demo');
-    } finally {
-      if (previous === undefined) delete process.env.PROPOS_DATA_PROFILE;
-      else process.env.PROPOS_DATA_PROFILE = previous;
-    }
+    const res = await callHandler(icalHandler, '/api/ical', { query: {}, env: { PROPOS_DATA_PROFILE: 'demo' } });
+    assert.equal(res.status, 403);
+    assert.equal(res.json.dataProfile, 'demo');
   });
 
   test('화면과 Vite는 hybrid에서 DB 혼합 데이터를 사용한다', () => {

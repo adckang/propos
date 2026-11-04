@@ -1,14 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { STATE_META, SEGMENT_COLORS, getGanttSegments } from '../../data/roomStateMockData';
 import { useMobile } from '../../hooks/useMobile';
-import { useReportingStats } from '../../hooks/useReportingStats';
+import { usePropertySelection } from '../../hooks/usePropertySelection.js';
 import ListViewFilter from './reporting/ListViewFilter';
-import SummaryBanner from './reporting/SummaryBanner';
-import ReportPanel from './reporting/ReportPanel';
-import { deriveSelectionScope, toggleAllSelection, syncSelectionWithProperties } from '../../domain/selectionScopeDomain.js';
-import { futureSummaryFor } from '../../domain/futureWeekDomain.js';
+import PeriodReport from './reporting/PeriodReport.jsx';
 import { periodForOffset, periodToWindowHighlight, describePeriod } from '../../domain/periodDomain.js';
-import { toKstDateKey, kstDayOffsetFromToday } from '../../domain/monthlyCalendarDomain.js';
 import { TENSE_STYLE } from './reporting/ReportPanel';
 
 const PAST_DAYS   = 6;
@@ -147,18 +143,10 @@ export default function PropertyListView({
   const [dayOccupantIds] = useState(() => initialOccupantIds
     ? { OCCUPIED: new Set(initialOccupantIds.occupied ?? []), VACANT: new Set(initialOccupantIds.vacant ?? []) }
     : null);
-  // 체크박스 선택 Set — 초기값: 전체 숙소 선택
-  const [selectedRooms, setSelectedRooms] = useState(() => new Set(properties.map(p => p.id)));
-
-  // 이전에 한 번도 본 적 없는 숙소만 자동 선택 (liveProperty iCal 동기화 대응)
-  // 이미 알고 있던 숙소를 사용자가 해제한 경우는 되살리지 않음 (selectionScopeDomain)
-  const knownIdsRef = useRef(new Set(properties.map(p => p.id)));
-  useEffect(() => {
-    const currentIds = properties.map(p => p.id);
-    const prevKnown  = knownIdsRef.current;
-    knownIdsRef.current = new Set(currentIds);
-    setSelectedRooms(prev => syncSelectionWithProperties(prev, prevKnown, currentIds));
-  }, [properties]);
+  // 체크박스 선택 — 처음엔 전체, 처음 보는 숙소만 자동 선택 (대시보드와 같은 규칙, usePropertySelection)
+  const selection = usePropertySelection(properties);
+  const { selectedRooms, setSelectedRooms, scope, noSelection, toggleAll } = selection;
+  const allCheckState = scope.mode;
 
   // 타임라인이 가리키는 위치를 그대로 따르는 통계 기간 — 주 모드: 가장 가까운 주(2주 뒤면 2주 뒤 주), 일 모드: 그 날
   const statsPeriod = useMemo(
@@ -167,42 +155,6 @@ export default function PropertyListView({
       : periodForOffset('day', windowOffset),
     [windowOffset, listMode],
   );
-
-  // 화면에 보이는 숙소 ID를 항상 명시해 DB의 레거시/테스트 숙소가 집계에 섞이지 않게 한다.
-  const allIds = properties.map(p => p.id);
-  const scope  = deriveSelectionScope(selectedRooms, allIds);
-  const noSelection   = scope.mode === 'none';
-  const allSelected   = scope.mode === 'all';
-  const allCheckState = scope.mode;
-  const statsPropertyIds = noSelection ? [] : scope.selectedIds;
-
-  // ALL 토글 핸들러 — partial/none → 전체선택, all → 전체해제
-  function toggleAll() {
-    setSelectedRooms(toggleAllSelection(scope.mode, allIds));
-  }
-
-  // 레포트/요약에 쓰는 숙소 — 전체 선택이면 전부, 일부면 선택한 숙소만
-  const scopedProperties = allSelected ? properties : properties.filter(p => selectedRooms.has(p.id));
-
-  // 기간 데이터 (Report Panel + SummaryBanner용)
-  // noSelection이면 period=null → 훅이 fetch 스킵
-  const { stats: periodStats, summary, insights, loading: periodLoading } = useReportingStats(
-    noSelection ? null : statsPeriod,
-    statsPropertyIds,
-  );
-
-
-  // 미래 기간 요약은 예약(iCal) 기준으로 클라이언트에서 계산 — 서버 요약은 이벤트 기반이라 미래엔 항상 "예약 없음"
-  const displaySummary = futureSummaryFor(statsPeriod, scopedProperties) || summary;
-
-  // 위반 상세 목록·"발견된 패턴" 팝업(D-028/D-029) 둘 다 여기서 같은 방식으로 숙소 선택을 처리 —
-  // occurredAt이 있으면 디테일뷰가 그 날짜로 바로 열리도록 day offset을 같이 계산해서 넘긴다.
-  const handleSelectRoom = (propertyId, occurredAt) => {
-    const prop = properties.find(p => p.id === propertyId);
-    if (!prop) return;
-    const dayOffset = occurredAt != null ? kstDayOffsetFromToday(toKstDateKey(occurredAt)) : null;
-    onSelectProperty?.(prop, dayOffset);
-  };
 
   const { windowStart, windowEnd, windowMs, dayLabels, monthLabels } = useGanttWindow(windowOffset);
   const { now, nowLeft, timeStr } = useLiveNow(windowStart, windowMs);
@@ -328,52 +280,13 @@ export default function PropertyListView({
 
       {/* 요약 배너 + 레포트 패널 — 바로 아래 타임라인의 하이라이트 박스와 맞닿아, 레포트가
           가리키는 구간이 무엇인지 시각적으로 이어지게 함 (D-024) */}
-      {noSelection ? (
-        <div style={{
-          padding: isMobile ? '9px 12px' : '10px 20px',
-          background: '#f8fafc', borderBottom: '1px solid #e2e8f0',
-          fontSize: isMobile ? 12 : 13, color: '#94a3b8',
-          textAlign: 'center', fontWeight: 500,
-        }}>
-          숙소를 선택해주세요
-        </div>
-      ) : (
-        <SummaryBanner
-          summary={displaySummary} loading={periodLoading} isMobile={isMobile} insights={insights}
-          onSelectRoom={handleSelectRoom} properties={properties}
-        >
-          {/* 레포트 패널 상단 — 선택 숙소 수 소형 표기 */}
-          <div style={{
-            padding: isMobile ? '4px 12px' : '4px 20px',
-            background: '#f8fafc', borderBottom: '1px solid #e2e8f0',
-            display: 'flex', alignItems: 'center', gap: 5,
-          }}>
-            <span style={{
-              fontSize: 10, color: allSelected ? '#94a3b8' : '#2563eb',
-              fontFamily: "'DM Mono', monospace", fontWeight: 600,
-            }}>
-              {allSelected
-                ? `전체 ${properties.length}개 숙소`
-                : `${scope.selectedCount} / ${scope.totalCount}개 선택`}
-            </span>
-            {!allSelected && (
-              <span style={{
-                fontSize: 9, background: '#dbeafe', color: '#1d4ed8',
-                border: '1px solid #bfdbfe', borderRadius: 4,
-                padding: '1px 5px', fontWeight: 700,
-              }}>
-                선택 레포트
-              </span>
-            )}
-          </div>
-          <ReportPanel
-            period={statsPeriod} stats={periodStats} loading={periodLoading} isMobile={isMobile}
-            properties={scopedProperties}
-            propertyIds={statsPropertyIds}
-            onSelectRoom={handleSelectRoom}
-          />
-        </SummaryBanner>
-      )}
+      <PeriodReport
+        period={statsPeriod}
+        properties={properties}
+        {...selection.reportScope}
+        onSelectProperty={onSelectProperty}
+        isMobile={isMobile}
+      />
 
       {/* 간트 헤더 + 목록 래퍼 — 현재 시각 연속선 기준점 */}
       <div style={{ flex: '1 0 auto', display: 'flex', flexDirection: 'column', position: 'relative' }}>

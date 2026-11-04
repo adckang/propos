@@ -11,9 +11,8 @@
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
+import { renderHook } from '../helpers/renderComponent.js';
+import { readSource } from '../helpers/sourceCode.js';
 
 import {
   deriveSelectionScope,
@@ -202,24 +201,31 @@ describe('시나리오 — 전체 → 1개 → 복수 → 해제 → 전체 (범
 // ══════════════════════════════════════════════════════════════════════════
 // D. PropertyListView 배선 (L2 — 소스 계약)
 // ══════════════════════════════════════════════════════════════════════════
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const listViewSrc = readFileSync(path.join(ROOT, 'src/components/v2/PropertyListView.jsx'), 'utf8');
 
-describe('PropertyListView — selectionScopeDomain 배선', () => {
-  test('selectionScopeDomain 함수 3종을 import한다', () => {
-    assert.match(listViewSrc, /from '\.\.\/\.\.\/domain\/selectionScopeDomain\.js'/);
-    for (const fn of ['deriveSelectionScope', 'toggleAllSelection', 'syncSelectionWithProperties']) {
-      assert.ok(listViewSrc.includes(fn), `${fn} 미사용`);
+describe('usePropertySelection — 리스트뷰·대시보드 공용 선택 훅 (실제 실행)', () => {
+  const props = [{ id: 'A' }, { id: 'B' }, { id: 'C' }];
+
+  test('처음엔 전체 선택 — 전체여도 null 이 아니라 화면 숙소 id 를 명시 (DB 의 숨은 레거시 숙소가 섞이지 않게)', async () => {
+    const selection = await renderHook('src/hooks/usePropertySelection.js', 'usePropertySelection', [props]);
+    assert.equal(selection.scope.mode, 'all');
+    assert.equal(selection.allSelected, true);
+    assert.equal(selection.noSelection, false);
+    assert.deepEqual(selection.statsPropertyIds, ['A', 'B', 'C']);
+    assert.deepEqual(selection.scopedProperties.map(p => p.id), ['A', 'B', 'C']);
+    assert.deepEqual(selection.scopeBadge, { allSelected: true, selectedCount: 3, totalCount: 3 });
+  });
+
+  test('숙소가 없으면 선택 없음 — 통계 범위 [] (전체로 되돌아가지 않음)', async () => {
+    const selection = await renderHook('src/hooks/usePropertySelection.js', 'usePropertySelection', [[]]);
+    assert.equal(selection.noSelection, true);
+    assert.deepEqual(selection.statsPropertyIds, []);
+  });
+
+  test('리스트뷰·대시보드 둘 다 이 훅을 쓴다 (선택 규칙이 한 곳에만 있다)', () => {
+    for (const file of ['src/components/v2/PropertyListView.jsx', 'src/components/v2/MonthlyView.jsx']) {
+      const src = readSource(file);
+      assert.match(src, /usePropertySelection\(properties\)/, file);
+      assert.doesNotMatch(src, /deriveSelectionScope|syncSelectionWithProperties/, `${file}: 선택 규칙을 다시 구현함`);
     }
-  });
-
-  test('전체 선택도 화면 숙소 ID를 명시해 DB의 숨은 레거시 숙소가 섞이지 않는다', () => {
-    assert.match(listViewSrc, /statsPropertyIds\s*=\s*noSelection\s*\?\s*\[\]\s*:\s*scope\.selectedIds/);
-    assert.ok(!/selectedRooms\.size\s*===\s*properties\.length/.test(listViewSrc),
-      '개수 비교로 전체 여부를 판단하는 인라인 로직이 남아 있음');
-  });
-
-  test('선택 없음이면 useReportingStats에 period=null 전달 (fetch 스킵, 전체로 복귀 금지)', () => {
-    assert.match(listViewSrc, /useReportingStats\(\s*noSelection\s*\?\s*null\s*:\s*statsPeriod/);
   });
 });

@@ -105,15 +105,5 @@ describe('숙소 이름 목록이 상세 목록까지 전달된다', () => {
     assert.ok(!/\{item\.property_name \?\? item\.property_id\}/.test(src), 'ID/서버 이름을 직접 출력하는 코드가 남아 있음');
   });
 
-  test('레포트 패널을 쓰는 모든 화면이 숙소 목록을 넘긴다', () => {
-    for (const rel of [
-      'src/components/v2/PropertyDetailView.jsx',
-      'src/components/v2/reporting/SelectedPropertyReport.jsx',
-    ]) {
-      const src = read(rel);
-      const start = src.indexOf('<ReportPanel');
-      const tag = src.slice(start, src.indexOf('/>', start));
-      assert.ok(/properties=/.test(tag), `${rel} 의 ReportPanel 에 properties 없음`);
-    }
-  });
+  // "레포트 패널을 쓰는 모든 화면이 숙소 목록을 넘긴다"는 s92 D 가 세 화면을 실제 렌더링해 검증한다.
 });

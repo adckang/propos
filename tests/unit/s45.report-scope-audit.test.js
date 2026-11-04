@@ -371,12 +371,8 @@ describe('useReportingStats — DEMO 대체 금지 (R1)', () => {
 });
 
 describe('미래 패널 → 선택 범위 전달 (R2, R3)', () => {
-  test('PropertyListView → ReportPanel: 필터된 properties + propertyIds 전달 (회귀 가드)', () => {
-    const el = jsxElement(read('src/components/v2/PropertyListView.jsx'), 'ReportPanel');
-    assert.ok(el.includes('properties='), 'properties');
-    assert.ok(el.includes('propertyIds={statsPropertyIds}'), 'propertyIds');
-  });
-
+  // 화면(리스트뷰·대시보드·숙소 상세) → 레포트 패널의 숙소 범위는 s92 D 가 실제 렌더링으로 검증한다
+  // (세 화면이 PeriodReport 하나를 쓴다). 여기는 패널 안쪽 전달만.
   test('ReportPanel → FutureMatrixPanel: propertyIds 전달 (회귀 가드)', () => {
     const el = jsxElement(read('src/components/v2/reporting/ReportPanel.jsx'), 'FutureMatrixPanel');
     assert.ok(el.includes('propertyIds={propertyIds}'));
@@ -391,17 +387,6 @@ describe('미래 패널 → 선택 범위 전달 (R2, R3)', () => {
     const src = read('src/components/v2/reporting/ActiveHybridPanel.jsx');
     const el = jsxElement(src, 'FutureMatrixPanel');
     assert.ok(el.includes('propertyIds={propertyIds}'));
-  });
-
-  test('DetailView → ReportPanel: 이 숙소의 properties 와 propertyIds 전달', () => {
-    const el = jsxElement(read('src/components/v2/PropertyDetailView.jsx'), 'ReportPanel');
-    assert.ok(el.includes('properties='), 'properties');
-    assert.ok(el.includes('propertyIds='), 'propertyIds');
-  });
-
-  test('Dashboard → 이번 달 ReportPanel: properties 전달', () => {
-    const el = jsxElement(read('src/components/v2/reporting/SelectedPropertyReport.jsx'), 'ReportPanel');
-    assert.ok(el.includes('properties='));
   });
 
   test('this_month 기간 범위를 계산할 수 있다 (Dashboard 이번 달 [예정])', () => {
@@ -451,19 +436,7 @@ describe('[예정] 구간 배선 — 지금 ~ 기간 끝 (R7, L2)', () => {
   });
 });
 
-describe('미래 기간 요약 문장 배선 (R15, L2)', () => {
-  test('ListView: 미래 기간 요약은 선택 숙소의 예약으로 계산해 SummaryBanner 에 전달', () => {
-    const src = read('src/components/v2/PropertyListView.jsx');
-    assert.match(src, /futureSummaryFor\(statsPeriod,\s*scopedProperties\)\s*\|\|\s*summary/);
-    assert.match(src, /<SummaryBanner\s+summary=\{displaySummary\}/);
-  });
-
-  test('DetailView: 이 숙소의 예약으로 계산', () => {
-    const src = read('src/components/v2/PropertyDetailView.jsx');
-    assert.match(src, /futureSummaryFor\(statsPeriod,\s*\[property\]\)\s*\|\|\s*summary/);
-    assert.ok(src.includes('<SummaryBanner summary={displaySummary}'));
-  });
-});
+// 미래 기간 요약 문장(예약 기준) 배선은 s92 D 가 세 화면 모두 실제 렌더링으로 검증한다 (R15).
 
 describe('cleaning stats API — 선택 숙소 필터 (L2)', () => {
   const src = read('api/cleaning/[...slug].js');

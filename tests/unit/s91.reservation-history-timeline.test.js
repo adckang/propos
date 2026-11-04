@@ -7,16 +7,16 @@
  *   - 캘린더: 지난 막대를 감지기 기록만으로 그려, 퇴실 감지 뒤 "청소 끝남"이 안 오면 청소중으로 굳었다.
  * 고친 뒤: 지난 구간도 예약 기록으로 미래와 같은 순서(공실→입실준비→체류→청소)로 다시 그린다.
  */
-import { describe, test, mock } from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { parse } from '@babel/parser';
 import { buildReservationHistorySegments, segmentsBefore } from '../../src/domain/reservationHistoryDomain.js';
 import { buildLiveProperty, deriveCurrentState, deriveTimeline, lastPastReservation } from '../../src/application/calendarSyncService.js';
 import { getWindowSegments, getGanttSegments } from '../../src/data/roomStateMockData.js';
 import { ASSIGNED_STATUSES } from '../../src/domain/cleaningStatsDomain.js';
+import { kst, withFrozenNow } from '../helpers/testTime.js';
+import { evaluateMemo, readSource } from '../helpers/sourceCode.js';
 
-const at = value => new Date(`2026-${value}:00+09:00`);
+const at = value => kst(`2026-${value}`);
 const iso = value => at(value).toISOString();
 const template = { id: '파주201', name: '파주201', checkOutHour: 11, cleaningDurationHours: 3 };
 
@@ -31,10 +31,7 @@ function stays() {
 }
 const rows = segments => segments.map(s => [s.mainStatus, s.subStatus, s.start.toISOString(), s.end?.toISOString() ?? null]);
 
-function withNow(value, run) {
-  mock.timers.enable({ apis: ['Date'], now: at(value) });
-  try { return run(); } finally { mock.timers.reset(); }
-}
+const withNow = (value, run) => withFrozenNow(at(value), run);
 
 function assertContiguous(segments) {
   for (let i = 1; i < segments.length; i++) {
@@ -43,20 +40,8 @@ function assertContiguous(segments) {
   }
 }
 
-function indicatorMap(property, recentSegs) {
-  const source = readFileSync(new URL('../../src/components/v2/PropertyDetailView.jsx', import.meta.url), 'utf8');
-  const ast = parse(source, { sourceType: 'module', plugins: ['jsx'] });
-  let callback;
-  function visit(node) {
-    if (!node || typeof node !== 'object' || callback) return;
-    if (node.type === 'VariableDeclarator' && node.id?.name === 'cleaningInfoMap') callback = node.init.arguments[0];
-    for (const value of Object.values(node)) {
-      if (Array.isArray(value)) value.forEach(visit); else if (value && typeof value === 'object') visit(value);
-    }
-  }
-  visit(ast); assert.ok(callback);
-  return new Function('property', 'recentSegs', 'lastPastReservation', 'ASSIGNED_STATUSES', `return (${source.slice(callback.start, callback.end)})();`)(property, recentSegs, lastPastReservation, ASSIGNED_STATUSES);
-}
+const indicatorMap = (property, recentSegs) => evaluateMemo('src/components/v2/PropertyDetailView.jsx', 'cleaningInfoMap',
+  { property, recentSegs, lastPastReservation, ASSIGNED_STATUSES });
 
 // ── L1: 예약 기록 → 지난 구간 ───────────────────────────────────────────────
 describe('buildReservationHistorySegments — 지난 예약을 미래와 같은 순서로 다시 그린다', () => {
@@ -179,7 +164,7 @@ describe('buildReservationHistorySegments — 겹침·경계 (코드 리뷰 반�
   });
 
   test('미래 예측도 같은 숙박 순서 함수를 쓴다 (과거·미래 규칙이 갈라지지 않게 — 소스 계약)', () => {
-    const mock = readFileSync(new URL('../../src/data/roomStateMockData.js', import.meta.url), 'utf8');
+    const mock = readSource('src/data/roomStateMockData.js');
     assert.match(mock, /import \{ appendCleaningSegments, appendStayCycle, mergeOverlappingStays \} from '..\/domain\/reservationHistoryDomain\.js'/);
     assert.match(mock, /cursor = appendStayCycle\(push, r, cursor, cleanH\);/);
     assert.doesNotMatch(mock, /function appendCleaningSegments/);
@@ -338,7 +323,7 @@ describe('숙소 상세 — 지난 청소에도 담당자가 보인다', () => {
   }));
 
   test('지난 청소가 완료(COMPLETED)로 바뀌어 있어도 배정으로 표시 (소스 계약)', () => {
-    const source = readFileSync(new URL('../../src/components/v2/PropertyDetailView.jsx', import.meta.url), 'utf8');
+    const source = readSource('src/components/v2/PropertyDetailView.jsx');
     assert.match(source, /const isAssigned = ASSIGNED_STATUSES\.has\(res\.cleaningStatus\)/);
     assert.deepEqual([...ASSIGNED_STATUSES].sort(), ['ASSIGNED', 'COMPLETED']);
   });
@@ -351,14 +336,14 @@ describe('숙소 상세 — 지난 청소에도 담당자가 보인다', () => {
   }));
 
   test('청소 표시는 그 청소 막대 안·창 안에 머문다 (소스 계약)', () => {
-    const source = readFileSync(new URL('../../src/components/v2/PropertyDetailView.jsx', import.meta.url), 'utf8');
+    const source = readSource('src/components/v2/PropertyDetailView.jsx');
     assert.match(source, /const anchorTime = new Date\(Math\.min\(\s*Math\.max\([\s\S]{0,160}seg\.start\.getTime\(\),\s*windowStart\.getTime\(\),\s*\),\s*segEnd\.getTime\(\),\s*\)\);/);
   });
 });
 
 // ── L2: 캘린더가 지난 막대를 예약 기록으로 그린다 ───────────────────────────
 describe('MonthlyCalendar — 지난 막대의 뼈대는 감지기가 아니라 예약 기록', () => {
-  const source = readFileSync(new URL('../../src/components/v2/reporting/MonthlyCalendar.jsx', import.meta.url), 'utf8');
+  const source = readSource('src/components/v2/reporting/MonthlyCalendar.jsx');
   test('예약 기록 막대를 우선하고, 기록이 없는 숙소만 감지기 기록으로', () => {
     assert.match(source, /import \{ buildReservationHistorySegments, segmentsBefore \} from '..\/..\/..\/domain\/reservationHistoryDomain\.js'/);
     assert.match(source, /const history = buildReservationHistorySegments\(\s*singleProperty\.reservations,\s*pastUntil,\s*singleProperty\.cleaningDurationHours \?\? 2\.5,\s*\{ since: from \},/);

@@ -158,19 +158,8 @@ describe('RoomStateApp.jsx — 발견된 패턴 팝업에서 날짜 지정 디�
   });
 });
 
-describe('SelectedPropertyReport.jsx — handleSelectRoom이 occurredAt으로 day offset을 계산해 넘긴다 (D-028)', () => {
-  const src = read('src/components/v2/reporting/SelectedPropertyReport.jsx');
-  test('kstDayOffsetFromToday/toKstDateKey를 이용해 dayOffset을 계산한다', () => {
-    assert.match(src, /import \{ toKstDateKey, kstDayOffsetFromToday \} from '\.\.\/\.\.\/\.\.\/domain\/monthlyCalendarDomain\.js'/);
-    assert.match(src, /const dayOffset = occurredAt != null \? kstDayOffsetFromToday\(toKstDateKey\(occurredAt\)\) : null;/);
-    assert.match(src, /onSelectProperty\?\.\(property, dayOffset\)/);
-  });
-  test('ReportPanel과 SummaryBanner 둘 다 같은 handleSelectRoom을 쓴다(중복 로직 없음)', () => {
-    assert.match(src, /onSelectRoom=\{handleSelectRoom\}/);
-    const occurrences = [...src.matchAll(/onSelectRoom=\{handleSelectRoom\}/g)];
-    assert.equal(occurrences.length, 2);
-  });
-});
+// 숙소를 누르면 그 일이 일어난 날짜(오늘 기준 며칠 전)로 이동, 레포트 패널·패턴 팝업이 같은 이동 규칙을 쓰는지는
+// s92 D(assertReportWiring)가 리스트뷰·대시보드를 실제 렌더링해 받은 onSelectRoom 을 호출해서 검증한다 (D-028).
 
 describe('SummaryBanner.jsx — 인사이트 한 줄을 누르면 상세 팝업이 뜬다 (D-028)', () => {
   const src = read('src/components/v2/reporting/SummaryBanner.jsx');

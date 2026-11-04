@@ -237,19 +237,4 @@ describe('api/stats.js — this_week/last_week도 insights를 자체 try/catch�
   });
 });
 
-describe('PropertyListView.jsx — insights를 SummaryBanner로 전달하고 handleSelectRoom을 공유한다 (D-029)', () => {
-  const src = read('src/components/v2/PropertyListView.jsx');
-  test('useReportingStats에서 insights를 구조분해한다', () => {
-    assert.match(src, /const \{ stats: periodStats, summary, insights, loading: periodLoading \} = useReportingStats/);
-  });
-  test('handleSelectRoom이 day offset을 계산해 onSelectProperty(prop, dayOffset)로 넘긴다', () => {
-    assert.match(src, /const dayOffset = occurredAt != null \? kstDayOffsetFromToday\(toKstDateKey\(occurredAt\)\) : null;/);
-    assert.match(src, /onSelectProperty\?\.\(prop, dayOffset\)/);
-  });
-  test('SummaryBanner와 ReportPanel 둘 다 같은 handleSelectRoom·insights를 쓴다', () => {
-    assert.match(src, /<SummaryBanner[\s\S]{0,120}insights=\{insights\}[\s\S]{0,120}onSelectRoom=\{handleSelectRoom\}/);
-    assert.match(src, /onSelectRoom=\{handleSelectRoom\}/);
-    const occurrences = [...src.matchAll(/handleSelectRoom/g)];
-    assert.ok(occurrences.length >= 3, '정의부 + SummaryBanner + ReportPanel 최소 3번 등장해야 함');
-  });
-});
+// 리스트뷰가 insights 를 요약 배너로 넘기고 패널·배너가 같은 숙소 이동 규칙을 쓰는지는 s92 D 가 렌더링으로 검증한다 (D-029).

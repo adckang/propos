@@ -28,7 +28,7 @@ describe('PropertyListView — ListViewFilter(네비게이터)가 레포트 패�
 
   test('상태 필터 바 다음 순서가 [ListViewFilter] → [요약 배너/레포트 패널] → [간트+하이라이트]다', () => {
     const navIdx    = src.indexOf('<ListViewFilter');
-    const reportIdx = src.indexOf('{noSelection ? (');
+    const reportIdx = src.indexOf('<PeriodReport');
     const ganttIdx  = src.indexOf('간트 헤더 + 목록 래퍼');
     assert.ok(navIdx > 0 && reportIdx > 0 && ganttIdx > 0, '세 구간을 모두 찾지 못함');
     assert.ok(navIdx < reportIdx, 'ListViewFilter가 레포트 블록보다 뒤에 있음');
@@ -40,11 +40,11 @@ describe('PropertyListView — ListViewFilter(네비게이터)가 레포트 패�
     const navIdx = src.indexOf('<ListViewFilter');
     const between = src.slice(filterBarIdx, navIdx);
     // 상태 필터 바의 닫는 div 이후 ListViewFilter 시작 전까지 다른 최상위 섹션(레포트/요약)이 끼어들면 안 됨
-    assert.ok(!between.includes('SummaryBanner'), '상태 필터 바와 네비게이터 사이에 SummaryBanner가 끼어 있음');
+    assert.ok(!between.includes('<PeriodReport'), '상태 필터 바와 네비게이터 사이에 레포트(PeriodReport)가 끼어 있음');
   });
 
   test('레포트 패널(SummaryBanner) 바로 다음이 간트 래퍼(하이라이트 박스 포함) — 그 사이에 네비게이터가 없다', () => {
-    const reportIdx = src.indexOf('{noSelection ? (');
+    const reportIdx = src.indexOf('<PeriodReport');
     const ganttIdx  = src.indexOf('간트 헤더 + 목록 래퍼');
     const between = src.slice(reportIdx, ganttIdx);
     assert.ok(!between.includes('<ListViewFilter'), '레포트 패널과 간트 사이에 네비게이터가 남아 있음 — 리오더가 적용되지 않음');

@@ -89,10 +89,8 @@ test('월간 지표 상세는 선택 숙소 ID를 이벤트 조회에 전달한�
   assert.match(calls[0].sql, /property_id = ANY/);
 });
 
-test('MonthlyView ALL은 null 대신 화면의 숙소 ID 전체를 전달한다', () => {
-  const source = readFileSync(path.join(ROOT, 'src/components/v2/MonthlyView.jsx'), 'utf8');
-  assert.match(source, /statsPropertyIds\s*=\s*noSelection\s*\?\s*\[\]\s*:\s*scope\.selectedIds/);
-});
+// "전체 선택도 null 이 아니라 화면 숙소 id 전체" 규칙은 공용 선택 훅(usePropertySelection)이 갖고,
+// s46 이 훅을 실제 실행해 검증한다. 대시보드가 그 값을 레포트에 넘기는지는 s92 D 가 렌더링으로 검증.
 
 test('다음달 날짜 합계는 레포트의 예약·점유·청소 예정 합계와 일치한다', () => {
   const range = {

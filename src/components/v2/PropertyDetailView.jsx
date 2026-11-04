@@ -3,13 +3,11 @@ import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { weatherMeta } from '../../infrastructure/weatherClient';
 import { STATE_META, SEGMENT_COLORS, getWindowSegments } from '../../data/roomStateMockData';
 import { useMobile } from '../../hooks/useMobile';
-import { useReportingStats } from '../../hooks/useReportingStats';
 import { useMonthlyCalendar } from '../../hooks/useMonthlyCalendar.js';
 import DetailViewFilter from './reporting/DetailViewFilter';
-import SummaryBanner from './reporting/SummaryBanner';
-import ReportPanel, { TENSE_STYLE } from './reporting/ReportPanel';
+import PeriodReport from './reporting/PeriodReport.jsx';
+import { TENSE_STYLE } from './reporting/ReportPanel';
 import DailyActivityReportPanel from './reporting/DailyActivityReportPanel.jsx';
-import { futureSummaryFor } from '../../domain/futureWeekDomain.js';
 import { periodForOffset, periodToDateRange, describePeriod } from '../../domain/periodDomain.js';
 import { toKstDateKey } from '../../domain/monthlyCalendarDomain.js';
 import { lastPastReservation } from '../../application/calendarSyncService.js';
@@ -578,18 +576,16 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
     [tlMode, dayOffset, hourPeriod],
   );
 
-  const { stats, summary, loading: statsLoading } = useReportingStats(statsPeriod, [property.id]);
   const todayCalendar = useMonthlyCalendar(statsPeriod === 'today' ? 'this_month' : null, [property.id]);
   const todayIssueItems = statsPeriod === 'today'
     ? (todayCalendar.data?.days?.[toKstDateKey(now)]?.items ?? [])
     : [];
-  // 미래 기간 요약은 이 숙소의 예약(iCal) 기준 — 서버 요약은 이벤트 기반이라 미래엔 항상 "예약 없음"
+  // "오늘" 요약은 이 화면 고유 — 오늘 지금까지의 이상 징후 건수(캘린더 데이터). 못 가져오면 서버 요약으로 폴백
   const todayActivitySummary = statsPeriod === 'today' && todayCalendar.data
     ? todayIssueItems.length > 0
       ? `오늘 지금까지 이상 징후 ${todayIssueItems.length}건이 있었어요.`
       : '오늘 지금까지 문제 이벤트가 없어요.'
     : '';
-  const displaySummary = todayActivitySummary || futureSummaryFor(statsPeriod, [property]) || summary;
 
   const [lightboxSnap, setLightboxSnap] = useState(null);
 
@@ -788,20 +784,24 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
         )}
       </div>
 
-      {/* 요약 배너 + 레포트 패널 */}
-      <SummaryBanner summary={displaySummary} loading={statsLoading} isMobile={isMobile}>
-        {statsPeriod === 'today' ? (
+      {/* 요약 배너 + 레포트 패널 — 리스트뷰·대시보드와 같은 부품(PeriodReport). "오늘"만 이 화면 고유의 활동 요약·패널 */}
+      <PeriodReport
+        period={statsPeriod}
+        properties={[property]}
+        scopedProperties={[property]}
+        propertyIds={[property.id]}
+        summaryOverride={todayActivitySummary}
+        extraLoading={statsPeriod === 'today' && todayCalendar.loading}
+        panel={statsPeriod === 'today' ? (
           <DailyActivityReportPanel
             items={todayIssueItems}
             loading={todayCalendar.loading}
             error={!!todayCalendar.error}
             isMobile={isMobile}
           />
-        ) : (
-          <ReportPanel period={statsPeriod} stats={stats} loading={statsLoading} isMobile={isMobile}
-            properties={[property]} propertyIds={[property.id]} />
-        )}
-      </SummaryBanner>
+        ) : null}
+        isMobile={isMobile}
+      />
 
 
 {/* 본문: 타임라인(좁게) + 센서 패널(넓게) */}

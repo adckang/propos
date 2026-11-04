@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { STATE_META } from '../../data/roomStateMockData.js';
 import { useMobile } from '../../hooks/useMobile.js';
 import { useMonthlyCalendar } from '../../hooks/useMonthlyCalendar.js';
-import { deriveSelectionScope, syncSelectionWithProperties } from '../../domain/selectionScopeDomain.js';
-import SelectedPropertyReport from './reporting/SelectedPropertyReport.jsx';
+import { usePropertySelection } from '../../hooks/usePropertySelection.js';
+import PeriodReport from './reporting/PeriodReport.jsx';
 import MonthlyViewFilter from './reporting/MonthlyViewFilter.jsx';
 import PropertyMultiSelectDropdown from './reporting/PropertyMultiSelectDropdown.jsx';
 import MonthlyCalendar from './reporting/MonthlyCalendar.jsx';
@@ -14,15 +14,9 @@ export default function MonthlyView({ onSelectStatus, onNavigateToList, onSelect
   const isMobile = useMobile();
   const [statusDetailsOpen, setStatusDetailsOpen] = useState(false);
   const [statsPeriod, setStatsPeriod] = useState('this_month');
-  const [selectedRooms, setSelectedRooms] = useState(() => new Set(properties.map(property => property.id)));
-  const knownIdsRef = useRef(new Set(properties.map(property => property.id)));
-
-  useEffect(() => {
-    const currentIds = properties.map(property => property.id);
-    const previousKnown = knownIdsRef.current;
-    knownIdsRef.current = new Set(currentIds);
-    setSelectedRooms(previous => syncSelectionWithProperties(previous, previousKnown, currentIds));
-  }, [properties]);
+  // 체크박스 선택 — 리스트뷰와 같은 규칙 (usePropertySelection)
+  const selection = usePropertySelection(properties);
+  const { selectedRooms, setSelectedRooms, scope, noSelection, statsPropertyIds, scopedProperties } = selection;
 
   const now = new Date();
   const timeStr = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
@@ -37,14 +31,6 @@ export default function MonthlyView({ onSelectStatus, onNavigateToList, onSelect
     counts[mainStatus].subs[subStatus] = (counts[mainStatus].subs[subStatus] || 0) + 1;
   }
 
-  const allIds = properties.map(property => property.id);
-  const scope = deriveSelectionScope(selectedRooms, allIds);
-  const noSelection = scope.mode === 'none';
-  const allSelected = scope.mode === 'all';
-  // MonthlyView는 ALL이어도 화면에 보이는 숙소 ID를 명시적으로 전달한다.
-  // DB 전체(null)가 화면의 숙소 범위를 벗어나는 일을 막고, 숙소 1개인 경우도 단일 조회로 처리한다.
-  const statsPropertyIds = noSelection ? [] : scope.selectedIds;
-  const scopedProperties = allSelected ? properties : properties.filter(property => selectedRooms.has(property.id));
   const monthlyCalendarState = useMonthlyCalendar(noSelection ? null : statsPeriod, statsPropertyIds);
 
   const unassignedCleaningCount = properties.reduce((count, property) => count + (property.reservations || []).filter(
@@ -130,7 +116,10 @@ export default function MonthlyView({ onSelectStatus, onNavigateToList, onSelect
       {/* 네비게이터를 레포트 패널 위로 — ListView(D-024)와 같은 이유: 레포트 패널이 바로 아래
           컴포넌트(숙소 선택 드롭다운을 거쳐 캘린더)와 더 가까워지도록 순서를 바꿈 */}
       <MonthlyViewFilter statsPeriod={statsPeriod} onPeriodChange={setStatsPeriod} isMobile={isMobile} />
-      <SelectedPropertyReport statsPeriod={statsPeriod} scopedProperties={scopedProperties} statsPropertyIds={statsPropertyIds} scope={scope} noSelection={noSelection} allSelected={allSelected} properties={properties} onSelectProperty={onSelectProperty} isMobile={isMobile} monthlyCalendarState={monthlyCalendarState} />
+      {/* 월간 레포트 — 리스트뷰·숙소 상세와 같은 PeriodReport. 요약 배너는 아래 캘린더 로딩도 같이 기다린다 */}
+      <div data-testid="selected-property-report">
+        <PeriodReport period={statsPeriod} properties={properties} {...selection.reportScope} onSelectProperty={onSelectProperty} extraLoading={monthlyCalendarState.loading} isMobile={isMobile} />
+      </div>
       <PropertyMultiSelectDropdown properties={properties} selectedRooms={selectedRooms} setSelectedRooms={setSelectedRooms} scope={scope} isMobile={isMobile} />
       <MonthlyCalendar statsPeriod={statsPeriod} scopedProperties={scopedProperties} noSelection={noSelection} properties={properties} onSelectProperty={onSelectProperty} onNavigateToList={onNavigateToList} isMobile={isMobile} monthlyCalendarState={monthlyCalendarState} />
     </div>

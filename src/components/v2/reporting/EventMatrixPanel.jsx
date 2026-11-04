@@ -10,7 +10,7 @@ import { computeOperationalMetrics } from '../../../domain/operationalMetricsDom
  * report-architecture.md 섹션 4 Template-P 참조.
  *
  * 지표 라벨·분자/분모 정의는 operationalMetricsDomain.computeOperationalMetrics 가 정본 —
- * SummaryBanner 요약 문장(reportingService.generateSummary / SelectedPropertyReport)도 같은
+ * SummaryBanner 요약 문장(reportingService.generateSummary / PeriodReport)도 같은
  * 정의를 써서, 표 숫자와 위 요약 문장이 항상 같은 얘기를 하게 한다 (D-026).
  */
 

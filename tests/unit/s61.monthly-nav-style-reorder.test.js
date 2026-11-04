@@ -13,6 +13,8 @@
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { renderComponent } from '../helpers/renderComponent.js';
+import { PROPERTIES } from '../../src/data/roomStateMockData.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -53,22 +55,18 @@ describe('MonthlyViewFilter — ListViewFilter의 3버튼 네비게이터와 같
   });
 });
 
-describe('MonthlyView — 네비게이터(MonthlyViewFilter)가 레포트 패널(SelectedPropertyReport)보다 먼저 렌더링된다', () => {
-  const src = read('src/components/v2/MonthlyView.jsx');
-
-  test('JSX 순서가 [MonthlyViewFilter] → [SelectedPropertyReport] → [PropertyMultiSelectDropdown] → [MonthlyCalendar]다', () => {
-    const navIdx      = src.indexOf('<MonthlyViewFilter');
-    const reportIdx    = src.indexOf('<SelectedPropertyReport');
-    const dropdownIdx = src.indexOf('<PropertyMultiSelectDropdown');
-    const calendarIdx = src.indexOf('<MonthlyCalendar');
-    assert.ok(navIdx > 0 && reportIdx > 0 && dropdownIdx > 0 && calendarIdx > 0, '네 컴포넌트를 모두 찾지 못함');
-    assert.ok(navIdx < reportIdx, 'MonthlyViewFilter가 SelectedPropertyReport보다 뒤에 있음 — 리오더 미적용');
-    assert.ok(reportIdx < dropdownIdx, 'SelectedPropertyReport가 PropertyMultiSelectDropdown보다 뒤에 있음');
-    assert.ok(dropdownIdx < calendarIdx, 'PropertyMultiSelectDropdown이 MonthlyCalendar보다 뒤에 있음');
-  });
-
-  test('두 컴포넌트의 props는 리오더 이후에도 그대로다', () => {
-    assert.match(src, /<MonthlyViewFilter statsPeriod=\{statsPeriod\} onPeriodChange=\{setStatsPeriod\} isMobile=\{isMobile\} \/>/);
-    assert.match(src, /<SelectedPropertyReport statsPeriod=\{statsPeriod\} scopedProperties=\{scopedProperties\}/);
+describe('MonthlyView — 네비게이터가 레포트보다 먼저, 그 아래 숙소 선택·캘린더 (실제 렌더링 순서)', () => {
+  test('화면 순서: [기간 버튼] → [레포트] → [숙소 선택] → [캘린더]', async () => {
+    const { html } = await renderComponent('src/components/v2/MonthlyView.jsx', { properties: PROPERTIES.slice(0, 3) }, {
+      replace: {
+        'src/hooks/useReportingStats.js': { useReportingStats: () => ({ stats: null, summary: '', insights: [], loading: false }) },
+        'src/hooks/useMonthlyCalendar.js': { useMonthlyCalendar: () => ({ data: null, loading: false, error: null }) },
+      },
+    });
+    const order = ['monthly-view-filter', 'selected-property-report', 'property-multi-select-toggle', 'monthly-calendar']
+      .map(id => [id, html.indexOf(`data-testid="${id}"`)]);
+    for (const [id, index] of order) assert.ok(index >= 0, `${id} 가 화면에 없음`);
+    const indexes = order.map(([, index]) => index);
+    assert.deepEqual(indexes, [...indexes].sort((a, b) => a - b), `화면 순서가 다름: ${order.map(([id]) => id).join(' → ')}`);
   });
 });

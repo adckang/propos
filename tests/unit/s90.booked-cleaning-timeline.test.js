@@ -1,12 +1,12 @@
-import { describe, test, mock } from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { parse } from '@babel/parser';
 import { buildLiveProperty, deriveCurrentState, deriveTimeline, lastPastReservation } from '../../src/application/calendarSyncService.js';
 import { getWindowSegments, getGanttSegments } from '../../src/data/roomStateMockData.js';
 import { ASSIGNED_STATUSES } from '../../src/domain/cleaningStatsDomain.js';
+import { kst, withFrozenNow } from '../helpers/testTime.js';
+import { evaluateMemo, extractFunction } from '../helpers/sourceCode.js';
 
-const at = value => new Date(`2026-10-${value}:00+09:00`);
+const at = value => kst(`2026-10-${value}`);
 const template = { id: 'timeline-fixture', name: '검증숙소', checkOutHour: 11, cleaningDurationHours: 3 };
 function reservations() {
   return [
@@ -14,29 +14,14 @@ function reservations() {
     { uid: 'next', checkIn: at('30T15:00'), checkOut: at('31T11:00'), cleaningAt: at('31T12:00'), cleaningEnd: at('31T15:00'), cleaningStatus: 'ASSIGNED', cleanerName: '다음담당자' },
   ];
 }
-function withNow(value, run) {
-  mock.timers.enable({ apis: ['Date'], now: at(value) });
-  try { return run(); } finally { mock.timers.reset(); }
-}
+const withNow = (value, run) => withFrozenNow(at(value), run);
 const cleaningRows = segments => segments.filter(s => s.mainStatus === 'CLEANING').map(s => ({
   subStatus: s.subStatus, start: s.start.toISOString(), end: s.end?.toISOString() ?? null,
   checkout: s.cleaningCheckoutAt?.toISOString(),
 }));
 
-function indicatorMap(property, recentSegs) {
-  const source = readFileSync(new URL('../../src/components/v2/PropertyDetailView.jsx', import.meta.url), 'utf8');
-  const ast = parse(source, { sourceType: 'module', plugins: ['jsx'] });
-  let callback;
-  function visit(node) {
-    if (!node || typeof node !== 'object' || callback) return;
-    if (node.type === 'VariableDeclarator' && node.id?.name === 'cleaningInfoMap') callback = node.init.arguments[0];
-    for (const value of Object.values(node)) {
-      if (Array.isArray(value)) value.forEach(visit); else if (value && typeof value === 'object') visit(value);
-    }
-  }
-  visit(ast); assert.ok(callback);
-  return new Function('property', 'recentSegs', 'lastPastReservation', 'ASSIGNED_STATUSES', `return (${source.slice(callback.start, callback.end)})();`)(property, recentSegs, lastPastReservation, ASSIGNED_STATUSES);
-}
+const indicatorMap = (property, recentSegs) => evaluateMemo('src/components/v2/PropertyDetailView.jsx', 'cleaningInfoMap',
+  { property, recentSegs, lastPastReservation, ASSIGNED_STATUSES });
 
 describe('Booked cleaning timeline — 11 checkout / 12–15 cleaning', () => {
   test('current state switches from pending to progress at the booked start', () => {
@@ -137,11 +122,7 @@ describe('Actual detail indicator mapping after splitting waiting and progress',
 });
 
 test('list Gantt does not merge progress into a pending-colored bar', () => withNow('30T10:00', () => {
-  const text = readFileSync(new URL('../../src/components/v2/PropertyListView.jsx', import.meta.url), 'utf8');
-  const tree = parse(text, { sourceType: 'module', plugins: ['jsx'] });
-  const node = tree.program.body.find(n => n.type === 'FunctionDeclaration' && n.id?.name === 'mergeGanttSegments');
-  assert.ok(node);
-  const merge = new Function(`return (${text.slice(node.start, node.end)});`)();
+  const merge = extractFunction('src/components/v2/PropertyListView.jsx', 'mergeGanttSegments');
   const property = buildLiveProperty(template, reservations());
   const rows = merge(getGanttSegments(property, at('29T00:00'), at('31T23:00')))
     .filter(s => s.mainStatus === 'CLEANING' && s.start < at('30T15:00'));

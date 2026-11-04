@@ -65,7 +65,7 @@ describe('PropertyDetailView — 레포트 기간 하이라이트 박스 배선'
 
   test('periodToDateRange로 기간의 날짜 범위를 구하고, 레포트 패널과 같은 시제 색을 쓴다', () => {
     assert.match(src, /import \{ periodForOffset, periodToDateRange, describePeriod \} from '\.\.\/\.\.\/domain\/periodDomain\.js';/);
-    assert.match(src, /import ReportPanel, \{ TENSE_STYLE \} from '\.\/reporting\/ReportPanel';/);
+    assert.match(src, /import \{ TENSE_STYLE \} from '\.\/reporting\/ReportPanel';/);
     assert.match(src, /const periodRange = useMemo\(\(\) => periodToDateRange\(statsPeriod\), \[statsPeriod\]\);/);
     assert.match(src, /const periodStyle = TENSE_STYLE\[periodTense\] \?\? TENSE_STYLE\.active;/);
   });
