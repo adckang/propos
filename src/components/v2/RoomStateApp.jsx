@@ -521,6 +521,7 @@ export default function RoomStateApp({ onBack }) {
         body: JSON.stringify({ property_id: canonicalPropertyId(cfg) }),
       });
       if (!syncResponse.ok) throw new Error(await errorMessageOf(syncResponse));
+      const syncResult = await syncResponse.json();
 
       const cloudRows = await refreshDbProperties();
       const row = cloudRows.find(item => (
@@ -530,8 +531,6 @@ export default function RoomStateApp({ onBack }) {
 
       const live = cloudRowToLiveProperty(row);
       setLiveProperty(live);
-      setLastSynced(new Date());
-      setSyncStatus('ok');
 
       // Pi 워처에 현재 예약 정보 전달 (퇴실 감지용)
       const currentRes = live.reservation;
@@ -540,6 +539,11 @@ export default function RoomStateApp({ onBack }) {
         district: cfg.district,
         reservation: currentRes ? { checkOut: currentRes.checkOut?.toISOString?.() ?? null } : null,
       });
+      if (syncResult.assignmentRepair?.error) {
+        throw new Error(`청소 담당자 동기화 실패: ${syncResult.assignmentRepair.error}`);
+      }
+      setLastSynced(new Date());
+      setSyncStatus('ok');
     } catch (error) {
       setSyncStatus('error');
       Toast.show(`캘린더 동기화 실패: ${error.message || '설정과 URL을 확인하세요.'}`, 'e');

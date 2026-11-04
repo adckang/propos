@@ -336,6 +336,9 @@ function PropertyPanel({ syncConfig, onDataChanged }) {
         body: JSON.stringify({ property_id: propertyId }),
       });
       await onDataChanged?.();
+      if (result.assignmentRepair?.error) {
+        throw new Error(`청소 담당자 동기화 실패: ${result.assignmentRepair.error}`);
+      }
       Toast.show(`서버 iCal 동기화 완료 — 신규 ${result.created}건 생성`, 's');
     } catch (e) {
       Toast.show('서버 동기화 실패: ' + e.message, 'e');

@@ -105,6 +105,11 @@ test('실DB: 파주201 청소 작업의 담당자 연결 상태 진단', { skip:
       jobShapes: shapeRows,
       statuses: [...new Set(jobs.map(row => row.status))].sort(),
     }));
+
+    assert.equal(assignedWithoutId.length, 0,
+      `배정 완료 ${assigned.length}건 중 ${assignedWithoutId.length}건의 담당자 ID가 비어 있습니다.`);
+    assert.equal(assignedWithoutName.length, 0,
+      `담당자 ID가 있지만 이름을 조회할 수 없는 배정이 ${assignedWithoutName.length}건입니다.`);
   } finally {
     await pool.end();
   }
