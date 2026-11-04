@@ -1,5 +1,5 @@
 // roomStateMockData.js — Room State Machine UI 전용 목업 데이터
-import { reservationCleaningWindow } from '../domain/cleaningScheduleDomain.js';
+import { appendCleaningSegments, appendStayCycle, mergeOverlappingStays } from '../domain/reservationHistoryDomain.js';
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
@@ -698,41 +698,29 @@ export const SEGMENT_COLORS = {
 
 // ── 미래 상태 예측 세그먼트 생성 (예약 데이터 기반) ───────────────────────────
 
-function appendCleaningSegments(push, reservation, cursor, durationHours) {
-  const window = reservationCleaningWindow(reservation, durationHours);
-  const start = window?.start ?? cursor;
-  const end = window?.end ?? new Date(cursor.getTime() + durationHours * 3_600_000);
-  const checkoutAt = reservation?.checkOut;
-  if (start > cursor) push('CLEANING', 'CLEANING_PENDING', cursor, start, checkoutAt);
-  push('CLEANING', 'CLEANING_IN_PROGRESS', new Date(Math.max(cursor.getTime(), start.getTime())), end, checkoutAt);
-  return new Date(Math.max(cursor.getTime(), end.getTime()));
-}
-
 function addResCycles(push, property, firstRes, cursor, windowEnd) {
   const cleanH = property.cleaningDurationHours ?? 2.5;
+  // 겹치는 예약은 지난 구간·현재 상태와 같은 방식으로 하나의 숙박으로 합친다 (mergeOverlappingStays)
   const all    = property.reservations
-    ? property.reservations.filter(r => r.checkIn >= cursor && r.checkIn < windowEnd)
-                           .sort((a, b) => a.checkIn - b.checkIn)
+    ? mergeOverlappingStays(property.reservations).filter(r => r.checkIn >= cursor && r.checkIn < windowEnd)
     : (firstRes && firstRes.checkIn > cursor ? [firstRes] : []);
 
+  // 숙박 한 번의 순서는 지난 타임라인(buildReservationHistorySegments)과 같은 함수 — 과거·미래 규칙이 갈라지지 않게
   for (const r of all) {
     if (cursor >= windowEnd) break;
-    const ci = r.checkIn;
-    const co = r.checkOut;
-    const prepAt = new Date(Math.max(cursor.getTime(), ci.getTime() - 3600000));
-    const optEnd = new Date(ci.getTime() - 0.5 * 3600000);
-    if (prepAt > cursor) { push('VACANT', 'CLEANING_FINISHED', cursor, prepAt); cursor = prepAt; }
-    if (cursor < optEnd) { push('PRE_STAY_READY', 'OPTIMIZING', cursor, optEnd); cursor = optEnd; }
-    if (cursor < ci)     { push('PRE_STAY_READY', 'OPTIMIZED',  cursor, ci);    cursor = new Date(ci); }
-    if (co && co > cursor) { push('OCCUPIED', 'GOOD_CONDITION',         cursor, co);       cursor = new Date(co); }
-    cursor = appendCleaningSegments(push, r, cursor, cleanH);
+    cursor = appendStayCycle(push, r, cursor, cleanH);
   }
   return cursor;
 }
 
 function buildFutureSegments(property, windowEnd) {
   const now = new Date();
-  const { reservation, timeline } = property;
+  const { timeline } = property;
+  // 지금/다음 예약이 다른 행과 겹치면 합친 숙박을 쓴다 — 현재 상태·지난 구간(합친 숙박 기준)과 예측이 갈라지지 않게
+  const stays = mergeOverlappingStays(property.reservations ?? []);
+  const reservation = property.reservation
+    ? (stays.find(stay => stay.checkIn <= property.reservation.checkIn && property.reservation.checkIn < stay.checkOut) ?? property.reservation)
+    : property.reservation;
   const currentSeg = [...timeline].reverse().find(s => s.end === null);
   if (!currentSeg) return [];
 
@@ -764,25 +752,21 @@ function buildFutureSegments(property, windowEnd) {
       const cleaningReservation = currentSeg.cleaningCheckoutAt
         ? property.reservations?.find(r => r.checkOut?.getTime() === currentSeg.cleaningCheckoutAt.getTime())
         : null;
-      if (cleaningReservation) {
-        cursor = appendCleaningSegments(push, cleaningReservation, cursor, cleanH);
-      } else {
-        const cleanDone = new Date(now.getTime() + cleanH * 3600000);
-        push('CLEANING', currentSeg.subStatus, cursor, cleanDone);
-        cursor = cleanDone;
-      }
       const ci = reservation?.checkIn;
       const co = reservation?.checkOut;
-      if (ci && ci >= cursor && ci < windowEnd) {
-        const prepAt = new Date(Math.max(cursor.getTime(), ci.getTime() - 3600000));
-        const optEnd = new Date(ci.getTime() - 0.5 * 3600000);
-        push('VACANT', 'CLEANING_FINISHED', cursor, prepAt);
-        if (prepAt > cursor) cursor = prepAt;
-        if (cursor < optEnd) { push('PRE_STAY_READY', 'OPTIMIZING', cursor, optEnd); cursor = optEnd; }
-        if (cursor < ci)     { push('PRE_STAY_READY', 'OPTIMIZED', cursor, ci);      cursor = new Date(ci); }
-        if (co && co > cursor) { push('OCCUPIED', 'GOOD_CONDITION', cursor, co); cursor = new Date(co); }
-        cursor = appendCleaningSegments(push, reservation, cursor, cleanH);
+      // 예약된 청소가 다음 체크인을 넘겨도 체크인에서 끊는다 — 지난 구간(buildReservationHistorySegments)과 같은 규칙
+      const pushUntilCheckIn = ci
+        ? (mainStatus, subStatus, start, end, checkoutAt) => push(mainStatus, subStatus, start, end > ci ? ci : end, checkoutAt)
+        : push;
+      if (cleaningReservation) {
+        cursor = appendCleaningSegments(pushUntilCheckIn, cleaningReservation, cursor, cleanH);
+      } else {
+        const cleanDone = new Date(now.getTime() + cleanH * 3600000);
+        pushUntilCheckIn('CLEANING', currentSeg.subStatus, cursor, cleanDone);
+        cursor = cleanDone;
       }
+      if (ci && cursor > ci && ci > now) cursor = new Date(ci);
+      if (ci && co && ci < windowEnd && co > cursor) cursor = appendStayCycle(push, reservation, cursor, cleanH);
       cursor = addResCycles(push, property, null, cursor, windowEnd);
       push('VACANT', 'CLEANING_FINISHED', cursor, windowEnd);
       break;
@@ -790,11 +774,16 @@ function buildFutureSegments(property, windowEnd) {
     case 'PRE_STAY_READY': {
       const ci = reservation?.checkIn;
       if (!ci || ci <= now) break;
-      push('PRE_STAY_READY', currentSeg.subStatus, cursor, ci);
+      // 최적화중은 체크인 30분 전까지, 그 뒤 최적화완료 — 지난 구간(appendStayCycle)과 같은 경계.
+      // 이미 최적화완료면(자동화가 일찍 끝냄) 그대로 체크인까지 유지
+      const optimizedAt = new Date(ci.getTime() - 0.5 * 3600000);
+      if (currentSeg.subStatus === 'OPTIMIZING' && cursor < optimizedAt) {
+        push('PRE_STAY_READY', 'OPTIMIZING', cursor, optimizedAt);
+        cursor = optimizedAt;
+      }
+      push('PRE_STAY_READY', 'OPTIMIZED', cursor, ci);
       cursor = new Date(ci);
-      const co = reservation?.checkOut;
-      if (co && co > cursor) { push('OCCUPIED', 'GOOD_CONDITION', cursor, co); cursor = new Date(co); }
-      cursor = appendCleaningSegments(push, reservation, cursor, cleanH);
+      cursor = appendStayCycle(push, reservation, cursor, cleanH);
       cursor = addResCycles(push, property, null, cursor, windowEnd);
       push('VACANT', 'CLEANING_FINISHED', cursor, windowEnd);
       break;
@@ -806,15 +795,11 @@ function buildFutureSegments(property, windowEnd) {
         push('VACANT', currentSeg.subStatus, cursor, windowEnd);
         break;
       }
+      // 지금의 공실(정비 등 subStatus 유지) → 그다음은 지난 구간·addResCycles 와 같은 숙박 순서 함수
       const prepAt = new Date(Math.max(cursor.getTime(), ci.getTime() - 3600000));
-      const optEnd = new Date(ci.getTime() - 0.5 * 3600000);
       push('VACANT', currentSeg.subStatus, cursor, prepAt);
       if (prepAt > cursor) cursor = prepAt;
-      if (cursor < optEnd) { push('PRE_STAY_READY', 'OPTIMIZING', cursor, optEnd); cursor = optEnd; }
-      if (cursor < ci)     { push('PRE_STAY_READY', 'OPTIMIZED', cursor, ci);      cursor = new Date(ci); }
-      const co = reservation?.checkOut;
-      if (co && co > cursor) { push('OCCUPIED', 'GOOD_CONDITION', cursor, co); cursor = new Date(co); }
-      cursor = appendCleaningSegments(push, reservation, cursor, cleanH);
+      cursor = appendStayCycle(push, reservation, cursor, cleanH);
       cursor = addResCycles(push, property, null, cursor, windowEnd);
       push('VACANT', 'CLEANING_FINISHED', cursor, windowEnd);
       break;

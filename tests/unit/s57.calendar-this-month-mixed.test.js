@@ -72,7 +72,8 @@ describe('MonthlyCalendar — 이번달은 칸 단위로 지난 날짜(문제 �
   });
 
   test('미래 구간(futureRange)도 statsPeriod로 계산한다 (this_month면 지금~월말, next_month면 월 전체)', () => {
-    assert.match(src, /\(\) => \(needsFutureData \? periodToRemainingRange\(statsPeriod\) : null\)/);
+    // 2026-11-04(s91): 지금 기준은 칸의 지금 표시와 같은 1분 시계(now)
+    assert.match(src, /\(\) => \(needsFutureData \? periodToRemainingRange\(statsPeriod, now\.getTime\(\)\) : null\)/);
   });
 
   test('지난달은 미래 데이터를 아예 안 가져온다 (needsFutureData가 false)', () => {

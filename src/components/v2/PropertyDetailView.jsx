@@ -13,6 +13,7 @@ import { futureSummaryFor } from '../../domain/futureWeekDomain.js';
 import { periodForOffset, periodToDateRange, describePeriod } from '../../domain/periodDomain.js';
 import { toKstDateKey } from '../../domain/monthlyCalendarDomain.js';
 import { lastPastReservation } from '../../application/calendarSyncService.js';
+import { ASSIGNED_STATUSES } from '../../domain/cleaningStatsDomain.js';
 
 const PAST_HOURS    = 7 * 24;      // 현재 시각 이전 7일 (168h)
 const FUTURE_HOURS  = 7 * 24;      // 현재 시각 이후 7일 (168h)
@@ -628,16 +629,30 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
     const tracksCleaning = reservations.some(r => r.cleaningStatus != null);
     if (!tracksCleaning) return map;
     const lastCheckedOut = lastPastReservation(reservations, new Date());
+    const isProgress = seg => seg.mainStatus === 'CLEANING' && seg.subStatus === 'CLEANING_IN_PROGRESS';
+    const findReservation = checkoutAt => reservations.find(r => r.checkOut && r.checkOut.getTime() === checkoutAt.getTime());
+    const futureKeys = new Set();
     for (const seg of recentSegs) {
-      if (seg.mainStatus !== 'CLEANING' || seg.subStatus !== 'CLEANING_IN_PROGRESS' || !seg.isFuture) continue;
+      if (!isProgress(seg) || !seg.isFuture) continue;
       const checkoutAt = seg.cleaningCheckoutAt ?? seg.start;
-      const res = reservations.find(r => r.checkOut && r.checkOut.getTime() === checkoutAt.getTime())
-        ?? (seg.cleaningCheckoutAt ? null : lastCheckedOut);
+      futureKeys.add(checkoutAt.getTime());
+      const res = findReservation(checkoutAt) ?? (seg.cleaningCheckoutAt ? null : lastCheckedOut);
+      if (res?.checkOut) futureKeys.add(res.checkOut.getTime());
       if (res?.cleaningStatus) {
         map.set(seg, { cleaningStatus: res.cleaningStatus, cleanerName: res.cleanerName, cleaningAt: res.cleaningAt, cleaningEnd: res.cleaningEnd });
       } else {
         map.set(seg, { cleaningStatus: 'UNASSIGNED' });
       }
+    }
+    // 지난 청소(예약 기록으로 다시 그린 구간)도 담당자를 보여준다. 지금 진행 중인 청소는 "지금"에서
+    // 지난/미래 두 조각으로 나뉘므로 미래 조각에만 한 번 그린다(futureKeys). 담당자가 정해진 기록
+    // (배정·완료)만 그린다 — 기록이 없거나 상태가 갱신되지 않은 지난 청소에 "미배정"을 붙이지 않는다.
+    for (const seg of recentSegs) {
+      if (!isProgress(seg) || seg.isFuture || !seg.cleaningCheckoutAt) continue;
+      if (futureKeys.has(seg.cleaningCheckoutAt.getTime())) continue;
+      const res = findReservation(seg.cleaningCheckoutAt);
+      if (!ASSIGNED_STATUSES.has(res?.cleaningStatus)) continue;
+      map.set(seg, { cleaningStatus: res.cleaningStatus, cleanerName: res.cleanerName, cleaningAt: res.cleaningAt, cleaningEnd: res.cleaningEnd });
     }
     return map;
   }, [recentSegs, property.reservations]);
@@ -926,9 +941,19 @@ export default function PropertyDetailView({ property, weather, onBack, onCleani
               if (!res) return null;
 
               const segEnd = seg.end ?? new Date(seg.start.getTime() + 3 * 3600000);
-              const anchorTime = res.cleaningAt ?? new Date((seg.start.getTime() + segEnd.getTime()) / 2);
+              // 표시는 그 청소 막대 안에 둔다 — 창 맨 앞에서 잘렸거나(실제 시작이 창 밖) 다음 체크인에서 끊긴
+              // 청소는 저장된 청소 시각이 막대 밖이라, 그대로 쓰면 헤더나 다른 상태 막대 위에 그려진다
+              const anchorTime = new Date(Math.min(
+                Math.max(
+                  (res.cleaningAt ?? new Date((seg.start.getTime() + segEnd.getTime()) / 2)).getTime(),
+                  seg.start.getTime(),
+                  windowStart.getTime(),
+                ),
+                segEnd.getTime(),
+              ));
               const topPx = ((anchorTime.getTime() - windowStart.getTime()) / 3600000) * hourPx;
-              const isAssigned = res.cleaningStatus === 'ASSIGNED';
+              // 지난 청소는 완료(COMPLETED)로 바뀌어 있을 수 있다 — 담당자가 있던 청소이므로 배정으로 본다
+              const isAssigned = ASSIGNED_STATUSES.has(res.cleaningStatus);
 
               return (
                 <div

@@ -11,7 +11,7 @@ import {
   airbnbEventsToReservations,
   gcalEventsToCleaningSlots,
 } from '../domain/room-state/icalParser.js';
-import { reservationCleaningWindow } from '../domain/cleaningScheduleDomain.js';
+import { buildReservationHistorySegments } from '../domain/reservationHistoryDomain.js';
 
 const PROXIES = [
   url => `/api/ical?url=${encodeURIComponent(url)}`,
@@ -67,22 +67,10 @@ export async function syncGoogleCalendarSlots(icalUrl) {
   return gcalEventsToCleaningSlots(events);
 }
 
-// 스펙: 체크인 정확히 1시간 전에 checkin_prep_time_reached 발생
-function getPrepStart(checkIn) {
-  return new Date(checkIn.getTime() - 3600000);
-}
-
-function getPreStaySubStatus(checkIn, now) {
-  const optEnd = new Date(checkIn.getTime() - 0.5 * 3600000); // 체크인 30분 전
-  return now < optEnd ? 'OPTIMIZING' : 'OPTIMIZED';
-}
-
 /**
  * 체크인 순서로 정렬된 예약 배열에서 "체크아웃이 지난 것 중 가장 최근(배열상 마지막)" 것을 고른다.
- * deriveCurrentState·deriveTimeline이 "지금 무슨 상태인지"를 판단하는 기준점과, PropertyDetailView의
- * cleaningInfoMap이 "지금 청소 중인 세그먼트는 누구 예약인지" 되짚는 기준점이 반드시 같아야 한다
- * (따로 구현하면, 예약이 겹쳐 있을 때 — D-031에서도 확인된 실제 현상 — 서로 다른 예약을
- * "지금"으로 가리켜 틀린 상태/담당자가 뜰 수 있다) — 그래서 한 곳에만 둔다.
+ * PropertyDetailView의 cleaningInfoMap이 체크아웃 키(cleaningCheckoutAt) 없는 청소 세그먼트(목업
+ * 타임라인)를 "누구 예약인지" 되짚을 때 쓴다. 예약 기반 타임라인의 청소 세그먼트는 키를 직접 갖는다.
  */
 export function lastPastReservation(reservations, now) {
   const pastRes = reservations.filter(r => r.checkOut <= now);
@@ -90,112 +78,35 @@ export function lastPastReservation(reservations, now) {
 }
 
 /**
- * 예약 배열 + 현재 시각 → 현재 상태 파생.
- * 예약된 청소 시작 전에는 대기, 예약 종료 전까지는 진행 구간으로 예측한다.
- */
-export function deriveCurrentState(reservations, now = new Date(), cleanDurationHours = 2.5) {
-  const activeRes = reservations.find(r => r.checkIn <= now && r.checkOut > now);
-  if (activeRes) return { mainStatus: 'OCCUPIED', subStatus: 'GOOD_CONDITION' };
-
-  const lastRes = lastPastReservation(reservations, now);
-  if (lastRes) {
-    const cleaning = reservationCleaningWindow(lastRes, cleanDurationHours);
-    if (cleaning.end > now) return {
-      mainStatus: 'CLEANING',
-      subStatus: now < cleaning.start ? 'CLEANING_PENDING' : 'CLEANING_IN_PROGRESS',
-    };
-  }
-
-  const nextRes = reservations
-    .filter(r => r.checkIn > now)
-    .sort((a, b) => a.checkIn - b.checkIn)[0];
-  if (nextRes) {
-    const prepStart = getPrepStart(nextRes.checkIn);
-    if (now >= prepStart) {
-      return {
-        mainStatus: 'PRE_STAY_READY',
-        subStatus: getPreStaySubStatus(nextRes.checkIn, now),
-      };
-    }
-  }
-
-  return { mainStatus: 'VACANT', subStatus: 'CLEANING_FINISHED' };
-}
-
-/**
- * 예약 배열 → 타임라인 세그먼트 (말단 세그먼트는 end: null).
+ * 예약 배열 → 타임라인 세그먼트 (말단 세그먼트는 end: null = 지금 진행 중).
  * buildFutureSegments가 end===null인 세그먼트를 현재 상태로 사용함.
+ *
+ * 지난 예약 전부를 예약 기록으로 다시 그린다 — 예전엔 가장 최근 숙박 1건만 그려서 그보다 오래된
+ * 과거가 숙소 상세·리스트 타임라인에서 텅 비어 보였다(실사용 중 발견, 2026-11-04). 숙박 한 번의
+ * 순서(입실준비 → 체류 → 청소 → 공실)는 미래 예측과 같은 함수(appendStayCycle)를 쓴다.
  */
-export function deriveTimeline(reservations, cleanDurationHours = 2.5) {
-  const now    = new Date();
-  const active = reservations.find(r => r.checkIn <= now && r.checkOut > now);
+export function deriveTimeline(reservations, cleanDurationHours = 2.5, now = new Date()) {
+  const timeline = buildReservationHistorySegments(reservations, now, cleanDurationHours, { openEnded: true });
+  if (timeline.length) return timeline;
 
-  if (active) {
-    return [{
-      mainStatus: 'OCCUPIED',
-      subStatus: 'GOOD_CONDITION',
-      start: active.checkIn,
-      end: null,
-    }];
-  }
-
-  const lastRes = lastPastReservation(reservations, now);
-  const nextRes = reservations
-    .filter(r => r.checkIn > now)
-    .sort((a, b) => a.checkIn - b.checkIn)[0];
-
-  if (lastRes) {
-    const { start: cleanStart, end: cleanEnd } = reservationCleaningWindow(lastRes, cleanDurationHours);
-    const cleaningSegments = [
-      ...(cleanStart > lastRes.checkOut ? [{ mainStatus: 'CLEANING', subStatus: 'CLEANING_PENDING', start: lastRes.checkOut, end: cleanStart, cleaningCheckoutAt: lastRes.checkOut }] : []),
-      { mainStatus: 'CLEANING', subStatus: 'CLEANING_IN_PROGRESS', start: cleanStart, end: cleanEnd, cleaningCheckoutAt: lastRes.checkOut },
-    ];
-    if (cleanEnd > now) {
-      return [
-        { mainStatus: 'OCCUPIED', subStatus: 'GOOD_CONDITION', start: lastRes.checkIn, end: lastRes.checkOut },
-        ...cleaningSegments.filter(seg => seg.start <= now).map(seg => ({ ...seg, end: seg.end > now ? null : seg.end })),
-      ];
-    }
-
-    if (nextRes) {
-      const prepStart = new Date(Math.max(cleanEnd.getTime(), getPrepStart(nextRes.checkIn).getTime()));
-      if (now >= prepStart) {
-        const subStatus = getPreStaySubStatus(nextRes.checkIn, now);
-        return [
-          { mainStatus: 'OCCUPIED', subStatus: 'GOOD_CONDITION', start: lastRes.checkIn, end: lastRes.checkOut },
-          ...cleaningSegments,
-          { mainStatus: 'VACANT', subStatus: 'CLEANING_FINISHED', start: cleanEnd, end: prepStart },
-          { mainStatus: 'PRE_STAY_READY', subStatus, start: prepStart, end: null },
-        ].filter(seg => seg.end === null || seg.end > seg.start);
-      }
-    }
-
-    return [
-      { mainStatus: 'OCCUPIED', subStatus: 'GOOD_CONDITION', start: lastRes.checkIn, end: lastRes.checkOut },
-      ...cleaningSegments,
-      { mainStatus: 'VACANT', subStatus: 'CLEANING_FINISHED', start: cleanEnd, end: null },
-    ];
-  }
-
-  if (nextRes) {
-    const prepStart = getPrepStart(nextRes.checkIn);
-    if (now >= prepStart) {
-      return [{
-        mainStatus: 'PRE_STAY_READY',
-        subStatus: getPreStaySubStatus(nextRes.checkIn, now),
-        start: prepStart,
-        end: null,
-      }];
-    }
-  }
-
-  // 과거 체크아웃 없음 → 공실
+  // 입실준비가 시작된 예약이 하나도 없음 → 공실
   return [{
     mainStatus: 'VACANT',
     subStatus: 'CLEANING_FINISHED',
     start: new Date(now.getTime() - 24 * 3600000),
     end: null,
   }];
+}
+
+/**
+ * 예약 배열 + 현재 시각 → 현재 상태 = 타임라인의 "지금 진행 중" 구간.
+ * 타임라인과 같은 계산을 쓰므로 상태 칩·필터와 타임라인이 서로 다른 말을 할 수 없다
+ * (따로 구현했을 땐 겹친 예약·체크인을 넘긴 청소에서 둘이 어긋났다, 코드 리뷰에서 재현).
+ * 예약된 청소 시작 전에는 대기, 예약 종료 전까지는 진행 구간으로 예측한다.
+ */
+export function deriveCurrentState(reservations, now = new Date(), cleanDurationHours = 2.5) {
+  const { mainStatus, subStatus } = deriveTimeline(reservations, cleanDurationHours, now).at(-1);
+  return { mainStatus, subStatus };
 }
 
 /**
@@ -209,8 +120,9 @@ export function buildLiveProperty(template, reservations, cleaningSlots = []) {
   const now     = new Date();
   const cleanH  = template.cleaningDurationHours ?? 2.5;
 
-  const currentState = deriveCurrentState(reservations, now, cleanH);
-  const timeline     = deriveTimeline(reservations, cleanH);
+  const timeline     = deriveTimeline(reservations, cleanH, now);
+  const { mainStatus, subStatus } = timeline.at(-1);
+  const currentState = { mainStatus, subStatus };
 
   const activeRes = reservations.find(r => r.checkIn <= now && r.checkOut > now);
   const futureRes = reservations.filter(r => r.checkIn > now).sort((a, b) => a.checkIn - b.checkIn);

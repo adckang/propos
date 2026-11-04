@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { STATE_META, getGanttSegments } from '../../../data/roomStateMockData.js';
+import { buildReservationHistorySegments, segmentsBefore } from '../../../domain/reservationHistoryDomain.js';
 import {
   buildFutureCalendarDays,
   buildFutureReservationSegments,
@@ -230,9 +231,11 @@ export default function MonthlyCalendar({
   const needsFutureData = statsPeriod === 'this_month' || statsPeriod === 'next_month';
   const selectedIdsKey = scopedProperties.map(property => property.id).join(',');
   // next_month: 월 전체 / this_month: 지금 ~ 월말("지금 이후"). periodToRemainingRange가 이미 이 규칙을 안다.
+  // "지금"(이번달의 지난/앞으로 경계)은 칸의 지금 표시(nowMarker)와 같은 1분 시계로 다시 잡는다 — 탭을 연 순간에
+  // 고정하면 그 뒤에 지나간 퇴실·청소가 지난 막대로 안 바뀌고 예측 막대로만 남는다
   const futureRange = useMemo(
-    () => (needsFutureData ? periodToRemainingRange(statsPeriod) : null),
-    [needsFutureData, statsPeriod],
+    () => (needsFutureData ? periodToRemainingRange(statsPeriod, now.getTime()) : null),
+    [needsFutureData, statsPeriod, now],
   );
 
   useEffect(() => {
@@ -268,10 +271,27 @@ export default function MonthlyCalendar({
   const stateSegments = useMemo(() => {
     if (!singleProperty) return [];
     if (statsPeriod === 'next_month') return buildFutureReservationSegments(singleProperty, futureRange);
-    // 지난달 전체, 그리고 이번달의 "지금까지"는 실제 이벤트 막대 — 이번달의 "지금 이후"는 예약 기반 예측 막대를 이어 붙인다
+    // 지난달 전체, 그리고 이번달의 "지금까지"는 지난 예약 기록으로 다시 그린 막대 — 이번달의 "지금 이후"는
+    // 예약 기반 예측 막대를 이어 붙인다. 예전엔 지난 막대를 감지기 기록만으로 그려서, 퇴실은 감지됐는데
+    // "청소 끝남"·다음 입실이 감지되지 않으면 다음 예약까지 며칠씩 청소중(빨강)으로 굳었다(실사용 중 발견,
+    // 2026-11-04). 예약 기록이 시작되기 전 기간(또는 기록이 없는 숙소)만 기존처럼 감지기 기록 → 목업 타임라인으로 채운다.
     const from = kstDate(calendar.year, calendar.month, 1);
     const to = kstDate(calendar.year, calendar.month + 1, 1);
-    const past = data?.stateSegments?.length ? data.stateSegments : getGanttSegments(singleProperty, from, to);
+    // 지난 막대는 미래 막대가 시작하는 바로 그 시각(futureRange.from)에서 끝나야 겹치지 않는다 — 여기서
+    // Date.now()를 다시 읽으면 15분 동기화로 숙소가 갱신될 때 두 막대가 몇 분씩 겹쳐 그려진다
+    const pastUntil = futureRange?.from
+      ? new Date(futureRange.from)
+      : new Date(Math.min(to.getTime(), Date.now()));
+    const history = buildReservationHistorySegments(
+      singleProperty.reservations,
+      pastUntil,
+      singleProperty.cleaningDurationHours ?? 2.5,
+      { since: from },
+    );
+    const fallback = data?.stateSegments?.length ? data.stateSegments : getGanttSegments(singleProperty, from, to);
+    const past = history.length
+      ? [...segmentsBefore(fallback, history[0].start), ...history]
+      : fallback;
     if (statsPeriod === 'this_month' && futureRange) {
       return [...past, ...buildFutureReservationSegments(singleProperty, futureRange)];
     }

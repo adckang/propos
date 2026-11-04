@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { parse } from '@babel/parser';
 import { buildLiveProperty, deriveCurrentState, deriveTimeline, lastPastReservation } from '../../src/application/calendarSyncService.js';
 import { getWindowSegments, getGanttSegments } from '../../src/data/roomStateMockData.js';
+import { ASSIGNED_STATUSES } from '../../src/domain/cleaningStatsDomain.js';
 
 const at = value => new Date(`2026-10-${value}:00+09:00`);
 const template = { id: 'timeline-fixture', name: '검증숙소', checkOutHour: 11, cleaningDurationHours: 3 };
@@ -34,7 +35,7 @@ function indicatorMap(property, recentSegs) {
     }
   }
   visit(ast); assert.ok(callback);
-  return new Function('property', 'recentSegs', 'lastPastReservation', `return (${source.slice(callback.start, callback.end)})();`)(property, recentSegs, lastPastReservation);
+  return new Function('property', 'recentSegs', 'lastPastReservation', 'ASSIGNED_STATUSES', `return (${source.slice(callback.start, callback.end)})();`)(property, recentSegs, lastPastReservation, ASSIGNED_STATUSES);
 }
 
 describe('Booked cleaning timeline — 11 checkout / 12–15 cleaning', () => {
@@ -93,7 +94,8 @@ describe('Booked cleaning timeline — 11 checkout / 12–15 cleaning', () => {
   test('late cleaning end does not overlap the next preparation segment', () => withNow('30T15:10', () => {
     const rows = reservations(); rows[1].checkIn = at('30T15:30');
     const timeline = deriveTimeline(rows, 3);
-    const preparation = timeline.find(s => s.mainStatus === 'PRE_STAY_READY');
+    // 지난 예약의 입실준비도 타임라인 앞에 남으므로(s91) 다음 예약의 입실준비 = 마지막 것
+    const preparation = timeline.findLast(s => s.mainStatus === 'PRE_STAY_READY');
     assert.ok(preparation); assert.equal(preparation.start.getTime(), at('30T15:00').getTime());
   }));
 

@@ -39,7 +39,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-import { buildLiveProperty, lastPastReservation, deriveCurrentState } from '../../src/application/calendarSyncService.js';
+import { buildLiveProperty, lastPastReservation, deriveCurrentState, deriveTimeline } from '../../src/application/calendarSyncService.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8');
@@ -204,16 +204,14 @@ describe('calendarSyncService.js — lastPastReservation (체크아웃이 지난
     const picked = lastPastReservation(reservations, now);
     assert.equal(picked.tag, 'B_shorter_but_later_checkin', 'checkOut 기준으로 고르면 A가 뽑히는데, 그건 deriveCurrentState와 달라짐');
 
-    // 두 선택이 실제로 다른 결과를 내는 시점으로 교차 확인: A 체크아웃(10/27) 1시간 뒤는
-    // A 기준이면 청소중(2.5시간 이내)이지만, B 체크아웃(10/24)으로부터는 사흘이 지나 청소중이
-    // 아니다 — lastPastReservation이 (버그처럼) A를 골랐다면 이 시점에 CLEANING이어야 한다.
+    // 2026-11-04 갱신(s91): 상태·타임라인은 이제 겹친 예약을 하나의 숙박(10/18~10/27)으로 합쳐 판단한다 —
+    // 손님은 늦은 체크아웃(10/27)에 나가므로 그 1시간 뒤는 청소중이 맞다. 일관성은 lastPastReservation
+    // 대신 청소 구간의 체크아웃 키(cleaningCheckoutAt)로 보장한다: 상태·타임라인·담당자 찾기가 모두 A를 가리킨다.
     const soonAfterA = new Date('2026-10-27T01:00:00Z');
-    const state = deriveCurrentState(reservations, soonAfterA, 2.5);
-    assert.notEqual(
-      state.mainStatus, 'CLEANING',
-      'A를 기준으로 판단했다면(체크아웃 정렬 버그) 이 시점엔 CLEANING이어야 하는데 아니라면' +
-      ' lastPastReservation이 deriveCurrentState와 다른 예약을 고르고 있다는 뜻'
-    );
+    assert.equal(deriveCurrentState(reservations, soonAfterA, 2.5).mainStatus, 'CLEANING');
+    const current = deriveTimeline(reservations, 2.5, soonAfterA).at(-1);
+    assert.equal(current.mainStatus, 'CLEANING');
+    assert.equal(current.cleaningCheckoutAt.getTime(), reservations[0].checkOut.getTime(), '담당자는 A 예약에서 찾는다');
   });
 });
 

@@ -3,7 +3,8 @@
  * CANCELLED 제외, ASSIGNED + COMPLETED = 배정 완료
  */
 
-const ASSIGNED_STATUSES = new Set(['ASSIGNED', 'COMPLETED']);
+/** 담당자가 정해진 청소 상태 — 레포트·캘린더·숙소 상세가 같은 정의를 쓴다 */
+export const ASSIGNED_STATUSES = new Set(['ASSIGNED', 'COMPLETED']);
 
 /**
  * @param {Array<{ status: string }>} jobs
