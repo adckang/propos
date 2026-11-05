@@ -8,29 +8,9 @@ import { getHaBaseUrl, getHaToken } from "./server/haProxy.js";
 import { fetchWeather } from "./server/weatherService.js";
 import {
   getDemoCleaningStats,
-  getDemoDrilldown,
-  getDemoMonthlyCalendar,
   getDemoPropertyConfigs,
-  getDemoStats,
 } from "./src/application/demoReportingService.js";
 import { DATA_PROFILE, resolveBuildDataProfile } from "./src/config/dataProfile.js";
-import { describePeriod, parseOffsetPeriod } from "./src/domain/periodDomain.js";
-
-const DEMO_STATS_PERIODS = new Set([
-  "now", "yesterday", "today", "tomorrow", "last_hour", "next_hour",
-  "this_week", "last_week", "next_week", "this_month", "last_month", "next_month",
-]);
-const DEMO_CALENDAR_PERIODS = new Set(["last_month", "this_month", "next_month"]);
-const DEMO_DRILLDOWN_METRICS = new Set([
-  "cleaning_time", "post_checkout_energy", "post_checkout_security",
-  "vacant_energy", "post_cleaning_security", "pre_stay_optimization",
-]);
-
-function isDemoDrilldownPeriod(period) {
-  if (["yesterday", "last_hour", "this_week", "last_week", "this_month", "last_month"].includes(period)) return true;
-  const descriptor = describePeriod(period);
-  return Boolean(descriptor && descriptor.tense === "past" && (descriptor.unit === "week" || descriptor.unit === "day"));
-}
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -63,11 +43,11 @@ function vercelResponse(res) {
   return res;
 }
 
-async function handleLocalDatabaseApi(req, res) {
+async function handleLocalDatabaseApi(req, res, { statsOnly = false } = {}) {
   const originalUrl = req.url || '';
   const isStats = originalUrl === '/api/stats' || originalUrl.startsWith('/api/stats?') || originalUrl.startsWith('/api/stats/');
-  const isCleaning = originalUrl.startsWith('/api/cleaning/');
-  const isWatcherProperties = originalUrl === '/api/properties' || originalUrl.startsWith('/api/properties?');
+  const isCleaning = !statsOnly && originalUrl.startsWith('/api/cleaning/');
+  const isWatcherProperties = !statsOnly && (originalUrl === '/api/properties' || originalUrl.startsWith('/api/properties?'));
   if (!isStats && !isCleaning && !isWatcherProperties) return false;
 
   try {
@@ -158,44 +138,9 @@ function apiProxyPlugin(env, dataProfile) {
       if (dataProfile !== DATA_PROFILE.DEMO && await handleLocalDatabaseApi(req, res)) {
         return;
       }
-      // demo 프로필의 공통 레포트 서비스 — Vite와 demo 배포가 같은 응답을 사용한다.
-      if (dataProfile === DATA_PROFILE.DEMO && req.url?.startsWith("/api/stats/calendar") && req.method === "GET") {
-        const url = new URL(req.url, "http://localhost");
-        const period = url.searchParams.get("period") ?? "this_month";
-        if (!DEMO_CALENDAR_PERIODS.has(period)) {
-          sendJson(res, 400, { error: `invalid period: ${period}` });
-          return;
-        }
-        const rawIds = url.searchParams.get("property_ids") ?? "";
-        const selectedIds = rawIds ? rawIds.split(",").map(s => s.trim()).filter(Boolean) : null;
-        sendJson(res, 200, getDemoMonthlyCalendar(period, { propertyIds: selectedIds }));
-        return;
-      }
-      // demo 프로필 드릴다운도 같은 공통 서비스에서 생성한다.
-      if (dataProfile === DATA_PROFILE.DEMO && req.url?.startsWith("/api/stats/drilldown") && req.method === "GET") {
-        const url    = new URL(req.url, "http://localhost");
-        const metric = url.searchParams.get("metric") ?? "";
-        const period = url.searchParams.get("period") ?? "";
-        const rawIds = url.searchParams.get("property_ids") ?? "";
-        const selectedIds = rawIds ? rawIds.split(",").map(s => s.trim()).filter(Boolean) : null;
-        if (!period) { sendJson(res, 400, { error: "period is required" }); return; }
-        if (!metric) { sendJson(res, 400, { error: "metric is required" }); return; }
-        if (!isDemoDrilldownPeriod(period)) { sendJson(res, 400, { error: `invalid period: ${period}` }); return; }
-        if (!DEMO_DRILLDOWN_METRICS.has(metric)) { sendJson(res, 400, { error: `invalid metric: ${metric}` }); return; }
-        sendJson(res, 200, getDemoDrilldown(metric, period, { propertyIds: selectedIds }));
-        return;
-      }
-      // demo 프로필 통계 — production API와 동일한 응답 계약.
-      if (dataProfile === DATA_PROFILE.DEMO && req.url?.startsWith("/api/stats") && req.method === "GET") {
-        const url = new URL(req.url, "http://localhost");
-        const period = url.searchParams.get("period") ?? "now";
-        const rawIds = url.searchParams.get("property_ids") ?? "";
-        const selectedIds = rawIds ? rawIds.split(",").map(s => s.trim()).filter(Boolean) : null;
-        if (!DEMO_STATS_PERIODS.has(period) && !parseOffsetPeriod(period)) {
-          sendJson(res, 400, { error: `invalid period: ${period}` });
-          return;
-        }
-        sendJson(res, 200, getDemoStats(period, { propertyIds: selectedIds }));
+      // demo 프로필의 레포트 API(/api/stats·drilldown·calendar)도 운영과 같은 핸들러가 받는다 — 핸들러가 demo 를
+      // 알아서 처리하므로(DB 미사용) 기간 검증·응답 규칙이 개발 서버에 따로 복사돼 갈라지지 않는다.
+      if (dataProfile === DATA_PROFILE.DEMO && await handleLocalDatabaseApi(req, res, { statsOnly: true })) {
         return;
       }
       if (dataProfile === DATA_PROFILE.DEMO && req.url?.startsWith("/api/cleaning/stats") && req.method === "GET") {

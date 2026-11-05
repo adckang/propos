@@ -33,14 +33,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8');
 
 // ── 버그 1: this_week 드릴다운 검증 ────────────────────────────────────────────
-describe('api/stats.js — VALID_DRILLDOWN_PERIODS에 this_week가 있다 (ListView 기본 화면 팝업 400 버그 수정)', () => {
-  const src = read('api/stats.js');
-  test('배열 리터럴에 "this_week"가 포함된다', () => {
-    const m = src.match(/const VALID_DRILLDOWN_PERIODS = \[([\s\S]*?)\];/);
-    assert.ok(m, 'VALID_DRILLDOWN_PERIODS 정의를 찾지 못함');
-    assert.match(m[1], /"this_week"/);
-  });
-});
+// ListView 기본 화면(이번 주)의 실패 상세 팝업이 운영에서 400 나던 버그 — 이제 기간 기능표(periodCapabilities)
+// 하나가 정하고, s92 B 가 this_week 상세가 운영·데모 핸들러 모두에서 열리는지 실제 호출로 검증한다.
 
 // ── 버그 2: scope_comparison 팝업 제목 ─────────────────────────────────────────
 describe('describeScopeComparisonTitle — 타입·periodUnit에 맞는 제목 접미사', () => {

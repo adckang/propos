@@ -10,7 +10,7 @@ import { countCurrentStats } from '../domain/reportingDomain.js';
 import {
   describePeriod,
   monthsAgoRange,
-  periodForOffset,
+  periodCapabilities,
   periodToDateRange,
   periodToRemainingRange,
 } from '../domain/periodDomain.js';
@@ -46,12 +46,8 @@ const MONTHLY_DEMO_ISSUE_TEMPLATES = [
 ];
 
 function demoMonthRange(period, now = new Date()) {
-  const monthOffset = period === 'last_month' ? 1 : period === 'this_month' ? 0 : period === 'next_month' ? -1 : null;
-  if (monthOffset === null) {
-    throw new Error(`지원하지 않는 월간 period: ${period}`);
-  }
-  const { from, to } = monthsAgoRange(monthOffset, now.getTime());
-  return { from, to };
+  if (describePeriod(period)?.unit !== 'month') throw new Error(`지원하지 않는 월간 period: ${period}`);
+  return periodToDateRange(period, now.getTime());
 }
 
 function monthlyDemoIssues(period, selectedIds = null, now = new Date()) {
@@ -132,7 +128,7 @@ function demoPropertyMetricRows(metricItems) {
 }
 
 function demoMonthlyInsights(period, nowMs, selectedIds) {
-  const baseOffset = period === 'last_month' ? 1 : 0;
+  const baseOffset = -describePeriod(period).offset;
   const reportPeriod = monthsAgoRange(baseOffset, nowMs).monthKey;
   const issues = monthlyDemoIssues(period, selectedIds, new Date(nowMs));
   const metricItems = Object.entries(DEMO_METRIC_META).flatMap(([metricKey, meta]) =>
@@ -144,8 +140,7 @@ function demoMonthlyInsights(period, nowMs, selectedIds) {
 }
 
 function demoWeeklyInsights(period, nowMs, selectedIds) {
-  const baseOffset = period === 'last_week' ? 1 : 0;
-  const reportPeriod = toKstDateKey(periodToDateRange(periodForOffset('week', -baseOffset), nowMs).from);
+  const reportPeriod = toKstDateKey(periodToDateRange(period, nowMs).from);
   const drilldowns = demoDrilldownItems(period, new Date(nowMs));
   const metricItems = Object.keys(DEMO_METRIC_META).flatMap(metricKey =>
     (drilldowns[metricKey] ?? [])
@@ -207,9 +202,11 @@ export function getDemoStats(period, { propertyIds = null, now = new Date() } = 
         ? `${descriptor.label} ${selectionLabel} 체크인 ${stats.checkIns}건 완료, 이상감지 ${stats.anomalies}건이 있었어요.`
         : `${descriptor.label} ${selectionLabel} 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`;
   }
-  const insights = period === 'this_month' || period === 'last_month'
+  // 발견된 패턴이 열리는 기간은 운영과 같은 표(periodCapabilities)로 판단
+  const insightUnit = periodCapabilities(period).insights;
+  const insights = insightUnit === 'month'
     ? demoMonthlyInsights(period, now.getTime(), propertyIds)
-    : period === 'this_week' || period === 'last_week'
+    : insightUnit === 'week'
       ? demoWeeklyInsights(period, now.getTime(), propertyIds)
       : undefined;
   return { period, stats, summary: summary ?? '', ...(insights ? { insights } : {}), dataProfile: 'demo' };

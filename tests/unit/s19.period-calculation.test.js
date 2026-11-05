@@ -130,7 +130,9 @@ describe("getPeriodRange — 일 단위 (KST 기준)", () => {
   test("'last_hour' → 절대 시각 기준 (KST 보정 불필요)", () => {
     const { from, to } = getPeriodRange("last_hour", REF);
     const diffMs = to - from;
-    assert.equal(diffMs, 60 * 60 * 1000); // 정확히 1시간
+    // 끝은 다른 기간과 같은 포함 구간(다음 경계 - 1ms) — 2026-11-04 기간 규칙 일원화
+    assert.equal(diffMs, 60 * 60 * 1000 - 1); // 1시간 (끝 포함)
+    assert.equal(to.getTime(), REF.getTime() - 1);
   });
 });
 

@@ -19,9 +19,12 @@ function kstMidnight(y, m, d) {
 
 // ── 기간 이름 ↔ 오프셋 ─────────────────────────────────────────────────────────
 
+// 월도 주·일과 같은 "몇 기간 뒤·전" 체계다(날짜 범위를 한 함수로 계산하려고). 다만 월은 이름 있는
+// 세 기간(지난달·이번 달·다음 달)만 받는다 — months_ago_N 같은 일반 이름은 아직 화면이 없다.
 const NAMED_OFFSETS = {
-  last_week: { unit: 'week', offset: -1 }, this_week: { unit: 'week', offset: 0 }, next_week: { unit: 'week', offset: 1 },
-  yesterday: { unit: 'day',  offset: -1 }, today:     { unit: 'day',  offset: 0 }, tomorrow:  { unit: 'day',  offset: 1 },
+  last_week:  { unit: 'week',  offset: -1 }, this_week:  { unit: 'week',  offset: 0 }, next_week:  { unit: 'week',  offset: 1 },
+  yesterday:  { unit: 'day',   offset: -1 }, today:      { unit: 'day',   offset: 0 }, tomorrow:   { unit: 'day',   offset: 1 },
+  last_month: { unit: 'month', offset: -1 }, this_month: { unit: 'month', offset: 0 }, next_month: { unit: 'month', offset: 1 },
 };
 const NAME_OF_OFFSET = {
   week: { '-1': 'last_week', '0': 'this_week', '1': 'next_week' },
@@ -31,8 +34,8 @@ const GENERIC_RE = /^(weeks|days)_(ahead|ago)_([1-9]\d{0,3})$/;
 const MAX_OFFSET = { week: 520, day: 3650 }; // 약 10년 — 터무니없는 요청 방지
 
 /**
- * 주/일 기간 문자열 → { unit: 'week'|'day', offset }. 양수=미래, 음수=과거, 0=이번.
- * 주/일 기간이 아니면 null.
+ * 주/일/월 기간 문자열 → { unit: 'week'|'day'|'month', offset }. 양수=미래, 음수=과거, 0=이번.
+ * 그런 기간이 아니면 null (now, last_hour/next_hour 포함).
  * @param {string} period
  */
 export function parseOffsetPeriod(period) {
@@ -103,47 +106,73 @@ export function describePeriod(period) {
 // ── 기간 → 범위 ───────────────────────────────────────────────────────────────
 
 /**
- * @param {string} period  — 주/일 기간(last_week … weeks_ahead_2 … tomorrow … days_ago_3),
- *                           'this_month' | 'next_month' | 'next_hour'
- * @param {number} [nowMs] — 테스트용 고정 타임스탬프 (ms). 생략 시 Date.now()
- * @returns {{ from: Date, to: Date } | null}
+ * 지금 기준 몇 일/주/달 뒤·전의 KST 달력 구간 [from, to). 주는 월요일 0시 시작, 달은 1일 0시 시작.
+ * 모든 기간의 날짜 범위가 이 함수 하나에서 나온다 — 화면(periodToDateRange)·서버 집계(getPeriodRange)·
+ * 패턴 분석(monthsAgoRange·주간 비교)·데모가 같은 답을 내게.
+ * @param {'day'|'week'|'month'} unit
+ * @param {number} offset
+ * @param {number} [nowMs]
  */
-export function periodToDateRange(period, nowMs) {
+export function rangeForOffset(unit, offset, nowMs) {
   const now = new Date(nowMs != null ? nowMs : Date.now());
   const kst = new Date(now.getTime() + KST_OFFSET_MS);
   const y = kst.getUTCFullYear(), m = kst.getUTCMonth(), d = kst.getUTCDate();
-
-  const off = parseOffsetPeriod(period);
-  if (off?.unit === 'day') {
-    return { from: kstMidnight(y, m, d + off.offset), to: kstMidnight(y, m, d + off.offset + 1) };
+  if (unit === 'day') {
+    return { from: kstMidnight(y, m, d + offset), to: kstMidnight(y, m, d + offset + 1) };
   }
-  if (off?.unit === 'week') {
+  if (unit === 'week') {
     const dow   = kst.getUTCDay(); // KST 기준 요일: 0=Sun, 1=Mon … 6=Sat
     const toMon = dow === 0 ? -6 : 1 - dow; // 이번 주 월요일까지의 일 오프셋
-    const start = d + toMon + 7 * off.offset;
+    const start = d + toMon + 7 * offset;
     return { from: kstMidnight(y, m, start), to: kstMidnight(y, m, start + 7) };
   }
-
-  if (period === 'this_month') {
-    return { from: kstMidnight(y, m, 1), to: kstMidnight(y, m + 1, 1) };
+  if (unit === 'month') {
+    return { from: kstMidnight(y, m + offset, 1), to: kstMidnight(y, m + offset + 1, 1) };
   }
+  throw new Error(`unknown unit: "${unit}"`);
+}
 
-  if (period === 'next_month') {
-    return { from: kstMidnight(y, m + 1, 1), to: kstMidnight(y, m + 2, 1) };
-  }
+/**
+ * @param {string} period  — 주/일 기간(last_week … weeks_ahead_2 … tomorrow … days_ago_3),
+ *                           월 기간(last_month · this_month · next_month), 'last_hour' | 'next_hour'
+ * @param {number} [nowMs] — 테스트용 고정 타임스탬프 (ms). 생략 시 Date.now()
+ * @returns {{ from: Date, to: Date } | null}  [from, to) — 'now'·알 수 없는 기간은 null
+ */
+export function periodToDateRange(period, nowMs) {
+  const off = parseOffsetPeriod(period);
+  if (off) return rangeForOffset(off.unit, off.offset, nowMs);
 
+  const now = new Date(nowMs != null ? nowMs : Date.now());
+  // "다음 예정"은 지금(1분)을 지난 뒤부터 1시간 — 지금 막 일어난 일과 겹치지 않게
   if (period === 'next_hour') {
-    return {
-      from: new Date(now.getTime() + 60_000),
-      to:   new Date(now.getTime() + HOUR + 60_000),
-    };
+    return { from: new Date(now.getTime() + 60_000), to: new Date(now.getTime() + HOUR + 60_000) };
   }
-
   if (period === 'last_hour') {
     return { from: new Date(now.getTime() - HOUR), to: new Date(now.getTime()) };
   }
-
   return null;
+}
+
+/**
+ * 기간마다 열리는 기능 — 서버 API(운영·데모)와 화면이 이 표 하나로 판단한다.
+ * 예전엔 서버에 "허용 기간 목록"이 5곳(운영·데모·개발 서버) 따로 있어, 새 기간을 넣을 때 한 곳을 빠뜨리면
+ * 그 기능만 운영에서 조용히 400 이 났다(D-029 "이번주 상세 팝업" 버그의 원인).
+ *   stats      통계·요약 — 이름이 있는 모든 기간
+ *   drilldown  실패 상세 목록 — 지난 기간 전부 + 진행 중인 주·달(오늘은 실시간 패널이라 없음)
+ *   calendar   월간 캘린더 — 달 단위
+ *   insights   발견된 패턴 — 이번·지난 주/달만 ('week' | 'month' | null)
+ * @param {string} period
+ */
+export function periodCapabilities(period) {
+  const d = describePeriod(period);
+  if (!d) return { stats: false, drilldown: false, calendar: false, insights: null };
+  const weekOrMonth = d.unit === 'week' || d.unit === 'month';
+  return {
+    stats: true,
+    drilldown: d.tense === 'past' || (d.tense === 'active' && weekOrMonth),
+    calendar: d.unit === 'month',
+    insights: weekOrMonth && (d.offset === 0 || d.offset === -1) ? d.unit : null,
+  };
 }
 
 /**
@@ -217,15 +246,8 @@ export function periodRangeLabel(period, nowMs) {
  * @returns {{ from: Date, to: Date, monthKey: string }}
  */
 export function monthsAgoRange(n, nowMs) {
-  const now = new Date(nowMs != null ? nowMs : Date.now());
-  const kst = new Date(now.getTime() + KST_OFFSET_MS);
-  const y = kst.getUTCFullYear();
-  const m = kst.getUTCMonth();
-
-  const from = kstMidnight(y, m - n, 1);
-  const to   = kstMidnight(y, m - n + 1, 1);
-  const keyDate = new Date(Date.UTC(y, m - n, 1));
-  const monthKey = `${keyDate.getUTCFullYear()}-${String(keyDate.getUTCMonth() + 1).padStart(2, '0')}`;
-
+  const { from, to } = rangeForOffset('month', -n, nowMs);
+  const kstFrom = new Date(from.getTime() + KST_OFFSET_MS);
+  const monthKey = `${kstFrom.getUTCFullYear()}-${String(kstFrom.getUTCMonth() + 1).padStart(2, '0')}`;
   return { from, to, monthKey };
 }

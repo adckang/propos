@@ -227,14 +227,6 @@ describe('getWeeklyInsights — period 게이트 + 숙소 스코프 파생 + DB 
 });
 
 // ── L2: 소스 계약 ─────────────────────────────────────────────────────────────
-describe('api/stats.js — this_week/last_week도 insights를 자체 try/catch로 붙인다', () => {
-  const src = read('api/stats.js');
-  test('getWeeklyInsights를 import하고 this_week/last_week 분기에서 호출, 실패해도 stats는 살린다', () => {
-    assert.match(src, /import\s*\{[^}]*getWeeklyInsights[^}]*\}\s*from\s*"\.\.\/src\/application\/reportingService\.js"/);
-    assert.match(src, /else if \(period === "this_week" \|\| period === "last_week"\) \{/);
-    assert.match(src, /result\.insights = await getWeeklyInsights\(period, \{ db, propertyIds \}\);/);
-    assert.match(src, /getWeeklyInsights 실패 — insights 없이 응답/);
-  });
-});
+// 주간 insights 가 붙는 기간·실패 격리는 s92 B 가 실제 실행으로 검증한다 (periodCapabilities + getPeriodInsights).
 
 // 리스트뷰가 insights 를 요약 배너로 넘기고 패널·배너가 같은 숙소 이동 규칙을 쓰는지는 s92 D 가 렌더링으로 검증한다 (D-029).

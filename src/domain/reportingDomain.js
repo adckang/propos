@@ -1,94 +1,20 @@
 // 모든 함수는 순수 함수 — 외부 의존 없음
 
-import { parseOffsetPeriod, periodToDateRange } from "./periodDomain.js";
+import { periodToDateRange } from "./periodDomain.js";
 
 /**
- * 기간 키를 날짜 범위로 변환한다.
+ * 기간 키 → 이벤트 집계용 날짜 범위 (끝 포함: to = 다음 경계 - 1ms).
+ * 날짜 계산 자체는 periodDomain.periodToDateRange 하나가 한다 — 화면·서버·패턴 분석·데모가 같은 구간을 본다
+ * (예전엔 여기에 주·일·월 계산이 따로 있었고, 화면용엔 "지난달"이 아예 없었다).
  * @param {string} period
  * @param {Date} referenceDate
  * @returns {{ from: Date, to: Date } | null}  null = 실시간(범위 없음)
  */
-// KST = UTC+9. 한국 호스트 기준 날짜 경계를 UTC로 변환하기 위한 오프셋.
-const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
-
-/**
- * KST 기준 날짜 컴포넌트(y/m/d)로부터 하루 범위의 UTC Date 쌍을 반환한다.
- * KST 00:00 = UTC (y,m,d,00:00) - 9h
- */
-function kstDayRange(y, m, d) {
-  return {
-    from: new Date(Date.UTC(y, m, d, 0, 0, 0, 0) - KST_OFFSET_MS),
-    to:   new Date(Date.UTC(y, m, d, 23, 59, 59, 999) - KST_OFFSET_MS),
-  };
-}
-
 export function getPeriodRange(period, referenceDate = new Date()) {
   if (period === "now") return null;
-
-  // KST 기준 날짜 컴포넌트 (UTC 날짜가 아닌 KST 날짜 기준으로 분기해야 함)
-  const kstRef = new Date(referenceDate.getTime() + KST_OFFSET_MS);
-  const y = kstRef.getUTCFullYear();
-  const m = kstRef.getUTCMonth();
-  const d = kstRef.getUTCDate();
-
-  // 일 단위
-  if (period === "yesterday") return kstDayRange(y, m, d - 1);
-  if (period === "today")     return kstDayRange(y, m, d);
-  if (period === "tomorrow")  return kstDayRange(y, m, d + 1);
-
-  // 시간 단위 (절대 시각 기준 — KST 보정 불필요)
-  if (period === "last_hour") {
-    const to   = new Date(referenceDate);
-    const from = new Date(to.getTime() - 60 * 60 * 1000);
-    return { from, to };
-  }
-  if (period === "next_hour") {
-    const from = new Date(referenceDate);
-    const to   = new Date(from.getTime() + 60 * 60 * 1000);
-    return { from, to };
-  }
-
-  // 주 단위 (KST 기준 월요일 00:00 ~ 일요일 23:59)
-  if (period === "this_week" || period === "last_week" || period === "next_week") {
-    const dow = kstRef.getUTCDay(); // KST 기준 요일
-    const daysToMonday = dow === 0 ? 6 : dow - 1;
-    const mondayKstDate = d - daysToMonday;
-
-    let weekOffset = 0;
-    if (period === "last_week") weekOffset = -7;
-    else if (period === "next_week") weekOffset = 7;
-
-    const fromDay = mondayKstDate + weekOffset;
-    const from = new Date(Date.UTC(y, m, fromDay, 0, 0, 0, 0) - KST_OFFSET_MS);
-    const to   = new Date(Date.UTC(y, m, fromDay + 6, 23, 59, 59, 999) - KST_OFFSET_MS);
-    return { from, to };
-  }
-
-  // 월 단위 (KST 기준 월 1일 00:00 ~ 말일 23:59)
-  if (period === "this_month" || period === "last_month" || period === "next_month") {
-    let targetYear = y;
-    let targetMonth = m;
-
-    if (period === "last_month") {
-      targetMonth -= 1;
-      if (targetMonth < 0) { targetMonth = 11; targetYear -= 1; }
-    } else if (period === "next_month") {
-      targetMonth += 1;
-      if (targetMonth > 11) { targetMonth = 0; targetYear += 1; }
-    }
-
-    const from = new Date(Date.UTC(targetYear, targetMonth, 1, 0, 0, 0, 0) - KST_OFFSET_MS);
-    const to   = new Date(Date.UTC(targetYear, targetMonth + 1, 0, 23, 59, 59, 999) - KST_OFFSET_MS);
-    return { from, to };
-  }
-
-  // 주·일 오프셋 기간 (weeks_ago_2, days_ahead_3 …) — periodDomain 의 [from, to) 를 포함 구간(to - 1ms)으로
-  if (parseOffsetPeriod(period)) {
-    const r = periodToDateRange(period, referenceDate.getTime());
-    return { from: r.from, to: new Date(r.to.getTime() - 1) };
-  }
-
-  throw new Error(`unknown period: "${period}"`);
+  const range = periodToDateRange(period, referenceDate.getTime());
+  if (!range) throw new Error(`unknown period: "${period}"`);
+  return { from: range.from, to: new Date(range.to.getTime() - 1) };
 }
 
 /**

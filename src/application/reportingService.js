@@ -1,5 +1,5 @@
 import { getPeriodRange, countCurrentStats, countPeriodEvents } from "../domain/reportingDomain.js";
-import { describePeriod, monthsAgoRange, periodForOffset, periodToDateRange } from "../domain/periodDomain.js";
+import { describePeriod, monthsAgoRange, periodCapabilities, periodForOffset, periodToDateRange } from "../domain/periodDomain.js";
 import { summarizeOperationalMetrics, computeMeasurableMetrics } from "../domain/operationalMetricsDomain.js";
 import {
   detectCleaningTimeFailures,
@@ -303,9 +303,9 @@ async function buildInsightDetectorInputs(db, periodDataList, propertyIds, logLa
  * @returns {Promise<object[]>}
  */
 export async function getMonthlyInsights(period, { db, propertyIds = null, now = new Date() }) {
-  if (period !== "this_month" && period !== "last_month") return [];
+  if (periodCapabilities(period).insights !== "month") return [];
 
-  const baseOffset = period === "last_month" ? 1 : 0;
+  const baseOffset = -describePeriod(period).offset; // 이번 달 0, 지난달 1
 
   // 최근 몇 달치 스코프 합산 지표 — MONTH_OVER_MONTH(현재·직전)·CONSECUTIVE(전체 이력) 공용.
   // 달마다 서로 독립적인 조회라 Promise.all로 동시에 실행(순서는 그대로 보존됨).
@@ -331,9 +331,9 @@ export async function getMonthlyInsights(period, { db, propertyIds = null, now =
  * @returns {Promise<object[]>}
  */
 export async function getWeeklyInsights(period, { db, propertyIds = null, now = new Date() }) {
-  if (period !== "this_week" && period !== "last_week") return [];
+  if (periodCapabilities(period).insights !== "week") return [];
 
-  const baseOffset = period === "last_week" ? 1 : 0;
+  const baseOffset = -describePeriod(period).offset; // 이번 주 0, 지난주 1
 
   const weekDataList = await Promise.all(
     Array.from({ length: INSIGHT_LOOKBACK_WEEKS }, (_, i) => computeAggregateWeekMetrics(db, baseOffset + i, propertyIds, now))
@@ -343,6 +343,26 @@ export async function getWeeklyInsights(period, { db, propertyIds = null, now = 
   const detectorInputs = await buildInsightDetectorInputs(db, weekDataList, propertyIds, "getWeeklyInsights");
   const insights = buildWeeklyInsights(detectorInputs, reportPeriod);
   return insights.map(insight => ({ ...insight, periodKey: period }));
+}
+
+/**
+ * 기간의 "발견된 패턴" — 주간·월간 공통 진입점. 패턴이 열리는 기간인지는 periodCapabilities 표가 정한다.
+ * 부가 분석이라 실패해도(추가 DB 조회 여러 번) 이미 계산된 통계·요약 응답을 살려야 하므로 여기서 잡아 [] 로
+ * 돌려준다(D-027 코드 리뷰에서 발견한 500 버그).
+ * @returns {Promise<object[]|null>}  null = 이 기간엔 패턴 기능 없음(응답에 insights 필드를 안 붙임)
+ */
+export async function getPeriodInsights(period, deps) {
+  const unit = periodCapabilities(period).insights;
+  if (!unit) return null;
+  const [label, getInsights] = unit === "month"
+    ? ["getMonthlyInsights", getMonthlyInsights]
+    : ["getWeeklyInsights", getWeeklyInsights];
+  try {
+    return await getInsights(period, deps);
+  } catch (err) {
+    console.error(`[reportingService] ${label} 실패 — insights 없이 응답:`, err?.message ?? err);
+    return [];
+  }
 }
 
 /** 월간 캘린더의 날짜별 문제 이력과 단일 숙소 상태 구간. */

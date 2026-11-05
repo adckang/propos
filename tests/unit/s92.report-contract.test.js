@@ -14,8 +14,8 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { getPeriodRange } from '../../src/domain/reportingDomain.js';
-import { periodToDateRange, describePeriod, monthsAgoRange, periodForOffset } from '../../src/domain/periodDomain.js';
-import { generateSummary, getMonthlyInsights, getWeeklyInsights } from '../../src/application/reportingService.js';
+import { periodToDateRange, describePeriod, monthsAgoRange, periodForOffset, periodCapabilities } from '../../src/domain/periodDomain.js';
+import { generateSummary, getMonthlyInsights, getPeriodInsights, getWeeklyInsights } from '../../src/application/reportingService.js';
 import { getDemoStats } from '../../src/application/demoReportingService.js';
 import { futureSummaryFor } from '../../src/domain/futureWeekDomain.js';
 import { PROPERTIES } from '../../src/data/roomStateMockData.js';
@@ -30,8 +30,9 @@ const wall = date => (date ? new Date(date.getTime() + 9 * 3_600_000).toISOStrin
 // ── A. 기간 규칙 ────────────────────────────────────────────────────────────
 // [기간, 시제, 단위, 오프셋, 이름, 서버 범위 시작, 서버 범위 끝(포함)]
 const PERIODS = [
-  ['last_hour',     'past',   'hour',  -1, '지난 1시간', '2026-11-04T09:00:00.000', '2026-11-04T10:00:00.000'],
-  ['next_hour',     'future', 'hour',   1, '다음 예정',  '2026-11-04T10:00:00.000', '2026-11-04T11:00:00.000'],
+  // 시간 단위도 끝은 포함 구간(-1ms). "다음 예정"은 지금(1분)을 지난 뒤부터 — 화면과 서버가 같은 구간 (2026-11-04 일원화)
+  ['last_hour',     'past',   'hour',  -1, '지난 1시간', '2026-11-04T09:00:00.000', '2026-11-04T09:59:59.999'],
+  ['next_hour',     'future', 'hour',   1, '다음 예정',  '2026-11-04T10:01:00.000', '2026-11-04T11:00:59.999'],
   ['yesterday',     'past',   'day',   -1, '어제',       '2026-11-03T00:00:00.000', '2026-11-03T23:59:59.999'],
   ['today',         'active', 'day',    0, '오늘',       '2026-11-04T00:00:00.000', '2026-11-04T23:59:59.999'],
   ['tomorrow',      'future', 'day',    1, '내일',       '2026-11-05T00:00:00.000', '2026-11-05T23:59:59.999'],
@@ -62,31 +63,27 @@ describe('A. 기간 규칙 — 모든 기간의 시제·이름·날짜 범위', 
     assert.equal(describePeriod('now').tense, 'now');
   });
 
-  test('알 수 없는 기간은 이름이 없다 (months_ago_2 처럼 월 오프셋은 아직 없음)', () => {
+  test('알 수 없는 기간은 이름이 없다 (월은 이름 있는 세 기간만 — months_ago_2 는 아직 없음)', () => {
     assert.equal(describePeriod('bogus'), null);
     assert.equal(describePeriod('months_ago_2'), null);
   });
 
-  for (const [period] of PERIODS.filter(([p]) => !p.endsWith('_hour') && p !== 'last_month')) {
+  for (const [period] of PERIODS) {
     test(`화면용 범위 = 서버 범위 (끝만 배타/포함 차이): ${period}`, () => {
       const screen = periodToDateRange(period, NOW.getTime());
       const server = getPeriodRange(period, NOW);
+      assert.ok(screen, `${period}: 화면용 범위 없음`);
       assert.equal(screen.from.getTime(), server.from.getTime());
       assert.equal(screen.to.getTime() - 1, server.to.getTime());
     });
   }
 
-  test('화면용 범위에 "지난달"이 있다 (지금은 null — 기간 규칙 일원화에서 추가)', { todo: '2단계: 기간 규칙 일원화' }, () => {
-    const screen = periodToDateRange('last_month', NOW.getTime());
-    const server = getPeriodRange('last_month', NOW);
-    assert.ok(screen, '화면용 지난달 범위가 없음');
-    assert.equal(screen.to.getTime() - 1, server.to.getTime());
-  });
-
-  test('"다음 1시간"이 화면·서버에서 같은 구간이다 (지금은 화면만 1분 늦게 시작)', { todo: '2단계: 기간 규칙 일원화' }, () => {
-    const screen = periodToDateRange('next_hour', NOW.getTime());
-    const server = getPeriodRange('next_hour', NOW);
-    assert.equal(screen.from.getTime(), server.from.getTime());
+  test('기간 기능표: 운영·데모·화면이 쓰는 한 표 (periodCapabilities)', () => {
+    for (const [period, stats, drilldown, calendar, insights] of CAPABILITIES) {
+      const caps = periodCapabilities(period);
+      assert.deepEqual([caps.stats, caps.drilldown, caps.calendar, Boolean(caps.insights)], [stats, drilldown, calendar, insights], period);
+      if (insights) assert.equal(caps.insights, describePeriod(period).unit, period);
+    }
   });
 
   test('패턴 분석의 "N개월 전" 범위 = 지난달/이번 달 범위', () => {
@@ -175,6 +172,25 @@ describe('B. 서버 API — 기간별 통계·상세·캘린더·발견된 패�
       }
     });
   }
+
+  test('발견된 패턴 진입점: 열린 기간만, 분석이 실패해도 [] 로 통계 응답을 살린다', async () => {
+    const failing = { query: async () => { throw new Error('db down'); } };
+    const logged = [];
+    const originalError = console.error;
+    console.error = (...args) => logged.push(args.join(' '));
+    try {
+      assert.deepEqual(await getPeriodInsights('last_month', { db: failing, now: NOW }), []);
+      assert.deepEqual(await getPeriodInsights('this_week', { db: failing, now: NOW }), []);
+    } finally {
+      console.error = originalError;
+    }
+    assert.ok(logged.some(line => line.includes('getMonthlyInsights 실패')), '월간 실패 로그');
+    assert.ok(logged.some(line => line.includes('getWeeklyInsights 실패')), '주간 실패 로그');
+    const untouched = { query: async () => { throw new Error('호출되면 안 됨'); } };
+    for (const period of ['next_month', 'weeks_ago_2', 'yesterday', 'now', 'bogus']) {
+      assert.equal(await getPeriodInsights(period, { db: untouched, now: NOW }), null, period);
+    }
+  });
 
   test('운영 경로의 발견된 패턴: 열린 기간만 DB 를 조회한다', async () => {
     const queried = [];

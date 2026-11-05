@@ -368,21 +368,8 @@ describe('getMonthlyInsights — period 게이트 + 숙소 스코프 파생 + DB
 });
 
 // ── L2: API·훅·UI 배선 계약 ───────────────────────────────────────────────────
-describe('api/stats.js — insights는 월간 기간에서만 추가된다', () => {
-  const src = read('api/stats.js');
-  test('getMonthlyInsights를 import하고 this_month/last_month에서만 호출한다', () => {
-    assert.match(src, /import\s*\{[^}]*getMonthlyInsights[^}]*\}\s*from\s*"\.\.\/src\/application\/reportingService\.js"/);
-    assert.match(src, /if \(period === "this_month" \|\| period === "last_month"\) \{/);
-  });
-
-  // 코드 리뷰에서 발견 — getMonthlyInsights는 그 자체로 추가 DB 조회를 여러 번 더 하는
-  // 부가 기능이라, 여기서 실패해도 이미 계산된 stats/summary까지 500으로 날려버리면 안 된다.
-  test('getMonthlyInsights 호출은 자체 try/catch로 감싸 실패해도 stats 응답 자체는 살린다', () => {
-    assert.match(src, /try \{\s*\n\s*result\.insights = await getMonthlyInsights/);
-    assert.match(src, /catch \(err\) \{\s*\n\s*console\.error\("\[api\/stats\] getMonthlyInsights/);
-    assert.match(src, /result\.insights = \[\];/);
-  });
-});
+// 어떤 기간에 insights 가 붙는지·분석이 실패해도 통계 응답이 살아남는지는 s92 B 가 실제 실행으로 검증한다
+// (기간 기능표 periodCapabilities + getPeriodInsights).
 
 describe('useReportingStats — insights를 API 응답에서 그대로 노출한다', () => {
   const src = read('src/hooks/useReportingStats.js');

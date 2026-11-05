@@ -63,9 +63,15 @@ describe('parseOffsetPeriod — 몇 주·며칠 뒤/전', () => {
 
   test('잘못된 이름은 null', () => {
     for (const bad of ['', 'weeks_ahead_0', 'weeks_ahead_-1', 'weeks_ahead_02', 'weeks_ahead_x',
-      'weeks_next_2', 'week_ahead_2', 'this_month', 'now', 'last_hour', 'weeks_ahead_2;drop', null, undefined, 3]) {
+      'weeks_next_2', 'week_ahead_2', 'months_ago_2', 'now', 'last_hour', 'weeks_ahead_2;drop', null, undefined, 3]) {
       assert.equal(parseOffsetPeriod(bad), null, String(bad));
     }
+  });
+
+  test('월도 같은 오프셋 체계 — 이름 있는 세 기간만 (2026-11-04 기간 규칙 일원화)', () => {
+    assert.deepEqual(parseOffsetPeriod('last_month'), { unit: 'month', offset: -1 });
+    assert.deepEqual(parseOffsetPeriod('this_month'), { unit: 'month', offset: 0 });
+    assert.deepEqual(parseOffsetPeriod('next_month'), { unit: 'month', offset: 1 });
   });
 
   test('터무니없이 먼 기간은 거부 (주 520, 일 3650 초과)', () => {
@@ -273,9 +279,11 @@ describe('periodRangeLabel — 사람이 읽는 날짜 범위', () => {
   test('3일 뒤: 하루라 "9/19"', () => {
     assert.equal(periodRangeLabel('days_ahead_3', WED_NOON_KST), '9/19');
   });
-  test('주·일 기간이 아니면 빈 문자열', () => {
-    assert.equal(periodRangeLabel('this_month', WED_NOON_KST), '');
+  test('달은 그 달 1일~말일, 오프셋이 없는 기간은 빈 문자열', () => {
+    assert.equal(periodRangeLabel('this_month', WED_NOON_KST), '9/1~9/30');
+    assert.equal(periodRangeLabel('last_month', WED_NOON_KST), '8/1~8/31');
     assert.equal(periodRangeLabel('now', WED_NOON_KST), '');
+    assert.equal(periodRangeLabel('next_hour', WED_NOON_KST), '');
   });
 });
 
@@ -395,13 +403,8 @@ describe('타임라인 위치 → 레포트 기간 배선', () => {
     assert.ok(!/PERIOD_TENSE\s*=/.test(panel) && !/PERIOD_NAV_LABEL\s*=/.test(panel), '하드코딩 표가 남아 있음');
   });
 
-  test('통계 API: 새 기간 이름을 받아들인다', () => {
-    assert.match(read('api/stats.js'), /parseOffsetPeriod\(period\)/);
-  });
-
-  test('실패 상세 API: 과거 주/일 기간을 받아들인다', () => {
-    assert.match(read('api/stats.js'), /describePeriod\(period\)/);
-  });
+  // 통계·실패 상세 API 가 새 기간 이름(weeks_ago_2 · days_ahead_3 …)을 받아들이는지는 s92 B 가
+  // 실제 핸들러(운영·데모 경로)를 호출해 기간 전체 표로 검증한다.
 
   test('서버 청소 지표: 미래 판정은 하드코딩 목록이 아니라 기간 시제', () => {
     const svc = read('src/application/reportingService.js');
