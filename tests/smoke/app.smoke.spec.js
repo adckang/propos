@@ -4,9 +4,10 @@ import { getDemoStats, getDemoDrilldown, getDemoMonthlyCalendar } from '../../sr
 // Local preview shares production APIs. UI tests must never send writes or
 // telemetry to the occupied property; all service requests use fixture data.
 test.beforeEach(async ({ page }) => {
-  await page.route('https://**', route => route.fulfill({ status: 204, body: '' }));
-  await page.route('**/api/**', async route => {
+  await page.route('**/*', async route => {
     const url = new URL(route.request().url());
+    if (!['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) return route.fulfill({ status: 204, body: '' });
+    if (!url.pathname.startsWith('/api/')) return route.continue();
     let body = {};
     if (route.request().method() !== 'GET') return route.fulfill({ status: 403, json: { error: 'UI test is read-only' } });
     if (url.pathname === '/api/auth/me') body = { required: false };
