@@ -1,0 +1,24 @@
+# Web deploys do not need Pi boot credentials, local secrets, docs or tests.
+.git
+node_modules
+.env*
+src/config/propos.config.json
+src/config/propos.config.local.json
+scripts/start-watcher.sh
+docs
+tests
+.github
+.githooks
+.agents
+.claude
+.vscode
+.DS_Store
+myAccountMng.txt
+mytest.txt
+undefined
+data/monitoring-state.json
+data/monitoring-config.json
+data/properties-config.json
+data/snapshotLog.json
+data/google-services.json
+data/*firebase-adminsdk*.json
