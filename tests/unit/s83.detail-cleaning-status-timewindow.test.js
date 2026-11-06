@@ -33,7 +33,7 @@
  * 레이어: L1 — buildLiveProperty 실제 호출(①). L2 — PropertyDetailView.jsx 소스 계약(②).
  */
 
-import { describe, test } from 'node:test';
+import { beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -61,6 +61,9 @@ function makeReservation({ checkIn, checkOut, cleaningStatus, cleanerName }) {
 
 describe('buildLiveProperty — 예약이 이미 cleaningStatus를 들고 있으면 겹침 재계산으로 덮어쓰지 않는다 (①)', () => {
   const now = new Date('2026-10-30T00:00:00Z');
+  // These scenarios require future reservations. Keep their declared clock
+  // fixed after the fixture check-in date passes; assertions stay unchanged.
+  beforeEach(t => t.mock.timers.enable({ apis: ['Date'], now }));
 
   test('예약의 raw 체크아웃 시각이 cleaningSlots 시각과 9시간 어긋나도, 이미 ASSIGNED면 그대로 ASSIGNED', () => {
     // 실제 운영에서 관찰된 패턴 그대로: 예약 체크아웃은 11:00 UTC, 청소 슬롯은 같은 날 02:00-05:00 UTC
