@@ -2,6 +2,7 @@
  * s70 — demo/real 데이터 프로필 경계와 공통 데모 데이터 무결성.
  */
 
+import '../helpers/isolateDataDir.js';
 import { after, describe, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -147,7 +148,8 @@ describe('API 경계 — demo는 공통 서비스만 읽고 실제 캘린더는 
     const vite = read('vite.config.mjs');
     assert.match(app, /dbPropertyRows/);
     assert.match(app, /cloudRowToLiveProperty/);
-    assert.match(vite, /if \(dataProfile !== DATA_PROFILE\.DEMO\) startWatcher\(\)/);
+    assert.match(vite, /target: 'https:\/\/www\.proposonline\.com'/);
+    assert.doesNotMatch(vite, /startWatcher|occupancyWatcher/);
     assert.match(vite, /req\.url\?\.startsWith\("\/api\/ical"\)/);
   });
 

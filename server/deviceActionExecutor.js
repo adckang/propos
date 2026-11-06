@@ -70,7 +70,7 @@ function resolveEntityIds(role, deviceMap) {
  * @param {object} deviceMap    { DEVICE_ROLE: string | string[] | null }
  * @returns {{ executed: object[], skipped: object[] }}
  */
-export async function executeStateActions(mainStatus, deviceMap = {}) {
+export async function executeStateActions(mainStatus, deviceMap = {}, { skipRoles = [] } = {}) {
   const actions = STATE_DEVICE_ACTIONS[mainStatus];
   if (!actions?.length) return { executed: [], skipped: [] };
 
@@ -78,6 +78,7 @@ export async function executeStateActions(mainStatus, deviceMap = {}) {
   const skipped  = [];
 
   for (const { role, cmd } of actions) {
+    if (skipRoles.includes(role)) continue;
     const entityIds = resolveEntityIds(role, deviceMap);
 
     if (!entityIds.length) {
@@ -88,7 +89,7 @@ export async function executeStateActions(mainStatus, deviceMap = {}) {
     for (const entityId of entityIds) {
       try {
         const haCall = buildHaCall(role, cmd, entityId);
-        await callHaService(haCall.domain, haCall.service, haCall.data);
+        await callHaService(haCall.domain, haCall.service, haCall.data, { signal: AbortSignal.timeout(10_000) });
         executed.push({ role, entityId, cmd });
       } catch (err) {
         skipped.push({ role, entityId, reason: err.message });

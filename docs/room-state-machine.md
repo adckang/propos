@@ -1,6 +1,6 @@
 # Room State Machine
 > PROPOS 숙소 상태 전환 규칙 정본
-> 버전: v2.4 | 업데이트: 2026-11-04
+> 버전: v2.5 | 업데이트: 2026-11-06 · 센서 기반 입실 준비
 
 ---
 
@@ -24,6 +24,7 @@
 | VACANT           | MAINTENANCE             | 공실 / 기타정비  | 글로벌 이벤트로 진입 |
 | PRE_STAY_READY   | OPTIMIZING              | 입실전 / 최적화중 |           |
 | PRE_STAY_READY   | OPTIMIZED               | 입실전 / 최적화완료 |         |
+| PRE_STAY_READY   | OPTIMIZATION_FAILED     | 입실전 / 최적화실패 | 중요 센서·장치 실패·안전 중단 |
 | OCCUPIED         | GOOD_CONDITION          | 체류중 / 상태좋음 |           |
 | OCCUPIED         | ENERGY_WASTE            | 체류중 / 에너지낭비 |         |
 | OCCUPIED         | ISSUE_COMPLAINT         | 체류중 / 민원발생 |           |
@@ -177,8 +178,8 @@ OCCUPIED / GOOD_CONDITION
 > `maintenance_required` / `maintenance_started` / `maintenance_finished` → 글로벌 이벤트 (3A).
 
 **`optimization_started` 제거 사유:**
-OPTIMIZING 상태 진입 시 디스패처가 최적화 액션 시퀀스를 자동 실행한다.
-완료되면 `optimization_finished` 이벤트가 발생한다.
+실제 최적화는 [센서 기반 입실 준비 명세](pre-stay-optimization.md)의 숙소 영역·센서·장치·알림 사전 검사를 통과해야 실행한다.
+모든 지정 방의 실제 온습도가 목표를 5분 유지해야 `optimization_finished`가 발생한다. 입실 30분 전이라는 시간만으로 완료하지 않는다.
 `optimization_started`는 상태 변경이 없는 액션 트리거이므로 `getNextRoomState`에 등장하지 않는다.
 
 ### C. OCCUPIED / 체류중
@@ -478,3 +479,17 @@ getNextRoomState 내부에서 호출하지 않는다.
 - VACANT/MAINTENANCE + checkin_prep_time_reached 시 운영자 알림 발송
 - maintenance_* 이벤트 운영자 확인 다이얼로그 처리
 ```
+
+## 10. 센서 기반 입실 준비 · 2026-11-06
+
+요구사항·목표·안전 조건·저장·검증 정본은 [pre-stay-optimization.md](pre-stay-optimization.md)다. 예약 타임라인의 1시간/30분 전 구간은 화면 예측이며 실제 제어·완료 증거로 사용하지 않는다.
+
+| 전이 ID | From | 이벤트 | To | 실행 의미 |
+| --- | --- | --- | --- | --- |
+| PREP-T01 | VACANT/CLEANING_FINISHED 또는 ENERGY_WASTE | check_in_detected | OCCUPIED/GOOD_CONDITION | 준비를 시작하지 않았다면 별도 `optimization_skipped` 기록 |
+| PREP-T02 | PRE_STAY_READY/OPTIMIZING | check_in_detected | OCCUPIED/GOOD_CONDITION | 입실과 별개로 진행 중 환경 최적화 계속 |
+| PREP-T03 | PRE_STAY_READY/OPTIMIZING | optimization_failed | PRE_STAY_READY/OPTIMIZATION_FAILED | 환경 장치 안전 정지·운영자 알림 |
+| PREP-T04 | PRE_STAY_READY/OPTIMIZATION_FAILED | check_in_detected | OCCUPIED/GOOD_CONDITION | 입실 때문에 준비 실패 이력을 지우거나 재가동하지 않음 |
+| PREP-T05 | PRE_STAY_READY의 준비 중·완료·실패 | optimization_cancelled | VACANT/CLEANING_FINISHED | 준비 제어 종료·대상 제외. 일반 공실 씬/도어락을 재실행하지 않음 |
+
+손님 입실 후 발생한 `optimization_finished`는 제어 회차의 완료 기록으로 저장한다. OCCUPIED를 PRE_STAY_READY로 되돌리지 않는다. 생략·취소·실패·완료는 준비 실행 상태이며 이벤트 수신 파이프라인의 `events.status`와 다르다.

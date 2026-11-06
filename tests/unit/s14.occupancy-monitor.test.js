@@ -487,13 +487,13 @@ describe('체크인 감지', () => {
     assert.deepEqual(events, []);
   });
 
-  test('PRE_STAY_READY/OPTIMIZING 상태에서는 ENTRY 감지해도 이벤트 없음', () => {
+  test('최적화 진행 중에도 ENTRY가 확정되면 입실을 기록한다 (환경 준비는 계속)', () => {
     const m = new OccupancyMonitor();
     call(m, snap({ motionDetected: false, doorOpen: true  }), PRE_STAY_OPTIMIZING, null, 0);
     call(m, snap({ motionDetected: false, doorOpen: false }), PRE_STAY_OPTIMIZING, null, 1 * MIN);
     call(m, snap({ motionDetected: true,  doorOpen: false }), PRE_STAY_OPTIMIZING, null, 1 * MIN + 1);
     const events = call(m, snap({ motionDetected: true,  doorOpen: false }), PRE_STAY_OPTIMIZING, null, 4 * MIN + 2);
-    assert.deepEqual(events, []);
+    assert.deepEqual(events.map(e => e.type), ['check_in_detected']);
   });
 });
 

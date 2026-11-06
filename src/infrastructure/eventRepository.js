@@ -8,6 +8,7 @@
  */
 
 import { ANCHOR_EVENT_TYPES, FOLLOW_EVENT_TYPES, deriveRoomState } from "../domain/roomStateFromEventsDomain.js";
+import { PRE_STAY_EVENT_TYPES } from "../domain/metricDrilldownDomain.js";
 
 /**
  * 이벤트를 Postgres에 삽입한다.
@@ -18,9 +19,16 @@ import { ANCHOR_EVENT_TYPES, FOLLOW_EVENT_TYPES, deriveRoomState } from "../doma
  * @returns {Promise<{ inserted: boolean, id: string|null }>}
  */
 export async function insertEvent(db, event, isSoft) {
+  // 구형 Pi 요청에는 출처 필드가 없다. HA_WATCHER는 기존 스키마의 기본값이며,
+  // fallback 참조는 실제 수신 이벤트 UUID만 가리킨다 (예약·센서 원본 ID를 추측하지 않는다).
+  const sourceSystem = typeof event.source_system === 'string' && event.source_system.trim()
+    ? event.source_system : 'HA_WATCHER';
+  const sourceRef = typeof event.source_ref === 'string' && event.source_ref.trim()
+    ? event.source_ref : `ingest:event:${event.id}`;
   const result = await db.query(
-    `INSERT INTO events (id, property_id, type, is_soft, device_time, data)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO events (id, property_id, type, is_soft, device_time, data, source_system, source_ref, data_origin)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+       COALESCE((SELECT data_origin FROM property_cleaning_config WHERE property_id = $2), 'REAL'))
      ON CONFLICT (property_id, type, device_time) DO NOTHING
      RETURNING id`,
     [
@@ -30,6 +38,8 @@ export async function insertEvent(db, event, isSoft) {
       isSoft,
       event.device_time,
       event.data ?? null,
+      sourceSystem,
+      sourceRef,
     ]
   );
 
@@ -135,6 +145,44 @@ export async function queryEvents(db, range, propertyIds = null) {
     [range.from, range.to]
   );
   return result.rows;
+}
+
+/**
+ * 기간 끝에 열린 준비 회차의 다음 관련 기록을 조회한다. 첫 시각의 모든 이벤트를 반환해
+ * 동시 입실/완료의 판정도 공통 도메인이 담당한다. 기간 밖 준비는 분모에 넣지 않는다.
+ */
+export async function queryNextPreStayEvents(db, after, through, propertyIds) {
+  if (!propertyIds.length || new Date(after).getTime() >= new Date(through).getTime()) return [];
+  const { rows } = await db.query(
+    `WITH next_pre_stay_times AS (
+       SELECT property_id, MIN(device_time) AS device_time
+         FROM events
+        WHERE property_id = ANY($1::text[]) AND type = ANY($2::text[])
+          AND device_time > $3 AND device_time <= $4
+        GROUP BY property_id
+     )
+     SELECT e.* FROM events e
+       JOIN next_pre_stay_times n ON n.property_id = e.property_id AND n.device_time = e.device_time
+      WHERE e.type = ANY($2::text[])
+      ORDER BY e.device_time`,
+    [propertyIds, PRE_STAY_EVENT_TYPES, after, through]
+  );
+  return rows;
+}
+
+/** Versioned sensor runs may finish after early entry; query only exact run IDs. */
+export async function queryPreStayRunOutcomes(db, after, through, runs) {
+  if (!runs.length || new Date(after).getTime() >= new Date(through).getTime()) return [];
+  const { rows } = await db.query(
+    `SELECT e.* FROM events e
+       JOIN jsonb_to_recordset($1::jsonb) AS r(property_id text, run_id text)
+         ON r.property_id = e.property_id AND r.run_id = e.data->>'optimizationRunId'
+      WHERE e.data->>'preparationPolicy' = 'sensor-v1'
+        AND e.type = ANY($2::text[]) AND e.device_time > $3 AND e.device_time <= $4
+      ORDER BY e.device_time`,
+    [JSON.stringify(runs), ['checkin_prep_time_reached', 'optimization_finished', 'optimization_failed', 'optimization_cancelled'], after, through]
+  );
+  return rows;
 }
 
 /**

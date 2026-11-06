@@ -1,11 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import eruda from "vite-plugin-eruda";
-import { handleNodeHaRequest } from "./server/haApiHandlers.js";
-import { handleNodeIcalRequest } from "./server/icalApiHandlers.js";
-import { startWatcher, getMonitoringState, setMonitoringConfig, setRoomState } from "./server/occupancyWatcher.js";
-import { getHaBaseUrl, getHaToken } from "./server/haProxy.js";
-import { fetchWeather } from "./server/weatherService.js";
 import {
   getDemoCleaningStats,
   getDemoPropertyConfigs,
@@ -16,15 +11,6 @@ function sendJson(res, status, body) {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.end(JSON.stringify(body));
-}
-
-async function readBody(req) {
-  if (req.body && typeof req.body === "object") return req.body;
-  const chunks = [];
-  for await (const c of req) chunks.push(c);
-  if (!chunks.length) return {};
-  try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
-  catch { return {}; }
 }
 
 function queryFromUrl(rawUrl = '') {
@@ -43,57 +29,20 @@ function vercelResponse(res) {
   return res;
 }
 
-async function handleLocalDatabaseApi(req, res, { statsOnly = false } = {}) {
-  const originalUrl = req.url || '';
-  const isStats = originalUrl === '/api/stats' || originalUrl.startsWith('/api/stats?') || originalUrl.startsWith('/api/stats/');
-  const isCleaning = !statsOnly && originalUrl.startsWith('/api/cleaning/');
-  const isWatcherProperties = !statsOnly && (originalUrl === '/api/properties' || originalUrl.startsWith('/api/properties?'));
-  if (!isStats && !isCleaning && !isWatcherProperties) return false;
-
+// Only explicit DEMO reports execute locally. Service data and all physical
+// device operations always pass through the production API below.
+async function handleDemoReportApi(req, res) {
+  const raw = req.url || '';
+  if (!(raw === '/api/stats' || raw.startsWith('/api/stats?') || raw.startsWith('/api/stats/'))) return false;
   try {
-    const query = queryFromUrl(originalUrl);
-    req.query = query;
-    const response = vercelResponse(res);
-    if (isStats) {
-      const { default: handler } = await import('./api/stats.js');
-      await handler(req, response);
-      return true;
-    }
-    if (isWatcherProperties) {
-      const { default: handler } = await import('./api/properties.js');
-      await handler(req, response);
-      return true;
-    }
-    const { default: handler } = await import('./api/cleaning/[...slug].js');
-    await handler(req, response);
-    return true;
-  } catch (error) {
-    console.error('[vite/local-db-api]', error);
-    sendJson(res, 500, { error: error.message });
-    return true;
-  }
+    req.query = queryFromUrl(raw);
+    const { default: handler } = await import('./api/stats.js');
+    await handler(req, vercelResponse(res));
+  } catch (error) { sendJson(res, 500, { error: error.message }); }
+  return true;
 }
 
-async function handleCameraSnapshot(req, res) {
-  const imgPath = new URL(req.url, "http://localhost").searchParams.get("path") ?? "";
-  if (!imgPath.startsWith("/local/snapshots/") || imgPath.includes("..")) {
-    res.statusCode = 400; res.end(); return;
-  }
-  try {
-    const imgRes = await fetch(`${getHaBaseUrl()}${imgPath}`, {
-      headers: { Authorization: `Bearer ${getHaToken()}` },
-    });
-    if (!imgRes.ok) { res.statusCode = 404; res.end(); return; }
-    const buf = Buffer.from(await imgRes.arrayBuffer());
-    res.statusCode = 200;
-    res.setHeader("Content-Type", imgRes.headers.get("content-type") || "image/jpeg");
-    res.setHeader("Content-Length", buf.length);
-    res.setHeader("Cache-Control", "public, max-age=86400");
-    res.end(buf);
-  } catch { res.statusCode = 502; res.end(); }
-}
-
-function apiProxyPlugin(env, dataProfile) {
+function apiProxyPlugin(dataProfile) {
   const attachMiddleware = server => {
     server.middlewares.use(async (req, res, next) => {
       const demoBlocksExternalSideEffect = dataProfile === DATA_PROFILE.DEMO && (
@@ -108,41 +57,7 @@ function apiProxyPlugin(env, dataProfile) {
         sendJson(res, 403, { error: "demo profile is read-only", dataProfile: "demo" });
         return;
       }
-      if (req.url?.startsWith("/api/ha/")) {
-        handleNodeHaRequest(req, res);
-        return;
-      }
-      if (req.url?.startsWith("/api/ical")) {
-        handleNodeIcalRequest(req, res);
-        return;
-      }
-      if (req.url === "/api/monitoring/state" && req.method === "GET") {
-        sendJson(res, 200, getMonitoringState());
-        return;
-      }
-      if (req.url === "/api/monitoring/config" && req.method === "POST") {
-        setMonitoringConfig(await readBody(req));
-        sendJson(res, 200, { ok: true });
-        return;
-      }
-      if (req.url === "/api/monitoring/state" && req.method === "PUT") {
-        const body = await readBody(req);
-        if (body.roomState) setRoomState(body.roomState);
-        sendJson(res, 200, { ok: true });
-        return;
-      }
-      if (req.url?.startsWith("/api/camera/snapshot") && req.method === "GET") {
-        await handleCameraSnapshot(req, res);
-        return;
-      }
-      if (dataProfile !== DATA_PROFILE.DEMO && await handleLocalDatabaseApi(req, res)) {
-        return;
-      }
-      // demo 프로필의 레포트 API(/api/stats·drilldown·calendar)도 운영과 같은 핸들러가 받는다 — 핸들러가 demo 를
-      // 알아서 처리하므로(DB 미사용) 기간 검증·응답 규칙이 개발 서버에 따로 복사돼 갈라지지 않는다.
-      if (dataProfile === DATA_PROFILE.DEMO && await handleLocalDatabaseApi(req, res, { statsOnly: true })) {
-        return;
-      }
+      if (await handleDemoReportApi(req, res)) return;
       if (dataProfile === DATA_PROFILE.DEMO && req.url?.startsWith("/api/cleaning/stats") && req.method === "GET") {
         const csUrl      = new URL(req.url, "http://localhost");
         const withItems  = csUrl.searchParams.get("items") === "true";
@@ -178,18 +93,6 @@ function apiProxyPlugin(env, dataProfile) {
         sendJson(res, 200, { dataProfile: "demo" });
         return;
       }
-      if (req.url?.startsWith("/api/weather") && req.method === "GET") {
-        const district = new URL(req.url, "http://localhost").searchParams.get("district") ?? "";
-        if (!district) { sendJson(res, 400, { error: "district required" }); return; }
-        try {
-          const result = await fetchWeather(district, env.PROPOS_KMA_API_KEY ?? null);
-          if (result.error) { sendJson(res, result.status ?? 500, { error: result.error }); return; }
-          sendJson(res, 200, result.data);
-        } catch (err) {
-          sendJson(res, 502, { error: err.message });
-        }
-        return;
-      }
       next();
     });
   };
@@ -197,37 +100,28 @@ function apiProxyPlugin(env, dataProfile) {
   return {
     name: "api-proxy-middleware",
     configureServer(server) {
-      if (dataProfile !== DATA_PROFILE.DEMO) startWatcher();
       attachMiddleware(server);
     },
     configurePreviewServer(server) {
-      if (dataProfile !== DATA_PROFILE.DEMO) startWatcher();
       attachMiddleware(server);
     },
   };
 }
 
 export default defineConfig(({ mode }) => {
-  // 접두사 '' → VITE_ 제한 없이 .env.local 전체 로드 (PROPOS_* 포함)
   const env = loadEnv(mode, process.cwd(), '');
-  // Vite의 loadEnv 결과는 import.meta.env에만 주입된다. 로컬에서 Vercel API
-  // 핸들러를 직접 호출할 때도 동일한 DB/Google 설정을 사용하도록 서버 런타임
-  // 환경에 없는 값만 보완한다(이미 주입된 셸/배포 환경변수는 우선 유지).
-  for (const [key, value] of Object.entries(env)) {
-    if (!(key in process.env) && (
-      key === 'POSTGRES_URL' ||
-      key.startsWith('PROPOS_') ||
-      key.startsWith('GOOGLE_') ||
-      key.startsWith('FIREBASE_') ||
-      key.startsWith('KV_')
-    )) {
-      process.env[key] = value;
-    }
-  }
   const dataProfile = resolveBuildDataProfile(mode, env);
+  // The fixture API shares the production report handler, whose runtime
+  // profile must also be DEMO when the build profile came from an env file.
+  if (dataProfile === DATA_PROFILE.DEMO) process.env.PROPOS_DATA_PROFILE = DATA_PROFILE.DEMO;
+  // Localhost is a UI entry point into the same service, not another backend.
+  // Tokens, DB connections and watcher routing are read only by production.
+  const proxy = dataProfile === DATA_PROFILE.DEMO ? undefined : {
+    '/api': { target: 'https://www.proposonline.com', changeOrigin: true, cookieDomainRewrite: '' },
+  };
 
   return {
-    plugins: [react(), apiProxyPlugin(env, dataProfile), ...(mode === 'development' ? [eruda()] : [])],
+    plugins: [react(), ...(dataProfile === DATA_PROFILE.DEMO ? [apiProxyPlugin(dataProfile)] : []), ...(mode === 'development' ? [eruda()] : [])],
     define: {
       'import.meta.env.VITE_PROPOS_DATA_PROFILE': JSON.stringify(dataProfile),
     },
@@ -237,11 +131,13 @@ export default defineConfig(({ mode }) => {
       host: true,
       port: 5173,
       strictPort: true,
+      proxy,
     },
     preview: {
       host: true,
       port: 4173,
       strictPort: true,
+      proxy,
     },
     build: {
       outDir: "dist",

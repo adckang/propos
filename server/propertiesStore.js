@@ -41,6 +41,7 @@ function toWatcherProperty(property) {
     district: String(property.district ?? '').trim(),
     watcherId: property.watcherId ?? property.watcher_id ?? null,
     devices: property.devices && typeof property.devices === 'object' ? property.devices : {},
+    ...(property.optimization && typeof property.optimization === 'object' ? { optimization: property.optimization } : {}),
   };
 }
 

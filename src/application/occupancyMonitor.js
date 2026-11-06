@@ -186,8 +186,9 @@ export class OccupancyMonitor {
       cfg: SUSPICION_CFG,
     });
 
-    // PRE_STAY_READY/OPTIMIZED: 체크인 감지만
-    if (main === 'PRE_STAY_READY' && sub === 'OPTIMIZED') {
+    // All preparation outcomes permit check-in. Sensor optimization has its own
+    // controller and keeps running when guests arrive before it finishes.
+    if (main === 'PRE_STAY_READY' || main === 'VACANT') {
       return occupancyEvents; // check_in_detected or []
     }
 

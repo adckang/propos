@@ -647,7 +647,7 @@ PAST 기간 레포트(Template-P)에서 지표 실패 건수를 탭하면 해당
 
 | METRIC_KEYS 인덱스 | metric key | EventMatrixPanel 라벨 | 실패 감지 방식 |
 |---|---|---|---|
-| 0 | `pre_stay_optimization` | 입실전 숙소 최적화율 | `checkin_prep_time_reached` 중 같은 기간 내 `optimization_finished` 없는 것 |
+| 0 | `pre_stay_optimization` | 입실전 숙소 최적화율 | 구형 A안은 준비부터 다음 준비/입실 전 첫 완료를 연결. `sensor-v1`은 동일 제어 회차의 센서 완료/명시 실패를 집계하고 생략·취소·미확인은 제외. [정본](pre-stay-optimization.md#prep-04) |
 | 1 | `post_checkout_energy` | 퇴실후 청소전 절전 적용률 | `post_checkout_energy_waste_detected` 이벤트 직접 집계 |
 | 2 | `post_checkout_security` | 퇴실후 청소전 보안 적용률 | `post_checkout_security_breach_detected` 이벤트 직접 집계 |
 | 3 | `vacant_energy` | 청소후 공실중 절전 적용률 | `vacant_energy_waste_detected` 이벤트 직접 집계 |
@@ -704,7 +704,7 @@ metricDrilldownDomain.js   — 순수 함수 3개 (cleaning_time / eventType / p
 |---|---|---|
 | `detectCleaningTimeFailures(events)` | events[] | cleaning_started→finished 페어, 소요시간 > 3h |
 | `detectEventTypeFailures(events, eventType)` | events[], string | 해당 eventType의 모든 이벤트 |
-| `detectPreStayOptimizationFailures(events)` | events[] | `checkin_prep_time_reached` 중 같은 기간 내 동일 `property_id`의 `optimization_finished` 없는 것 (시간 순서 무관) |
+| `detectPreStayOptimizationFailures(events, context)` | 기간 내 events[] + 기간 밖 연결 근거 | 구형 A안: 같은 숙소의 준비 시작부터 다음 준비/입실 전 첫 완료, 날짜 경계 허용. 신규 `sensor-v1`: 같은 숙소·optimizationRunId의 명시 실패만 반환. 조기 입실 뒤 완료 허용. [정본](pre-stay-optimization.md) |
 
 반환 공통 형식: `[{ property_id, occurred_at, detail }]`
 

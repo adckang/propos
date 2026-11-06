@@ -102,7 +102,7 @@ function normalizeItem(item) {
  * 이벤트와 청소 잡 문제를 캘린더/DetailView가 함께 쓰는 문제 아이템으로 변환한다.
  * 감지 1회를 1건으로 세고 해결 이벤트는 건수에 더하지 않는다.
  */
-export function buildIssueItems(events = [], cleaningIssues = []) {
+export function buildIssueItems(events = [], cleaningIssues = [], preStayContext = []) {
   const eventsAsc = [...events].sort((a, b) =>
     (asDate(a.device_time)?.getTime() ?? 0) - (asDate(b.device_time)?.getTime() ?? 0)
   );
@@ -124,7 +124,7 @@ export function buildIssueItems(events = [], cleaningIssues = []) {
     }));
   }
 
-  for (const failure of detectPreStayOptimizationFailures(eventsAsc)) {
+  for (const failure of detectPreStayOptimizationFailures(eventsAsc, preStayContext)) {
     items.push(normalizeItem({
       ...failure,
       category: 'PRE_STAY_READY',

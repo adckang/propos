@@ -108,10 +108,12 @@ describe("deriveRoomState — 규칙에 맞지 않는 기록은 무시", () => {
 });
 
 describe("이벤트 종류 목록", () => {
-  test("큰 변화 4종과 세부 이벤트 8종, 서로 겹치지 않는다", () => {
+  test("큰 변화 4종과 세부 이벤트 10종(최적화 실패·취소 포함), 서로 겹치지 않는다", () => {
     assert.equal(ANCHOR_EVENT_TYPES.length, 4);
-    assert.equal(FOLLOW_EVENT_TYPES.length, 8);
-    assert.equal(new Set([...ANCHOR_EVENT_TYPES, ...FOLLOW_EVENT_TYPES]).size, 12);
+    assert.equal(FOLLOW_EVENT_TYPES.length, 10);
+    assert.ok(FOLLOW_EVENT_TYPES.includes('optimization_failed'));
+    assert.equal(new Set([...ANCHOR_EVENT_TYPES, ...FOLLOW_EVENT_TYPES]).size, 14);
+    assert.deepEqual(deriveRoomState('cleaning_finished', ['checkin_prep_time_reached', 'optimization_failed']), st('PRE_STAY_READY', 'OPTIMIZATION_FAILED'));
   });
 });
 
@@ -302,9 +304,14 @@ describe("현재 상태 레포트는 더 이상 5분짜리 임시 저장소를 �
     assert.ok(svc.includes("getLastKnownStatesFromDB("));
   });
 
-  test("한 숙소씩 반복 조회하지 않는다 (숙소 수만큼 DB를 부르는 구조 금지)", () => {
-    const nowBranch = svc.slice(svc.indexOf('period === "now"'), svc.indexOf("const range = getPeriodRange"));
-    assert.ok(!/ids\.map\(|Promise\.all/.test(nowBranch));
+  test("한 숙소씩 반복 조회하지 않는다 (실제 now API 서비스의 질의 수 검증)", async () => {
+    for (const count of [1, 20]) {
+      const histories = Object.fromEntries(Array.from({ length: count }, (_, i) => [`property-${i}`, ['check_in_detected']]));
+      const db = makeStateDb(histories);
+      const result = await getStatsForPeriod('now', { db, propertyIds: Object.keys(histories) });
+      assert.equal(db.calls.length, 1);
+      assert.equal(result.stats.occupied, count);
+    }
   });
 
   test("옛 한 숙소 조회(getLastKnownStateFromDB)는 남아 있지 않다", () => {

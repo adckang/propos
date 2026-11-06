@@ -24,6 +24,8 @@ const eventSchema = z.object({
   type: z.enum(ALL_EVENT_TYPE_VALUES),
   device_time: isoTimestamp,
   data: z.record(z.unknown()).optional(),
+  source_system: z.string().nullish(),
+  source_ref: z.string().nullish(),
 });
 
 /**

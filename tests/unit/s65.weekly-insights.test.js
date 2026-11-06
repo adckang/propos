@@ -189,15 +189,20 @@ describe('getWeeklyInsights — period 게이트 + 숙소 스코프 파생 + DB 
   });
 
   const FIXED_EVENTS = [
-    ...Array(4).fill({ property_id: 'p1', type: 'checkin_prep_time_reached' }),
-    ...Array(2).fill({ property_id: 'p1', type: 'optimization_finished' }),
-    { property_id: 'p2', type: 'checkin_prep_time_reached' },
+    ...[1, 3, 5, 7].map(hour => ({ property_id: 'p1', type: 'checkin_prep_time_reached', hour })),
+    ...[1.5, 3.5].map(hour => ({ property_id: 'p1', type: 'optimization_finished', hour })),
+    ...[5.5, 7.5].map(hour => ({ property_id: 'p1', type: 'check_in_detected', hour })),
+    { property_id: 'p2', type: 'checkin_prep_time_reached', hour: 1 },
+    { property_id: 'p2', type: 'check_in_detected', hour: 2 },
   ];
   function makeDb(calls) {
     return {
       query: async (sql, params) => {
         calls.push({ sql, params });
-        if (/FROM events/.test(sql)) return { rows: FIXED_EVENTS };
+        if (/FROM events/.test(sql)) {
+          const from = params.find(value => value instanceof Date);
+          return { rows: FIXED_EVENTS.map(({ hour, ...event }) => ({ ...event, device_time: new Date(from.getTime() + hour * 3_600_000) })) };
+        }
         return { rows: [] };
       },
     };

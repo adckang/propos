@@ -58,13 +58,13 @@ function ptyToWmoCode(pty) {
   }
 }
 
-async function fetchOpenMeteo(loc) {
+async function fetchOpenMeteo(loc, options = {}) {
   const params = new URLSearchParams({
     latitude: loc.latitude, longitude: loc.longitude,
     current:  'temperature_2m,relative_humidity_2m,apparent_temperature,weather_code',
     timezone: 'Asia/Seoul', forecast_days: '1',
   });
-  const r = await fetch(`${OPEN_METEO_URL}?${params}`);
+  const r = await fetch(`${OPEN_METEO_URL}?${params}`, options);
   const d = await r.json();
   const cur = d.current;
   if (cur?.temperature_2m == null) return null;
@@ -75,20 +75,27 @@ async function fetchOpenMeteo(loc) {
     humidity:    cur.relative_humidity_2m ?? null,
     weatherCode: cur.weather_code ?? 1,
     source:      'open-meteo',
+    observedAt:  cur.time ? new Date(`${cur.time}${/[Zz]|[+-]\d\d:\d\d$/.test(cur.time) ? '' : '+09:00'}`).toISOString() : null,
   };
 }
 
-export async function fetchWeather(district, kmaApiKey) {
-  const normalized = district.trim().replace(/[시군구읍면동리]$/, '').trim();
+export async function fetchWeather(district, kmaApiKey, { signal, location } = {}) {
+  const options = signal ? { signal } : {};
+  const normalized = String(district ?? '').trim().replace(/[시군구읍면동리]$/, '').trim();
 
   // 지역명 → 위경도 지오코딩
-  let loc;
+  let loc = location;
+  if (location && (!Number.isFinite(location.latitude) || Math.abs(location.latitude) > 90 || !Number.isFinite(location.longitude) || Math.abs(location.longitude) > 180)) {
+    return { error: '잘못된 숙소 좌표', status: 400 };
+  }
   try {
+    if (!loc) {
     const geoRes = await fetch(
-      `${GEOCODING_URL}?name=${encodeURIComponent(normalized)}&count=1&language=ko&format=json`
+      `${GEOCODING_URL}?name=${encodeURIComponent(normalized)}&count=1&language=ko&format=json`, options
     );
     const geoData = await geoRes.json();
     loc = geoData.results?.[0];
+    }
   } catch (err) {
     return { error: `지오코딩 실패: ${err.message}`, status: 502 };
   }
@@ -96,7 +103,7 @@ export async function fetchWeather(district, kmaApiKey) {
 
   // KMA API 키 없으면 Open-Meteo 직접 호출
   if (!kmaApiKey) {
-    const data = await fetchOpenMeteo(loc);
+    const data = await fetchOpenMeteo(loc, options);
     if (!data) return { error: 'Open-Meteo 응답 없음', status: 502 };
     return { data };
   }
@@ -113,7 +120,7 @@ export async function fetchWeather(district, kmaApiKey) {
   });
 
   try {
-    const r    = await fetch(`${KMA_NCST_URL}?${params}`);
+    const r    = await fetch(`${KMA_NCST_URL}?${params}`, options);
     const json = await r.json();
     const items = json.response?.body?.items?.item ?? [];
     const get   = (cat) => items.find(i => i.category === cat)?.obsrValue;
@@ -130,6 +137,7 @@ export async function fetchWeather(district, kmaApiKey) {
           humidity:    Number.isNaN(humidity) ? null : humidity,
           weatherCode: ptyToWmoCode(pty),
           source:      'kma',
+          observedAt:  new Date(`${base_date.slice(0, 4)}-${base_date.slice(4, 6)}-${base_date.slice(6, 8)}T${base_time.slice(0, 2)}:00:00+09:00`).toISOString(),
         },
       };
     }
@@ -141,7 +149,7 @@ export async function fetchWeather(district, kmaApiKey) {
   }
 
   // Open-Meteo 폴백
-  const fallback = await fetchOpenMeteo(loc);
+  const fallback = await fetchOpenMeteo(loc, options);
   if (!fallback) return { error: '날씨 데이터를 가져올 수 없음', status: 502 };
   return { data: { ...fallback, source: 'open-meteo-fallback' } };
 }

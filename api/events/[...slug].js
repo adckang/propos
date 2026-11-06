@@ -85,7 +85,7 @@ export default async function handler(req, res) {
         return sendJson(res, 401, { error: "Unauthorized" });
       }
       const body = await readBody(req);
-      const { type, is_soft, device_time, property_id, data } = body;
+      const { type, is_soft, device_time, property_id, data, source_system, source_ref } = body;
       if (!type || !property_id || !device_time) {
         return sendJson(res, 400, { error: "Missing required fields: type, property_id, device_time" });
       }
@@ -97,6 +97,8 @@ export default async function handler(req, res) {
         is_soft:     is_soft ?? false,
         device_time: new Date(device_time),
         data:        data ?? null,
+        source_system,
+        source_ref,
       };
       const result = await insertEvent(db, event, is_soft ?? false);
       return sendJson(res, 200, result);

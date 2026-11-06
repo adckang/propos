@@ -70,24 +70,85 @@ export function detectEventTypeFailures(events, eventType) {
     }));
 }
 
-/**
- * checkin_prep_time_reached 중 같은 property_id의 optimization_finished가 없는 건 반환.
- */
-export function detectPreStayOptimizationFailures(events) {
-  const preps     = events.filter(e => e.type === "checkin_prep_time_reached");
-  const optimized = new Set(
-    events
-      .filter(e => e.type === "optimization_finished")
-      .map(e => e.property_id)
-  );
+export const PRE_STAY_EVENT_TYPES = ['checkin_prep_time_reached', 'check_in_detected', 'optimization_finished', 'optimization_failed', 'optimization_cancelled', 'optimization_skipped'];
 
-  return preps
-    .filter(e => !optimized.has(e.property_id))
-    .map(({ property_id, device_time }) => ({
-      property_id,
-      occurred_at: device_time,
-      detail: {},
-    }));
+export function isSensorPreparationEvent(event) {
+  return event.data?.preparationPolicy === 'sensor-v1' && typeof event.data.optimizationRunId === 'string' && event.data.optimizationRunId.length > 0;
+}
+
+export function isMeasurablePreparationRound(round) {
+  return !round.sensorBased || ['COMPLETED', 'FAILED'].includes(round.status);
+}
+
+/**
+ * A안: 숙소별 준비 시작부터 다음 준비/입실 직전까지의 첫 완료를 연결한다.
+ * 기간 밖 context는 연결/종료 근거로만 쓰며, 그 안의 준비는 이 기간의 분모에 넣지 않는다.
+ * source_ref는 출처일 뿐 연결 키가 아니다. 중복 키는 DB와 같은 (숙소, 타입, 발생 시각).
+ * before는 준비 시작의 배타 상한이다. 월/주 패턴의 다음 기간 시작 기록은 연결 근거로만 쓴다.
+ */
+export function getPreStayPreparationRounds(events, context = [], before = null) {
+  const byProperty = new Map(), seen = new Set(), rounds = [];
+  const inputOrder = new Map();
+  events.forEach((event, index) => { if (!inputOrder.has(event)) inputOrder.set(event, index); });
+  for (const [index, event] of [...events, ...context].entries()) {
+    if (!PRE_STAY_EVENT_TYPES.includes(event.type)) continue;
+    const tracked = index < events.length;
+    const ms = toMs(event.device_time);
+    if (ms == null) {
+      // 시각이 잘못된 준비는 완료를 추측하지 않는다. 정상 DB 행에는 NOT NULL 시각이 있다.
+      if (tracked && event.type === 'checkin_prep_time_reached') rounds.push({ event, completedAt: null, closedAt: null });
+      continue;
+    }
+    const key = JSON.stringify([event.property_id, event.type, ms]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (!byProperty.has(event.property_id)) byProperty.set(event.property_id, []);
+    byProperty.get(event.property_id).push({ event, ms, tracked });
+  }
+
+  for (const entries of byProperty.values()) {
+    // 같은 시각이면 준비 → 입실 → 완료. 입실과 동시에 온 완료는 '입실 전' 완료가 아니다.
+    entries.sort((a, b) => a.ms - b.ms || PRE_STAY_EVENT_TYPES.indexOf(a.event.type) - PRE_STAY_EVENT_TYPES.indexOf(b.event.type));
+    let active = null;
+    for (const { event, tracked } of entries) {
+      if (event.type === 'checkin_prep_time_reached') {
+        if (active) active.closedAt = event.device_time;
+        active = isSensorPreparationEvent(event) ? null : { event, completedAt: null, closedAt: null };
+        if (!active) continue;
+        if (tracked) rounds.push(active);
+      } else if (event.type === 'check_in_detected') {
+        if (active) active.closedAt = event.device_time;
+        active = null;
+      } else if (event.type === 'optimization_finished' && !isSensorPreparationEvent(event) && active && active.completedAt == null) {
+        active.completedAt = event.device_time;
+      }
+    }
+    const sensorRuns = new Set();
+    for (const { event, tracked } of entries) {
+      if (!tracked || event.type !== 'checkin_prep_time_reached' || !isSensorPreparationEvent(event) || sensorRuns.has(event.data.optimizationRunId)) continue;
+      sensorRuns.add(event.data.optimizationRunId);
+      const startMs = toMs(event.device_time);
+      const nextStart = entries.find(e => e.event.type === 'checkin_prep_time_reached' && e.ms > startMs);
+      const outcomes = entries.filter(e => e.ms >= startMs && (!nextStart || e.ms < nextStart.ms || (e.ms === nextStart.ms && e.event.type === 'optimization_cancelled'))
+        && isSensorPreparationEvent(e.event) && e.event.data.optimizationRunId === event.data.optimizationRunId
+        && ['optimization_finished', 'optimization_failed', 'optimization_cancelled'].includes(e.event.type));
+      const outcome = (outcomes.find(e => e.event.type === 'optimization_cancelled') ?? outcomes[0])?.event;
+      const status = { optimization_finished: 'COMPLETED', optimization_failed: 'FAILED', optimization_cancelled: 'CANCELLED' }[outcome?.type] ?? 'UNCONFIRMED';
+      rounds.push({ event, sensorBased: true, status, completedAt: status === 'COMPLETED' ? outcome.device_time : null,
+        closedAt: outcome?.device_time ?? nextStart?.event.device_time ?? null, reason: outcome?.data?.reason ?? null });
+    }
+  }
+  return rounds
+    .filter(round => before == null || toMs(round.event.device_time) < new Date(before).getTime())
+    .sort((a, b) => inputOrder.get(a.event) - inputOrder.get(b.event));
+}
+
+/** 준비 회차 중 완료 기록이 연결되지 않은 건만 반환한다. */
+export function detectPreStayOptimizationFailures(events, context = []) {
+  return getPreStayPreparationRounds(events, context)
+    .filter(round => isMeasurablePreparationRound(round) && round.completedAt == null)
+    .map(round => ({ property_id: round.event.property_id, occurred_at: round.event.device_time,
+      detail: round.sensorBased ? { reason: round.reason, optimizationRunId: round.event.data.optimizationRunId } : {} }));
 }
 
 // ── 위반 건의 "정도"를 알 수 있게 앞뒤 이벤트를 짝지어 준다 ────────────────────────────────

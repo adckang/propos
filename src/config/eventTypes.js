@@ -18,6 +18,9 @@ export const EVENT_TYPES = Object.freeze({
   COMPLAINT_RESOLVED: "complaint_resolved",
   CHECKIN_PREP_TIME_REACHED: "checkin_prep_time_reached",
   OPTIMIZATION_FINISHED: "optimization_finished",
+  OPTIMIZATION_FAILED: "optimization_failed",
+  OPTIMIZATION_SKIPPED: "optimization_skipped",
+  OPTIMIZATION_CANCELLED: "optimization_cancelled",
   RESERVATION_CANCELLED: "reservation_cancelled",
 
   // 글로벌 이벤트 (미구현 — 상수만 선언)

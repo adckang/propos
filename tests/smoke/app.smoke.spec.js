@@ -1,4 +1,22 @@
 import { expect, test } from "@playwright/test";
+import { getDemoStats, getDemoDrilldown, getDemoMonthlyCalendar } from '../../src/application/demoReportingService.js';
+
+// Local preview shares production APIs. UI tests must never send writes or
+// telemetry to the occupied property; all service requests use fixture data.
+test.beforeEach(async ({ page }) => {
+  await page.route('https://**', route => route.fulfill({ status: 204, body: '' }));
+  await page.route('**/api/**', async route => {
+    const url = new URL(route.request().url());
+    let body = {};
+    if (route.request().method() !== 'GET') return route.fulfill({ status: 403, json: { error: 'UI test is read-only' } });
+    if (url.pathname === '/api/auth/me') body = { required: false };
+    else if (url.pathname === '/api/properties' || url.pathname === '/api/cleaning/properties') body = [];
+    else if (url.pathname === '/api/stats/calendar') body = getDemoMonthlyCalendar(url.searchParams.get('period') ?? 'this_month');
+    else if (url.pathname === '/api/stats/drilldown') body = getDemoDrilldown(url.searchParams.get('metric'), url.searchParams.get('period'));
+    else if (url.pathname === '/api/stats') body = getDemoStats(url.searchParams.get('period') ?? 'now');
+    return route.fulfill({ status: 200, json: body });
+  });
+});
 
 test.describe("PROPOS smoke", () => {
   test("landing and key pages render without runtime errors", async ({ page }) => {

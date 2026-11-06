@@ -61,10 +61,11 @@ const {
 } = await import('../../server/occupancyWatcher.js');
 
 // ── fetch 모크 헬퍼 ───────────────────────────────────────────────────────────
-function mockFetch({ template = '[]', states = {}, history = {} } = {}) {
+function mockFetch({ template = '[]', states = {}, history = {}, services = [] } = {}) {
   const callLog = [];
   global.fetch = async (url, opts) => {
     callLog.push(url);
+    if (url.endsWith('/api/services')) return { ok: true, json: async () => services };
     if (url.includes('/api/template')) {
       return { ok: true, async text() { return template; }, async json() { return {}; } };
     }
@@ -85,6 +86,16 @@ function mockFetch({ template = '[]', states = {}, history = {} } = {}) {
 
 // ── 상태 초기화 헬퍼 ─────────────────────────────────────────────────────────
 function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function mockPreparation() {
+  const reported = new Date().toISOString();
+  mockFetch({ template: '["sensor.test_temperature","sensor.test_humidity","climate.test"]', services: [{ domain: 'notify', services: { mobile_app_operator: {} } }], states: {
+    'sensor.test_temperature': { state: '29', last_reported: reported, attributes: { unit_of_measurement: '°C' } },
+    'sensor.test_humidity': { state: '48', last_reported: reported, attributes: { unit_of_measurement: '%' } },
+    'climate.test': { state: 'off', attributes: { hvac_modes: ['off', 'cool', 'heat'], temperature_unit: '°C' } },
+  } });
+  return { rooms: [{ id: 'living', temperatureEntity: 'sensor.test_temperature', humidityEntity: 'sensor.test_humidity', climateEntity: 'climate.test' }], operatorNotifyService: 'notify.mobile_app_operator' };
+}
 
 function resetWatcher() {
   stopWatcher();
@@ -391,11 +402,11 @@ describe('TC-OW-004: OccupancyMonitor 직렬 처리 사이클 안정성', () => 
 describe('TC-OW-005: 캘린더 이벤트 — 체크인 시각 전 발동', () => {
 
   test('checkIn 45분 전 → VACANT에서 PRE_STAY_READY/OPTIMIZING 전환', async () => {
-    mockFetch({ template: '[]' });
+    const optimization = mockPreparation();
     const checkIn = new Date(Date.now() + 45 * 60 * 1000).toISOString(); // 45분 후
 
     setRoomState({ mainStatus: 'VACANT', subStatus: 'CLEANING_FINISHED' });
-    setMonitoringConfig({ areaName: 'test', reservation: { checkIn, checkOut: new Date(Date.now() + 25 * 3600 * 1000).toISOString() } });
+    setMonitoringConfig({ areaName: 'test', optimization, reservation: { checkIn, checkOut: new Date(Date.now() + 25 * 3600 * 1000).toISOString() } });
 
     await wait(200); // checkCalendarEvents async 완료 대기
 
@@ -406,27 +417,28 @@ describe('TC-OW-005: 캘린더 이벤트 — 체크인 시각 전 발동', () =>
     assert.equal(roomState.subStatus,  'OPTIMIZING');
   });
 
-  test('checkIn 20분 전 → PRE_STAY_READY/OPTIMIZED까지 전환', async () => {
-    mockFetch({ template: '[]' });
+  test('checkIn 20분 전이어도 목표 미달 센서값이면 최적화 중으로 유지', async () => {
+    const optimization = mockPreparation();
     const checkIn = new Date(Date.now() + 20 * 60 * 1000).toISOString(); // 20분 후
 
     setRoomState({ mainStatus: 'VACANT', subStatus: 'CLEANING_FINISHED' });
-    setMonitoringConfig({ areaName: 'test', reservation: { checkIn, checkOut: new Date(Date.now() + 25 * 3600 * 1000).toISOString() } });
+    setMonitoringConfig({ areaName: 'test', optimization, reservation: { checkIn, checkOut: new Date(Date.now() + 25 * 3600 * 1000).toISOString() } });
 
     await wait(200);
 
     const { roomState } = getMonitoringState();
-    // 20분 후 체크인 → 1시간 전 + 30분 전 조건 모두 만족 → OPTIMIZED까지 전환
+    // Approved DEC-01 replaces timer success with measured environmental success.
     assert.equal(roomState.mainStatus, 'PRE_STAY_READY');
-    assert.equal(roomState.subStatus,  'OPTIMIZED');
+    assert.equal(roomState.subStatus,  'OPTIMIZING');
+    assert.equal(getMonitoringState().preparation.run.status, 'PREPARING');
   });
 
   test('checkIn 2시간 후 → 상태 변화 없음', async () => {
-    mockFetch({ template: '[]' });
+    const optimization = mockPreparation();
     const checkIn = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(); // 2시간 후
 
     setRoomState({ mainStatus: 'VACANT', subStatus: 'CLEANING_FINISHED' });
-    setMonitoringConfig({ areaName: 'test', reservation: { checkIn, checkOut: new Date(Date.now() + 26 * 3600 * 1000).toISOString() } });
+    setMonitoringConfig({ areaName: 'test', optimization, reservation: { checkIn, checkOut: new Date(Date.now() + 26 * 3600 * 1000).toISOString() } });
 
     await wait(200);
 
@@ -483,12 +495,12 @@ describe('TC-OW-007: reservation 취소 감지 — 상태 복귀', () => {
 // ── TC-OW-006: 과거 checkIn → 캘린더 이벤트 무시 ────────────────────────────
 describe('TC-OW-006: 과거 checkIn → 캘린더 이벤트 무시', () => {
 
-  test('이미 지난 checkIn → 상태 변화 없음', async () => {
+  test('체크아웃까지 지난 예약 → 상태 변화 없음 (청소 지연 후 유효 예약 준비와 구분)', async () => {
     mockFetch({ template: '[]' });
     const checkIn = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 1시간 전 (과거)
 
     setRoomState({ mainStatus: 'VACANT', subStatus: 'CLEANING_FINISHED' });
-    setMonitoringConfig({ areaName: 'test', reservation: { checkIn, checkOut: new Date(Date.now() + 23 * 3600 * 1000).toISOString() } });
+    setMonitoringConfig({ areaName: 'test', reservation: { checkIn, checkOut: new Date(Date.now() - 10 * 60 * 1000).toISOString() } });
 
     await wait(200);
 

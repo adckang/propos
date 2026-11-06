@@ -28,6 +28,8 @@ export const FOLLOW_EVENT_TYPES = Object.freeze([
   "vacant_energy_waste_resolved",
   "checkin_prep_time_reached",
   "optimization_finished",
+  "optimization_failed",
+  "optimization_cancelled",
 ]);
 
 /**

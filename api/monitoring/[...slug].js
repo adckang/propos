@@ -1,8 +1,9 @@
 /**
  * /api/monitoring/config  — POST: Pi 워처로 설정 전달
  * /api/monitoring/state   — GET/POST/PUT: Pi 워처 roomState 중계
+ * /api/monitoring/event   — POST: Pi가 청소·정비 전환과 센서 준비를 처리
  *
- * slug[0] = "config" | "state"
+ * slug[0] = "config" | "state" | "event"
  */
 
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
@@ -23,6 +24,10 @@ function sendJson(res, status, body) {
 }
 
 async function readBody(req) {
+  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) return req.body;
+  if (typeof req.body === 'string' || Buffer.isBuffer(req.body)) {
+    try { return JSON.parse(req.body.toString()); } catch { return {}; }
+  }
   const chunks = [];
   for await (const c of req) chunks.push(c);
   if (!chunks.length) return {};
@@ -63,10 +68,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    if (action === "config") {
+    if (action === "config" || action === "event") {
       if (req.method !== "POST") { sendJson(res, 405, { error: "Method not allowed" }); return; }
       const body = await readBody(req);
-      const upstream = `${watcherUrl.replace(/\/$/, "")}/api/monitoring/config`;
+      const upstream = `${watcherUrl.replace(/\/$/, "")}/api/monitoring/${action}`;
       const r = await fetch(upstream, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

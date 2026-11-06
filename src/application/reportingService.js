@@ -4,12 +4,14 @@ import { summarizeOperationalMetrics, computeMeasurableMetrics } from "../domain
 import {
   detectCleaningTimeFailures,
   detectPreStayOptimizationFailures,
+  getPreStayPreparationRounds,
+  isMeasurablePreparationRound,
   detectVacantEnergyFailures,
   detectPostCheckoutFailures,
   detectPostCleaningFailures,
 } from "../domain/metricDrilldownDomain.js";
 import { buildMonthlyInsights, buildWeeklyInsights } from "../domain/insightDomain.js";
-import { queryEvents, getLastKnownStatesFromDB, queryStateEventsForProperty } from "../infrastructure/eventRepository.js";
+import { queryEvents, queryNextPreStayEvents, queryPreStayRunOutcomes, getLastKnownStatesFromDB, queryStateEventsForProperty } from "../infrastructure/eventRepository.js";
 import { queryCleaningJobCounts, queryCleaningJobCountsByProperty, queryCleaningIssueItems } from "../infrastructure/cleaningJobRepository.js";
 import { buildIssueItems, buildStateSegmentsFromEvents, groupIssueItemsByKstDate, toKstDateKey } from "../domain/monthlyCalendarDomain.js";
 
@@ -125,6 +127,32 @@ export function generateSummary(period, stats) {
   return "";
 }
 
+// 원시 이벤트 개수 집계는 유지하고, 레포트의 준비 분자·분모는 상세와 같은 회차로 계산한다.
+function countReportEvents(events, context = [], preparationBefore = null) {
+  const stats = countPeriodEvents(events);
+  const rounds = getPreStayPreparationRounds(events, context, preparationBefore);
+  const measured = rounds.filter(isMeasurablePreparationRound);
+  stats.preStayAttempts = measured.length;
+  stats.preStayOptimized = measured.filter(round => round.completedAt != null).length;
+  stats.preStayUnconfirmed = rounds.filter(round => round.sensorBased && round.status === 'UNCONFIRMED').length;
+  stats.preStayCancelled = rounds.filter(round => round.status === 'CANCELLED').length;
+  stats.preStaySkipped = new Set(events.filter(event => event.type === 'optimization_skipped')
+    .map(event => JSON.stringify([event.property_id, event.data?.optimizationRunId ?? event.device_time]))).size;
+  return stats;
+}
+
+async function loadPreStayContext(db, events, range, now, preparationBefore = null) {
+  const rounds = getPreStayPreparationRounds(events, [], preparationBefore);
+  const open = rounds
+    .filter(round => round.completedAt == null && round.closedAt == null && Number.isFinite(new Date(round.event.device_time).getTime()));
+  const ids = [...new Set(open.filter(round => !round.sensorBased).map(round => round.event.property_id))];
+  const sensorRuns = rounds.filter(round => round.sensorBased).map(round => ({ property_id: round.event.property_id, run_id: round.event.data.optimizationRunId }));
+  const [legacy, sensor] = await Promise.all([
+    queryNextPreStayEvents(db, range.to, now, ids), queryPreStayRunOutcomes(db, range.to, now, sensorRuns),
+  ]);
+  return [...legacy, ...sensor];
+}
+
 /**
  * countPeriodEvents가 0으로 둔 청소 지표 6·7을 채운다 (report-architecture 지표 표).
  *   cleaningOnTime  = 청소 완료 - 3시간 초과 건 (드릴다운 실패 목록과 같은 기준. 시작 이벤트가 없는 완료는 감점하지 않음)
@@ -172,7 +200,8 @@ export async function getStatsForPeriod(period, { db, propertyIds = null, now = 
 
   const range = getPeriodRange(period, now);
   const events = await queryEvents(db, range, propertyIds);
-  const stats = countPeriodEvents(events);
+  const preStayContext = await loadPreStayContext(db, events, range, now);
+  const stats = countReportEvents(events, preStayContext);
   await injectCleaningMetrics(stats, { db, events, range, propertyIds, period, now });
   const summary = generateSummary(period, stats);
   return {
@@ -193,7 +222,7 @@ const INSIGHT_LOOKBACK_WEEKS  = 4;
  * 인사이트 오케스트레이션(getMonthlyInsights/getWeeklyInsights)이 공유하는 부분(D-029). 날짜
  * 범위를 구하는 방식(월 오프셋 vs 주 오프셋)만 호출부가 다르고, 그 뒤 집계 로직은 완전히 동일.
  */
-async function computeAggregateMetricsForRange(db, { from, to }, propertyIds, logLabel) {
+async function computeAggregateMetricsForRange(db, { from, to }, propertyIds, logLabel, now, preparationBefore) {
   // 이벤트 조회와 청소잡 집계는 서로 독립적(둘 다 {from,to,propertyIds}만 필요) — 동시에 실행.
   const [events, jobsResult] = await Promise.all([
     queryEvents(db, { from, to }, propertyIds),
@@ -201,7 +230,8 @@ async function computeAggregateMetricsForRange(db, { from, to }, propertyIds, lo
       .then(jobs => ({ ok: true, jobs }))
       .catch(err => ({ ok: false, err })),
   ]);
-  const stats = countPeriodEvents(events);
+  const preStayContext = await loadPreStayContext(db, events, { from, to }, now, preparationBefore);
+  const stats = countReportEvents(events, preStayContext, preparationBefore);
   stats.cleaningOnTime = Math.max(0, stats.cleaningFinished - detectCleaningTimeFailures(events).length);
   if (jobsResult.ok) {
     stats.cleaningCreated  = jobsResult.jobs.created;
@@ -211,7 +241,7 @@ async function computeAggregateMetricsForRange(db, { from, to }, propertyIds, lo
     stats.cleaningCreated  = null;
     stats.cleaningAssigned = null;
   }
-  return { events, metrics: computeMeasurableMetrics(stats) };
+  return { events, preStayContext, metrics: computeMeasurableMetrics(stats) };
 }
 
 /** reportPeriod 기준 monthOffset달 전의 집계 지표 + 이벤트. */
@@ -219,8 +249,8 @@ async function computeAggregateMonthMetrics(db, monthOffset, propertyIds, now) {
   const { from, to, monthKey } = monthsAgoRange(monthOffset, now.getTime());
   // 이번 달은 완료 구간만 본다. 미래 checkout을 완료 이력의 실패 패턴으로 세지 않는다.
   const effectiveTo = monthOffset === 0 ? new Date(Math.min(to.getTime(), now.getTime())) : to;
-  const { events, metrics } = await computeAggregateMetricsForRange(db, { from, to: effectiveTo }, propertyIds, "getMonthlyInsights");
-  return { period: monthKey, from, to: effectiveTo, events, metrics };
+  const { events, preStayContext, metrics } = await computeAggregateMetricsForRange(db, { from, to: effectiveTo }, propertyIds, "getMonthlyInsights", now, to);
+  return { period: monthKey, from, to: effectiveTo, events, preStayContext, preparationBefore: to, metrics };
 }
 
 /** reportPeriod 기준 weekOffset주 전(그 주 월요일 KST)의 집계 지표 + 이벤트. */
@@ -230,8 +260,8 @@ async function computeAggregateWeekMetrics(db, weekOffset, propertyIds, now) {
   // 이번 주도 getStatsForPeriod와 같은 완료 시점(now)까지만 집계한다.
   const effectiveTo = weekOffset === 0 ? new Date(Math.min(to.getTime(), now.getTime())) : to;
   const weekKey = toKstDateKey(from); // 그 주 월요일, KST
-  const { events, metrics } = await computeAggregateMetricsForRange(db, { from, to: effectiveTo }, propertyIds, "getWeeklyInsights");
-  return { period: weekKey, from, to: effectiveTo, events, metrics };
+  const { events, preStayContext, metrics } = await computeAggregateMetricsForRange(db, { from, to: effectiveTo }, propertyIds, "getWeeklyInsights", now, to);
+  return { period: weekKey, from, to: effectiveTo, events, preStayContext, preparationBefore: to, metrics };
 }
 
 /**
@@ -278,7 +308,7 @@ async function buildInsightDetectorInputs(db, periodDataList, propertyIds, logLa
   // property_id = ListView 표시 이름 그 자체 (D-016) — 별도 이름 조회 불필요.
   const propertyMetricRows = [];
   for (const [propId, propEvents] of eventsByProperty) {
-    const stats = countPeriodEvents(propEvents);
+    const stats = countReportEvents(propEvents, current.preStayContext, current.preparationBefore);
     stats.cleaningOnTime = Math.max(0, stats.cleaningFinished - detectCleaningTimeFailures(propEvents).length);
     const cj = cleaningMap.get(propId) ?? { created: 0, assigned: 0 };
     stats.cleaningCreated  = cj.created;
@@ -372,6 +402,7 @@ export async function getMonthlyCalendarData(period, { db, propertyIds = null, n
 
   const range = getPeriodRange(period, now);
   const events = await queryEvents(db, range, propertyIds);
+  const preStayContext = await loadPreStayContext(db, events, range, now);
 
   let cleaningIssues = [];
   try {
@@ -380,7 +411,7 @@ export async function getMonthlyCalendarData(period, { db, propertyIds = null, n
     console.error('[reportingService] 월간 cleaning_jobs 조회 실패:', err?.message ?? err);
   }
 
-  const items = buildIssueItems(events, cleaningIssues);
+  const items = buildIssueItems(events, cleaningIssues, preStayContext);
   let stateSegments = [];
   if (Array.isArray(propertyIds) && propertyIds.length === 1) {
     const stateEvents = await queryStateEventsForProperty(db, range, propertyIds[0]);
@@ -408,7 +439,7 @@ const METRIC_DETECTORS = {
   post_checkout_security: (events) => detectPostCheckoutFailures(events, "post_checkout_security_breach_detected"),
   vacant_energy:          (events) => detectVacantEnergyFailures(events),
   post_cleaning_security: (events) => detectPostCleaningFailures(events, "post_cleaning_security_breach_detected"),
-  pre_stay_optimization:  (events) => detectPreStayOptimizationFailures(events),
+  pre_stay_optimization:  (events, context) => detectPreStayOptimizationFailures(events, context),
 };
 
 /**
@@ -419,18 +450,19 @@ const METRIC_DETECTORS = {
  * @param {{ db: object }} deps
  * @returns {Promise<{ metric, period, failCount, items }>}
  */
-export async function getDrilldownForMetric(metric, period, { db, propertyIds = null }) {
+export async function getDrilldownForMetric(metric, period, { db, propertyIds = null, now = new Date() }) {
   const detect = METRIC_DETECTORS[metric];
   if (!detect) throw new Error(`unknown metric: "${metric}"`);
 
-  const range  = getPeriodRange(period);
+  const range  = getPeriodRange(period, now);
   const events = await queryEvents(db, range, propertyIds);
+  const preStayContext = metric === 'pre_stay_optimization' ? await loadPreStayContext(db, events, range, now) : [];
   // 공실 에너지 낭비는 "언제 꺼졌는지"까지 봐야 얼마나 켜져 있었는지 알 수 있다 —
   // 기간이 끝난 뒤에 꺼진 건도 "꺼짐 확인 안 됨"으로 잘못 보이지 않게 기간 끝~지금의 꺼짐 기록만 더 가져온다
   const late   = metric === "vacant_energy"
     ? await queryLateEvents(db, range, propertyIds, "vacant_energy_waste_resolved")
     : [];
-  const items  = detect(late.length > 0 ? events.concat(late) : events);
+  const items  = detect(late.length > 0 ? events.concat(late) : events, preStayContext);
 
   return { metric, period, failCount: items.length, items };
 }

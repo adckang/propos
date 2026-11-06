@@ -11,12 +11,14 @@
  *   GET  /api/monitoring/state   → 현재 roomState + 이벤트 로그
  *   POST /api/monitoring/config  → 모니터링 설정 업데이트 (브라우저에서 호출)
  *   PUT  /api/monitoring/state   → roomState 수동 덮어쓰기
+ *   POST /api/monitoring/event   → 청소·정비 요청 (센서 준비와 같은 직렬 처리)
  */
 
 import http from 'node:http';
-import { startWatcher, stopWatcher, getMonitoringState, setMonitoringConfig, setRoomState } from '../server/occupancyWatcher.js';
+import { startWatcher, stopWatcher, shutdownPreparation, getMonitoringState, setMonitoringConfig, setRoomState } from '../server/occupancyWatcher.js';
 import { loadProperties, saveProperties } from '../server/propertiesStore.js';
 import { getHaBaseUrl, getHaToken } from '../server/haProxy.js';
+import { handleMonitoringEventRequest } from '../server/monitoringEventHandler.js';
 
 const PORT = Number(process.env.PROPOS_WATCHER_PORT ?? 3001);
 
@@ -44,6 +46,11 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { sendJson(res, 204, {}); return; }
 
   const url = new URL(req.url, `http://localhost:${PORT}`);
+
+  if (req.method === 'POST' && url.pathname === '/api/monitoring/event') {
+    await handleMonitoringEventRequest(req, res);
+    return;
+  }
 
   if (req.method === 'GET' && url.pathname === '/api/monitoring/state') {
     sendJson(res, 200, getMonitoringState());
@@ -113,5 +120,13 @@ server.listen(PORT, () => {
   startWatcher();
 });
 
-process.on('SIGTERM', () => { stopWatcher(); server.close(); });
-process.on('SIGINT',  () => { stopWatcher(); server.close(); process.exit(0); });
+let shuttingDown = false;
+async function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  stopWatcher();
+  try { await shutdownPreparation(); }
+  finally { server.close(); }
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

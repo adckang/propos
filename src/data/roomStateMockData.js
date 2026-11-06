@@ -49,6 +49,7 @@ export const STATE_META = {
     subStates: {
       OPTIMIZING: { label: '최적화중' },
       OPTIMIZED:  { label: '최적화완료' },
+      OPTIMIZATION_FAILED: { label: '최적화실패' },
     },
   },
   OCCUPIED: {

@@ -487,6 +487,30 @@ describe('실제 핸들러: /api/monitoring 과 /api/camera/snapshot', () => {
     assert.equal((await callMon({ method: 'PUT', query: { watcherId: 'watcher1' }, body: {}, cookie })).statusCode, 403);
     assert.equal((await callMon({ method: 'POST', query: { watcherId: 'watcher1' }, body: {}, cookie })).statusCode, 403);
     assert.equal((await callMon({ slug: 'config', method: 'POST', query: { watcherId: 'watcher1' }, body: {}, cookie })).statusCode, 403); // 설정 전송은 관리자 전용
+    assert.equal((await callMon({ slug: 'event', method: 'POST', query: { watcherId: 'watcher1' }, body: { type: 'cleaning_finished', propertyId: '파주201' }, cookie })).statusCode, 403);
+  });
+  test('수동 작업은 지정 워처의 event로 중계하며 기존 state 요청도 유지한다', async () => {
+    restoreFetch();
+    const sent = [];
+    stubFetch((url, init) => { sent.push({ url, init }); return jsonReply({ ok: true }); });
+    const body = { type: 'cleaning_finished', propertyId: '파주201' };
+    assert.equal((await callMon({ slug: 'event', method: 'POST', query: { watcherId: 'watcher1' }, body, cookie: adminCookie() })).statusCode, 200);
+    assert.equal(sent.at(-1).url, 'http://pi.test/api/monitoring/event');
+    assert.deepEqual(JSON.parse(sent.at(-1).init.body), body);
+    assert.equal((await callMon({ method: 'PUT', query: { watcherId: 'watcher1' }, body: { roomState: { mainStatus: 'VACANT' } }, cookie: adminCookie() })).statusCode, 200);
+    assert.equal(sent.at(-1).url, 'http://pi.test/api/monitoring/state');
+    assert.equal((await callMon({ slug: 'event', method: 'POST', body, query: { watcherId: 'watcher1' } })).statusCode, 401);
+    assert.equal((await callMon({ slug: 'event', method: 'GET', query: { watcherId: 'watcher1' }, cookie: adminCookie() })).statusCode, 405);
+  });
+  test('Vercel이 이미 파싱한 작업 본문도 누락하지 않는다', async () => {
+    restoreFetch();
+    let sent;
+    stubFetch((url, init) => { sent = JSON.parse(init.body); return jsonReply({ ok: true }); });
+    const body = { type: 'cleaning_finished', propertyId: '파주201' };
+    const req = mkReq({ method: 'POST', url: '/api/monitoring/event', query: { watcherId: 'watcher1' }, cookie: adminCookie() });
+    req.body = body;
+    await mon.default(req, mkRes());
+    assert.deepEqual(sent, body);
   });
   test('★ 모니터링: 이름표는 맞지만 그 이름의 주소가 기본 Pi(다른 숙소) 로 폴백되면 거절', async () => {
     // B숙소 운영자, watcher2 이름표는 B 소유. 주소 맵에는 watcher2 가 없어 기본 Pi(http://pi.test = 파주201 의 Pi)로 폴백된다.
@@ -544,10 +568,13 @@ describe('실제 핸들러: /api/monitoring 과 /api/camera/snapshot', () => {
 
 describe('코드 계약 (리뷰 반영)', () => {
   const read = (f) => readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8');
-  test('화면: 서버가 거절한 자동화에 "종료 중/실행 중" 성공 토스트를 띄우지 않는다 (호출이 성공한 뒤에만 안내)', () => {
+  test('화면: 워처 장애 시에도 브라우저가 자동 감지·장치 제어를 대신하지 않는다', () => {
     const r = read('src/components/v2/RoomStateApp.jsx');
-    assert.match(r, /callService\('homeassistant', 'turn_off', \{ area_id: syncConfig\.name \}\)\s*\.then\(\(\) => Toast\.show\('퇴실 확인/);
-    assert.match(r, /callService\('homeassistant', 'turn_on', \{ area_id: syncConfig\.name \}\)\s*\.then\(\(\) => Toast\.show\('입실 준비/);
+    assert.doesNotMatch(r, /OccupancyMonitor|localMonitorRef|putMonitoringRoomState|callService\(/);
+    // Sensor preparation now runs after Pi preflight; the browser must not
+    // bypass that check by turning on an entire HA area or showing success.
+    assert.doesNotMatch(r, /callService\('homeassistant', 'turn_on', \{ area_id: syncConfig\.name/);
+    assert.doesNotMatch(r, /Toast\.show\('입실 준비 시작/);
   });
   test('공용 DB 풀: 연결 오류 리스너가 있고, 접속 주소가 없으면 localhost 로 붙지 않고 명시적으로 실패한다', () => {
     const d = read('server/auth/authDb.js');

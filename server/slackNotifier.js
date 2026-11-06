@@ -35,3 +35,20 @@ export async function notifyEvent(eventId, propertyId, type) {
 
   return { sent: res.ok };
 }
+
+/** Independent operator channel when HA itself cannot deliver its own alert. */
+export function hasOperatorAlertWebhook() {
+  try { return new URL(process.env.PROPOS_SLACK_WEBHOOK).protocol === 'https:'; }
+  catch { return false; }
+}
+
+export async function notifyPreparationSafety({ propertyId, message }) {
+  if (!hasOperatorAlertWebhook()) return { sent: false };
+  try {
+    const response = await fetch(process.env.PROPOS_SLACK_WEBHOOK, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: `[${propertyId ?? '숙소'}] ${message}` }), signal: AbortSignal.timeout(10_000),
+    });
+    return { sent: response.ok };
+  } catch { return { sent: false }; }
+}

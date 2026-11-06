@@ -31,7 +31,7 @@ async function parseTextSafe(response) {
   return response.text().catch(() => "");
 }
 
-export async function callHaService(domain, service, data = {}) {
+export async function callHaService(domain, service, data = {}, options = {}) {
   if (!domain) throw new Error("domain is required");
   if (!service) throw new Error("service is required");
 
@@ -39,6 +39,7 @@ export async function callHaService(domain, service, data = {}) {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(data),
+    ...(options.signal ? { signal: options.signal } : {}),
   });
 
   if (!response.ok) {
@@ -49,13 +50,14 @@ export async function callHaService(domain, service, data = {}) {
   return (await parseJsonSafe(response)) ?? {};
 }
 
-export async function getHaState(entityId) {
+export async function getHaState(entityId, options = {}) {
   if (!entityId) throw new Error("entityId is required");
 
   const response = await fetch(`${HA_BASE}/api/states/${entityId}`, {
     headers: {
       Authorization: `Bearer ${HA_TOKEN}`,
     },
+    ...(options.signal ? { signal: options.signal } : {}),
   });
 
   if (!response.ok) {
@@ -104,14 +106,21 @@ export async function getHaAllStates() {
   return Array.isArray(data) ? data : [];
 }
 
-export async function getHaStates(entityIds) {
+export async function getHaServices(options = {}) {
+  const response = await fetch(`${HA_BASE}/api/services`, { headers: getHeaders(), ...options });
+  if (!response.ok) throw new Error('HA service registry unavailable');
+  const data = await parseJsonSafe(response);
+  return Array.isArray(data) ? data : [];
+}
+
+export async function getHaStates(entityIds, options = {}) {
   if (!Array.isArray(entityIds)) {
     throw new Error("entityIds must be an array");
   }
 
   const uniqueIds = [...new Set(entityIds.filter(Boolean))];
   const entries = await Promise.all(
-    uniqueIds.map(async entityId => [entityId, await getHaState(entityId)])
+    uniqueIds.map(async entityId => [entityId, await getHaState(entityId, options)])
   );
 
   return Object.fromEntries(entries);

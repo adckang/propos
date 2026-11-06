@@ -2,7 +2,7 @@
  * s73 — Pi/로컬/Vercel 데이터 경계 계약 (2026-10-12)
  *
  * Pi는 Home Assistant 워처 메타데이터와 상태/이벤트를 제공하고, 예약·청소 일정은
- * Postgres API가 유일한 정본이다. 로컬 Vite도 같은 Vercel 핸들러를 실행해야 한다.
+ * Postgres API가 유일한 정본이다. 로컬 Vite는 같은 운영 API로 중계한다.
  */
 
 import { describe, test } from 'node:test';
@@ -37,16 +37,13 @@ describe('Pi watcher metadata store', () => {
 describe('local Vite API routing', () => {
   const src = read('vite.config.mjs');
 
-  test('/api/properties는 로컬에서도 production과 같은 Pi watcher handler를 호출한다', () => {
-    const start = src.indexOf('if (isWatcherProperties)');
-    const end = src.indexOf('    }\n    const { default: handler }', start);
-    const block = src.slice(start, end);
-    assert.match(block, /import\('\.\/api\/properties\.js'\)/);
-    assert.doesNotMatch(block, /cleaning\/properties/);
+  test('숙소 메타데이터도 운영 API로 중계하며 로컬 워처를 시작하지 않는다', () => {
+    assert.match(src, /'\/api': \{ target: 'https:\/\/www\.proposonline\.com'/);
+    assert.doesNotMatch(src, /occupancyWatcher|startWatcher/);
   });
 
-  test('/api/cleaning/*는 Postgres cleaning handler로 남는다', () => {
-    assert.match(src, /import\('\.\/api\/cleaning\/\[\.\.\.slug\]\.js'\)/);
+  test('로컬은 별도 cleaning handler나 DB 연결·토큰 설정을 읽지 않는다', () => {
+    assert.doesNotMatch(src, /import\('\.\/api\/cleaning\/\[\.\.\.slug\]\.js'\)|POSTGRES_URL|GOOGLE_/);
   });
 });
 

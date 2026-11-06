@@ -131,11 +131,13 @@ export class SuspicionTracker {
     }
 
     // ── PRE_STAY_READY: 체크인 감지 + 조기 체크인 + 노쇼 ────────────────────
-    if (main === 'PRE_STAY_READY' && (sub === 'OPTIMIZED' || sub === 'OPTIMIZING')) {
+    const waitingAfterCleaning = main === 'VACANT' && ['CLEANING_FINISHED', 'ENERGY_WASTE'].includes(sub)
+      && checkInMs !== null && now >= checkInMs;
+    if ((main === 'PRE_STAY_READY' && ['OPTIMIZED', 'OPTIMIZING', 'OPTIMIZATION_FAILED'].includes(sub)) || waitingAfterCleaning) {
       let checkinFired = false;
 
       // 버그 fix: 조기 체크인 후 checkIn 시각 도래 → check_in_detected
-      if (sub === 'OPTIMIZED' && this.checkinSuspectedAt !== null
+      if (this.checkinSuspectedAt !== null
           && checkInMs !== null && now >= checkInMs) {
         events.push({
           type:   'check_in_detected',
@@ -146,15 +148,15 @@ export class SuspicionTracker {
         checkinFired = true;
       } else if (entry) {
         if (checkInMs === null || now >= checkInMs) {
-          if (sub === 'OPTIMIZED') {
-            events.push({
-              type:   'check_in_detected',
-              reason: '체크인 확인 — 도어 이벤트 후 입실 감지',
-              timestamp: now,
-            });
-            this._resetCheckin();
-          }
-          // OPTIMIZING: check_in_detected 발화 안함 (state machine 전환 불가)
+          events.push({
+            type:   'check_in_detected',
+            reason: '체크인 확인 — 도어 이벤트 후 입실 감지',
+            timestamp: now,
+          });
+          this._resetCheckin();
+          checkinFired = true;
+          // Preparation continues independently after arrival; never delay
+          // occupancy merely because environmental preparation is unfinished.
         } else if (this.checkinSuspectedAt === null) {
           // [Soft] early_checkin_suspected: checkIn 시각 이전 ENTRY
           this.checkinSuspectedAt = now;

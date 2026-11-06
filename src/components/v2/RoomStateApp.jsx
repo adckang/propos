@@ -1,18 +1,19 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import MonthlyView from './MonthlyView';
 import PropertyListView from './PropertyListView';
 import PropertyDetailView from './PropertyDetailView';
 import CleaningManager from './CleaningManager';
 import { PROPERTIES } from '../../data/roomStateMockData';
 import { buildLiveProperty, deriveCurrentState } from '../../application/calendarSyncService';
-import { getAreaData, callService } from '../../infrastructure/haBrowserClient';
+import { getAreaData } from '../../infrastructure/haBrowserClient';
 import { getWeatherByDistrict } from '../../infrastructure/weatherClient';
-import { OccupancyMonitor } from '../../application/occupancyMonitor';
+import { requestMonitoringEvent } from '../../infrastructure/monitoringClient.js';
 import { getNextRoomState, isValidTransition, INITIAL_STATE } from '../../domain/room-state/roomStateDomain';
 import { DEVICE_ROLE } from '../../domain/device-control/deviceRoles';
 import Toast from '../../utils/toast';
 import { canonicalPropertyId, planPropertyIdentity, validatePropertyName } from '../../domain/propertyIdentityDomain';
 import { DATA_PROFILE, normalizeDataProfile } from '../../config/dataProfile.js';
+import { measuredPreparationState } from '../../domain/preStayOptimizationDomain.js';
 
 const APP_DATA_PROFILE = normalizeDataProfile(import.meta.env.VITE_PROPOS_DATA_PROFILE, DATA_PROFILE.HYBRID);
 const USE_DEMO_DATA = APP_DATA_PROFILE === DATA_PROFILE.DEMO;
@@ -152,6 +153,7 @@ async function putProperties(list) {
       district: property.district || '',
       watcherId: property.watcherId ?? null,
       devices: property.devices && typeof property.devices === 'object' ? property.devices : {},
+      ...(property.optimization ? { optimization: property.optimization } : {}),
     }));
     await fetch('/api/properties', {
       method: 'PUT',
@@ -223,6 +225,7 @@ function SettingsModal({ config, onSave, onClose }) {
       district: watcher?.district ?? saved.district,
       watcherId: watcher?.watcherId ?? saved.watcherId,
       devices: watcher?.devices ?? saved.devices,
+      optimization: watcher?.optimization ?? saved.optimization,
     };
     setForm(f => ({ ...f, ...merged, _uiDevices: formatDeviceMap(merged.devices ?? {}) }));
     Toast.show('운영 DB에서 설정을 불러왔습니다. 저장을 눌러 적용하세요.', 's');
@@ -404,13 +407,6 @@ function SyncBadge({ status, lastSynced, onSync, onSettings, onCleaning }) {
   );
 }
 
-function buildReservation(property) {
-  const r = property.reservation;
-  if (!r) return null;
-  const hour = String(property.checkOutHour ?? 11).padStart(2, '0');
-  return { checkOut: new Date(`${r.checkOutDate}T${hour}:00`) };
-}
-
 // ── 서버 모니터링 API ─────────────────────────────────────────────────────────
 async function postMonitoringConfig(cfg, watcherId = null) {
   const qs = watcherId ? `?watcherId=${encodeURIComponent(watcherId)}` : '';
@@ -466,17 +462,6 @@ async function fetchMonitoringState(watcherId = null) {
   return res.json();
 }
 
-async function putMonitoringRoomState(roomState, watcherId = null) {
-  const qs = watcherId ? `?watcherId=${encodeURIComponent(watcherId)}` : '';
-  try {
-    await fetch(`/api/monitoring/state${qs}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomState }),
-    });
-  } catch { /* 서버 미연결 시 무시 */ }
-}
-
 // ── 메인 앱 ────────────────────────────────────────────────────────────────────
 export default function RoomStateApp({ onBack }) {
   const [view, setView]                   = useState('dashboard');
@@ -505,10 +490,8 @@ export default function RoomStateApp({ onBack }) {
   const [monitorState, setMonitorState]         = useState(INITIAL_STATE);
   const [snapshotLog, setSnapshotLog]           = useState([]);
   const [serverWatcherActive, setServerWatcherActive] = useState(false);
+  const [measuredPreparation, setMeasuredPreparation] = useState(null);
   const [lastMonitorEvent, setLastMonitorEvent] = useState(null);
-  const localMonitorRef = useRef(new OccupancyMonitor());
-  // 날씨를 HA 폴링 클로저 안에서 읽기 위한 ref (stale closure 방지)
-  const liveWeatherRef = useRef(null);
 
   // 서버 정본 동기화 실행. 브라우저는 iCal/Google 원본을 직접 읽지 않는다.
   const runSync = useCallback(async (cfg) => {
@@ -532,13 +515,14 @@ export default function RoomStateApp({ onBack }) {
       const live = cloudRowToLiveProperty(row);
       setLiveProperty(live);
 
-      // Pi 워처에 현재 예약 정보 전달 (퇴실 감지용)
+      // The same reservation drives entry/exit sensing and preparation. Guest
+      // messages do not supply a verified arrival time in the current system.
       const currentRes = live.reservation;
       postMonitoringConfig({
         areaName: cfg.name,
         district: cfg.district,
-        reservation: currentRes ? { checkOut: currentRes.checkOut?.toISOString?.() ?? null } : null,
-      });
+        reservation: currentRes ? { uid: currentRes.uid ?? null, checkIn: currentRes.checkIn?.toISOString?.() ?? null, checkOut: currentRes.checkOut?.toISOString?.() ?? null } : null,
+      }, cfg.watcherId ?? null);
       if (syncResult.assignmentRepair?.error) {
         throw new Error(`청소 담당자 동기화 실패: ${syncResult.assignmentRepair.error}`);
       }
@@ -576,6 +560,7 @@ export default function RoomStateApp({ onBack }) {
           district: piCfg?.district ?? '',
           watcherId: piCfg?.watcherId ?? null,
           devices: piCfg?.devices ?? {},
+          optimization: piCfg?.optimization,
         }
         : null;
       if (!cfg || cancelled) return;
@@ -638,86 +623,33 @@ export default function RoomStateApp({ onBack }) {
     refreshDbProperties();
   }, [view, refreshDbProperties]);
 
-  // ── HA 폴링 헬퍼 ──────────────────────────────────────────────────────────
-  function buildSnap(haSnap) {
-    const w = liveWeatherRef.current;
-    let outdoorTempSource;
-    if (haSnap.outdoorTemp)   outdoorTempSource = 'ha';
-    else if (w?.temp)         outdoorTempSource = 'weather-api';
-    else                      outdoorTempSource = null;
-
-    return {
-      ...haSnap,
-      outdoorTemp:      haSnap.outdoorTemp     ?? w?.temp     ?? null,
-      outdoorHumidity:  haSnap.outdoorHumidity ?? w?.humidity ?? null,
-      outdoorTempSource,
-    };
-  }
-
-  function applyMonitorEvents(events, snap) {
-    for (const event of events) {
-      if (!isValidTransition(monitorState, event.type)) continue;
-      const next = getNextRoomState(monitorState, event.type);
-      setMonitorState(next);
-      putMonitoringRoomState(next);
-      setLastMonitorEvent({ ...event, snap });
-      Toast.show(`🏠 ${event.reason}`, event.severity === 'CRITICAL' ? 'e' : 'w');
-
-      // check_out_detected: HA Area 전체 기기 종료
-      if (event.type === 'check_out_detected' && syncConfig?.name) {
-        // 호출이 실제로 성공했을 때만 알린다 — 운영자 계정은 서버가 거절(403)하는데 "종료 중"이라고 뜨면 거짓 안내가 된다
-        callService('homeassistant', 'turn_off', { area_id: syncConfig.name })
-          .then(() => Toast.show('퇴실 확인 — 모든 기기 종료 중', 'i'))
-          .catch(() => {});
+  async function performRoomOperation(type, successMessage) {
+    if (!isValidTransition(monitorState, type)) return;
+    try {
+      if (USE_DEMO_DATA) {
+        setMonitorState(getNextRoomState(monitorState, type));
+      } else {
+        // Detail pages for another/simulated property must not operate this Pi.
+        if (selectedProperty?.id !== liveProperty?.id || selectedProperty?.dataOrigin !== 'REAL') return;
+        const result = await requestMonitoringEvent(type, syncConfig?.name, syncConfig?.watcherId);
+        setMonitorState(result.roomState);
       }
-    }
+      if (type === 'cleaning_finished') setLastMonitorEvent(null);
+      Toast.show(successMessage, type === 'cleaning_finished' ? 's' : 'i');
+    } catch (error) { Toast.show(error.message, 'e'); }
   }
 
   function handleCleaningStarted() {
-    if (!isValidTransition(monitorState, 'cleaning_started')) return;
-    const next = getNextRoomState(monitorState, 'cleaning_started');
-    setMonitorState(next);
-    putMonitoringRoomState(next);
-    Toast.show('청소 시작됨', 'i');
+    return performRoomOperation('cleaning_started', '청소 시작됨');
   }
-
   function handleCleaningFinished() {
-    if (!isValidTransition(monitorState, 'cleaning_finished')) return;
-    const next = getNextRoomState(monitorState, 'cleaning_finished');
-    setMonitorState(next);
-    putMonitoringRoomState(next);
-    setLastMonitorEvent(null);
-    Toast.show('청소 완료 — 숙소 준비됨', 's');
-
-    // 스펙: "청소 완료 시점에 체크인까지 1시간 미만이면 즉시 PRE_STAY_READY 전환"
-    // 15분 iCal 싱크 주기를 기다리지 않고 현재 시각 기준으로 즉시 재계산
-    if (liveProperty?.reservations) {
-      const freshCal = deriveCurrentState(
-        liveProperty.reservations, new Date(),
-        liveProperty.cleaningDurationHours ?? 2.5,
-      );
-      const immediate = deriveNextMonitorState(freshCal.mainStatus, freshCal.subStatus, next);
-      if (immediate) {
-        setMonitorState(immediate);
-        putMonitoringRoomState(immediate);
-      }
-    }
+    return performRoomOperation('cleaning_finished', '청소 완료 — 숙소 준비됨');
   }
-
   function handleMaintenanceStarted() {
-    if (!isValidTransition(monitorState, 'maintenance_started')) return;
-    const next = getNextRoomState(monitorState, 'maintenance_started');
-    setMonitorState(next);
-    putMonitoringRoomState(next);
-    Toast.show('정비 시작됨', 'i');
+    return performRoomOperation('maintenance_started', '정비 시작됨');
   }
-
   function handleMaintenanceFinished() {
-    if (!isValidTransition(monitorState, 'maintenance_finished')) return;
-    const next = getNextRoomState(monitorState, 'maintenance_finished');
-    setMonitorState(next);
-    putMonitoringRoomState(next);
-    Toast.show('정비 완료', 's');
+    return performRoomOperation('maintenance_finished', '정비 완료');
   }
 
   // HA 폴링 — 숙소 이름을 Area ID로 사용, 30초 주기
@@ -732,13 +664,6 @@ export default function RoomStateApp({ onBack }) {
         if (cancelled || !data) return;
         if (data.sensorReadings) setLiveSensorReadings(data.sensorReadings);
         setLiveDevices(data.devices ?? []);
-
-        if (serverWatcherActive || !data.monitoringSnapshot || liveProperty?.currentState?.mainStatus !== 'OCCUPIED') return;
-
-        const snap   = buildSnap(data.monitoringSnapshot);
-        const res    = buildReservation(liveProperty);
-        const events = localMonitorRef.current.process({ snap, roomState: monitorState, reservation: res, now: Date.now() });
-        applyMonitorEvents(events, snap);
       } catch {
         // HA 미연결 시 무시
       }
@@ -747,7 +672,7 @@ export default function RoomStateApp({ onBack }) {
     poll();
     const interval = setInterval(poll, 30000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [syncConfig?.name, serverWatcherActive, liveProperty, monitorState]);
+  }, [syncConfig?.name]);
 
   // 서버 워처 폴링 — 5초 주기
   useEffect(() => {
@@ -758,15 +683,21 @@ export default function RoomStateApp({ onBack }) {
     async function pollServer() {
       try {
         const state = await fetchMonitoringState(watcherId);
-        if (cancelled || !state) return;
+        if (cancelled) return;
+        if (!state?.roomState || state.config?.areaName !== syncConfig.name) {
+          setServerWatcherActive(false);
+          setMeasuredPreparation(null);
+          return;
+        }
         if (state.roomState) {
           setMonitorState(state.roomState);
           setServerWatcherActive(true);
+          setMeasuredPreparation(state.config?.areaName === syncConfig.name ? state.preparation ?? null : null);
           const log = state.eventLog;
           if (log?.length) setLastMonitorEvent(log[log.length - 1]);
         }
       } catch {
-        setServerWatcherActive(false);
+        if (!cancelled) { setServerWatcherActive(false); setMeasuredPreparation(null); }
       }
     }
 
@@ -777,13 +708,18 @@ export default function RoomStateApp({ onBack }) {
 
   // snapshotLog 폴링 — 라이브 숙소(syncConfig)의 워처에서만 가져옴
   useEffect(() => {
+    if (!syncConfig?.name) return;
     const watcherId = syncConfig?.watcherId ?? null;
     let cancelled = false;
 
     async function pollSnapshot() {
       try {
         const state = await fetchMonitoringState(watcherId);
-        if (cancelled || !state) return;
+        if (cancelled) return;
+        if (!state?.roomState || state.config?.areaName !== syncConfig.name) {
+          setSnapshotLog([]);
+          return;
+        }
         setSnapshotLog(state.snapshotLog ?? []);
       } catch { /* 연결 없으면 무시 */ }
     }
@@ -791,7 +727,7 @@ export default function RoomStateApp({ onBack }) {
     pollSnapshot();
     const interval = setInterval(pollSnapshot, 5000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [syncConfig?.watcherId]);
+  }, [syncConfig?.name, syncConfig?.watcherId]);
 
   // 날씨 폴링 — district 기준, 15분 주기
   useEffect(() => {
@@ -809,12 +745,9 @@ export default function RoomStateApp({ onBack }) {
     return () => { cancelled = true; clearInterval(interval); };
   }, [syncConfig?.district]);
 
-  // liveWeather 변경 시 ref 동기화
-  useEffect(() => { liveWeatherRef.current = liveWeather; }, [liveWeather]);
-
   // iCal 캘린더 상태 → monitorState 동기화
   useEffect(() => {
-    if (!liveProperty) return;
+    if (!USE_DEMO_DATA || !liveProperty) return;
     const next = deriveNextMonitorState(
       liveProperty.currentState?.mainStatus,
       liveProperty.currentState?.subStatus,
@@ -822,17 +755,11 @@ export default function RoomStateApp({ onBack }) {
     );
     if (next) {
       setMonitorState(next);
-      putMonitoringRoomState(next);
     }
   }, [liveProperty?.currentState?.mainStatus, liveProperty?.currentState?.subStatus]);
 
-  // PRE_STAY_READY 진입 시 HA 입실 준비 씬 실행
-  useEffect(() => {
-    if (monitorState.mainStatus !== 'PRE_STAY_READY' || !syncConfig?.name) return;
-    callService('homeassistant', 'turn_on', { area_id: syncConfig.name })
-      .then(() => Toast.show('입실 준비 시작 — HA 씬 실행 중', 'i'))
-      .catch(() => {});
-  }, [monitorState.mainStatus]);
+  // Real preparation is controlled by the Pi after sensor/device preflight.
+  // A predicted calendar segment must never activate an entire HA area.
 
   const handleSaveSettings = async (form) => {
     // 이름은 곧 ID (D-016) — 쉼표 등 키로 쓸 수 없는 이름은 저장하지 않는다
@@ -865,7 +792,8 @@ export default function RoomStateApp({ onBack }) {
     putProperties([withId]);      // Pi 파일에 영구 저장 (source of truth)
     // Pi 워처에도 설정 전달 (areaName + district + devices) — 이벤트 property_id 도 이 이름으로 쌓인다
     postMonitoringConfig(
-      { areaName: withId.name, district: withId.district, devices: withId.devices },
+      { areaName: withId.name, district: withId.district, devices: withId.devices,
+        ...(withId.optimization ? { optimization: withId.optimization } : {}) },
       withId.watcherId ?? null,
     );
   };
@@ -889,19 +817,23 @@ export default function RoomStateApp({ onBack }) {
       cleaningSlots: liveDbProperty.cleaningSlots,
     }
     : liveProperty;
+  const measuredLiveState = serverWatcherActive
+    ? measuredPreparationState(liveWithDbAssignments, syncConfig?.name, measuredPreparation, monitorState)
+    : null;
   const mergedProperties = USE_DEMO_DATA
     ? PROPERTIES.map(property => ({ ...property, dataOrigin: 'SIMULATED', snapshotLog: [] }))
     : [
       ...dbProperties,
       ...(liveWithDbAssignments ? [{
         ...liveWithDbAssignments,
+        ...(measuredLiveState ? { currentState: measuredLiveState } : {}),
         dataOrigin: 'REAL',
         sensorReadings: liveSensorReadings ?? liveProperty.sensorReadings,
         haDevices: liveDevices,
-        // OCCUPIED 상태일 때 서버 워처(또는 로컬 모니터) subStatus로 덮어쓰기
-        subStatus: liveProperty.currentState?.mainStatus === 'OCCUPIED'
+        // OCCUPIED 상태일 때 서버 워처 subStatus로 덮어쓰기
+        subStatus: measuredLiveState?.subStatus ?? (liveProperty.currentState?.mainStatus === 'OCCUPIED'
           ? monitorState.subStatus
-          : liveProperty.subStatus,
+          : liveProperty.subStatus),
         monitorState,
         lastMonitorEvent,
         serverWatcherActive,

@@ -4,16 +4,17 @@
  * 시작:  REST로 초기 상태 구성 → WebSocket 연결 + state_changed 구독
  * 평상시: HA push → entityStateMap 업데이트 → debounce 500ms → 상태 머신 처리
  * 끊김:  재연결 → REST 갱신 → 히스토리 재처리 → WebSocket 재구독
- * 캘린더: 1분마다 체크인 시각 비교 → checkin_prep / optimization_finished 발동
+ * 입실 준비: 30초마다 예약·센서·장치 확인 → 센서 목표 유지 시에만 완료
  *
  * 실행:
- *   개발: Vite 플러그인 자동 기동 (vite.config.mjs)
- *   운영: pm2 start scripts/occupancy-watcher-standalone.mjs --name propos-watcher
+ *   숙소별 Pi: pm2 start scripts/occupancy-watcher-standalone.mjs --name propos-watcher
+ *   로컬·운영 웹 화면은 운영 API를 통해 같은 Pi에 연결하며 워처를 기동하지 않는다.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import {
   callHaService,
   getHaStates,
@@ -23,6 +24,9 @@ import {
   getHaToken,
 } from './haProxy.js';
 import { executeStateActions } from './deviceActionExecutor.js';
+import { PreStayOptimizationController } from '../src/application/preStayOptimizationController.js';
+import { PREPARATION_POLICY } from '../src/domain/preStayOptimizationDomain.js';
+import { getPreparationWeather, alertPreparationFailure, checkOperatorChannel, getPreparationAreaEntities } from './preparationAdapters.js';
 import { OccupancyMonitor } from '../src/application/occupancyMonitor.js';
 import {
   getNextRoomState,
@@ -53,6 +57,9 @@ const monitor  = new OccupancyMonitor();
 const eventLog     = [];
 const softEventLog = [];  // checkout_confirmation_needed / early_checkin_suspected / no_show_suspected
 const snapshotLog  = [];  // { path, ts, roomState } — CCTV 출입 스냅샷
+let preparationOutbox = [];
+let flushingPreparationOutbox = false;
+let statePersistenceFailed = false;
 let lastError   = null;
 let lastEventAt = Date.now(); // 마지막 정상 이벤트 시각 (히스토리 재처리 기준점)
 let snapshotCleanupTimer = null;
@@ -83,9 +90,40 @@ let isProcessing   = false;
 let pendingProcess = false; // isProcessing 중 새 요청이 왔을 때 플래그
 let isReplaying    = false;
 let wsEventBuffer  = [];    // 히스토리 재처리 중 WebSocket 이벤트 버퍼
+let pendingConfig  = null;
+const pendingManualEvents = [];
+let preparationShuttingDown = false;
 
 // ── 캘린더 타이머 ─────────────────────────────────────────────────────────────
 let calendarTimer = null;
+
+const preparation = new PreStayOptimizationController({
+  getStates: ids => getHaStates(ids, { signal: AbortSignal.timeout(PREPARATION_POLICY.requestTimeoutMs) }),
+  callService: (domain, service, data) => callHaService(domain, service, data, { signal: AbortSignal.timeout(PREPARATION_POLICY.requestTimeoutMs) }),
+  getWeather: getPreparationWeather,
+  createId: randomUUID,
+  now: () => Date.now(),
+  save: () => persistState(),
+  alert: alertPreparationFailure,
+  checkOperatorChannel,
+  getAllowedEntities: getPreparationAreaEntities,
+  afterPreflight: (cfg, allowed) => {
+    if (!cfg.devices || !Array.isArray(allowed)) return;
+    const devices = Object.fromEntries(Object.entries(cfg.devices).map(([role, value]) => [role,
+      (Array.isArray(value) ? value : [value]).filter(entity => allowed.includes(entity))]));
+    return executeStateActions('PRE_STAY_READY', devices, { skipRoles: ['AC_MAIN'] });
+  },
+  emit: async (type, data) => {
+    const event = { type, data, reason: data.reason ?? '센서 기반 입실 준비' };
+    if ((!data.propertyId || data.propertyId === config?.areaName) && isValidTransition(roomState, type)) await applyTransition(event);
+    else {
+      eventLog.push({ ...event, prevState: { ...roomState }, newState: { ...roomState }, ts: Date.now() });
+      if (eventLog.length > 100) eventLog.shift();
+      reportEventToVercel(type, false, data).catch(() => {});
+      persistState();
+    }
+  },
+});
 
 // ── 퍼시스트 ─────────────────────────────────────────────────────────────────
 function ensureDataDir() {
@@ -94,14 +132,21 @@ function ensureDataDir() {
 
 function persistState() {
   ensureDataDir();
-  const payload = { roomState, eventLog: eventLog.slice(-100), updatedAt: Date.now() };
-  try { writeFileSync(STATE_FILE, JSON.stringify(payload, null, 2)); } catch { /* ignore */ }
+  const payload = { roomState, eventLog: eventLog.slice(-100), preparation: preparation.snapshot(), preparationOutbox, updatedAt: Date.now() };
+  try {
+    writeFileSync(`${STATE_FILE}.tmp`, JSON.stringify(payload, null, 2));
+    renameSync(`${STATE_FILE}.tmp`, STATE_FILE);
+    statePersistenceFailed = false;
+    return true;
+  } catch { statePersistenceFailed = true; return false; }
 }
 
 function loadPersistedState() {
   try {
     const raw  = readFileSync(STATE_FILE, 'utf8');
     const data = JSON.parse(raw);
+    preparationOutbox = Array.isArray(data.preparationOutbox) ? data.preparationOutbox : [];
+    preparation.restore(data.preparation);
     return data.roomState ?? INITIAL_STATE;
   } catch { return INITIAL_STATE; }
 }
@@ -224,7 +269,7 @@ async function sendHaNotification(event, newState) {
     await callHaService('persistent_notification', 'create', {
       title, message: msg,
       notification_id: `propos_monitor_${Date.now()}`,
-    });
+    }, { signal: AbortSignal.timeout(PREPARATION_POLICY.requestTimeoutMs) });
   } catch { /* 알림 실패 무시 */ }
 }
 
@@ -259,12 +304,14 @@ async function applyTransition(event) {
     return;
   }
   const nextState = getNextRoomState(roomState, event.type);
+  await preparation.onLifecycleEvent(event.type, { config, now: Date.now() });
   const entry = { ...event, prevState: roomState, newState: nextState, ts: Date.now() };
   eventLog.push(entry);
   if (eventLog.length > 100) eventLog.shift();
   roomState = nextState;
 
   reportEventToVercel(event.type, false, {
+    ...event.data,
     prevState: entry.prevState,
     newState:  nextState,
     reason:    event.reason ?? null,
@@ -274,8 +321,11 @@ async function applyTransition(event) {
 
   await sendHaNotification(event, nextState);
 
-  if (config?.devices) {
-    const result = await executeStateActions(nextState.mainStatus, config.devices);
+  if (config?.devices && nextState.mainStatus !== 'PRE_STAY_READY' && event.type !== 'optimization_cancelled') {
+    // Environmental preparation has one owner. Neither entering PRE_STAY_READY
+    // nor arriving early may inject the legacy fixed cooling command.
+    const skipRoles = ['PRE_STAY_READY', 'OCCUPIED'].includes(nextState.mainStatus) ? ['AC_MAIN'] : [];
+    const result = await executeStateActions(nextState.mainStatus, config.devices, { skipRoles });
     if (result.executed.length)
       console.log(`[Watcher] 기기 제어:`, result.executed.map(e => e.role).join(', '));
     if (result.skipped.length)
@@ -287,12 +337,26 @@ async function applyTransition(event) {
 
 // ── 핵심 처리 ─────────────────────────────────────────────────────────────────
 async function processNow(now = Date.now()) {
+  if (preparationShuttingDown) return;
   if (isProcessing) {
     pendingProcess = true;
     return;
   }
   isProcessing = true;
+  const completedManualEvents = [];
   try {
+    for (const request of pendingManualEvents.splice(0)) {
+      try {
+        if (request.propertyId !== config?.areaName) throw Object.assign(new Error('Watcher property does not match'), { status: 409 });
+        if (!isValidTransition(roomState, request.type)) throw Object.assign(new Error('Room state changed; refresh and retry'), { status: 409 });
+        const next = getNextRoomState(roomState, request.type);
+        if (next.mainStatus === roomState.mainStatus && next.subStatus === roomState.subStatus) {
+          throw Object.assign(new Error('Monitoring event already applied'), { status: 409 });
+        }
+        await applyTransition({ type: request.type, reason: '운영자 수동 처리' });
+        completedManualEvents.push(request);
+      } catch (error) { request.reject(error); }
+    }
     const snap        = buildSnapshotFromStates(entityStateMap);
     const reservation = buildReservation();
     const events      = monitor.process({ snap, roomState, reservation, now });
@@ -305,13 +369,22 @@ async function processNow(now = Date.now()) {
       }
     }
 
+    if (!isReplaying && !preparationShuttingDown) await preparation.tick({ config, roomState, now });
+    flushPreparationOutbox().catch(() => {});
+
     lastEventAt = now;
     lastError   = null;
+    for (const request of completedManualEvents) request.resolve({ ok: true, roomState: { ...roomState } });
   } catch (err) {
+    for (const request of completedManualEvents) request.reject(err);
     lastError = err.message;
     console.error('[Watcher] 처리 오류:', err.message);
   } finally {
     isProcessing = false;
+    if (pendingConfig) {
+      const next = pendingConfig; pendingConfig = null;
+      setMonitoringConfig(next);
+    }
     if (pendingProcess) {
       pendingProcess = false;
       setImmediate(() => processNow());
@@ -334,7 +407,35 @@ function recordSnapshot(path) {
 }
 
 // ── Vercel 이벤트 리포트 (fire-and-forget) ────────────────────────────────────
+async function flushPreparationOutbox() {
+  if (!PI_SECRET || flushingPreparationOutbox || !preparationOutbox.length) return;
+  flushingPreparationOutbox = true;
+  try {
+    while (preparationOutbox.length) {
+      const payload = preparationOutbox[0];
+      const response = await fetch(`${VERCEL_URL}/api/events/write`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-pi-secret': PI_SECRET },
+        body: JSON.stringify(payload), signal: AbortSignal.timeout(PREPARATION_POLICY.requestTimeoutMs),
+      });
+      if (!response.ok) return;
+      // Retrying the original occurrence timestamp preserves the existing DB
+      // UNIQUE(property_id,type,device_time) duplicate protection after a crash.
+      preparationOutbox.shift(); persistState();
+    }
+  } finally { flushingPreparationOutbox = false; }
+}
+
 async function reportEventToVercel(type, isSoft, data = null) {
+  if (data?.preparationPolicy === 'sensor-v1' && data.optimizationRunId) {
+    const sourceRef = `optimization:${data.optimizationRunId}:${type}`;
+    if (!preparationOutbox.some(event => event.source_ref === sourceRef)) {
+      preparationOutbox.push({ type, is_soft: isSoft, device_time: Date.now(), property_id: data.propertyId ?? config?.areaName,
+        data, source_system: 'HA_WATCHER', source_ref: sourceRef });
+      persistState();
+    }
+    await flushPreparationOutbox();
+    return;
+  }
   if (!PI_SECRET || !config?.areaName) return;
   try {
     await fetch(`${VERCEL_URL}/api/events/write`, {
@@ -347,8 +448,9 @@ async function reportEventToVercel(type, isSoft, data = null) {
         type,
         is_soft:     isSoft,
         device_time: Date.now(),
-        property_id: config.areaName,
+        property_id: data?.preparationPolicy === 'sensor-v1' ? data.propertyId ?? config.areaName : config.areaName,
         data,
+        ...(data?.optimizationRunId ? { source_system: 'HA_WATCHER', source_ref: `optimization:${data.optimizationRunId}:${type}` } : {}),
       }),
     });
   } catch { /* 네트워크 오류 무시 — 로컬 상태는 이미 기록됨 */ }
@@ -468,6 +570,7 @@ async function initEntityMap() {
     if (myVersion !== initVersion) return; // 더 새로운 초기화가 시작됐으면 버림
 
     if (!Array.isArray(ids) || !ids.length) {
+      areaEntityIds = new Set(); entityStateMap = {};
       console.warn(`[Watcher] area '${config.areaName}' 엔티티 없음`);
       return;
     }
@@ -487,29 +590,12 @@ async function initEntityMap() {
   }
 }
 
-// ── 캘린더 이벤트 (1분 인터벌) ───────────────────────────────────────────────
+// ── 예약·안전 감시 (30초 인터벌) ───────────────────────────────────────────────
 async function checkCalendarEvents() {
-  if (isProcessing) return; // processNow 실행 중이면 다음 인터벌에 재시도
-
-  const checkIn = config?.reservation?.checkIn
-    ? new Date(config.reservation.checkIn).getTime()
-    : null;
-
-  if (!checkIn || checkIn <= Date.now()) return; // 없거나 이미 지난 체크인은 무시
-
-  const msUntil = checkIn - Date.now();
-
-  // 체크인 1시간 전 → PRE_STAY_READY/OPTIMIZING 진입
-  if (msUntil <= 3_600_000 && isValidTransition(roomState, 'checkin_prep_time_reached')) {
-    console.log('[Watcher] 캘린더: checkin_prep_time_reached');
-    await applyTransition({ type: 'checkin_prep_time_reached', reason: '체크인 1시간 전' });
-  }
-
-  // 체크인 30분 전 → PRE_STAY_READY/OPTIMIZED 진입
-  if (msUntil <= 1_800_000 && isValidTransition(roomState, 'optimization_finished')) {
-    console.log('[Watcher] 캘린더: optimization_finished');
-    await applyTransition({ type: 'optimization_finished', reason: '체크인 30분 전' });
-  }
+  // The timer only triggers a fresh observation. Elapsed time cannot finish a
+  // preparation. Share processNow's lock with sensor and lifecycle processing.
+  if (isProcessing) { pendingProcess = true; return; }
+  await processNow(Date.now());
 }
 
 // ── WebSocket 연결 ────────────────────────────────────────────────────────────
@@ -604,16 +690,21 @@ export function getMonitoringState() {
     lastPollAt:  lastEventAt, // 하위 호환 유지
     lastEventAt,
     lastError,
+    preparation: preparation.snapshot(),
+    preparationDeliveryPending: preparationOutbox.length,
+    statePersistenceFailed,
   };
 }
 
 export function setMonitoringConfig(cfg) {
+  if (isProcessing) { pendingConfig = { ...pendingConfig, ...cfg }; return; }
   const prevCheckIn = config?.reservation?.checkIn ?? null;
-  config = cfg;
-  persistConfig(cfg);
+  // Browser reservation refreshes must preserve hardware/sensor mappings.
+  config = { ...config, ...cfg };
+  persistConfig(config);
 
   // 예약 취소 감지: 이전에 checkIn이 있었는데 이제 없어진 경우
-  const newCheckIn = cfg?.reservation?.checkIn ?? null;
+  const newCheckIn = config?.reservation?.checkIn ?? null;
   if (prevCheckIn !== null && newCheckIn === null) {
     if (roomState.mainStatus === 'PRE_STAY_READY') {
       // RSM 설계: PRE_STAY_READY에서 예약 취소 → 비즈니스 레이어가 INITIAL_STATE 직접 복귀
@@ -628,7 +719,6 @@ export function setMonitoringConfig(cfg) {
   }
 
   // 새 config에 checkIn이 있을 수 있으므로 즉시 캘린더 체크
-  checkCalendarEvents().catch(() => {});
   // areaName이 바뀔 수 있으므로 엔티티 맵 재초기화
   initEntityMap()
     .then(() => processNow(Date.now()))
@@ -640,10 +730,25 @@ export function setRoomState(newState) {
   persistState();
 }
 
+// Browser requests express an operation, never a predicted room state. Keep
+// them in the same serialized cycle as sensor events and preparation control.
+export function dispatchMonitoringEvent({ type, propertyId } = {}) {
+  if (!['cleaning_started', 'cleaning_finished', 'maintenance_started', 'maintenance_finished'].includes(type)
+    || typeof propertyId !== 'string' || !propertyId.trim()) {
+    return Promise.reject(Object.assign(new Error('Invalid monitoring event'), { status: 400 }));
+  }
+  if (preparationShuttingDown || isReplaying) return Promise.reject(Object.assign(new Error('Watcher is not ready'), { status: 503 }));
+  return new Promise((resolve, reject) => {
+    pendingManualEvents.push({ type, propertyId, resolve, reject });
+    processNow().catch(reject);
+  });
+}
+
 export function startWatcher() {
   // calendarTimer 가 동기적으로 즉시 설정되므로 중복 호출 방지의 핵심 가드다.
   // ws / reconnectTimer 는 비동기 초기화 이후에 설정되므로 재시작 감지용 보조 조건.
   if (ws || reconnectTimer || calendarTimer) return;
+  preparationShuttingDown = false;
 
   roomState = loadPersistedState();
   config    = loadPersistedConfig();
@@ -665,9 +770,8 @@ export function startWatcher() {
     scheduleReconnect(); // 실패 시 재시도
   });
 
-  // 캘린더 이벤트: 시작 즉시 + 1분마다
-  checkCalendarEvents().catch(() => {});
-  calendarTimer = setInterval(() => checkCalendarEvents().catch(() => {}), 60_000);
+  // Watchdog observations continue even when sensor values do not change.
+  calendarTimer = setInterval(() => checkCalendarEvents().catch(() => {}), PREPARATION_POLICY.pollMs);
 }
 
 export function stopWatcher() {
@@ -678,4 +782,10 @@ export function stopWatcher() {
   if (debounceTimer)        { clearTimeout(debounceTimer);           debounceTimer        = null; }
   if (snapshotCleanupTimer) { clearInterval(snapshotCleanupTimer);   snapshotCleanupTimer = null; }
   console.log('[Watcher] 중지');
+}
+
+export async function shutdownPreparation() {
+  preparationShuttingDown = true;
+  for (const request of pendingManualEvents.splice(0)) request.reject(Object.assign(new Error('Watcher is stopping'), { status: 503 }));
+  await preparation.shutdown();
 }
