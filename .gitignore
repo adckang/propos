@@ -21,3 +21,5 @@ Claude-Code-Usage-Monitor/
 src/components/backup/
 "src/components/IntroScene copy.jsx"
 .env*
+# Pi-specific boot credentials remain on the owner machine, outside Git deploys.
+scripts/start-watcher.sh

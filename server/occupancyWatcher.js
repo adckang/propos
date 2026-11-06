@@ -96,6 +96,8 @@ let preparationShuttingDown = false;
 
 // ── 캘린더 타이머 ─────────────────────────────────────────────────────────────
 let calendarTimer = null;
+let watcherStopped = true;
+let watcherGeneration = 0;
 
 const preparation = new PreStayOptimizationController({
   getStates: ids => getHaStates(ids, { signal: AbortSignal.timeout(PREPARATION_POLICY.requestTimeoutMs) }),
@@ -600,14 +602,17 @@ async function checkCalendarEvents() {
 
 // ── WebSocket 연결 ────────────────────────────────────────────────────────────
 function connectWebSocket() {
+  if (watcherStopped) return;
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
 
   const url = getHaWsUrl();
   console.log(`[Watcher] WebSocket 연결: ${url}`);
 
-  ws = new WebSocket(url);
+  const connection = new WebSocket(url);
+  ws = connection;
 
   ws.addEventListener('message', (event) => {
+    if (watcherStopped || ws !== connection) return;
     let msg;
     try { msg = JSON.parse(event.data); } catch { return; }
 
@@ -640,16 +645,19 @@ function connectWebSocket() {
   });
 
   ws.addEventListener('open', () => {
+    if (watcherStopped || ws !== connection) return;
     console.log('[Watcher] WebSocket 연결됨');
   });
 
   ws.addEventListener('close', (event) => {
+    if (watcherStopped || ws !== connection) return;
     ws = null;
     console.warn(`[Watcher] WebSocket 끊김 (code: ${event.code}). ${reconnectDelay / 1000}초 후 재연결`);
     scheduleReconnect();
   });
 
   ws.addEventListener('error', () => {
+    if (watcherStopped || ws !== connection) return;
     lastError = 'WebSocket 연결 오류';
     console.error('[Watcher] WebSocket 오류 발생');
   });
@@ -657,20 +665,24 @@ function connectWebSocket() {
 
 // ── 재연결 (backoff) ──────────────────────────────────────────────────────────
 function scheduleReconnect() {
-  if (reconnectTimer) return;
+  if (watcherStopped || reconnectTimer) return;
+  const generation = watcherGeneration;
 
   const delay = reconnectDelay;
   reconnectDelay = Math.min(reconnectDelay * 2, 60_000);
 
   reconnectTimer = setTimeout(async () => {
     reconnectTimer = null;
+    if (watcherStopped || generation !== watcherGeneration) return;
     const disconnectedAt = lastEventAt;
 
     // 초기 상태 재갱신
     await initEntityMap();
+    if (watcherStopped || generation !== watcherGeneration) return;
 
     // 끊긴 동안 놓친 이벤트 재처리
     await replayHistory(disconnectedAt);
+    if (watcherStopped || generation !== watcherGeneration) return;
 
     // WebSocket 재연결
     connectWebSocket();
@@ -748,6 +760,8 @@ export function startWatcher() {
   // calendarTimer 가 동기적으로 즉시 설정되므로 중복 호출 방지의 핵심 가드다.
   // ws / reconnectTimer 는 비동기 초기화 이후에 설정되므로 재시작 감지용 보조 조건.
   if (ws || reconnectTimer || calendarTimer) return;
+  watcherStopped = false;
+  const generation = ++watcherGeneration;
   preparationShuttingDown = false;
 
   roomState = loadPersistedState();
@@ -762,9 +776,12 @@ export function startWatcher() {
   // 비동기 초기화 (fire-and-forget)
   (async () => {
     await initEntityMap();
+    if (watcherStopped || generation !== watcherGeneration) return;
     await processNow(Date.now()); // 초기 스냅샷으로 한 번 처리
+    if (watcherStopped || generation !== watcherGeneration) return;
     connectWebSocket();
   })().catch(err => {
+    if (watcherStopped || generation !== watcherGeneration) return;
     console.error('[Watcher] 초기화 오류:', err.message);
     lastError = err.message;
     scheduleReconnect(); // 실패 시 재시도
@@ -775,6 +792,8 @@ export function startWatcher() {
 }
 
 export function stopWatcher() {
+  watcherStopped = true;
+  watcherGeneration++;
   ws?.close();
   ws = null;
   if (reconnectTimer)       { clearTimeout(reconnectTimer);         reconnectTimer       = null; }
