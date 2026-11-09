@@ -1,8 +1,8 @@
 # RF-06 · 이벤트 수신 경로 계약 감사
 
-> 확인일: 2026-11-09 · 코드 기준: `d96e9d4`와 현재 작업 트리 · 상태 관리: [refactoring.md](refactoring.md#sec-02)
+> 확인일: 2026-11-09 · 감사 기준: `d96e9d4` · 승인 코드 반영: `435f45f` · 상태 관리: [refactoring.md](refactoring.md#sec-02)
 >
-> **1~6절은 수정 전 읽기 전용 감사 기록**이며, 원인 코드는 `d96e9d4`에서 확인할 수 있다. 감사 당시 운영에는 인증정보 없는 GET 3회만 수행했고 코드·테스트·DB·환경변수·Pi 설정·장치·알림·배포는 변경하지 않았다. 이후 사용자가 우선 문제 해결을 지시해 코드·테스트를 수정했다. 1차 개선은 [7절](#rf-06-implementation), **후속 인증 보완·현재 남은 범위는 [8절](#rf-06-followup)**을 따른다. 아래 감사의 ‘재현’은 외부 I/O를 가짜로 대체한 실제 함수 진단이다.
+> **1~6절은 수정 전 읽기 전용 감사 기록**이며, 원인 코드는 `d96e9d4`에서 확인할 수 있다. 감사 당시 운영에는 인증정보 없는 GET 3회만 수행했고 코드·테스트·DB·환경변수·Pi 설정·장치·알림·배포는 변경하지 않았다. 이후 사용자가 우선 문제 해결을 지시해 코드·테스트를 수정했다. 1차 개선은 [7절](#rf-06-implementation), 후속 인증 보완·남은 범위는 [8절](#rf-06-followup), **운영·Pi 반영 완료 결과는 [9절](#rf-06-rollout)**을 따른다. 아래 감사의 ‘재현’은 외부 I/O를 가짜로 대체한 실제 함수 진단이다.
 
 ## 1. 사용자 시나리오와 확인 범위
 
@@ -190,4 +190,37 @@ node --test tests/unit/s18.event-validation.test.js tests/unit/s24.event-service
 
 공식 SMSGate 안내에는 사용자 지정 메시지 ID와 상태 조회가 있다. 현재 코드는 단수 `/message`와 legacy `message` 필드를 사용하고, 안내는 복수 `/messages`를 기준으로 하므로 실제 호환성·중복 응답 의미를 확인하기 전 URL·요청을 바꾸지 않는다. 현재 SMS 함수는 응답 ID를 보존하지 않는다. Firebase도 성공 시 메시지 ID를 반환하지만 현재 `_push.js`는 이를 반환하지 않는다. [SMSGate 발행 안내](https://docs.sms-gate.app/features/sending-messages/), [상태 조회](https://docs.sms-gate.app/features/status-tracking/), [Firebase 반환 ID](https://firebase.google.com/docs/cloud-messaging/send/admin-sdk), [현재 push 함수](../server/cleaning/_push.js#L29)
 
-현재 운영 DB의 실제 열/제약·알림 원본 행, SMSGate 계정·서비스의 실제 지원 계약과 수신 결과는 조회하지 않았다. 이 사전 자료만으로 ACT-10의 계약 확정이나 ACT-11 구현 승인이 완료된 것으로 표시하지 않는다. 다음 실행은 ACT-10의 읽기 전용 조사이며 RF-06 반영과 RF-06.4 후속은 대기로 관리한다.
+현재 운영 DB의 실제 열/제약·알림 원본 행, SMSGate 계정·서비스의 실제 지원 계약과 수신 결과는 조회하지 않았다. 이 사전 자료만으로 ACT-10의 계약 확정이나 ACT-11 구현 승인이 완료된 것으로 표시하지 않는다. 8절 작성 시 RF-06 반영과 RF-06.4 후속은 대기였으며, 이후 승인 코드 반영만 9절에서 완료했다. 다음 실행은 ACT-10의 읽기 전용 조사다.
+
+<a id="rf-06-rollout"></a>
+
+## 9. 2026-11-09 승인 코드 운영·Pi 반영 완료
+
+사용자 지시 **“테스트 및 리뷰 완료 되었으면 새 코드 반영해”**에 따라 7·8절의 코드와 회귀를 재검토한 뒤 반영했다. 기본 분기 후처리 복구 RF-06.4를 새로 구현하거나 과거 이벤트를 재처리하지 않았다.
+
+### 9.1 · 반영한 버전과 확인 결과
+
+| 대상 | 결과 |
+| --- | --- |
+| Git | `435f45fb3bee336c6584b3d09b5a1e7e0fc7942a` (`fix: validate and durably deliver Pi events`)를 `origin/main`에 푸시. 개인 메모·기존 미추적 자료·`.DS_Store`는 제외 |
+| Vercel | 실제 프로젝트 `propos-project-v2`의 [Production 배포](https://propos-project-v2-nw56m5n6u-adcfirmproj-5252s-projects.vercel.app) READY·커밋 일치. `www.proposonline.com`·`proposonline.com`·`propos-project-v2.vercel.app` 별칭 확인 |
+| Pi 반영 순서 | 새 운영 API READY 확인 후 기존 투숙·준비 없음·빈 전송 큐·프로세스/코드/보호 설정 확인, 백업 후 `server/occupancyWatcher.js` 1개만 원자 교체·워처 재시작 |
+| Pi 실행 | PID 1325→1399, 워처 1개. 정적 import로 추적한 런타임 19개 모듈이 대상 커밋 해시와 일치. `.propos-release.json`의 commit도 `435f45f`. Pi Git HEAD는 배포 버전의 근거로 사용하지 않음 |
+| 설정 보존 | monitoring/properties 설정·비공개/공개 숙소 설정·기동 파일·비공개 환경파일·Git 제외 규칙 7개 해시 보존. 환경파일 root 전용 0600·Git 제외·기동 인자 유지. 인증값·장치 매핑 변경 없음 |
+| 재시작 후 상태 | 즉시 확인과 후속 GET 모두 `OCCUPIED / GOOD_CONDITION`, WebSocket 정상·오류 없음·준비 실행 없음·전체 전송 대기 0·거절 보관 0 |
+
+API를 먼저 반영해 구형 Pi 요청의 호환성을 유지하고 이어서 새 Pi를 반영했다. 워처 재시작이 포함되므로 무중단 배포로 표현하지 않는다. 배포 결과 문서는 제품 코드 변경 없는 후속 커밋으로 기록하며 Pi 릴리즈는 위 코드 커밋을 가리킨다.
+
+### 9.2 · 테스트·리뷰와 운영 smoke 범위
+
+- 전체 테스트 2,757개 중 통과 2,755·일반 실패 0·기존 TODO 2. 기대값 완화·TODO 제거 없이 유지했다.
+- 시나리오·배포 준비·빌드·dist 동기화 검사와 격리 Playwright smoke 1개 통과. 격리 smoke는 외부 쓰기 요청을 fixture로 차단한다. 공개 후보 파일·dist에 로컬 비밀값이 포함되지 않았는지도 값 출력 없이 검사했다.
+- [해당 코드의 GitHub CI](https://github.com/adckang/propos/actions/runs/42587630518) 성공. 단위/기능·시나리오·배포 준비·dist·Chromium 설치·smoke가 포함된 워크플로다.
+- 운영 HTTPS GET: 홈페이지·엔트리 JS·`/api/auth/me`·개인정보처리방침·약관 200, 인증정보 없는 `/api/events/write`·`history` 401, 기본 `/api/events` 404. 기본 쓰기 경로를 새로 노출하지 않았다.
+- Pi는 실제 파일 해시·프로세스 수·보호 설정·상태 GET으로 확인했다. **투숙 중이므로 장치 명령·가짜 입실/청소 이벤트·시험 알림·운영 POST는 실행하지 않았다.** DB/스키마 수동 변경·동기화·토큰 교체도 하지 않았다. 실제 자연 발생 이벤트를 새 코드로 DB에 저장하는 종단 검증은 아직 확인하지 않았다.
+
+### 9.3 · 복구 기준과 남은 작업
+
+Pi 복구 자료는 `/config/propos/.rollout/rf06-20261109T084329111Z-435f45f/`에 root 전용으로 보관한다. 이전 워처·릴리즈 기록·반영 전 상태 스냅샷·후보/결과 기록을 포함한다. 이번에는 복구가 필요하지 않았다. 문제 발생 시 소스·프로세스만 이전 버전으로 복구하고 최신 상태 파일·대기 이벤트·거절 보관을 과거 스냅샷으로 덮어쓰지 않는다. 구형 코드가 새 거절 필드를 보존하지 못할 수 있으므로 최신 상태도 별도 보존해야 한다. 직전 웹 코드 기준은 `d96e9d4`, Pi 워처 기준은 `25a1d28`이다.
+
+**완료:** 승인한 입력 검증·일반 이벤트 영속 전송·호환성·인증 보완의 코드/테스트·운영/Pi 반영과 읽기 전용 smoke. **미완료:** RF-06.4 기본 분기 후처리 복구, 실제 이벤트→운영 DB→화면/보고서 대조, 실제 장치/알림 검증, 기존 보고서 TODO 2개. 다음 작업은 [ACT-10](refactoring.md#act-10) 조사다. 이번 반영을 리팩토링 전체나 운영 무결성 전체의 검증 완료로 해석하지 않는다.
