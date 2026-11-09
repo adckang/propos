@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import { randomUUID } from 'node:crypto';
 import { parse } from '@babel/parser';
-import { validateEvent } from '../../src/domain/eventValidation.js';
+import { validateEvent, validateWriteEvent } from '../../src/domain/eventValidation.js';
 import { insertEvent } from '../../src/infrastructure/eventRepository.js';
 import { processEvent } from '../../src/application/eventService.js';
 import { DATA_PROFILE } from '../../src/config/dataProfile.js';
@@ -62,7 +62,7 @@ async function request(action, body, { duplicate = false, authorized = true } = 
     process: { env: { PROPOS_PI_SECRET: 'test-secret' } },
     DATA_PROFILE, resolveServerDataProfile: () => DATA_PROFILE.HYBRID,
     readBody: load('readBody'), sendJson: load('sendJson'), ensureTable: load('ensureTable'),
-    randomUUID, validateEvent, processEvent, insertEvent, kv: {},
+    randomUUID, validateEvent, validateWriteEvent, processEvent, insertEvent, kv: {},
     notifyEvent: async (...args) => { notices.push(args); return { sent: false }; },
     requireScope: () => { throw new Error('POST must retain its existing Pi authentication path'); },
   });

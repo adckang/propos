@@ -28,6 +28,17 @@ const eventSchema = z.object({
   source_ref: z.string().nullish(),
 });
 
+// The deployed Pi sends milliseconds without a caller UUID. Share the same
+// field/type/source rules, while retaining that transport's nullable data/flag.
+const writeEventSchema = eventSchema.omit({ id: true }).extend({
+  device_time: z.union([
+    isoTimestamp,
+    z.number().finite().refine(value => !isNaN(new Date(value).getTime()), { message: '유효한 밀리초 시각 필요' }),
+  ]),
+  data: eventSchema.shape.data.nullable(),
+  is_soft: z.boolean().nullish(),
+});
+
 /**
  * 이벤트 객체를 Zod 스키마로 검증한다.
  * @param {unknown} raw
@@ -35,4 +46,8 @@ const eventSchema = z.object({
  */
 export function validateEvent(raw) {
   return eventSchema.safeParse(raw);
+}
+
+export function validateWriteEvent(raw) {
+  return writeEventSchema.safeParse(raw);
 }

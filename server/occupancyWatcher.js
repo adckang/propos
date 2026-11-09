@@ -58,6 +58,7 @@ const eventLog     = [];
 const softEventLog = [];  // checkout_confirmation_needed / early_checkin_suspected / no_show_suspected
 const snapshotLog  = [];  // { path, ts, roomState } — CCTV 출입 스냅샷
 let preparationOutbox = [];
+let eventDeliveryRejected = [];
 let flushingPreparationOutbox = false;
 let statePersistenceFailed = false;
 let lastError   = null;
@@ -134,7 +135,7 @@ function ensureDataDir() {
 
 function persistState() {
   ensureDataDir();
-  const payload = { roomState, eventLog: eventLog.slice(-100), preparation: preparation.snapshot(), preparationOutbox, updatedAt: Date.now() };
+  const payload = { roomState, eventLog: eventLog.slice(-100), preparation: preparation.snapshot(), preparationOutbox, eventDeliveryRejected, updatedAt: Date.now() };
   try {
     writeFileSync(`${STATE_FILE}.tmp`, JSON.stringify(payload, null, 2));
     renameSync(`${STATE_FILE}.tmp`, STATE_FILE);
@@ -148,6 +149,7 @@ function loadPersistedState() {
     const raw  = readFileSync(STATE_FILE, 'utf8');
     const data = JSON.parse(raw);
     preparationOutbox = Array.isArray(data.preparationOutbox) ? data.preparationOutbox : [];
+    eventDeliveryRejected = Array.isArray(data.eventDeliveryRejected) ? data.eventDeliveryRejected : [];
     preparation.restore(data.preparation);
     return data.roomState ?? INITIAL_STATE;
   } catch { return INITIAL_STATE; }
@@ -408,54 +410,53 @@ function recordSnapshot(path) {
   console.log(`[Watcher] 스냅샷 기록: ${path}`);
 }
 
-// ── Vercel 이벤트 리포트 (fire-and-forget) ────────────────────────────────────
+// ── Vercel 이벤트 전송 ──────────────────────────────────────────────────────
+// Keep the persisted queue name for existing Pi state files. All event types
+// now share its durable, single-sender delivery path; API side effects stay unchanged.
 async function flushPreparationOutbox() {
   if (!PI_SECRET || flushingPreparationOutbox || !preparationOutbox.length) return;
   flushingPreparationOutbox = true;
   try {
     while (preparationOutbox.length) {
+      if (!persistState()) return; // never transmit an occurrence not yet durable
       const payload = preparationOutbox[0];
       const response = await fetch(`${VERCEL_URL}/api/events/write`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-pi-secret': PI_SECRET },
         body: JSON.stringify(payload), signal: AbortSignal.timeout(PREPARATION_POLICY.requestTimeoutMs),
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        if (![400, 422].includes(response.status)) return;
+        // Preserve invalid payloads for inspection without blocking later events.
+        // Auth/configuration/rate/server failures remain in the retry queue.
+        eventDeliveryRejected.push({ payload, httpStatus: response.status });
+        preparationOutbox.shift();
+        if (!persistState()) {
+          preparationOutbox.unshift(payload); eventDeliveryRejected.pop(); return;
+        }
+        continue;
+      }
+      const acknowledgement = await response.json();
+      if (typeof acknowledgement?.inserted !== 'boolean') return;
       // Retrying the original occurrence timestamp preserves the existing DB
       // UNIQUE(property_id,type,device_time) duplicate protection after a crash.
-      preparationOutbox.shift(); persistState();
+      preparationOutbox.shift();
+      if (!persistState()) { preparationOutbox.unshift(payload); return; }
     }
-  } finally { flushingPreparationOutbox = false; }
+  } catch { /* retain original payloads on network/timeout/invalid response */ }
+  finally { flushingPreparationOutbox = false; }
 }
 
 async function reportEventToVercel(type, isSoft, data = null) {
-  if (data?.preparationPolicy === 'sensor-v1' && data.optimizationRunId) {
-    const sourceRef = `optimization:${data.optimizationRunId}:${type}`;
-    if (!preparationOutbox.some(event => event.source_ref === sourceRef)) {
-      preparationOutbox.push({ type, is_soft: isSoft, device_time: Date.now(), property_id: data.propertyId ?? config?.areaName,
-        data, source_system: 'HA_WATCHER', source_ref: sourceRef });
-      persistState();
-    }
-    await flushPreparationOutbox();
-    return;
+  const isPreparation = data?.preparationPolicy === 'sensor-v1' && data.optimizationRunId;
+  const propertyId = isPreparation ? data.propertyId ?? config?.areaName : config?.areaName;
+  if (!propertyId) return;
+  const sourceRef = isPreparation ? `optimization:${data.optimizationRunId}:${type}` : `watcher:event:${randomUUID()}`;
+  if (!preparationOutbox.some(event => event.source_ref === sourceRef)) {
+    preparationOutbox.push({ type, is_soft: isSoft, device_time: Date.now(), property_id: propertyId,
+      data: structuredClone(data), source_system: 'HA_WATCHER', source_ref: sourceRef });
+    if (!persistState()) return;
   }
-  if (!PI_SECRET || !config?.areaName) return;
-  try {
-    await fetch(`${VERCEL_URL}/api/events/write`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-pi-secret': PI_SECRET,
-      },
-      body: JSON.stringify({
-        type,
-        is_soft:     isSoft,
-        device_time: Date.now(),
-        property_id: data?.preparationPolicy === 'sensor-v1' ? data.propertyId ?? config.areaName : config.areaName,
-        data,
-        ...(data?.optimizationRunId ? { source_system: 'HA_WATCHER', source_ref: `optimization:${data.optimizationRunId}:${type}` } : {}),
-      }),
-    });
-  } catch { /* 네트워크 오류 무시 — 로컬 상태는 이미 기록됨 */ }
+  await flushPreparationOutbox();
 }
 
 // ── 스냅샷 파일 정리 (10일 초과 삭제) ───────────────────────────────────────
@@ -703,7 +704,9 @@ export function getMonitoringState() {
     lastEventAt,
     lastError,
     preparation: preparation.snapshot(),
-    preparationDeliveryPending: preparationOutbox.length,
+    preparationDeliveryPending: preparationOutbox.filter(event => event.data?.preparationPolicy === 'sensor-v1').length,
+    eventDeliveryPending: preparationOutbox.length,
+    eventDeliveryRejectedCount: eventDeliveryRejected.length,
     statePersistenceFailed,
   };
 }

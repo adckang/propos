@@ -12,7 +12,7 @@ import { kv } from "@vercel/kv";
 import { randomUUID } from "node:crypto";
 import { getPeriodRange } from "../../src/domain/reportingDomain.js";
 import { queryEvents, insertEvent } from "../../src/infrastructure/eventRepository.js";
-import { validateEvent } from "../../src/domain/eventValidation.js";
+import { validateEvent, validateWriteEvent } from "../../src/domain/eventValidation.js";
 import { processEvent } from "../../src/application/eventService.js";
 import { notifyEvent } from "../../server/slackNotifier.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
@@ -63,6 +63,15 @@ export default async function handler(req, res) {
   const db = new Pool({ connectionString: process.env.POSTGRES_URL });
 
   try {
+    // Both machine-ingestion branches use the same credential; GET keeps its
+    // existing operator/session scope below. Do not expose a new root route.
+    if (req.method === "POST" && (!action || action === "write")) {
+      const secret = req.headers["x-pi-secret"];
+      if (!process.env.PROPOS_PI_SECRET || secret !== process.env.PROPOS_PI_SECRET) {
+        return sendJson(res, 401, { error: "Unauthorized" });
+      }
+    }
+
     // POST /api/events — Pi watcher 이벤트 수신 (구 index.js)
     if (!action && req.method === "POST") {
       const body = await readBody(req);
@@ -80,15 +89,15 @@ export default async function handler(req, res) {
 
     // POST /api/events/write — 상태전환 이벤트 저장 (구 write.js)
     if (action === "write" && req.method === "POST") {
-      const secret = req.headers["x-pi-secret"];
-      if (!process.env.PROPOS_PI_SECRET || secret !== process.env.PROPOS_PI_SECRET) {
-        return sendJson(res, 401, { error: "Unauthorized" });
-      }
       const body = await readBody(req);
-      const { type, is_soft, device_time, property_id, data, source_system, source_ref } = body;
-      if (!type || !property_id || !device_time) {
+      if (!body?.type || !body?.property_id || !body?.device_time) {
         return sendJson(res, 400, { error: "Missing required fields: type, property_id, device_time" });
       }
+      const validation = validateWriteEvent(body);
+      if (!validation.success) {
+        return sendJson(res, 400, { error: "Invalid event", issues: validation.error.issues.map(i => i.message) });
+      }
+      const { type, is_soft, device_time, property_id, data, source_system, source_ref } = validation.data;
       await ensureTable(db);
       const event = {
         id:          randomUUID(),
