@@ -1,8 +1,55 @@
 import messaging from '@react-native-firebase/messaging';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { updateFcmToken } from './api';
+import { getFcmTokenOwner, updateFcmToken } from './api';
 
 const STORAGE_KEY_FCM = '@propos/fcm_token';
+const STORAGE_KEY_PENDING = '@propos/fcm_token_pending';
+type Rotation = { oldToken: string; newToken: string; workerId: string };
+let syncQueue: Promise<unknown> = Promise.resolve();
+
+async function confirmRotation(rotation: Rotation) {
+  await updateFcmToken(rotation.oldToken, rotation.newToken, rotation.workerId);
+  await AsyncStorage.setItem(STORAGE_KEY_FCM, rotation.newToken);
+  await AsyncStorage.removeItem(STORAGE_KEY_PENDING);
+}
+
+async function synchronizeToken(token: string) {
+  let stored = await AsyncStorage.getItem(STORAGE_KEY_FCM);
+  const raw = await AsyncStorage.getItem(STORAGE_KEY_PENDING);
+  if (raw) {
+    const pending = JSON.parse(raw) as Rotation;
+    if (!pending || typeof pending.oldToken !== 'string' || !pending.oldToken ||
+        typeof pending.newToken !== 'string' || !pending.newToken || pending.newToken === pending.oldToken ||
+        typeof pending.workerId !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(pending.workerId) ||
+        (stored !== pending.oldToken && stored !== pending.newToken)) {
+      throw new Error('token recovery state invalid');
+    }
+    if (stored === pending.newToken) await AsyncStorage.removeItem(STORAGE_KEY_PENDING);
+    else await confirmRotation(pending);
+    stored = pending.newToken;
+  }
+  if (!stored) {
+    // Initial registration still belongs to registerWorker/App.tsx.
+    await AsyncStorage.setItem(STORAGE_KEY_FCM, token);
+  } else if (stored !== token) {
+    const workerId = await getFcmTokenOwner(stored);
+    const pending = { oldToken: stored, newToken: token, workerId };
+    await AsyncStorage.setItem(STORAGE_KEY_PENDING, JSON.stringify(pending));
+    await confirmRotation(pending);
+  }
+}
+
+function synchronizeLatestToken(): Promise<string> {
+  const next = syncQueue.then(async () => {
+    // Read the SDK token when this operation starts, so queued listeners cannot
+    // restore an older token over a newer refresh event.
+    const token = await messaging().getToken();
+    try { await synchronizeToken(token); } catch { /* durable intent / old token survive for the next startup */ }
+    return token;
+  });
+  syncQueue = next.catch(() => {});
+  return next;
+}
 
 /** 앱 시작 시 FCM 권한 요청 + 토큰 발급 */
 export async function initFcm(): Promise<string | null> {
@@ -13,15 +60,7 @@ export async function initFcm(): Promise<string | null> {
 
   if (!granted) return null;
 
-  const token = await messaging().getToken();
-  const stored = await AsyncStorage.getItem(STORAGE_KEY_FCM);
-
-  if (stored && stored !== token) {
-    await updateFcmToken(stored, token).catch(() => {});
-  }
-
-  await AsyncStorage.setItem(STORAGE_KEY_FCM, token);
-  return token;
+  return synchronizeLatestToken();
 }
 
 export async function getStoredFcmToken(): Promise<string | null> {
@@ -30,12 +69,8 @@ export async function getStoredFcmToken(): Promise<string | null> {
 
 /** FCM 토큰 자동 갱신 리스너 (앱 수명 동안 유지) */
 export function watchTokenRefresh() {
-  return messaging().onTokenRefresh(async (newToken) => {
-    const old = await AsyncStorage.getItem(STORAGE_KEY_FCM);
-    if (old && old !== newToken) {
-      await updateFcmToken(old, newToken).catch(() => {});
-    }
-    await AsyncStorage.setItem(STORAGE_KEY_FCM, newToken);
+  return messaging().onTokenRefresh(async () => {
+    await synchronizeLatestToken().catch(() => {});
   });
 }
 

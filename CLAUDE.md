@@ -1,6 +1,7 @@
 # PROPOS
 > Airbnb 숙소 관리 시스템. Vite + React 18. Vercel + 라즈베리파이 + Tailscale.
 > 업데이트: 2026-08-06
+> 작업 현황·진행 순서·미결 결정은 `docs/refactoring.md`를 참고 (SEC-02부터 확인)
 
 ## 코드 규칙 (절대)
 - `innerHTML` 금지 → `textContent` 또는 `escapeHtml()`

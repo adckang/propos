@@ -1,6 +1,7 @@
 # Design Decisions
 
 > 이미 검토하고 버린 선택지를 Claude가 다시 제안하는 것을 방지.
+> D-035 이후의 결정과 작업 상태는 `docs/refactoring.md`를 참고.
 
 ---
 

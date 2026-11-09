@@ -4,6 +4,7 @@
  * POST /api/workers/register  { phone, email, fcm_token }
  * POST /api/workers/heartbeat { fcm_token }
  * POST /api/workers/token     { fcm_token, new_token }
+ * GET  /api/workers/token     Authorization: Bearer <current token> (owner confirmation)
  */
 
 import { Pool } from "pg";
@@ -29,7 +30,7 @@ async function readBody(req) {
   const chunks = [];
   for await (const c of req) chunks.push(c);
   if (!chunks.length) return {};
-  try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
+  try { return JSON.parse(Buffer.concat(chunks).toString("utf8")) ?? {}; } // 본문이 JSON null 이어도 빈 요청으로
   catch { return {}; }
 }
 
@@ -113,25 +114,63 @@ async function handleHeartbeat(req, res) {
  * FCM 토큰 갱신 (앱 재설치 또는 토큰 로테이션 시)
  */
 async function handleTokenUpdate(req, res) {
+  if (req.method === 'GET') {
+    res.setHeader('Cache-Control', 'private, no-store');
+    const authorization = req.headers?.authorization ?? req.headers?.Authorization;
+    const token = typeof authorization === 'string' ? authorization.match(/^Bearer (\S+)$/i)?.[1] : null;
+    if (!token) return sendJson(res, 401, { error: 'token required' });
+    let rows;
+    try { ({ rows } = await db.query('SELECT id FROM cleaners WHERE fcm_token=$1 LIMIT 2', [token])); }
+    catch (error) { throw Object.assign(new Error('FCM_TOKEN_STORAGE_FAILED'), { code: error.code }); }
+    if (rows.length > 1) return sendJson(res, 409, { error: 'token owner ambiguous' });
+    if (!rows.length) return sendJson(res, 404, { error: '등록되지 않은 토큰' });
+    return sendJson(res, 200, { ok: true, worker_id: rows[0].id });
+  }
   if (req.method !== "POST") return sendJson(res, 405, { error: "POST only" });
 
-  const { fcm_token, new_token } = await readBody(req);
-  if (!fcm_token || !new_token) return sendJson(res, 400, { error: "fcm_token, new_token 필수" });
+  const { fcm_token, new_token, worker_id } = await readBody(req);
+  if (typeof fcm_token !== 'string' || !fcm_token.trim() || typeof new_token !== 'string' || !new_token.trim()) {
+    return sendJson(res, 400, { error: "fcm_token, new_token 필수" });
+  }
+  if (worker_id !== undefined && (typeof worker_id !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(worker_id))) {
+    return sendJson(res, 400, { error: 'worker_id invalid' });
+  }
+  const workerId = worker_id?.toLowerCase();
 
-  const { rows } = await db.query(
-    `UPDATE cleaners
-     SET fcm_token    = $2,
-         fcm_token_at = NOW(),
-         fcm_status   = 'active',
-         last_seen_at = NOW()
-     WHERE fcm_token = $1
-     RETURNING id`,
-    [fcm_token, new_token]
-  );
-
-  if (!rows.length) return sendJson(res, 404, { error: "기존 토큰을 찾을 수 없음" });
-
-  return sendJson(res, 200, { ok: true });
+  let client, discardConnection;
+  try {
+    client = await db.connect();
+    await client.query('BEGIN');
+    await client.query("SET LOCAL lock_timeout='3s'");
+    await client.query("SET LOCAL statement_timeout='5s'");
+    // Serialize token API claims to the same destination without a new table.
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`worker-fcm:${new_token}`]);
+    const { rows } = await client.query(`SELECT id,fcm_token FROM cleaners
+      WHERE fcm_token=ANY($1::text[]) OR id=$2::uuid ORDER BY id FOR UPDATE`, [[fcm_token, new_token], workerId ?? null]);
+    const oldOwners = rows.filter(row => row.fcm_token === fcm_token);
+    const newOwners = rows.filter(row => row.fcm_token === new_token);
+    const worker = workerId ? rows.find(row => row.id === workerId) : oldOwners[0];
+    let status = 200, body = { ok: true };
+    if (oldOwners.length > 1 || newOwners.length > 1) {
+      status = 409; body = { error: 'token owner ambiguous' };
+    } else if (!worker || (oldOwners.length && oldOwners[0].id !== worker.id) ||
+        ![fcm_token, new_token].includes(worker.fcm_token)) {
+      status = 404; body = { error: '기존 토큰을 찾을 수 없음' };
+    } else if (newOwners.length && newOwners[0].id !== worker.id) {
+      status = 409; body = { error: 'token already belongs to another worker' };
+    } else if (!(workerId && worker.fcm_token === new_token)) {
+      await client.query(`UPDATE cleaners SET fcm_token=$2,fcm_token_at=NOW(),fcm_status='active',last_seen_at=NOW()
+        WHERE id=$1 AND fcm_token=$3`, [worker.id, new_token, fcm_token]);
+    }
+    // Lost-ACK retries with the confirmed ID are read-only confirmations; they
+    // cannot reactivate inactive/invalid tokens or change lifecycle timestamps.
+    await client.query('COMMIT');
+    return sendJson(res, status, body);
+  } catch (error) {
+    // ROLLBACK 까지 실패한 연결은 트랜잭션이 남아 있을 수 있어 풀에 돌려주지 않고 폐기한다
+    try { await client?.query('ROLLBACK'); } catch (rollbackError) { discardConnection = rollbackError; }
+    throw Object.assign(new Error('FCM_TOKEN_STORAGE_FAILED'), { code: error.code });
+  } finally { client?.release(discardConnection); }
 }
 
 /**

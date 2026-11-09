@@ -4,6 +4,7 @@ import {
   StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import auth from '@react-native-firebase/auth';
+import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 
 type Step = 'phone' | 'otp' | 'email';
 
@@ -16,7 +17,7 @@ export default function PhoneAuthScreen({ onComplete }: Props) {
   const [phone, setPhone]     = useState('');
   const [otp, setOtp]         = useState('');
   const [email, setEmail]     = useState('');
-  const [confirm, setConfirm] = useState<ReturnType<typeof auth['signInWithPhoneNumber']> extends Promise<infer T> ? T : never | null>(null);
+  const [confirm, setConfirm] = useState<FirebaseAuthTypes.ConfirmationResult | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function requestOtp() {

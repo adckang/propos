@@ -18,11 +18,31 @@ export async function sendHeartbeat(fcmToken: string) {
   }).catch(() => {}); // heartbeat 실패는 무시 (앱 동작에 영향 없음)
 }
 
-export async function updateFcmToken(oldToken: string, newToken: string) {
-  await fetch(`${PROPOS_BASE_URL}/api/workers/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fcm_token: oldToken, new_token: newToken }),
+async function tokenRequest(options: RequestInit) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const res = await fetch(`${PROPOS_BASE_URL}/api/workers/token`, { ...options, signal: controller.signal });
+    if (!res.ok) throw new Error(`token request failed: ${res.status}`);
+    const receipt = await res.json();
+    if (receipt?.ok !== true) throw new Error('token receipt missing');
+    return receipt;
+  } finally { clearTimeout(timer); }
+}
+
+// The read-only GET is rejected safely by older servers; it cannot rotate a
+// token before the app has persisted the identity needed for lost-ACK recovery.
+export async function getFcmTokenOwner(token: string): Promise<string> {
+  const receipt = await tokenRequest({ method: 'GET', headers: { Authorization: `Bearer ${token}` } });
+  if (typeof receipt.worker_id !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(receipt.worker_id)) {
+    throw new Error('token owner receipt missing');
+  }
+  return receipt.worker_id;
+}
+
+export async function updateFcmToken(oldToken: string, newToken: string, workerId?: string) {
+  await tokenRequest({ method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fcm_token: oldToken, new_token: newToken, ...(workerId ? { worker_id: workerId } : {}) }),
   });
 }
 
