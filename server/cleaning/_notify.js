@@ -55,7 +55,34 @@ export function selectChannel(cleaner) {
  * @param {string} [payload.notifId] - cleaning_notifs.id (channel 컬럼 업데이트용)
  * @returns {{ ok: boolean, channel: 'FCM'|'SMS'|'SMS_FALLBACK'|'NONE' }}
  */
-export async function notify(db, cleaner, { title, body, data = {}, smsText, notifId }) {
+async function notifyInitial(db, cleaner, { title, body, data, smsText, deliveryFallbackCode }) {
+  let fallbackCode = ['UNREGISTERED','INVALID_ARGUMENT'].includes(deliveryFallbackCode) ? deliveryFallbackCode : null;
+  const channel = fallbackCode && cleaner.phone ? 'SMS' : selectChannel(cleaner);
+  let result, deliveredChannel = channel;
+  if (channel === 'SMS' && fallbackCode) deliveredChannel = 'SMS_FALLBACK';
+  if (channel === 'FCM') {
+    result = await sendPush(cleaner.fcm_token, { title, body, data }, { detailed: true });
+    if (result.outcome === 'FAILED' && ['UNREGISTERED','INVALID_ARGUMENT'].includes(result.errorCode)) {
+      fallbackCode = result.errorCode;
+      try { await handleFcmFailure(db, cleaner, result.errorCode); } catch { /* SMS remains safe after a definite rejection */ }
+      if (smsText && cleaner.phone) {
+        result = await sendSms(cleaner.phone, smsText, { detailed: true });
+        deliveredChannel = 'SMS_FALLBACK';
+      }
+    }
+  } else if (channel === 'SMS' && smsText) {
+    result = await sendSms(cleaner.phone, smsText, { detailed: true });
+  } else {
+    result = { outcome: 'FAILED', errorCode: 'DELIVERY_CHANNEL_UNAVAILABLE' };
+  }
+  // Durable receipt/channel recording belongs to the request owner, not this
+  // transport function. Unknown FCM outcomes must not trigger an SMS action.
+  return { ...result, ok: result.outcome === 'ACCEPTED', attemptedChannel: deliveredChannel,
+    ...(fallbackCode ? { fcmFailureCode: fallbackCode } : {}), channel: result.outcome === 'ACCEPTED' ? deliveredChannel : 'NONE' };
+}
+
+export async function notify(db, cleaner, { title, body, data = {}, smsText, notifId, deliveryId, deliveryFallbackCode }) {
+  if (deliveryId) return notifyInitial(db, cleaner, { title, body, data, smsText, deliveryFallbackCode });
   const channel = selectChannel(cleaner);
   let resultChannel = "NONE";
 

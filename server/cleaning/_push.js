@@ -19,14 +19,16 @@ function getAdminApp() {
  * @param {{ title: string, body: string, data?: Record<string, string> }} payload
  * @returns {{ success: boolean, errorCode?: string }}
  */
-export async function sendPush(fcmToken, { title, body, data = {} }) {
-  if (!fcmToken) return { success: false, errorCode: "NO_TOKEN" };
+export async function sendPush(fcmToken, { title, body, data = {} }, options = {}) {
+  if (!fcmToken) return { success: false, errorCode: "NO_TOKEN", ...(options.detailed ? { outcome: 'FAILED', provider: 'FCM' } : {}) };
 
+  let started = false, timer;
   try {
     const app = getAdminApp();
     const messaging = getMessaging(app);
 
-    await messaging.send({
+    started = true;
+    const sending = messaging.send({
       token: fcmToken,
       notification: { title, body },
       data: Object.fromEntries(
@@ -38,10 +40,16 @@ export async function sendPush(fcmToken, { title, body, data = {} }) {
       },
     });
 
-    return { success: true };
+    const messageId = await (options.detailed ? Promise.race([sending, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(Object.assign(new Error('FCM response unknown'), { code: 'FCM_RESPONSE_TIMEOUT' })), options.timeoutMs ?? 10_000);
+    })]) : sending);
+    if (options.detailed && (typeof messageId !== 'string' || !messageId)) {
+      return { success: false, outcome: 'UNKNOWN', provider: 'FCM', errorCode: 'FCM_RECEIPT_MISSING' };
+    }
+    return options.detailed ? { success: true, outcome: 'ACCEPTED', provider: 'FCM', providerMessageId: messageId } : { success: true };
   } catch (err) {
     const code = err?.errorInfo?.code ?? err?.code ?? "UNKNOWN";
-    console.error("[push] FCM 발송 실패:", {
+    if (!options.detailed) console.error("[push] FCM 발송 실패:", {
       code,
       message: err?.message,
       errorInfo: err?.errorInfo,
@@ -52,6 +60,8 @@ export async function sendPush(fcmToken, { title, body, data = {} }) {
       : code.includes("invalid-argument") || code.includes("invalid-registration-token")
       ? "INVALID_ARGUMENT"
       : code;
-    return { success: false, errorCode };
-  }
+    return { success: false, errorCode, ...(options.detailed ? { provider: 'FCM', outcome:
+      !started || ['UNREGISTERED','INVALID_ARGUMENT'].includes(errorCode) ? 'FAILED' :
+        code === 'messaging/quota-exceeded' ? 'RETRYABLE' : 'UNKNOWN' } : {}) };
+  } finally { if (timer) clearTimeout(timer); }
 }

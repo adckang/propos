@@ -20,13 +20,15 @@ const HOUR_MS = 3_600_000;
  * 퇴실 뒤 청소 구간(대기 → 진행)을 push 하고 청소가 끝나는 시각을 돌려준다.
  * push(mainStatus, subStatus, start, end, checkoutAt) — 길이 0 이하 구간은 push 쪽에서 버린다.
  * 대기·진행 구간에는 원래 퇴실 시각(checkoutAt)을 넘겨, 화면이 담당자를 그 예약에서 찾게 한다.
+ * nextCheckIn이 있으면 다음 입실에서 표시와 cursor를 함께 끊는다. 저장된 청소 시각은 바꾸지 않는다.
  */
-export function appendCleaningSegments(push, reservation, cursor, durationHours) {
+export function appendCleaningSegments(push, reservation, cursor, durationHours, nextCheckIn = null) {
   const window = reservationCleaningWindow(reservation, durationHours);
   const start = window?.start ?? cursor;
-  const end = window?.end ?? new Date(cursor.getTime() + durationHours * HOUR_MS);
+  const plannedEnd = window?.end ?? new Date(cursor.getTime() + durationHours * HOUR_MS);
+  const end = nextCheckIn && plannedEnd > nextCheckIn ? nextCheckIn : plannedEnd;
   const checkoutAt = reservation?.checkOut;
-  if (start > cursor) push('CLEANING', 'CLEANING_PENDING', cursor, start, checkoutAt);
+  if (start > cursor) push('CLEANING', 'CLEANING_PENDING', cursor, start > end ? end : start, checkoutAt);
   push('CLEANING', 'CLEANING_IN_PROGRESS', new Date(Math.max(cursor.getTime(), start.getTime())), end, checkoutAt);
   return new Date(Math.max(cursor.getTime(), end.getTime()));
 }
@@ -35,7 +37,7 @@ export function appendCleaningSegments(push, reservation, cursor, durationHours)
  * 숙박 한 번: [공실] → 입실준비(최적화중·최적화완료) → 체류 → 청소. cursor 이전으로는 되돌아가지 않는다
  * (앞 청소가 늦게 끝나면 입실준비가 그만큼 짧아진다). 다음 cursor 를 돌려준다.
  */
-export function appendStayCycle(push, reservation, cursor, durationHours) {
+export function appendStayCycle(push, reservation, cursor, durationHours, nextCheckIn = null) {
   const checkIn = asDate(reservation.checkIn);
   const checkOut = asDate(reservation.checkOut);
   const prepAt = new Date(Math.max(cursor.getTime(), checkIn.getTime() - HOUR_MS));
@@ -44,7 +46,7 @@ export function appendStayCycle(push, reservation, cursor, durationHours) {
   if (cursor < optimizedAt) { push('PRE_STAY_READY', 'OPTIMIZING', cursor, optimizedAt); cursor = optimizedAt; }
   if (cursor < checkIn) { push('PRE_STAY_READY', 'OPTIMIZED', cursor, checkIn); cursor = new Date(checkIn); }
   if (checkOut && checkOut > cursor) { push('OCCUPIED', 'GOOD_CONDITION', cursor, checkOut); cursor = new Date(checkOut); }
-  return appendCleaningSegments(push, reservation, cursor, durationHours);
+  return appendCleaningSegments(push, reservation, cursor, durationHours, nextCheckIn);
 }
 
 /**

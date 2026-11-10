@@ -10,7 +10,37 @@ export function toE164(phone) {
   return `+${digits}`;
 }
 
-export async function sendSms(phone, message) {
+async function sendInitialSms(phone, message, { timeoutMs = 10_000 } = {}) {
+  const gwId = process.env.PROPOS_SMS_GW_ID, gwPwd = process.env.PROPOS_SMS_GW_PWD;
+  const failed = errorCode => ({ outcome: 'FAILED', provider: 'SMS', errorCode });
+  if (!gwId || !gwPwd) return failed('SMS_CONFIG_MISSING');
+  if (typeof phone !== 'string' || !message) return failed('SMS_INPUT_INVALID');
+  const number = toE164(phone);
+  if (!/^\+[1-9]\d{6,14}$/.test(number)) return failed('SMS_INPUT_INVALID');
+  try {
+    // No automatic retry: a lost response can follow an accepted message.
+    // Keep the existing gateway endpoint/body until its ID contract is verified.
+    const response = await fetch(`${GW_BASE}/message`, {
+      method: 'POST', signal: AbortSignal.timeout(timeoutMs),
+      headers: { 'Content-Type': 'application/json', Authorization: `Basic ${Buffer.from(`${gwId}:${gwPwd}`).toString('base64')}` },
+      body: JSON.stringify({ phoneNumbers: [number], message }),
+    });
+    if (response.ok) {
+      const body = await response.json().catch(() => null);
+      const id = body?.id ?? body?.messageId;
+      return { outcome: 'ACCEPTED', provider: 'SMS', providerMessageId: typeof id === 'string' ? id : null };
+    }
+    const retryHeader = response.headers?.get?.('retry-after');
+    const seconds = retryHeader == null ? NaN : Number(retryHeader);
+    const retryAt = Number.isFinite(seconds) ? Date.now() + seconds * 1000 : Date.parse(retryHeader);
+    const retryAfterMs = Number.isFinite(retryAt) && Number.isFinite(new Date(retryAt).getTime()) && retryAt > Date.now() ? retryAt - Date.now() : undefined;
+    return { outcome: response.status === 429 ? 'RETRYABLE' : response.status >= 400 && response.status < 500 ? 'FAILED' : 'UNKNOWN',
+      provider: 'SMS', errorCode: `SMS_HTTP_${response.status}`, ...(retryAfterMs ? { retryAfterMs } : {}) };
+  } catch { return { outcome: 'UNKNOWN', provider: 'SMS', errorCode: 'SMS_RESPONSE_UNKNOWN' }; }
+}
+
+export async function sendSms(phone, message, options = {}) {
+  if (options.detailed) return sendInitialSms(phone, message, options);
   const gwId  = process.env.PROPOS_SMS_GW_ID;
   const gwPwd = process.env.PROPOS_SMS_GW_PWD;
   if (!gwId || !gwPwd) {

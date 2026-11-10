@@ -6,6 +6,8 @@ import { Pool } from "pg";
 import { kv } from "@vercel/kv";
 import {
   advanceJob,
+  getVipFollowupJobs,
+  recoverInitialDeliveries,
   getPropertyConfig,
   calcCleaningTimes,
   toKstDateKey,
@@ -289,16 +291,9 @@ async function upsertProperty(req, res) {
 }
 
 async function runFollowupChecks() {
+  await recoverInitialDeliveries(db);
   // VIP 1시간 창 만료 → 다음 단계로
-  const { rows: vipJobs } = await db.query(
-    `SELECT j.* FROM cleaning_jobs j
-     JOIN LATERAL (
-       SELECT sent_at FROM cleaning_notifs WHERE job_id=j.id ORDER BY sent_at DESC LIMIT 1
-     ) n ON true
-     WHERE j.status IN ('NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3')
-       AND j.data_origin = 'REAL'
-       AND n.sent_at < NOW() - INTERVAL '1 hour'`
-  );
+  const { rows: vipJobs } = await getVipFollowupJobs(db);
   for (const job of vipJobs) {
     await advanceJob(db, job).catch(e => console.error("[followup] VIP advance 실패:", e.message));
   }
@@ -364,8 +359,14 @@ async function getJob(res, id, scope) {
   const notifColumns = isAdminScope(scope)
     ? "n.*"
     : "n.id, n.job_id, n.cleaner_id, n.tier, n.sent_at, n.reminded_at, n.response, n.response_at, n.channel";
+  // Preserve the legacy public projection; execution snapshots stay server-only.
+  const visibleNotifColumns = isAdminScope(scope)
+    ? "n.id, n.job_id, n.cleaner_id, n.tier, n.token, n.sent_at, n.reminded_at, n.response, n.response_at, n.channel, n.data_origin"
+    : notifColumns;
   const { rows: notifs } = await db.query(
-    `SELECT ${notifColumns}, cl.name AS cleaner_name, cl.phone FROM cleaning_notifs n
+    `SELECT ${notifColumns}, cl.name AS cleaner_name, cl.phone FROM (
+       SELECT ${visibleNotifColumns} FROM cleaning_notifs n
+     ) n
      JOIN cleaners cl ON cl.id = n.cleaner_id WHERE n.job_id=$1 ORDER BY n.sent_at`,
     [id]
   );
@@ -423,7 +424,11 @@ async function dispatchJob(res, jobId, scope) {
     return sendJson(res, 409, { error: "시뮬레이션 일정은 외부 배정 발송을 하지 않습니다.", data_origin: "SIMULATED" });
   }
   if (job.status !== "PENDING") return sendJson(res, 409, { error: `PENDING 상태가 아님 (현재: ${job.status})` });
-  await advanceJob(db, job, { deleteBlocker: makeBlockerDeleter() });
+  const result = await advanceJob(db, job, { deleteBlocker: makeBlockerDeleter() });
+  if (result?.ok === false) {
+    if (result.state === 'SENDING') return sendJson(res, 202, { ok: true, deliveryState: 'SENDING' });
+    return sendJson(res, 409, { ok: false, error: result.errorCode ?? 'DELIVERY_NOT_ACCEPTED', deliveryState: result.state });
+  }
   return sendJson(res, 200, { ok: true });
 }
 

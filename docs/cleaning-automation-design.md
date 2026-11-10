@@ -2,6 +2,7 @@
 
 > 작성: 2026-08-09 | 최종 확정: **2026-08-29** | 상태: **아키텍처 확정, 구현 진행 중**
 > 수정/삭제 로직은 이 문서 범위 제외 — 별도 문서로 추후 수립
+> 알림 운영 기준 보완: **2026-11-09 사용자 확인 — 앱 푸시(FCM)를 우선 사용하며 문자는 실제로 사용하지 않는다.** 문자 인터페이스·폴백 코드는 남아 있으나, 문자 설정·발송용 휴대폰 확보를 운영 반영의 필수 조건으로 삼지 않는다. 이번 명세 정정으로 폴백 코드를 제거하거나 실제 문자 발송을 활성화하지 않는다.
 
 ---
 
@@ -10,7 +11,7 @@
 | 항목 | 결정 | 비고 |
 |------|------|------|
 | 청소자 관리 UI | PROPOS 내 자체 UI + Postgres | |
-| 직원 알림 수단 | **FCM + SMS 듀얼 모드** (`_notify.js` NotificationService) | 앱 설치 시 FCM 우선, 미설치/실패 시 SMS 폴백 |
+| 직원 알림 수단 | **앱 푸시(FCM)** (`_notify.js` NotificationService) | 2026-11-09 사용자 확인. SMS는 미사용 인터페이스·기존 폴백 코드이며 운영 필수 채널이 아님 |
 | 슬롯 제어 방식 | **구글 예약 캘린더 + 블로커 이벤트** | 아래 섹션 9 참고 |
 | 선착순 보장 | 구글 예약 캘린더 슬롯 1개 (Google이 처리) + DB 조건부 UPDATE 이중 방어 | |
 | 호스트 캘린더 뷰 | Google Calendar UI (숙소별 캘린더) | 별도 PROPOS UI 불필요 |
@@ -25,7 +26,7 @@
 
 ## 1. 개요
 
-에어비앤비 체크아웃 일정을 자동 감지하고, 청소자에게 FCM 또는 SMS로 순차/동시 알림을 보내 청소를 배정하는 완전 자동화 시스템.
+에어비앤비 체크아웃 일정을 자동 감지하고, 청소자에게 앱 푸시(FCM)로 순차/동시 알림을 보내 청소를 배정하는 시스템. SMS 인터페이스는 있으나 현재 운영에서는 사용하지 않는다.
 
 **핵심 원리**: 구글 예약 캘린더를 슬롯 관리의 단일 진실 원천으로 사용. PROPOS는 체크아웃 일정에 맞춰 캘린더 슬롯을 "오픈"하고, 나머지는 구글이 처리(선착순, 청소자 캘린더 등록, 호스트 뷰).
 
@@ -44,9 +45,9 @@
 |---------|------|------|
 | 예약 감지 (즉시) | Gmail API Watch (Pub/Sub) | 에어비앤비 예약 확정 이메일 감지 |
 | 예약 파싱 | 기존 iCal 파서 | 이메일 감지 후 iCal 재폴링 트리거 |
-| 직원 알림 (FCM) | Firebase Admin SDK | Worker App 설치자. `api/cleaning/_push.js` |
-| 직원 알림 (SMS) | android-sms-gateway (Play Store) + 로컬 모드 | 앱 미설치자 또는 FCM 실패 폴백. `api/cleaning/_sms.js` |
-| 알림 채널 결정 | **NotificationService** | `api/cleaning/_notify.js` — 채널 선택/발송/기록 단일 진입점 |
+| 직원 알림 (FCM) | Firebase Admin SDK | 현재 운영 기준. Worker App 설치·등록자. `server/cleaning/_push.js` |
+| 직원 알림 (SMS) | android-sms-gateway 인터페이스 | 현재 미사용. 설정·실발송 계약 미검증이며 운영 선행 조건이 아님. `server/cleaning/_sms.js` |
+| 알림 채널 결정 | **NotificationService** | `server/cleaning/_notify.js` — 채널 선택/발송 진입점. ACT-11의 `_initialDelivery.js`가 최초 VIP 요청 접수를 기록. 운영 반영 상태는 `refactoring.md` SEC-02 기준 |
 | 슬롯 제어 | Google Calendar API (events.insert/delete) | 블로커 이벤트 생성/삭제로 예약 가능 날짜 제어 |
 | 배정 감지 | Google Calendar Webhook | 청소자 예약 완료 → 이메일로 cleaner 매핑 |
 | 거절 링크 | `proposonline.com/d/[TOKEN]` | 6자 토큰, 1회성. FCM(앱 내 버튼) + SMS(URL 클릭) 양쪽 동작 |
@@ -255,6 +256,8 @@ CREATE TABLE cleaning_notifs (
 모든 알림 발송은 `_dispatch.js`에서 채널을 직접 결정하지 않고 `_notify.js`의 `notify()` 하나만 호출한다. 채널 결정·폴백·기록은 내부에서만 처리.
 
 ### 채널 선택 로직
+
+아래 SMS 분기는 기존 코드에 남아 있는 인터페이스를 설명한다. 현재 운영에서 문자를 실제 사용하거나 FCM 실패를 SMS가 복구한다고 보장하는 기준이 아니다. 앱 등록·토큰 갱신·FCM 발송을 검증하며, SMS 설정 누락을 앱 푸시 장애의 원인으로 단정하지 않는다. [최신 확인과 범위](cleaning-notification-reliability-audit.md#act11-fcm-scope)
 
 ```
 cleaner.fcm_status = 'active' + fcm_token 있음

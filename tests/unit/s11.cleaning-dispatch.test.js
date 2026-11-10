@@ -5,6 +5,7 @@
 
 import { describe, test, mock } from "node:test";
 import assert from "node:assert/strict";
+import { installDeliveryIO } from '../helpers/cleaningDeliveryFixture.js';
 
 // ── 테스트 대상 함수 직접 import ────────────────────────────
 // BASE_URL은 환경변수 없으면 'https://www.proposonline.com'
@@ -252,18 +253,40 @@ describe("advanceJob — DB mock", () => {
 
   function makeMockDb({ propName = "테스트 숙소", cleaner = null } = {}) {
     const calls = [];
-    return {
+    let status = 'PENDING', notif;
+    const recipient = cleaner ? { active: true, tier: 'VIP_1', fcm_status: 'uninstalled', ...cleaner } : null;
+    const db = {
       _calls: calls,
       query: async (sql, params) => {
         calls.push({ sql: sql.trim().slice(0, 60), params });
 
+        // Return the rows required by the actual delivery repository. These
+        // fixtures do not decide whether sending/retrying is allowed; s109
+        // additionally executes the repository's SQL in isolated PostgreSQL.
+        if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(sql)) return { rows: [] };
+        if (sql.includes('FOR UPDATE OF j,p')) return { rows: [{ id: params[0], property_id: 'P-001', status,
+          data_origin: 'REAL', property_data_origin: 'REAL', property_name: propName,
+          checkout_at: '2026-09-10T02:00:00Z', cleaning_start_at: '2026-09-10T02:00:00Z' }] };
+        if (sql.includes('FROM cleaners WHERE id=')) return { rows: recipient ? [recipient] : [] };
+        if (sql.includes("initial_delivery_state IS NOT NULL")) return { rows: notif ? [notif] : [] };
+        if (sql.startsWith('SELECT n.id FROM cleaning_notifs')) return { rows: notif ? [{ id: notif.id }] : [] };
+        if (sql.startsWith("UPDATE cleaning_notifs SET initial_delivery_state='SENDING'")) {
+          notif = { ...notif, initial_delivery_state: 'SENDING', initial_delivery_data: JSON.parse(params[1]) };
+          return { rows: [notif] };
+        }
+        if (sql.startsWith('UPDATE cleaning_notifs SET initial_delivery_state=$3')) {
+          notif = { ...notif, initial_delivery_state: params[2], initial_accepted_at: params[4], channel: params[5],
+            initial_delivery_data: { ...notif.initial_delivery_data, ...JSON.parse(params[3]) } };
+          return { rows: [notif] };
+        }
+
         // property config
         if (sql.includes("property_cleaning_config")) {
-          return { rows: [{ name: propName }] };
+          return { rows: [{ name: propName, data_origin: 'REAL' }] };
         }
         // VIP cleaner 조회
         if (sql.includes("FROM cleaners WHERE tier=")) {
-          return { rows: cleaner ? [cleaner] : [] };
+          return { rows: recipient ? [recipient] : [] };
         }
         // 중복 발송 방지 체크
         if (sql.includes("j.status NOT IN") && sql.includes("cleaning_notifs")) {
@@ -271,15 +294,17 @@ describe("advanceJob — DB mock", () => {
         }
         // createNotif 기존 조회
         if (sql.includes("FROM cleaning_notifs WHERE job_id=")) {
-          return { rows: [] };
+          return { rows: notif ? [notif] : [] };
         }
         // createNotif INSERT
         if (sql.includes("INSERT INTO cleaning_notifs")) {
-          return { rows: [{ id: "notif-1", token: "TTTTT1" }] };
+          notif = { id: 'notif-1', token: params[3], initial_delivery_state: 'READY', initial_delivery_data: JSON.parse(params[5]) };
+          return { rows: [notif] };
         }
         // status UPDATE
         if (sql.includes("UPDATE cleaning_jobs SET status=")) {
-          return { rows: [] };
+          status = sql.includes("initial_delivery_state='ACCEPTED'") ? params[1] : params[0];
+          return { rows: [{ id: 'job', status }] };
         }
         // BULK cleaners
         if (sql.includes("FROM cleaners c") && sql.includes("tier = 'BULK'")) {
@@ -288,6 +313,8 @@ describe("advanceJob — DB mock", () => {
         return { rows: [] };
       },
     };
+    db.connect = async () => ({ query: db.query, release() {} });
+    return db;
   }
 
   test("PENDING 상태 + VIP_1 없음 → VIP_1 status 업뎃 후 재귀로 VIP_2 시도", async () => {
@@ -321,7 +348,8 @@ describe("advanceJob — DB mock", () => {
 
   // 알림 채널(FCM/SMS) 검증은 s25/s26에서 담당.
   // 여기서는 상태 머신 전환(PENDING → NOTIFYING_VIP_1)만 검증.
-  test("PENDING 상태 + VIP_1 있음 → status=NOTIFYING_VIP_1 전환", async () => {
+  test("PENDING 상태 + VIP_1 있음 → status=NOTIFYING_VIP_1 전환", async t => {
+    const io = installDeliveryIO(); t.after(() => io.restore());
     // fcm_token 없음 → sendJobPush는 false 반환 후 status 업데이트로 진행
     const cleaner = { id: "c-1", phone: "010-1111-1111", name: "김청소", tier: "VIP_1", fcm_token: null, fcm_status: "uninstalled" };
     const db = makeMockDb({ cleaner });
@@ -364,7 +392,8 @@ describe("advanceJob — DB mock", () => {
   });
 
   // SQL 이중 검증: getAvailableVip는 이제 fcm_token 없어도 phone 있으면 선발
-  test("PENDING + SMS 전용 VIP_1(fcm_token=null, phone 있음) → status=NOTIFYING_VIP_1 전환", async () => {
+  test("PENDING + SMS 전용 VIP_1(fcm_token=null, phone 있음) → status=NOTIFYING_VIP_1 전환", async t => {
+    const io = installDeliveryIO(); t.after(() => io.restore());
     const cleaner = {
       id: "c-3",
       phone: "010-3333-3333",
@@ -393,7 +422,8 @@ describe("advanceJob — DB mock", () => {
   });
 
   // SQL에서 (fcm_token IS NOT NULL OR phone IS NOT NULL) 패턴 확인
-  test("getAvailableVip 조회 SQL에 phone 조건 포함 (듀얼 모드 필터)", async () => {
+  test("getAvailableVip 조회 SQL에 phone 조건 포함 (듀얼 모드 필터)", async t => {
+    const io = installDeliveryIO(); t.after(() => io.restore());
     const cleaner = { id: "c-4", phone: "010-4444-4444", tier: "VIP_1", fcm_token: null };
     const db = makeMockDb({ cleaner });
     const job = {

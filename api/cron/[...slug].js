@@ -7,6 +7,8 @@ import { Pool } from "pg";
 import { kv } from "@vercel/kv";
 import {
   advanceJob,
+  getVipFollowupJobs,
+  recoverInitialDeliveries,
   buildSmsRemind,
   calcCleaningTimes,
   postSlack,
@@ -256,7 +258,7 @@ async function handleMonthlyClean(db, res) {
 // ── 후속 처리 크론 (30분마다) ─────────────────────────────
 
 async function handleCleaningFollowup(db, res) {
-  let advanced = 0;
+  let advanced = await recoverInitialDeliveries(db);
   let reminded = 0;
   let escalated = 0;
 
@@ -269,29 +271,19 @@ async function handleCleaningFollowup(db, res) {
   );
   for (const job of readyJobs) {
     try {
-      await advanceJob(db, job, { deleteBlocker: makeCronBlockerDeleter(db) });
-      advanced++;
+      const result = await advanceJob(db, job, { deleteBlocker: makeCronBlockerDeleter(db) });
+      if (result?.ok !== false) advanced++;
     }
     catch (e) { console.error(`[followup] PENDING advance 실패 (${job.id}):`, e.message); }
   }
 
   // VIP 타임아웃 체크 (1시간 창)
-  const { rows: vipJobs } = await db.query(
-    `SELECT j.*, n.sent_at AS notif_sent_at
-     FROM cleaning_jobs j
-     JOIN LATERAL (
-       SELECT sent_at FROM cleaning_notifs
-       WHERE job_id = j.id ORDER BY sent_at DESC LIMIT 1
-     ) n ON true
-     WHERE j.data_origin = 'REAL'
-       AND j.status IN ('NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3')
-       AND n.sent_at < NOW() - INTERVAL '1 hour'`
-  );
+  const { rows: vipJobs } = await getVipFollowupJobs(db);
 
   for (const job of vipJobs) {
     try {
-      await advanceJob(db, job);
-      advanced++;
+      const result = await advanceJob(db, job);
+      if (result?.ok !== false) advanced++;
     } catch (e) {
       console.error(`[followup] VIP advance 실패 (${job.id}):`, e.message);
     }

@@ -105,6 +105,32 @@ CREATE TABLE IF NOT EXISTS cleaning_notifs (
   channel      TEXT CHECK (channel IS NULL OR channel IN ('FCM','SMS','SMS_FALLBACK')),
   data_origin  TEXT NOT NULL DEFAULT 'REAL'
                CHECK (data_origin IN ('REAL','SIMULATED')),
+  initial_delivery_state TEXT,
+  initial_delivery_data JSONB,
+  initial_accepted_at TIMESTAMPTZ,
+  CONSTRAINT cleaning_notifs_initial_delivery_check CHECK (
+    (initial_delivery_state IS NULL AND initial_delivery_data IS NULL AND initial_accepted_at IS NULL)
+    OR (initial_delivery_state IS NOT NULL
+      AND initial_delivery_state IN ('READY','SENDING','ACCEPTED','RETRYABLE','UNKNOWN','FAILED','CANCELLED')
+      AND initial_delivery_data IS NOT NULL AND jsonb_typeof(initial_delivery_data)='object'
+      AND COALESCE(initial_delivery_data->>'kind','')='INITIAL_REQUEST'
+      AND initial_delivery_data ?& ARRAY['kind','payload','cleaner','expectedStatus','nextStatus','attempts','propertyId','checkoutAt','cleaningStartAt']
+      AND COALESCE(initial_delivery_data->>'propertyId','')<>''
+      AND (initial_delivery_data->>'checkoutAt')::timestamptz IS NOT NULL
+      AND (initial_delivery_data->>'cleaningStartAt')::timestamptz IS NOT NULL
+      AND jsonb_typeof(initial_delivery_data->'payload')='object'
+      AND jsonb_typeof(initial_delivery_data->'cleaner')='object'
+      AND jsonb_typeof(initial_delivery_data->'attempts')='number'
+      AND (initial_delivery_data->>'attempts')::integer>=0
+      AND initial_delivery_data->'cleaner' ? 'id'
+      AND (initial_delivery_data->'cleaner'->>'id')::uuid IS NOT DISTINCT FROM cleaner_id
+      AND CASE WHEN initial_delivery_state='SENDING' THEN
+        (initial_delivery_data->>'attemptId')::uuid IS NOT NULL
+        AND (initial_delivery_data->>'attemptedAt')::timestamptz IS NOT NULL ELSE true END
+      AND CASE WHEN initial_delivery_state='RETRYABLE' THEN
+        (initial_delivery_data->>'nextAttemptAt')::timestamptz IS NOT NULL ELSE true END
+      AND ((initial_delivery_state='ACCEPTED') = (initial_accepted_at IS NOT NULL)))
+  ),
   UNIQUE (job_id, cleaner_id)
 );
 

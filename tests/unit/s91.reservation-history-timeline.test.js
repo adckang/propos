@@ -163,12 +163,15 @@ describe('buildReservationHistorySegments — 겹침·경계 (코드 리뷰 반�
     assert.deepEqual(segmentsBefore(fallback, null), []);
   });
 
-  test('미래 예측도 같은 숙박 순서 함수를 쓴다 (과거·미래 규칙이 갈라지지 않게 — 소스 계약)', () => {
-    const mock = readSource('src/data/roomStateMockData.js');
-    assert.match(mock, /import \{ appendCleaningSegments, appendStayCycle, mergeOverlappingStays \} from '..\/domain\/reservationHistoryDomain\.js'/);
-    assert.match(mock, /cursor = appendStayCycle\(push, r, cursor, cleanH\);/);
-    assert.doesNotMatch(mock, /function appendCleaningSegments/);
-  });
+  test('충돌 없는 예약도 미래 예측과 예약 기록의 숙박 순서가 일치한다', () => withNow('11-04T10:00', () => {
+    const end = at('11-12T00:00');
+    const expected = buildReservationHistorySegments(stays(), end, 3)
+      .filter(segment => segment.end > at('11-04T10:00'))
+      .map(segment => ({ ...segment, start: segment.start < at('11-04T10:00') ? at('11-04T10:00') : segment.start }));
+    const future = getGanttSegments(buildLiveProperty(template, stays()), at('11-04T10:00'), end)
+      .filter(segment => segment.isFuture);
+    assert.deepEqual(rows(future), rows(expected));
+  }));
 });
 
 describe('청소가 다음 체크인을 넘길 때 / 겹친 예약 — 상태 칩과 타임라인이 같은 말을 한다 (2차 코드 리뷰 반영)', () => {
@@ -210,6 +213,91 @@ describe('청소가 다음 체크인을 넘길 때 / 겹친 예약 — 상태 �
       assert.deepEqual(property.currentState, { mainStatus: current.mainStatus, subStatus: current.subStatus }, `buildLiveProperty ${now}`);
     });
   });
+});
+
+describe('미래 청소가 다음 입실을 넘기는 경우 — 상세·리스트와 예약 기록의 경계 일치', () => {
+  const reservations = () => [
+    { uid: 'A', checkIn: at('11-09T15:00'), checkOut: at('11-10T11:00'), cleaningAt: at('11-10T12:00'), cleaningEnd: at('11-10T17:00'), cleaningStatus: 'ASSIGNED', cleanerName: '김청소' },
+    { uid: 'B', checkIn: at('11-10T15:00'), checkOut: at('11-11T11:00'), cleaningAt: at('11-11T12:00'), cleaningEnd: at('11-11T17:00') },
+    { uid: 'C', checkIn: at('11-11T15:00'), checkOut: at('11-12T11:00') },
+  ];
+  const futureViews = (property, end) => [
+    getWindowSegments(property, 24, (end - Date.now()) / 3_600_000),
+    getGanttSegments(property, new Date(Date.now() - 24 * 3_600_000), end),
+  ].map(segments => segments.filter(segment => segment.isFuture));
+
+  for (const [state, now] of [
+    ['VACANT', '11-09T10:00'],
+    ['PRE_STAY_READY', '11-09T14:10'],
+    ['OCCUPIED', '11-10T10:00'],
+    ['CLEANING', '11-10T12:30'],
+  ]) {
+    test(`${state}에서 미리 보아도 다음 두 숙박은 입실 시각에 시작한다`, () => withNow(now, () => {
+      const list = reservations();
+      const before = structuredClone(list);
+      const property = buildLiveProperty(template, list);
+      assert.equal(property.currentState.mainStatus, state);
+      const end = at('11-12T18:00');
+      const expected = buildReservationHistorySegments(list, end, 3)
+        .filter(segment => segment.end > at(now))
+        .map(segment => ({ ...segment, start: segment.start < at(now) ? at(now) : segment.start }));
+      for (const future of futureViews(property, end)) {
+        const occupied = future.filter(segment => segment.mainStatus === 'OCCUPIED');
+        for (const [checkIn, checkOut] of [['11-10T15:00', '11-11T11:00'], ['11-11T15:00', '11-12T11:00']]) {
+          assert.ok(occupied.some(segment => segment.start.getTime() === at(checkIn).getTime() && segment.end.getTime() === at(checkOut).getTime()), `${checkIn} 숙박이 누락되거나 늦게 시작됨`);
+        }
+        assertContiguous(future);
+        // 예약 기록은 첫 준비 시작 전의 상태를 추정하지 않는다. 양쪽에 근거가 있는 기간을 비교한다.
+        const commonStart = expected[0].start;
+        const comparable = future.filter(segment => segment.end > commonStart)
+          .map(segment => ({ ...segment, start: segment.start < commonStart ? commonStart : segment.start }));
+        assert.deepEqual(rows(comparable), rows(expected), '미래 표시도 같은 예약의 과거 계산과 일치');
+        const firstCleaning = future.find(segment => segment.cleaningCheckoutAt?.getTime() === at('11-10T11:00').getTime());
+        assert.ok(firstCleaning, '앞선 청소의 퇴실 연결 키 유지');
+      }
+      assert.deepEqual(list, before, '저장된 예약·청소 시각은 바꾸지 않음');
+    }));
+  }
+
+  for (const [label, cleaningAt, cleaningEnd, nextCheckIn] of [
+    ['청소 시작도 입실 뒤인 경우', '11-10T16:00', '11-10T19:00', '11-10T15:00'],
+    ['청소 종료와 입실이 같은 경우', '11-10T12:00', '11-10T15:00', '11-10T15:00'],
+    ['퇴실 직후 다음 손님 입실', '11-10T12:00', '11-10T17:00', '11-10T11:00'],
+    ['청소가 자정을 넘기는 경우', '11-10T23:00', '11-11T03:00', '11-11T01:00'],
+  ]) {
+    test(label, () => withNow('11-10T10:00', () => {
+      const list = reservations().slice(0, 2);
+      list[0] = { ...list[0], cleaningAt: at(cleaningAt), cleaningEnd: at(cleaningEnd) };
+      list[1] = { ...list[1], checkIn: at(nextCheckIn) };
+      const property = buildLiveProperty(template, list);
+      for (const future of futureViews(property, at('11-11T10:00'))) {
+        const occupied = future.find(segment => segment.mainStatus === 'OCCUPIED' && segment.start.getTime() === at(nextCheckIn).getTime());
+        assert.ok(occupied, '다음 손님의 입실 시각부터 체류');
+        assert.ok(!future.some(segment => segment.mainStatus === 'CLEANING' && segment.end > at(nextCheckIn)), '앞 청소가 입실 뒤까지 이어지지 않음');
+        assert.ok(future.every(segment => segment.end > segment.start), '길이 0 또는 음수 구간 없음');
+        assertContiguous(future);
+      }
+    }));
+  }
+
+  test('기본 청소시간도 다음 입실에서 끊고, 창 밖의 다음 입실은 화면에 그리지 않는다', () => withNow('11-10T10:00', () => {
+    const list = reservations().slice(0, 2);
+    delete list[0].cleaningAt;
+    delete list[0].cleaningEnd;
+    list[1] = { ...list[1], checkIn: at('11-10T12:00') };
+    const property = buildLiveProperty(template, list);
+    for (const future of futureViews(property, at('11-10T13:00'))) {
+      assert.deepEqual(rows(future).slice(-2), [
+        ['CLEANING', 'CLEANING_IN_PROGRESS', iso('11-10T11:00'), iso('11-10T12:00')],
+        ['OCCUPIED', 'GOOD_CONDITION', iso('11-10T12:00'), iso('11-10T13:00')],
+      ]);
+    }
+    for (const future of futureViews(property, at('11-10T11:30'))) {
+      assert.equal(future.at(-1).end.getTime(), at('11-10T11:30').getTime());
+      assert.equal(future.at(-1).mainStatus, 'CLEANING');
+      assert.ok(future.every(segment => segment.end <= at('11-10T11:30')));
+    }
+  }));
 });
 
 describe('3차 코드 리뷰 반영 — 예측도 합친 숙박, since, 입실준비 경계', () => {

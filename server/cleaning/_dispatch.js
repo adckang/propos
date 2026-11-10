@@ -4,6 +4,9 @@
  */
 
 import { notify } from "./_notify.js";
+import { createNotif, prepareInitialDelivery, maySendInitialDelivery,
+  recordInitialResult, projectAcceptedDelivery, findInitialDelivery, getInitialRecoveryJobs } from './_initialDelivery.js';
+export { createNotif, getVipFollowupJobs } from './_initialDelivery.js';
 
 const BASE_URL =
   process.env.PROPOS_BASE_URL ||
@@ -13,40 +16,6 @@ const BASE_URL =
   "https://www.proposonline.com";
 
 // ── 토큰 생성 ──────────────────────────────────────────────
-
-const TOKEN_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-
-function randomToken() {
-  let t = "";
-  for (let i = 0; i < 6; i++) t += TOKEN_CHARS[Math.floor(Math.random() * 36)];
-  return t;
-}
-
-export async function createNotif(db, { jobId, cleanerId, tier, dataOrigin = "REAL" }) {
-  // 이미 존재하면 기존 레코드 반환 (멱등성 보장, 동시 호출 방어)
-  const { rows: existing } = await db.query(
-    `SELECT id, token FROM cleaning_notifs WHERE job_id=$1 AND cleaner_id=$2`,
-    [jobId, cleanerId]
-  );
-  if (existing.length) return existing[0];
-
-  // token UNIQUE 충돌만 재시도 (최대 5회)
-  for (let i = 0; i < 5; i++) {
-    const token = randomToken();
-    try {
-      const { rows } = await db.query(
-        `INSERT INTO cleaning_notifs (job_id, cleaner_id, tier, token, data_origin)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, token`,
-        [jobId, cleanerId, tier, token, dataOrigin]
-      );
-      return rows[0];
-    } catch (e) {
-      if (e.code !== "23505") throw e;
-    }
-  }
-  throw new Error(`토큰 생성 실패 (job=${jobId}, cleaner=${cleanerId})`);
-}
 
 // sendSms, toE164 → _sms.js 로 이동 (re-export for backwards compat)
 export { sendSms, toE164 } from "./_sms.js";
@@ -120,14 +89,8 @@ export async function advanceJob(db, job, { deleteBlocker } = {}) {
 
   if (!nextStatus) return; // NOTIFYING_BULK 이후는 followup 크론이 처리
 
-  // PENDING → 첫 단계 전환 시 블로커 삭제 (슬롯 오픈)
-  if (job.status === "PENDING" && typeof deleteBlocker === "function") {
-    await deleteBlocker(job).catch((e) =>
-      console.error(`[dispatch] 블로커 삭제 실패 (${job.property_id}):`, e.message)
-    );
-  }
-
   const propCfg = await getPropertyConfig(db, job.property_id);
+  if (propCfg?.data_origin === 'SIMULATED') return { ok: false, state: 'CANCELLED', errorCode: 'DELIVERY_NOT_REAL' };
   const propertyName = propCfg?.name ?? job.property_id;
 
   if (nextStatus === "NOTIFYING_BULK") {
@@ -135,33 +98,57 @@ export async function advanceJob(db, job, { deleteBlocker } = {}) {
   }
 
   const tier = nextStatus.replace("NOTIFYING_", ""); // VIP_1 | VIP_2 | VIP_3
-  const cleaner = await getAvailableVip(db, job, tier);
+  const savedRequest = await findInitialDelivery(db, job);
+  const cleaner = savedRequest?.initial_delivery_data.cleaner ?? await getAvailableVip(db, job, tier);
 
   if (!cleaner) {
     // 해당 VIP 없거나 이미 다른 job으로 바쁨 → 다음 단계로 재귀
-    await db.query(
-      `UPDATE cleaning_jobs SET status=$1, updated_at=NOW() WHERE id=$2`,
-      [nextStatus, job.id]
+    const updated = await db.query(
+      `UPDATE cleaning_jobs SET status=$1, updated_at=NOW() WHERE id=$2 AND status=$3
+       AND checkout_at=$4 AND cleaning_start_at=$5 AND property_id=$6
+       AND data_origin='REAL' AND EXISTS (SELECT 1 FROM property_cleaning_config p
+         WHERE p.property_id=cleaning_jobs.property_id AND p.data_origin='REAL') RETURNING id`,
+      [nextStatus, job.id, job.status, job.checkout_at, job.cleaning_start_at, job.property_id]
     );
-    return advanceJob(db, { ...job, status: nextStatus });
+    if (!updated.rows.length) return { ok: false, state: 'CANCELLED', errorCode: 'JOB_STATE_CHANGED' };
+    if (job.status === 'PENDING' && typeof deleteBlocker === 'function') {
+      await deleteBlocker(job).catch(e => console.error('[dispatch] 블로커 삭제 실패:', e.code ?? e.name));
+    }
+    return advanceJob(db, { ...job, status: nextStatus }, { deleteBlocker });
   }
 
-  const notif = await createNotif(db, { jobId: job.id, cleanerId: cleaner.id, tier, dataOrigin: job.data_origin });
-  const calendarUrl = propCfg?.google_calendar_booking_url ?? `${BASE_URL}/c/${job.property_id}`;
-  console.log(`[dispatch] calendarUrl=${calendarUrl} (propCfg.url=${propCfg?.google_calendar_booking_url ?? "null"})`);
-  const dt = fmtDate(job.cleaning_start_at);
-  await notify(db, cleaner, {
+  const notif = await prepareInitialDelivery(db, { job, cleaner, nextStatus, payload: (n, current) => ({
     title: "[PROPOS] 청소 요청",
-    body: `${propertyName} ${dt}`,
-    data: { jobId: String(job.id), token: notif.token, calendarUrl, hostPhone: propCfg?.host_phone ?? "" },
-    smsText: buildSmsVip(job, propertyName, notif.token),
-    notifId: notif.id,
-  });
+    body: `${current.property_name ?? current.property_id} ${fmtDate(current.cleaning_start_at)}`,
+    data: { jobId: String(current.id), token: n.token,
+      calendarUrl: current.booking_url ?? `${BASE_URL}/c/${current.property_id}`, hostPhone: current.host_phone ?? "" },
+    smsText: buildSmsVip(current, current.property_name ?? current.property_id, n.token),
+  }) });
+  if (notif.state === 'ACCEPTED') return projectAcceptedDelivery(db, notif);
+  if (notif.state !== 'CLAIMED') return notif;
+  const saved = notif.initial_delivery_data;
+  if (job.status === 'PENDING' && typeof deleteBlocker === 'function') {
+    await deleteBlocker({ ...job, property_id: saved.propertyId, checkout_at: saved.checkoutAt,
+      cleaning_start_at: saved.cleaningStartAt }).catch(e => console.error('[dispatch] 블로커 삭제 실패:', e.code ?? e.name));
+  }
+  if (!await maySendInitialDelivery(db, notif)) {
+    return recordInitialResult(db, notif, { outcome: 'CANCELLED', channel: 'NONE', errorCode: 'JOB_OR_RECIPIENT_CHANGED' });
+  }
+  let result;
+  try { result = await notify(db, saved.cleaner, { ...saved.payload, deliveryId: notif.id, deliveryFallbackCode: saved.result?.fcmFailureCode }); }
+  catch { result = { ok: false, outcome: 'UNKNOWN', channel: 'NONE', errorCode: 'DELIVERY_OUTCOME_UNKNOWN' }; }
+  const receipt = await recordInitialResult(db, notif, result);
+  return receipt.state === 'ACCEPTED' ? projectAcceptedDelivery(db, receipt) : receipt;
+}
 
-  await db.query(
-    `UPDATE cleaning_jobs SET status=$1, updated_at=NOW() WHERE id=$2`,
-    [nextStatus, job.id]
-  );
+export async function recoverInitialDeliveries(db) {
+  const { rows } = await getInitialRecoveryJobs(db);
+  let recovered = 0;
+  for (const job of rows) {
+    try { const result = await advanceJob(db, job); if (result?.ok && result.jobAdvanced) recovered++; }
+    catch (error) { console.error('[dispatch] 최초 요청 복구 실패:', error.code ?? error.name); }
+  }
+  return recovered;
 }
 
 /** 중복 발송 방지: 해당 날짜에 이미 해당 VIP가 다른 job의 NOTIFYING 상태인지 */
@@ -223,10 +210,14 @@ async function dispatchBulk(db, job, propertyName, propCfg) {
     }
   }
 
-  await db.query(
-    `UPDATE cleaning_jobs SET status='NOTIFYING_BULK', updated_at=NOW() WHERE id=$1`,
-    [job.id]
+  const updated = await db.query(
+    `UPDATE cleaning_jobs SET status='NOTIFYING_BULK', updated_at=NOW() WHERE id=$1 AND status=$2
+      AND checkout_at=$3 AND cleaning_start_at=$4 AND property_id=$5
+      AND data_origin='REAL' AND EXISTS (SELECT 1 FROM property_cleaning_config p
+        WHERE p.property_id=cleaning_jobs.property_id AND p.data_origin='REAL') RETURNING id`,
+    [job.id, job.status, job.checkout_at, job.cleaning_start_at, job.property_id]
   );
+  return updated.rows.length ? { ok: true } : { ok: false, state: 'CANCELLED', errorCode: 'JOB_STATE_CHANGED' };
 }
 
 /** 배정 완료 시 나머지 청소자들에게 완료 알림 발송 (FCM + SMS 듀얼 모드) */

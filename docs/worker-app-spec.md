@@ -104,6 +104,9 @@ Worker App 오픈
 | POST | `/api/workers/register` | 앱 설치 시 FCM 토큰 + 전화번호 등록 |
 | POST | `/api/workers/heartbeat` | 앱 실행마다 `last_seen_at` 갱신 |
 | POST | `/api/workers/token` | FCM 토큰 갱신 시 업데이트 |
+| GET | `/api/workers/token` | 기존 토큰을 Authorization 헤더로 확인해 담당자 ID만 반환. 캐시 금지. 앱 갱신 복구용이며 운영 반영 완료 |
+
+**2026-11-09 승인 수정·11월 10일 지정폰 수신 확인:** 토큰 갱신 전 `GET /api/workers/token`에 `Authorization: Bearer <기존 토큰>`을 보내 담당자 ID를 확인한다. 앱은 그 ID와 기존/새 토큰을 먼저 보관하고 POST에 선택 항목 `worker_id`를 추가한다. 서버 저장 확인 후 로컬 토큰을 확정하며, 응답 유실 시 같은 담당자의 같은 저장인지 재확인한다. 기존 두 토큰만 보내는 POST와 정상 `{ok:true}` 응답은 유지한다. 토큰 API·앱 1.0.1은 반영됐고 지정폰 1대에서 FCM 접수·OS 알림·탭 후 앱 표시를 확인했다. 실제 기기 토큰 강제 회전·장애 주입까지 검증한 것은 아니다. [구현·회귀·한계](cleaning-notification-reliability-audit.md#act11-fcm-recovery), [실기 결과](cleaning-notification-reliability-audit.md#act11-phone-receipt)
 
 ```javascript
 // POST /api/workers/register 요청 바디
