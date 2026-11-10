@@ -38,6 +38,8 @@ import { getStatsForPeriod } from '../../src/application/reportingService.js';
 import { countCurrentStats, countPeriodEvents, getPeriodRange } from '../../src/domain/reportingDomain.js';
 import { periodToDateRange } from '../../src/domain/periodDomain.js';
 import { getOccupancyIssues } from '../../src/domain/futureReportDomain.js';
+import { requestFutureCleaningStats } from '../../src/hooks/useFutureCleaningStats.js';
+import { renderComponent } from '../helpers/renderComponent.js';
 import { PROPERTIES } from '../../src/data/roomStateMockData.js';
 import { makeStateDb } from '../helpers/stateEventsFixtures.js';
 
@@ -397,16 +399,31 @@ describe('미래 패널 → 선택 범위 전달 (R2, R3)', () => {
 describe('FutureMatrixPanel — 청소 통계 요청/렌더 (L2)', () => {
   const src = read('src/components/v2/reporting/FutureMatrixPanel.jsx');
 
-  test('선택 숙소를 property_ids 로 청소 통계 API에 전달 (회귀 가드)', () => {
-    assert.ok(src.includes("params.set('property_ids'"));
-    assert.ok(src.includes('/api/cleaning/stats?'));
+  // 2026-11-10 ACT-14: 요청 코드가 레포트·캘린더 공용 훅(useFutureCleaningStats)으로 옮겨져, 소스 글자 대신 실제 부품과
+  // 실제 요청 함수를 실행해 같은 약속(선택 숙소를 property_ids 로 보냄)을 확인한다
+  test('선택 숙소를 property_ids 로 청소 통계 API에 전달 (회귀 가드)', async () => {
+    const hookCalls = [];
+    await renderComponent('src/components/v2/reporting/FutureMatrixPanel.jsx',
+      { stats: {}, period: 'next_week', properties: [], propertyIds: ['A', 'B'] },
+      { replace: { 'src/hooks/useFutureCleaningStats.js': {
+        useFutureCleaningStats: (...args) => { hookCalls.push(args); return { data: null, loading: true, error: null }; },
+      } } });
+    assert.deepEqual(hookCalls.at(-1), ['next_week', ['A', 'B']]);
+    const urls = [];
+    await requestFutureCleaningStats('next_week', ['A', 'B'], async url => { urls.push(url); return { ok: true, json: async () => ({}) }; });
+    assert.deepEqual(urls, ['/api/cleaning/stats?period=next_week&items=true&property_ids=A%2CB']);
   });
 
   test('선택 변경 중 늦게 도착한 이전 응답이 최신 값을 덮어쓰지 않는다', () => {
-    const start = src.indexOf('useEffect(');
-    const end = src.indexOf('[period, idsKey]', start);
-    const block = src.slice(start, end);
-    assert.ok(/cancelled|AbortController|signal|ignore/i.test(block));
+    // 서버 렌더 테스트는 효과(useEffect)를 실행하지 못해 공용 훅의 소스 계약으로 확인한다
+    const hook = read('src/hooks/useFutureCleaningStats.js');
+    const start = hook.indexOf('useEffect(');
+    const end = hook.indexOf('[period, idsKey]', start);
+    const block = hook.slice(start, end);
+    assert.ok(start > 0 && end > start, '공용 훅의 요청 효과를 찾지 못함');
+    assert.match(block, /let cancelled = false/);
+    assert.match(block, /if \(!cancelled\) setState\(\{ key: requestKey, data, loading: false, error: null \}\)/);
+    assert.match(block, /return \(\) => \{ cancelled = true; \};/);
   });
 
   test('모든 훅은 조건부 early return 보다 앞에 위치 (Rules of Hooks)', () => {

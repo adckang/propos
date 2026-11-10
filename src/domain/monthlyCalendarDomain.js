@@ -42,6 +42,11 @@ function asDate(raw) {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/** 퇴실(또는 청소 작업의 퇴실) 시각이 [from, to) 안인지 — 캘린더 칸·레포트 청소 집계가 같은 기준을 쓴다 */
+function isCheckOutInRange(checkOut, from, to) {
+  return !!checkOut && checkOut >= from && checkOut < to;
+}
+
 function kstDayIndex(raw) {
   const date = asDate(raw);
   return date ? Math.floor((date.getTime() + KST_OFFSET_MS) / DAY_MS) : null;
@@ -195,15 +200,16 @@ export function buildFutureCalendarDays(properties = [], range, cleaningItems = 
     for (const reservation of (property.reservations ?? [])) {
       const checkIn = asDate(reservation.checkIn);
       const checkOut = asDate(reservation.checkOut);
+      // 퇴실은 퇴실 시각만 있으면 센다 — 레포트 퇴실예정(countWeekCheckOuts)·청소 집계(summarizeFutureCleaning)와 같은 기준
+      if (isCheckOutInRange(checkOut, from, to)) {
+        const key = toKstDateKey(checkOut);
+        if (days[key]) { days[key].checkOuts += 1; days[key].checkOutPropertyIds.push(property.id); }
+      }
       if (!checkIn || !checkOut) continue;
 
       if (checkIn >= from && checkIn < to) {
         const key = toKstDateKey(checkIn);
         if (days[key]) { days[key].checkIns += 1; days[key].checkInPropertyIds.push(property.id); }
-      }
-      if (checkOut >= from && checkOut < to) {
-        const key = toKstDateKey(checkOut);
-        if (days[key]) { days[key].checkOuts += 1; days[key].checkOutPropertyIds.push(property.id); }
       }
 
       const occupiedFrom = Math.max(fromDay, kstDayIndex(checkIn));
@@ -214,7 +220,10 @@ export function buildFutureCalendarDays(properties = [], range, cleaningItems = 
     }
   }
 
+  // 청소 작업도 퇴실과 같은 구간만 — 이번달은 구간이 "지금"부터라, 오늘 이미 지난 퇴실의 작업이 오늘 칸에 남으면
+  // 퇴실 수는 줄었는데 배정완료만 남는다
   for (const item of cleaningItems) {
+    if (!isCheckOutInRange(asDate(item.checkout_at), from, to)) continue;
     const key = toKstDateKey(item.checkout_at);
     if (days[key]) days[key].cleaningItems.push(item);
   }
@@ -262,6 +271,63 @@ export function classifyDayCleaningItems(cleaningItems = [], checkOutPropertyIds
   }
   const noJob = checkOutPropertyIds.filter(id => !coveredIds.has(id));
   return { assigned, requesting, manual, noJob };
+}
+
+/**
+ * 기간 전체의 청소 배정 현황 — 레포트 [예정](FutureMatrixPanel)이 캘린더 날짜 칸과 같은 규칙을 쓰도록,
+ * 퇴실 날짜(KST)마다 classifyDayCleaningItems 로 나눈 결과를 더한다(ACT-14). 그래서 레포트 숫자가 같은 기간의
+ * 캘린더 칸 합계와 같고, 퇴실마다 청소 작업이 하나씩 있으면 배정완료 + 미배정 = 퇴실예정이 된다.
+ *
+ * 퇴실과 청소 작업은 숙소 + 퇴실 날짜로 맞춘다 — 숙소만으로 기간 전체를 맞추면 같은 숙소의 다른 날 작업이
+ * 청소 계획 없는 퇴실을 가린다. 날짜 칸을 미리 만들지 않으므로 "다음 1시간"처럼 하루 안에서 끝나는 기간도 센다.
+ * 퇴실과 청소 작업 모두 퇴실 시각이 [from, to) 안인 것만 센다(캘린더 칸·퇴실예정과 같은 기준) — 서버가 작업을 받은
+ * 시각과 화면의 "지금"이 달라도, 이미 지난 퇴실의 작업이 배정완료에 남지 않는다.
+ *
+ * @param {Array<{ id: string, reservations?: object[] }>} properties  범위 안 숙소
+ * @param {{ from: Date|string, to: Date|string }} range  [from, to) — 퇴실예정과 같은 구간
+ * @param {object[]} cleaningItems  같은 구간의 청소 작업(/api/cleaning/stats items)
+ * @returns {{ assigned: object[], requesting: object[], manual: object[],
+ *             noJob: Array<{ property_id: string, checkout_at: string }> } | null}
+ */
+export function summarizeFutureCleaning(properties = [], range, cleaningItems = []) {
+  const from = asDate(range?.from);
+  const to = asDate(range?.to);
+  if (!from || !to || to <= from) return null;
+
+  const days = new Map();
+  const dayOf = key => {
+    if (!days.has(key)) days.set(key, { items: [], checkOutPropertyIds: [], checkOuts: [] });
+    return days.get(key);
+  };
+  for (const property of properties) {
+    for (const reservation of (property.reservations ?? [])) {
+      const checkOut = asDate(reservation.checkOut);
+      if (!isCheckOutInRange(checkOut, from, to)) continue;
+      const day = dayOf(toKstDateKey(checkOut));
+      day.checkOutPropertyIds.push(property.id);
+      day.checkOuts.push({ property_id: property.id, checkout_at: checkOut.toISOString() });
+    }
+  }
+  for (const item of cleaningItems) {
+    const checkOut = asDate(item.checkout_at);
+    if (isCheckOutInRange(checkOut, from, to)) dayOf(toKstDateKey(checkOut)).items.push(item);
+  }
+
+  const summary = { assigned: [], requesting: [], manual: [], noJob: [] };
+  for (const key of [...days.keys()].sort((a, b) => a.localeCompare(b))) {
+    const day = days.get(key);
+    const classified = classifyDayCleaningItems(day.items, day.checkOutPropertyIds);
+    summary.assigned.push(...classified.assigned);
+    summary.requesting.push(...classified.requesting);
+    summary.manual.push(...classified.manual);
+    // noJob 은 숙소 id 목록 — 그날 그 숙소의 퇴실 시각을 붙여 목록에 날짜를 보여줄 수 있게 한다
+    const unused = [...day.checkOuts];
+    for (const propertyId of classified.noJob) {
+      const index = unused.findIndex(checkOut => checkOut.property_id === propertyId);
+      summary.noJob.push(unused.splice(index, 1)[0]);
+    }
+  }
+  return summary;
 }
 
 /** 단일 숙소의 다음달 예약을 달력 막대로 그릴 구간. */

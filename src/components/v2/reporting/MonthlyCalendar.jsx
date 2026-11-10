@@ -16,8 +16,10 @@ import ViolationRow from './ViolationRow.jsx';
 import { NowCellMarker, NowLegendItem } from './NowMarker.jsx';
 import { kstNowMarker } from '../../../domain/nowMarkerDomain.js';
 import { useNow } from '../../../hooks/useNow.js';
+import { useFutureCleaningStats } from '../../../hooks/useFutureCleaningStats.js';
 
 const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+const NO_ITEMS = Object.freeze([]); // 청소 작업이 없을 때 — 렌더마다 새 배열이 되면 날짜 계산 memo 가 매번 다시 돈다
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const MULTI_ISSUE_COLOR = '#475569';
 
@@ -216,7 +218,6 @@ export default function MonthlyCalendar({
   const [selectedDay, setSelectedDay] = useState(null);
   // 미래달 칸의 입실/퇴실/청소배정 팝업 — { day: 'YYYY-MM-DD', kind } / kind: checkin|checkout|assigned|unassigned|requesting|manual
   const [futurePopup, setFuturePopup] = useState(null);
-  const [futureCleaning, setFutureCleaning] = useState({ items: [], loading: false, error: null });
   const calendar = useMemo(() => monthCells(statsPeriod), [statsPeriod]);
   // "지금" 표시 — 리스트 화면과 같은 방식. 오늘 칸이 이 달력에 보일 때만 표시
   const now = useNow();
@@ -229,7 +230,8 @@ export default function MonthlyCalendar({
   // 다음달은 전체가 미래라 항상 미래 포맷. 이번달은 "지금 이후"만 미래 포맷(다음달과 같은 방식),
   // 지금 이전은 그대로 지난달과 같은 "문제" 배지 포맷 — 칸 단위(cellIsFuture)로 나뉜다(사용자 요청).
   const needsFutureData = statsPeriod === 'this_month' || statsPeriod === 'next_month';
-  const selectedIdsKey = scopedProperties.map(property => property.id).join(',');
+  const selectedIds = useMemo(() => scopedProperties.map(property => property.id), [scopedProperties]);
+  const selectedIdsKey = selectedIds.join(',');
   // next_month: 월 전체 / this_month: 지금 ~ 월말("지금 이후"). periodToRemainingRange가 이미 이 규칙을 안다.
   // "지금"(이번달의 지난/앞으로 경계)은 칸의 지금 표시(nowMarker)와 같은 1분 시계로 다시 잡는다 — 탭을 연 순간에
   // 고정하면 그 뒤에 지나간 퇴실·청소가 지난 막대로 안 바뀌고 예측 막대로만 남는다
@@ -243,29 +245,13 @@ export default function MonthlyCalendar({
     setFuturePopup(null);
   }, [statsPeriod, selectedIdsKey]);
 
-  useEffect(() => {
-    if (!needsFutureData || noSelection) {
-      setFutureCleaning({ items: [], loading: false, error: null });
-      return;
-    }
-    let cancelled = false;
-    setFutureCleaning(current => ({ ...current, loading: true, error: null }));
-    const params = new URLSearchParams({ period: statsPeriod, items: 'true' });
-    if (selectedIdsKey) params.set('property_ids', selectedIdsKey);
-    fetch(`/api/cleaning/stats?${params}`)
-      .then(response => response.ok ? response.json() : Promise.reject(response.status))
-      .then(result => {
-        if (!cancelled) setFutureCleaning({ items: result.items ?? [], loading: false, error: null });
-      })
-      .catch(fetchError => {
-        if (!cancelled) setFutureCleaning({ items: [], loading: false, error: String(fetchError) });
-      });
-    return () => { cancelled = true; };
-  }, [needsFutureData, statsPeriod, noSelection, selectedIdsKey]);
+  // 청소 작업 목록 — 지난달·숙소 미선택이면 안 가져온다. 이번달·다음달 레포트(FutureMatrixPanel)와 같은 요청을 함께 쓴다
+  const futureCleaning = useFutureCleaningStats(needsFutureData && !noSelection ? statsPeriod : null, selectedIds);
+  const futureCleaningItems = futureCleaning.data?.items ?? NO_ITEMS;
 
   const futureDays = useMemo(
-    () => (futureRange ? buildFutureCalendarDays(scopedProperties, futureRange, futureCleaning.items) : {}),
-    [scopedProperties, futureRange, futureCleaning.items],
+    () => (futureRange ? buildFutureCalendarDays(scopedProperties, futureRange, futureCleaningItems) : {}),
+    [scopedProperties, futureRange, futureCleaningItems],
   );
 
   const stateSegments = useMemo(() => {

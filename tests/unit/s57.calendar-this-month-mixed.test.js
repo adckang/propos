@@ -17,9 +17,24 @@ import path from 'node:path';
 
 import { periodToRemainingRange } from '../../src/domain/periodDomain.js';
 import { buildFutureCalendarDays } from '../../src/domain/monthlyCalendarDomain.js';
+import { renderComponent } from '../helpers/renderComponent.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8');
+
+/** 실제 MonthlyCalendar 를 렌더링해 청소 작업 훅에 넘긴 [기간, 숙소] 를 돌려준다 */
+async function calendarCleaningRequest(statsPeriod, { noSelection = false } = {}) {
+  const calls = [];
+  const properties = [{ id: 'A', name: 'A', reservations: [] }, { id: 'B', name: 'B', reservations: [] }];
+  await renderComponent('src/components/v2/reporting/MonthlyCalendar.jsx', {
+    statsPeriod, scopedProperties: noSelection ? [] : properties, noSelection, properties,
+    onSelectProperty() {}, onNavigateToList() {},
+    monthlyCalendarState: { data: null, loading: false, error: null },
+  }, { replace: { 'src/hooks/useFutureCleaningStats.js': {
+    useFutureCleaningStats: (...args) => { calls.push(args); return { data: null, loading: false, error: null }; },
+  } } });
+  return calls.at(-1);
+}
 
 // ══════════════════════════════════════════════════════════════════════════
 // A. 전제 — periodToRemainingRange('this_month')는 "지금 ~ 월말"이라 이번달의
@@ -66,9 +81,11 @@ describe('MonthlyCalendar — 이번달은 칸 단위로 지난 날짜(문제 �
     assert.match(src, /\{!cellIsFuture\(cell\) && dayData\?\.total > 0 && \(/);
   });
 
-  test('미래 데이터 조회 기간은 statsPeriod 그대로 사용한다 (이번달이면 this_month로 요청 — next_month로 고정되지 않음)', () => {
-    assert.match(src, /const params = new URLSearchParams\(\{ period: statsPeriod, items: 'true' \}\);/);
-    assert.ok(!/period: 'next_month'/.test(src), "청소 배정 조회가 여전히 next_month로 고정돼 있음");
+  // 2026-11-10 ACT-14: 요청이 레포트와 같이 쓰는 공용 훅(useFutureCleaningStats)으로 옮겨져, 실제 캘린더를 렌더링해
+  // 훅에 넘기는 기간·숙소로 같은 약속을 확인한다
+  test('미래 데이터 조회 기간은 statsPeriod 그대로 사용한다 (이번달이면 this_month로 요청 — next_month로 고정되지 않음)', async () => {
+    assert.deepEqual(await calendarCleaningRequest('this_month'), ['this_month', ['A', 'B']]);
+    assert.deepEqual(await calendarCleaningRequest('next_month'), ['next_month', ['A', 'B']]);
   });
 
   test('미래 구간(futureRange)도 statsPeriod로 계산한다 (this_month면 지금~월말, next_month면 월 전체)', () => {
@@ -76,8 +93,9 @@ describe('MonthlyCalendar — 이번달은 칸 단위로 지난 날짜(문제 �
     assert.match(src, /\(\) => \(needsFutureData \? periodToRemainingRange\(statsPeriod, now\.getTime\(\)\) : null\)/);
   });
 
-  test('지난달은 미래 데이터를 아예 안 가져온다 (needsFutureData가 false)', () => {
-    assert.match(src, /if \(!needsFutureData \|\| noSelection\) \{/);
+  test('지난달은 미래 데이터를 아예 안 가져온다 (needsFutureData가 false) — 숙소를 안 골라도 안 가져온다', async () => {
+    assert.equal((await calendarCleaningRequest('last_month'))[0], null);
+    assert.equal((await calendarCleaningRequest('this_month', { noSelection: true }))[0], null);
   });
 
   test('숙소 하나만 선택했을 때(gantt 막대) 이번달은 지난 실제 기록 + 오늘 이후 예약 예측을 이어 붙인다', () => {

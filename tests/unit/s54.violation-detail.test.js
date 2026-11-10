@@ -601,7 +601,8 @@ describe('화면 배선 — 숙소 이름 · 구어체 한 줄 · 시간, 심각
   });
 
   test('FutureMatrixPanel — "수동배정 필요"는 배정 실패·요청 필요를 합친 같은 행, 급한 순 정렬, 눌러서 숙소로 이동', () => {
-    assert.match(panel, /buildMixedCleaningIssueRows\(/);
+    // 2026-11-10 ACT-14: 합치기·정렬은 buildManualCleaningRows(내부에서 buildMixedCleaningIssueRows)가 맡는다 — 동작은 s112
+    assert.match(panel, /buildManualCleaningRows\(/);
     assert.match(panel, /<ViolationRow/);
     assert.match(panel, /dateLabel=\{view\.when\}/);
     assert.match(panel, /onSelectRoom\?\.\(item\.property_id\)/);

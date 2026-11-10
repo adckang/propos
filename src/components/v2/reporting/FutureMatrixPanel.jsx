@@ -8,9 +8,11 @@
  *   퇴실예정 N건        ← 예약 건수는 순차적으로 한 줄씩, 청소 배정과 섞지 않음 (클릭 없음)
  *   청소배정
  *     배정완료 M건
- *     미배정 K건 ›      ← 지금처럼 컬러(0보다 크면 빨강). 누르면 팝업으로 "배정 요청중 / 수동배정 필요"를
- *                          보여준다(배정완료는 이미 위에 보이므로 팝업엔 안 넣음). 각 줄을 또 누르면
+ *     미배정 K건 ›      ← 지금처럼 컬러(0보다 크면 빨강). 누르면 팝업으로 "배정 요청중 / 수동배정 필요 /
+ *                          청소 계획 없음"을 보여준다(배정완료는 이미 위에 보이므로 팝업엔 안 넣음). 각 줄을 또 누르면
  *                          그 상태의 숙소별 상세 목록(급한 순, 신호등 색)으로 팝업이 전환된다.
+ *                          ACT-14(2026-11-10): 대시보드 캘린더 칸과 같은 규칙으로 센다 — 퇴실은 있는데 청소 작업이
+ *                          없는 건(청소 계획 없음)도 미배정이라 배정완료 + 미배정 = 퇴실예정, 캘린더 칸 합계와 같다.
  *   공실률 NN% → 누르면 팝업으로 **공실률 높은 순 숙소 리스트**(각자 자기 공실률 %, 10개씩 다음 버튼으로 넘김)를
  *     보여준다. (합계 "체류 N·공실 N" 2줄로는 어느 숙소가 비어있는지 알 수 없다는 피드백으로 목록으로 교체)
  *
@@ -27,16 +29,19 @@
  *
  * 데이터 소스:
  *   체크인/아웃, 공실/체류 → properties[].reservations (gantt와 동일)
- *   청소 배정 4분류 → /api/cleaning/stats?period=&items=true (DB, items=true 응답의 items[] 는 전체 잡을
- *   상태 그대로 담고 있어 "배정 요청중" 목록도 서버 추가 없이 여기서 상태로 걸러 쓴다)
+ *   청소 배정 → /api/cleaning/stats?period=&items=true (DB, items=true 응답의 items[] 는 전체 잡을
+ *   상태 그대로 담고 있어 "배정 요청중" 목록도 서버 추가 없이 여기서 상태로 걸러 쓴다). 개수는 items 와 예약을
+ *   퇴실 날짜로 맞춘 summarizeFutureCleaning(캘린더와 같은 규칙)으로 센다. 요청은 useFutureCleaningStats 가
+ *   대시보드 캘린더와 함께 쓴다(같은 요청은 한 번만).
  *
  * "수동배정 필요"·"배정 요청중" 상세 목록은 체크아웃이 가까운(급한) 건이 위로 오게 정렬하고, 줄마다
  * 구어체 한 줄로 무슨 상황인지 알려준다 (violationDetailDomain). 수동배정 필요는 급한 정도를 줄 색(빨강/주황)
  * 으로, 배정 요청중은 아직 문제가 아니라 회색(정보)으로만 표시한다.
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { periodToRemainingRange } from '../../../domain/periodDomain.js';
+import { useFutureCleaningStats } from '../../../hooks/useFutureCleaningStats.js';
 import {
   countWeekCheckIns,
   countWeekCheckOuts,
@@ -46,13 +51,9 @@ import {
 import DrilldownSheet from './DrilldownSheet.jsx';
 import ViolationRow from './ViolationRow.jsx';
 import { resolvePropertyName } from '../../../domain/propertyNameDomain.js';
-import { buildCleaningIssueRows, buildMixedCleaningIssueRows } from '../../../domain/violationDetailDomain.js';
-
-// 서버 SQL(api/cleaning/[...slug].js)·MonthlyCalendar.jsx 와 같은 분류 — "아직 자동으로 진행 중"인 상태들
-const REQUESTING_STATUSES = new Set([
-  'PENDING', 'NOTIFYING_VIP_1', 'NOTIFYING_VIP_2', 'NOTIFYING_VIP_3',
-  'NOTIFYING_BULK', 'BULK_REMINDED',
-]);
+import { buildCleaningIssueRows, buildManualCleaningRows, buildNoJobRows } from '../../../domain/violationDetailDomain.js';
+import { summarizeFutureCleaning } from '../../../domain/monthlyCalendarDomain.js';
+import { useNow } from '../../../hooks/useNow.js';
 
 const VACANCY_PAGE_SIZE = 10;
 
@@ -158,41 +159,34 @@ function VacancyPager({ page, totalPages, onPrev, onNext }) {
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 export default function FutureMatrixPanel({ stats, period, properties = [], propertyIds = null, isMobile = false, onSelectRoom }) {
-  const [cleaningStats,   setCleaningStats]   = useState(null);
-  const [cleaningLoading, setCleaningLoading] = useState(true);
-  const [cleaningError,   setCleaningError]   = useState(false);
   const [unassignedPopup,   setUnassignedPopup]   = useState(false); // 미배정 팝업 (배정요청중/수동배정필요)
   const [occupancyPopup,    setOccupancyPopup]    = useState(false); // 공실률 팝업 (숙소별 공실률 순위)
   const [vacancyPage,       setVacancyPage]       = useState(0);     // 공실률 팝업 — 10개 단위 페이지
   const [manualOpen,        setManualOpen]        = useState(false); // 수동배정 필요 상세 목록 팝업
   const [requestingOpen,    setRequestingOpen]    = useState(false); // 배정 요청중 상세 목록 팝업
+  const [noJobOpen,         setNoJobOpen]         = useState(false); // 청소 계획 없음 상세 목록 팝업
 
-  // 청소 배정 4분류 + 드릴다운 아이템 — DB
+  // 청소 배정 4분류 + 드릴다운 아이템 — DB. 대시보드 캘린더와 같은 요청을 함께 쓴다(useFutureCleaningStats)
   // propertyIds: null=전체, [...]= 선택 숙소 필터
-  const idsKey = Array.isArray(propertyIds) ? propertyIds.join(',') : null;
-  useEffect(() => {
-    if (!period) return;
-    let cancelled = false; // 선택이 빠르게 바뀔 때 늦게 도착한 이전 응답이 최신 값을 덮지 않도록
-    setCleaningLoading(true);
-    setCleaningError(false);
-    const params = new URLSearchParams({ period, items: 'true' });
-    if (idsKey) params.set('property_ids', idsKey);
-    fetch(`/api/cleaning/stats?${params}`)
-      .then(r => r.ok ? r.json() : Promise.reject(r.status))
-      .then(d => { if (cancelled) return; setCleaningStats(d); setCleaningLoading(false); })
-      .catch(() => { if (cancelled) return; setCleaningError(true); setCleaningLoading(false); });
-    return () => { cancelled = true; };
-  }, [period, idsKey]);
+  const { data: cleaningStats, loading: cleaningLoading, error: cleaningError } = useFutureCleaningStats(period, propertyIds);
 
   // 예정 구간 — 미래 기간은 기간 전체, 진행 중 기간(이번 주·이번 달)은 "지금 ~ 기간 끝".
-  // 지금이 하한이라 렌더마다 갱신 (지난 체크인이 [완료]와 [예정]에 이중으로 잡히지 않게)
-  const range  = periodToRemainingRange(period);
+  // 지금이 하한이라 시계를 따라 갱신 (지난 체크인이 [완료]와 [예정]에 이중으로 잡히지 않게). 캘린더와 같은 1분 시계 —
+  // 렌더마다 Date.now() 를 다시 읽으면 아래 집계 memo 가 매번 다시 돌고, 캘린더와 "지금"이 몇 초씩 달라진다
+  const now    = useNow();
+  const range  = useMemo(() => periodToRemainingRange(period, now.getTime()), [period, now]);
   const fromMs = range?.from.getTime();
   const toMs   = range?.to.getTime();
 
   // 체크인 / 체크아웃 예정 — properties[].reservations 직접 계산
   const checkIns  = useMemo(() => range ? countWeekCheckIns(properties,  range.from, range.to) : 0, [properties, fromMs, toMs]); // eslint-disable-line react-hooks/exhaustive-deps
   const checkOuts = useMemo(() => range ? countWeekCheckOuts(properties, range.from, range.to) : 0, [properties, fromMs, toMs]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 청소 배정 — 대시보드 캘린더 칸과 같은 규칙(퇴실 날짜마다 나눠 더함). 청소 작업이 없는 퇴실도 미배정에 든다(ACT-14)
+  const cleaningPlan = useMemo(() => (range && Array.isArray(cleaningStats?.items)
+    ? summarizeFutureCleaning(properties, range, cleaningStats.items)
+    : null),
+  [properties, fromMs, toMs, cleaningStats]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 공실/체류 예측 — properties[].reservations 직접 계산
   const forecast = useMemo(() => range
@@ -209,33 +203,29 @@ export default function FutureMatrixPanel({ stats, period, properties = [], prop
   const vacancyPageItems  = vacancyList.slice(vacancyPage * VACANCY_PAGE_SIZE, vacancyPage * VACANCY_PAGE_SIZE + VACANCY_PAGE_SIZE);
 
   // 수동배정 필요 상세 목록 — 배정 실패 + 배정 요청 필요를 하나로 합쳐 급한 순 정렬. 팝업이 열려 있을 때만 계산.
-  const manualRows = useMemo(() => {
-    if (!manualOpen) return [];
-    const entries = [
-      ...(cleaningStats?.failedItems ?? []).map(item => ({ kind: 'failed', item })),
-      ...(cleaningStats?.needsRequestItems ?? []).map(item => ({ kind: 'needsRequest', item })),
-    ];
-    return buildMixedCleaningIssueRows(entries, Date.now());
-  }, [manualOpen, cleaningStats]);
+  // 목록은 개수와 같은 집계(cleaningPlan.manual)에서 만들고, 문장에 쓰는 요청·거절 인원·취소 시각은 서버 실패·취소 목록에서 붙인다
+  const manualRows = useMemo(() => (manualOpen
+    ? buildManualCleaningRows(cleaningPlan?.manual, [...(cleaningStats?.failedItems ?? []), ...(cleaningStats?.needsRequestItems ?? [])], Date.now())
+    : []), [manualOpen, cleaningPlan, cleaningStats]);
 
-  // 배정 요청중 상세 목록 — items(전체 잡)에서 진행 중 상태만 걸러서 사용. 팝업이 열려 있을 때만 계산.
-  const requestingRows = useMemo(() => {
-    if (!requestingOpen) return [];
-    const items = (cleaningStats?.items ?? []).filter(item => REQUESTING_STATUSES.has(item.status));
-    return buildCleaningIssueRows('requesting', items, Date.now());
-  }, [requestingOpen, cleaningStats]);
+  // 배정 요청중 상세 목록 — 개수와 같은 집계(cleaningPlan.requesting)에서 만든다(서버 추가 호출 없음). 팝업이 열려 있을 때만 계산.
+  const requestingRows = useMemo(() => (requestingOpen
+    ? buildCleaningIssueRows('requesting', cleaningPlan?.requesting ?? [], Date.now())
+    : []), [requestingOpen, cleaningPlan]);
+
+  // 청소 계획 없음 상세 목록 — 퇴실은 있는데 청소 작업이 없는 건. 팝업이 열려 있을 때만 계산.
+  const noJobRows = useMemo(() => (noJobOpen ? buildNoJobRows(cleaningPlan?.noJob) : []), [noJobOpen, cleaningPlan]);
 
   // 훅 호출이 모두 끝난 뒤에만 조건부 return (Rules of Hooks)
   if (!stats) return null;
 
-  // 청소 배정 4분류 값 — "배정완료" vs 그 나머지(="미배정" = 배정요청중 + 수동배정 필요)로 다시 묶는다
-  const csAssigned   = cleaningStats?.assigned    ?? null;
-  const csRequesting = cleaningStats?.requesting  ?? null;
-  const csNeedsReq   = cleaningStats?.needsRequest ?? null;
-  const csFailed     = cleaningStats?.failed      ?? null;
-  const cleaningReady = !cleaningLoading && !cleaningError && csAssigned != null;
-  const csManual     = cleaningReady ? (csNeedsReq ?? 0) + (csFailed ?? 0) : null;       // 수동배정 필요 (실패+재요청)
-  const csUnassigned = cleaningReady ? (csManual ?? 0) + (csRequesting ?? 0) : null;      // 미배정 전체
+  // 청소 배정 값 — "배정완료" vs 그 나머지(="미배정" = 배정요청중 + 수동배정 필요 + 청소 계획 없음)로 다시 묶는다
+  const cleaningReady = !cleaningLoading && !cleaningError && cleaningPlan != null;
+  const csAssigned   = cleaningReady ? cleaningPlan.assigned.length   : null;
+  const csRequesting = cleaningReady ? cleaningPlan.requesting.length : null;
+  const csManual     = cleaningReady ? cleaningPlan.manual.length     : null;  // 수동배정 필요 (실패+재요청)
+  const csNoJob      = cleaningReady ? cleaningPlan.noJob.length      : null;  // 청소 계획 없음 (퇴실은 있는데 청소 작업 없음)
+  const csUnassigned = cleaningReady ? csRequesting + csManual + csNoJob : null; // 미배정 전체
 
   const fmtCleaning = (val) => {
     if (cleaningLoading) return '—';
@@ -247,6 +237,7 @@ export default function FutureMatrixPanel({ stats, period, properties = [], prop
   const unassignedClickable = cleaningReady && (csUnassigned ?? 0) > 0;
   const manualClickable     = cleaningReady && (csManual ?? 0) > 0;
   const requestingClickable = cleaningReady && (csRequesting ?? 0) > 0;
+  const noJobClickable      = cleaningReady && (csNoJob ?? 0) > 0;
 
   // 공실률 — 기간 전체 박수 기준 (기존 "공실 예정" 줄의 %)
   const vacancyPct = forecast ? Math.round(forecast.vacancyRate * 100) : null;
@@ -264,7 +255,7 @@ export default function FutureMatrixPanel({ stats, period, properties = [], prop
 
         <div style={DIVIDER} />
 
-        {/* 청소배정 — 퇴실예정과는 다른 숫자(체크아웃엔 아직 청소 잡이 안 만들어진 경우도 있음). 별도 카운트 */}
+        {/* 청소배정 — 퇴실예정과 따로 센다. 청소 작업이 없는 퇴실은 미배정(청소 계획 없음)에 든다 */}
         <div style={SECTION_HDR}>청소배정</div>
         <Row label="배정완료" value={fmtCleaning(csAssigned)} />
         <Row
@@ -287,13 +278,15 @@ export default function FutureMatrixPanel({ stats, period, properties = [], prop
         />
       </div>
 
-      {/* 미배정 팝업 — 배정 요청중 / 수동배정 필요 (배정완료는 이미 위에 보이므로 여기 안 넣음) */}
+      {/* 미배정 팝업 — 배정 요청중 / 수동배정 필요 / 청소 계획 없음 (캘린더 칸의 미배정 팝업과 같은 세 줄,
+          배정완료는 이미 위에 보이므로 여기 안 넣음) */}
       {unassignedPopup && (
         <DrilldownSheet
           metricLabel="미배정"
           staticItems={[
-            { key: 'requesting', label: '배정 요청중',  value: fmtCleaning(csRequesting), clickable: requestingClickable },
-            { key: 'manual',     label: '수동배정 필요', value: fmtCleaning(csManual), red: manualClickable, clickable: manualClickable },
+            { key: 'requesting', label: '배정 요청중',   value: fmtCleaning(csRequesting), clickable: requestingClickable },
+            { key: 'manual',     label: '수동배정 필요',  value: fmtCleaning(csManual), red: manualClickable, clickable: manualClickable },
+            { key: 'nojob',      label: '청소 계획 없음', value: fmtCleaning(csNoJob),  red: noJobClickable,  clickable: noJobClickable },
           ]}
           renderItem={(row) => (
             <StatRow
@@ -304,6 +297,7 @@ export default function FutureMatrixPanel({ stats, period, properties = [], prop
               onClick={row.clickable ? () => {
                 setUnassignedPopup(false);
                 if (row.key === 'requesting') setRequestingOpen(true);
+                else if (row.key === 'nojob') setNoJobOpen(true);
                 else setManualOpen(true);
               } : undefined}
             />
@@ -389,6 +383,29 @@ export default function FutureMatrixPanel({ stats, period, properties = [], prop
           emptyMessage="해당 건 없음"
           emptyIcon="✅"
           onClose={() => setRequestingOpen(false)}
+        />
+      )}
+
+      {/* 청소 계획 없음 상세 목록 팝업 — 숙소별, 퇴실이 가까운 순 (캘린더 목록과 같은 문구 + 퇴실 시각) */}
+      {noJobOpen && (
+        <DrilldownSheet
+          metricLabel="청소 계획 없음"
+          staticItems={noJobRows}
+          renderItem={({ item, view }) => (
+            <ViolationRow
+              key={`${item.property_id}-${item.checkout_at}`}
+              name={resolvePropertyName(properties, item.property_id)}
+              view={view}
+              dateLabel={view.when}
+              onClick={() => {
+                setNoJobOpen(false);
+                onSelectRoom?.(item.property_id);
+              }}
+            />
+          )}
+          emptyMessage="해당 건 없음"
+          emptyIcon="✅"
+          onClose={() => setNoJobOpen(false)}
         />
       )}
     </>

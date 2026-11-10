@@ -3,6 +3,8 @@ import { STATE_META } from '../../data/roomStateMockData.js';
 import { useMobile } from '../../hooks/useMobile.js';
 import { useMonthlyCalendar } from '../../hooks/useMonthlyCalendar.js';
 import { usePropertySelection } from '../../hooks/usePropertySelection.js';
+import { FutureCleaningProvider } from '../../hooks/useFutureCleaningStats.js';
+import { describePeriod } from '../../domain/periodDomain.js';
 import PeriodReport from './reporting/PeriodReport.jsx';
 import MonthlyViewFilter from './reporting/MonthlyViewFilter.jsx';
 import PropertyMultiSelectDropdown from './reporting/PropertyMultiSelectDropdown.jsx';
@@ -32,6 +34,8 @@ export default function MonthlyView({ onSelectStatus, onNavigateToList, onSelect
   }
 
   const monthlyCalendarState = useMonthlyCalendar(noSelection ? null : statsPeriod, statsPropertyIds);
+  // 앞으로 할 청소가 있는 달(이번달·다음달)만 청소 작업 목록을 받는다 — 지난달은 레포트·캘린더 모두 쓰지 않는다
+  const futureCleaningPeriod = !noSelection && describePeriod(statsPeriod)?.tense !== 'past' ? statsPeriod : null;
 
   const unassignedCleaningCount = properties.reduce((count, property) => count + (property.reservations || []).filter(
     reservation => reservation.checkIn > now && reservation.cleaningStatus === 'UNASSIGNED'
@@ -116,12 +120,15 @@ export default function MonthlyView({ onSelectStatus, onNavigateToList, onSelect
       {/* 네비게이터를 레포트 패널 위로 — ListView(D-024)와 같은 이유: 레포트 패널이 바로 아래
           컴포넌트(숙소 선택 드롭다운을 거쳐 캘린더)와 더 가까워지도록 순서를 바꿈 */}
       <MonthlyViewFilter statsPeriod={statsPeriod} onPeriodChange={setStatsPeriod} isMobile={isMobile} />
-      {/* 월간 레포트 — 리스트뷰·숙소 상세와 같은 PeriodReport. 요약 배너는 아래 캘린더 로딩도 같이 기다린다 */}
-      <div data-testid="selected-property-report">
-        <PeriodReport period={statsPeriod} properties={properties} {...selection.reportScope} onSelectProperty={onSelectProperty} extraLoading={monthlyCalendarState.loading} isMobile={isMobile} />
-      </div>
-      <PropertyMultiSelectDropdown properties={properties} selectedRooms={selectedRooms} setSelectedRooms={setSelectedRooms} scope={scope} isMobile={isMobile} />
-      <MonthlyCalendar statsPeriod={statsPeriod} scopedProperties={scopedProperties} noSelection={noSelection} properties={properties} onSelectProperty={onSelectProperty} onNavigateToList={onNavigateToList} isMobile={isMobile} monthlyCalendarState={monthlyCalendarState} />
+      {/* 이번달·다음달 청소 작업 목록은 한 번 받아 레포트 [예정]과 캘린더 칸이 같이 쓴다(ACT-14) */}
+      <FutureCleaningProvider period={futureCleaningPeriod} propertyIds={statsPropertyIds}>
+        {/* 월간 레포트 — 리스트뷰·숙소 상세와 같은 PeriodReport. 요약 배너는 아래 캘린더 로딩도 같이 기다린다 */}
+        <div data-testid="selected-property-report">
+          <PeriodReport period={statsPeriod} properties={properties} {...selection.reportScope} onSelectProperty={onSelectProperty} extraLoading={monthlyCalendarState.loading} isMobile={isMobile} />
+        </div>
+        <PropertyMultiSelectDropdown properties={properties} selectedRooms={selectedRooms} setSelectedRooms={setSelectedRooms} scope={scope} isMobile={isMobile} />
+        <MonthlyCalendar statsPeriod={statsPeriod} scopedProperties={scopedProperties} noSelection={noSelection} properties={properties} onSelectProperty={onSelectProperty} onNavigateToList={onNavigateToList} isMobile={isMobile} monthlyCalendarState={monthlyCalendarState} />
+      </FutureCleaningProvider>
     </div>
   );
 }

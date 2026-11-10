@@ -168,8 +168,11 @@ describe('FutureMatrixPanel — 예약은 순차적으로, 청소배정은 완�
   });
 
   test('배정 요청중 목록은 items 중 진행 중 상태만 걸러 쓴다 (서버 추가 호출 없음)', () => {
-    assert.match(src, /REQUESTING_STATUSES\.has\(item\.status\)/);
-    assert.match(src, /buildCleaningIssueRows\('requesting', items, Date\.now\(\)\)/);
+    // 2026-11-10 ACT-14: 진행 중 상태 분류를 레포트가 따로 들고 있지 않고, 개수와 같은 집계(summarizeFutureCleaning
+    // → classifyDayCleaningItems, 캘린더와 같은 분류)의 requesting 으로 목록을 만든다 — 개수와 목록이 갈라지지 않게
+    assert.match(src, /buildCleaningIssueRows\('requesting', cleaningPlan\?\.requesting \?\? \[\], Date\.now\(\)\)/);
+    assert.ok(!/REQUESTING_STATUSES/.test(src), '레포트가 진행 중 상태 목록 사본을 들고 있음');
+    assert.ok(!/fetch\(/.test(src), '레포트 패널이 직접 서버를 부름');
   });
 
   test('미배정 팝업에서 수동배정 필요를 누르면 그 팝업을 닫고 숙소별 상세 목록 팝업을 연다', () => {
@@ -177,8 +180,9 @@ describe('FutureMatrixPanel — 예약은 순차적으로, 청소배정은 완�
     assert.match(src, /manualOpen && \(/);
     assert.match(src, /metricLabel="수동배정 필요"/);
     assert.match(src, /staticItems=\{manualRows\}/);
-    assert.match(src, /kind: 'failed', item/);
-    assert.match(src, /kind: 'needsRequest', item/);
+    // 2026-11-10 ACT-14: 실패·재요청을 한 목록으로 합치는 일은 도메인 함수 buildManualCleaningRows 가 맡는다
+    // (개수와 같은 집계에서 만들고 실패 인원·취소 시각을 붙인다 — 동작은 s112 에서 실제 함수로 확인)
+    assert.match(src, /buildManualCleaningRows\(cleaningPlan\?\.manual, /);
   });
 
   test('공실률 한 줄 — 헤드라인 % 값은 그대로, 누르면 페이지를 0으로 되돌리고 팝업을 연다', () => {

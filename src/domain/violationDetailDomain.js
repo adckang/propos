@@ -308,6 +308,32 @@ function describeRequesting(item) {
   return REQUESTING_STAGE_TEXT[item?.status] ?? '청소 배정을 요청하고 응답을 기다리고 있어요';
 }
 
+/**
+ * "수동배정 필요" 목록 행 — 개수와 같은 작업 목록(summarizeFutureCleaning 의 manual)에서 만든다. 문장에 쓰는
+ * 요청·거절 인원(배정 실패)·취소 시각(배정 요청 필요)은 전체 작업 목록에 없어, 서버의 실패·취소 목록에서 같은
+ * 작업(숙소 + 퇴실 시각)을 찾아 붙인다. 못 찾으면 상태만으로 문장을 만든다.
+ */
+export function buildManualCleaningRows(manualItems, detailItems = [], now = Date.now()) {
+  const keyOf = item => `${item.property_id}|${item.checkout_at}`;
+  const detail = new Map((detailItems ?? []).map(item => [keyOf(item), item]));
+  const entries = (manualItems ?? []).map(item => ({
+    kind: item.status === 'CANCELLED' ? 'needsRequest' : 'failed',
+    item: detail.get(keyOf(item)) ?? item,
+  }));
+  return buildMixedCleaningIssueRows(entries, now);
+}
+
+/**
+ * "청소 계획 없음" 목록 행 — 퇴실은 있는데 청소 작업이 아직 없는 건(summarizeFutureCleaning 의 noJob).
+ * 대시보드 캘린더의 같은 목록과 같은 문구를 쓰고, 기간 레포트는 여러 날을 담으므로 퇴실 시각을 함께 보여준다.
+ * 등급을 나눌 근거가 없어 색은 중립(info), 퇴실이 가까운 순.
+ */
+export function buildNoJobRows(entries) {
+  return (entries ?? [])
+    .map(item => ({ item, view: { severity: SEVERITY.INFO, text: '청소 잡 미생성', when: formatKstDayTime(item.checkout_at) } }))
+    .sort((a, b) => (toMs(a.item.checkout_at) ?? Infinity) - (toMs(b.item.checkout_at) ?? Infinity));
+}
+
 /** 청소 배정 문제 목록 행 — 체크아웃이 가까운 순 */
 export function buildCleaningIssueRows(kind, items, now = Date.now()) {
   const rows = (items ?? []).map(item => ({ item, view: describeCleaningIssue(kind, item, now) }));
