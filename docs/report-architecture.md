@@ -423,6 +423,15 @@ iCal 마지막 동기화: N분 전 ✅ / ⚠ N시간 전 (오래된 경우 강�
 > 두 Scope 사이는 "숙소 선택" 액션으로만 전환된다.
 > ListView 안에서 H 단위로 드릴다운하지 않는다.
 
+<a id="summary-noshow-policy"></a>
+
+### 요약의 노쇼 안내 기준 · 2026-11-10 사용자 확정
+
+- **지난 모든 기간**(지난 1시간·어제·며칠 전·지난주·몇 주 전·지난달)에서 `noShowSuspected > 0`이면 기존 문구 `노쇼 의심 N건 확인이 필요해요.`를 요약 뒤에 한 번 표시한다. 0건이거나 NOW·ACTIVE·FUTURE이면 표시하지 않는다. All/Single-Property와 명시적 DEMO에 같은 기준을 적용한다.
+- 이 결정은 표시 범위만 바꾼다. 기존 집계·확인 상태 포함 기준·실패 건수·안심지수 분모를 바꾸거나 SOFT 이벤트를 실제 실패로 재분류하지 않는다.
+- 공통 표시 함수는 `src/domain/reportSummaryDomain.js`의 `appendPastNoShowNotice`다. 운영과 DEMO가 같은 함수를 호출하며 DB·외부 I/O 의존성은 없다.
+- 명시적 DEMO의 예정 요약도 같은 응답의 `stats.checkIns`를 그대로 사용한다. 숙소 선택 범위와 기간별 기존 문장 형식은 유지하며, 요약용 입실 건수를 독립 계산하지 않는다. 기본 HYBRID·REAL/SIMULATED 필터·fixture 저장 방식은 변경하지 않는다.
+
 ---
 
 ## 6. Analysis Layer (A-Layer)

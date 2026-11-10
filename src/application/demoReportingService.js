@@ -15,6 +15,7 @@ import {
   periodToRemainingRange,
 } from '../domain/periodDomain.js';
 import { summarizeOperationalMetrics } from '../domain/operationalMetricsDomain.js';
+import { appendPastNoShowNotice } from '../domain/reportSummaryDomain.js';
 import { buildMonthlyInsights, buildWeeklyInsights } from '../domain/insightDomain.js';
 import { toKstDateKey } from '../domain/monthlyCalendarDomain.js';
 
@@ -209,7 +210,7 @@ export function getDemoStats(period, { propertyIds = null, now = new Date() } = 
     : insightUnit === 'week'
       ? demoWeeklyInsights(period, now.getTime(), propertyIds)
       : undefined;
-  return { period, stats, summary: summary ?? '', ...(insights ? { insights } : {}), dataProfile: 'demo' };
+  return { period, stats, summary: appendPastNoShowNotice(period, stats, summary ?? ''), ...(insights ? { insights } : {}), dataProfile: 'demo' };
 }
 
 export function getDemoMonthlyCalendar(period, { propertyIds = null, now = new Date() } = {}) {

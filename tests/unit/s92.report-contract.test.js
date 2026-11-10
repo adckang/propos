@@ -9,7 +9,8 @@
  *   D. 화면 연결: 리스트뷰(주/일)·대시보드(월)·숙소 상세(일)가 레포트에 같은 숙소 범위·같은 요약 규칙·
  *      같은 "숙소 누르면 그 날짜로 이동" 동작을 넘기는지 — 실제 컴포넌트를 렌더링해서 확인.
  *
- * { todo } 로 표시한 테스트 = 지금은 틀려 있고 레포트 일원화 단계에서 고칠 것(실패해도 전체는 통과, 고치면 todo 해제).
+ * 기존 TODO 2개는 2026-11-10 사용자의 "지난 모든 기간에 같은 안내" 결정 후
+ * 수정 전 실패를 재현하고 일반 회귀로 전환했다. 실패를 허용하는 TODO는 남기지 않는다.
  */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -221,12 +222,12 @@ const NOSHOW = ' 노쇼 의심 1건 확인이 필요해요.';
 
 // [기간, OPS 문장, SHALLOW 문장, QUIET 문장]
 const SUMMARIES = [
-  ['last_hour',     '지난 1시간 보통이에요 (실패 10건)', '지난 1시간 완벽해요 (실패 0건)', '지난 1시간 완벽해요 (실패 0건)'],
+  ['last_hour',     `지난 1시간 보통이에요 (실패 10건)${NOSHOW}`, `지난 1시간 완벽해요 (실패 0건)${NOSHOW}`, '지난 1시간 완벽해요 (실패 0건)'],
   ['yesterday',     `어제 보통이에요 (실패 10건)${NOSHOW}`, `어제 완벽해요 (실패 0건)${NOSHOW}`, '어제 완벽해요 (실패 0건)'],
   ['days_ago_5',    `5일 전 보통이에요 (실패 10건)${NOSHOW}`, `5일 전 완벽해요 (실패 0건)${NOSHOW}`, '5일 전 완벽해요 (실패 0건)'],
   ['last_week',     `지난주 보통이에요 (실패 10건)${NOSHOW}`, `지난주 완벽해요 (실패 0건)${NOSHOW}`, '지난주 완벽해요 (실패 0건)'],
   ['weeks_ago_2',   `2주 전 보통이에요 (실패 10건)${NOSHOW}`, `2주 전 완벽해요 (실패 0건)${NOSHOW}`, '2주 전 완벽해요 (실패 0건)'],
-  ['last_month',    '지난달 보통이에요 (실패 10건)', '지난달 완벽해요 (실패 0건)', '지난달 완벽해요 (실패 0건)'],
+  ['last_month',    `지난달 보통이에요 (실패 10건)${NOSHOW}`, `지난달 완벽해요 (실패 0건)${NOSHOW}`, '지난달 완벽해요 (실패 0건)'],
   ['this_week',     '이번 주 보통이에요 (실패 10건)', '이번 주 완벽해요 (실패 0건)', '이번 주 완벽해요 (실패 0건)'],
   ['this_month',    '이번 달 보통이에요 (실패 10건)', '이번 달 완벽해요 (실패 0건)', '이번 달 완벽해요 (실패 0건)'],
   ['next_hour',     '1시간 내 체크인 14건 예정이에요.', '1시간 내 체크인 3건 예정이에요.', '1시간 내 체크인 3건 예정이에요.'],
@@ -258,10 +259,10 @@ describe('C. 요약 문장 — 모든 기간의 정확한 문장', () => {
     assert.equal(generateSummary('bogus', OPS), '');
   });
 
-  test('시제 공통 규칙: 지난 기간이면 단위와 상관없이 노쇼 의심 안내가 붙는다 (지금은 지난달만 빠짐)',
-    { todo: '3단계: 요약 문장 일원화' }, () => {
-      for (const period of ['yesterday', 'last_week', 'weeks_ago_2', 'last_month']) {
+  test('승인한 공통 규칙: 지난 모든 기간에 같은 노쇼 의심 안내를 한 번 붙인다', () => {
+      for (const period of ['last_hour', 'yesterday', 'days_ago_5', 'last_week', 'weeks_ago_2', 'last_month']) {
         assert.ok(generateSummary(period, OPS).endsWith(NOSHOW), period);
+        assert.equal(generateSummary(period, OPS).split(NOSHOW).length - 1, 1, period);
       }
     });
 
@@ -271,8 +272,8 @@ describe('C. 요약 문장 — 모든 기간의 정확한 문장', () => {
     }
   });
 
-  test('데모 요약도 운영과 같은 규칙으로 만든다 (지금은 데모가 따로 만든 문장)', { todo: '3단계: 요약 문장 일원화' }, () => {
-    for (const period of ['last_week', 'last_month', 'this_week', 'yesterday']) {
+  test('DEMO도 지난 기간 노쇼 안내와 운영 지표 요약의 공통 규칙을 따른다', () => {
+    for (const period of ['last_hour', 'yesterday', 'days_ago_5', 'last_week', 'weeks_ago_2', 'last_month', 'this_week']) {
       const demo = getDemoStats(period, { now: NOW });
       assert.equal(demo.summary, generateSummary(period, demo.stats), period);
     }
