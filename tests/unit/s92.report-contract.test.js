@@ -279,6 +279,25 @@ describe('C. 요약 문장 — 모든 기간의 정확한 문장', () => {
   });
 });
 
+describe('명시적 DEMO의 예정 요약 — 같은 응답의 입실 통계값 사용', () => {
+  for (const [scope, propertyIds] of [
+    ['전체', null],
+    ['일부 선택', PROPERTIES.slice(0, 3).map(property => property.id)],
+    ['선택 없음', []],
+  ]) {
+    for (const period of ['next_hour', 'tomorrow', 'next_week']) {
+      test(`${scope} / ${period}: 통계와 요약의 입실 건수가 일치한다`, () => {
+        const result = getDemoStats(period, { propertyIds, now: NOW });
+        const matched = result.summary.match(/체크인 (\d+)건/);
+        assert.ok(matched, '기존 예정 문장 형식 유지');
+        assert.equal(Number(matched[1]), result.stats.checkIns, '요약에 독립적으로 만든 입실 건수를 사용하지 않음');
+        assert.equal(result.dataProfile, 'demo');
+        assert.ok(result.summary.includes('예정이에요.'));
+      });
+    }
+  }
+});
+
 // ── D. 화면 연결 — 세 화면이 레포트에 같은 규칙으로 연결되는가 ────────────
 const REPORT_PANEL = 'src/components/v2/reporting/ReportPanel.jsx';
 const SUMMARY_BANNER = 'src/components/v2/reporting/SummaryBanner.jsx';

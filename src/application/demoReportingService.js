@@ -153,7 +153,7 @@ function demoWeeklyInsights(period, nowMs, selectedIds) {
 }
 
 export function getDemoStats(period, { propertyIds = null, now = new Date() } = {}) {
-  const { rooms, scale, scaleAll } = makeDemoScope(propertyIds);
+  const { rooms, scaleAll } = makeDemoScope(propertyIds);
   const currentStats = countCurrentStats(rooms.map(({ property }) => property.currentState));
   const pastStats = scaleAll({
     checkIns: 14, checkOuts: 12, anomalies: 3, energyWaste: 1,
@@ -177,13 +177,6 @@ export function getDemoStats(period, { propertyIds = null, now = new Date() } = 
     checkIns: 5,
   });
   const selectionLabel = propertyIds ? `${rooms.length}개 숙소` : '전체 숙소';
-  const summaries = {
-    now: `현재 ${selectionLabel} 중 ${currentStats.anomalyCount}개 이상 징후가 확인됐어요.`,
-    today: `현재 ${selectionLabel} 중 ${currentStats.anomalyCount}개 이상 징후가 확인됐어요.`,
-    next_week: `다음 주 ${selectionLabel} 체크인 ${scale(8)}건 예정이에요.`,
-    tomorrow: `내일 ${selectionLabel} 체크인 ${scale(8)}건 예정이에요.`,
-    next_hour: `1시간 내 ${selectionLabel} 체크인 ${scale(1)}건 예정이에요.`,
-  };
   const descriptor = describePeriod(period);
   const isLive = ['now', 'today'].includes(period);
   const isActive = descriptor?.tense === 'active' && !isLive;
@@ -193,6 +186,13 @@ export function getDemoStats(period, { propertyIds = null, now = new Date() } = 
   const stats = descriptor?.unit === 'month' && !isFuture
     ? alignMonthlyStatsWithIssues(baseStats, monthIssues)
     : baseStats;
+  const summaries = {
+    now: `현재 ${selectionLabel} 중 ${currentStats.anomalyCount}개 이상 징후가 확인됐어요.`,
+    today: `현재 ${selectionLabel} 중 ${currentStats.anomalyCount}개 이상 징후가 확인됐어요.`,
+    next_week: `다음 주 ${selectionLabel} 체크인 ${stats.checkIns}건 예정이에요.`,
+    tomorrow: `내일 ${selectionLabel} 체크인 ${stats.checkIns}건 예정이에요.`,
+    next_hour: `1시간 내 ${selectionLabel} 체크인 ${stats.checkIns}건 예정이에요.`,
+  };
   let summary = !isLive && !isFuture ? summarizeOperationalMetrics(period, stats) : null;
   if (summary == null) summary = summaries[period];
   if (summary === undefined && descriptor) {
