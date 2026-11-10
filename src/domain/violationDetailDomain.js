@@ -324,6 +324,28 @@ export function buildManualCleaningRows(manualItems, detailItems = [], now = Dat
 }
 
 /**
+ * "퇴실 없는 청소" 목록 행 — 퇴실과 맞지 않는데 아직 살아 있는 청소 작업(classifyDayCleaningItems 의 orphan, DEC-05).
+ * 손님이 날짜를 바꾸거나 취소해도 옛 작업이 남아 요청이 나가거나 담당자가 올 수 있다(RF-16) — 담당자가 배정된 건은
+ * 실제로 사람이 올 수 있어 빨강, 요청 중·배정 실패는 주황. 심한 순, 같은 색이면 날짜가 가까운 순.
+ */
+export function buildOrphanCleaningRows(items) {
+  const rows = (items ?? []).map(item => {
+    const lead = item.orphanReason === 'sameDay' ? '같은 날 다른 청소가 이미 잡혀 있는데' : '그날 퇴실 예약이 없는데';
+    let severity = SEVERITY.CAUTION;
+    let problem = '청소 요청이 진행 중이에요';
+    if (item.status === 'ASSIGNED') { // 완료·취소된 작업은 classifyDayCleaningItems 가 이미 뺐다
+      severity = SEVERITY.SEVERE;
+      problem = `${item.cleaner_name ? `${item.cleaner_name}님이` : '담당자가'} 배정돼 있어요`;
+    } else if (item.status === 'ESCALATED') {
+      problem = '배정 실패로 남아 있어요';
+    }
+    const at = toMs(item.checkout_at);
+    return { item, view: { severity, text: `${lead} ${problem}`, when: formatKstDayTime(item.checkout_at), sortKey: at != null ? -at : -Infinity } };
+  });
+  return rows.sort((a, b) => compareRows(a, b, () => 0));
+}
+
+/**
  * "청소 계획 없음" 목록 행 — 퇴실은 있는데 청소 작업이 아직 없는 건(summarizeFutureCleaning 의 noJob).
  * 대시보드 캘린더의 같은 목록과 같은 문구를 쓰고, 기간 레포트는 여러 날을 담으므로 퇴실 시각을 함께 보여준다.
  * 등급을 나눌 근거가 없어 색은 중립(info), 퇴실이 가까운 순.

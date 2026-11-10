@@ -145,8 +145,9 @@ describe('classifyDayCleaningItems', () => {
   });
 
   test('빈 입력·미지정 상태도 안전', () => {
-    assert.deepEqual(classifyDayCleaningItems([]), { assigned: [], requesting: [], manual: [], noJob: [] });
-    assert.deepEqual(classifyDayCleaningItems([{ property_id: 'X', status: undefined }]), { assigned: [], requesting: [], manual: [], noJob: [] });
+    // 2026-11-10 DEC-05: 퇴실과 맞지 않는 살아 있는 작업(orphan) 칸이 더해졌다 — 퇴실 정보 없이 부르면 항상 빈 배열
+    assert.deepEqual(classifyDayCleaningItems([]), { assigned: [], requesting: [], manual: [], noJob: [], orphan: [] });
+    assert.deepEqual(classifyDayCleaningItems([{ property_id: 'X', status: undefined }]), { assigned: [], requesting: [], manual: [], noJob: [], orphan: [] });
   });
 
   test('청소 잡이 없는 체크아웃 숙소는 noJob에 담긴다 ("퇴실 6건인데 배정완료 1건" 문제 해결)', () => {
@@ -227,7 +228,8 @@ describe('MonthlyCalendar — 체류/공실 → ListView 날짜 이동, 입실/�
   });
 
   test('청소 배정 완료·미배정이 하나도 없어도 퇴실 예정이 있으면(잡이 통째로 없음) 요약을 그린다', () => {
-    assert.match(src, /\(dayCleaning\.assigned\.length > 0 \|\| dayUnassigned > 0\) && \(/);
+    // 2026-11-10 DEC-05: 퇴실 없는 청소만 있는 날(퇴실 0)도 그 표시를 위해 요약을 그린다
+    assert.match(src, /\(dayCleaning\.assigned\.length > 0 \|\| dayUnassigned > 0 \|\| dayCleaning\.orphan\.length > 0\) && \(/);
   });
 
   test('classifyDayCleaningItems 호출에 그날의 checkOutPropertyIds를 넘긴다', () => {

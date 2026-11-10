@@ -495,8 +495,9 @@ describe('H: futureSummaryFor — 바쁨 등급', () => {
   const NOW = dt(2, 12).getTime();
   const nextWeekDt = (offsetDays, hourKst) => dt(7 + offsetDays, hourKst);
   // 숙소 1곳 기준 (체크인+체크아웃) 합계로 등급 경계를 확인한다: <1 한산 / 1~2 보통 / 2~4 바빠요 / ≥4 아주 바빠요
-  // n건의 "체크인만" 예약을 만든다 (체크아웃은 기간 밖으로 밀어 체크인 수만 정확히 세게)
-  const checkInsOnly = (n) => [prop('P1', Array.from({ length: n }, () => ({ checkIn: nextWeekDt(0, 15), checkOut: dt(100, 11) })))];
+  // n건의 "체크인만" 예약을 만든다 (체크아웃은 기간 밖으로 밀어 체크인 수만 정확히 세게).
+  // 2026-11-10 DEC-05: 같은 숙소·같은 날 입실은 1건으로 세므로, 한 숙소의 n건은 서로 다른 날(다음 주 월~)로 펼친다
+  const checkInsOnly = (n) => [prop('P1', Array.from({ length: n }, (_, i) => ({ checkIn: nextWeekDt(i, 15), checkOut: dt(100, 11) })))];
 
   it('숙소 1곳 · 합계 1건 (rate=1) → 보통이에요', () => {
     assert.equal(futureSummaryFor('next_week', checkInsOnly(1), NOW), '다음 주 보통이에요 (체크인 1건 · 체크아웃 0건)');
@@ -512,7 +513,7 @@ describe('H: futureSummaryFor — 바쁨 등급', () => {
 
   it('숙소 2곳 · 합계 3건 (rate=1.5, 1≤1.5<2) → 보통이에요 — 숙소 수로 정규화됨', () => {
     const A = prop('A', [{ checkIn: nextWeekDt(0, 15), checkOut: dt(100, 11) }]);
-    const B = prop('B', Array.from({ length: 2 }, () => ({ checkIn: nextWeekDt(0, 15), checkOut: dt(100, 11) })));
+    const B = prop('B', Array.from({ length: 2 }, (_, i) => ({ checkIn: nextWeekDt(i, 15), checkOut: dt(100, 11) })));
     assert.equal(futureSummaryFor('next_week', [A, B], NOW), '다음 주 보통이에요 (체크인 3건 · 체크아웃 0건)');
   });
 
@@ -535,8 +536,8 @@ describe('H: futureSummaryFor — 바쁨 등급', () => {
     assert.equal((rangeJan.to.getTime() - rangeJan.from.getTime()) / DAY, 31);
     assert.equal((rangeFeb.to.getTime() - rangeFeb.from.getTime()) / DAY, 28);
 
-    const checkInsOnlyIn = (range, n) => [prop('P1', Array.from({ length: n }, () => ({
-      checkIn:  new Date(range.from.getTime() + DAY),
+    const checkInsOnlyIn = (range, n) => [prop('P1', Array.from({ length: n }, (_, i) => ({
+      checkIn:  new Date(range.from.getTime() + (i + 1) * DAY), // 서로 다른 날 (DEC-05: 같은 숙소·같은 날은 1건)
       checkOut: new Date(range.to.getTime() + 100 * DAY), // 범위 밖으로 밀어 체크아웃은 안 셈
     })))];
 
@@ -549,5 +550,27 @@ describe('H: futureSummaryFor — 바쁨 등급', () => {
       futureSummaryFor('next_month', checkInsOnlyIn(rangeFeb, 8), nowJan),
       '다음 달 바빠요 (체크인 8건 · 체크아웃 0건)'
     );
+  });
+});
+
+// ── DEC-05 (2026-11-10): 숙소 하나는 하루에 입실·퇴실 1번 ──────────────────────
+describe('DEC-05: 같은 숙소·같은 날의 예약 여러 건은 입실·퇴실 1건', () => {
+  // Airbnb 가 같은 예약을 다른 uid 로 다시 내보내 중복 행이 생긴 경우(2026-10-30 실사용) — 청소 작업도 숙소·퇴실 날짜마다 하나다
+  const duplicate = { checkIn: dt(2, 15), checkOut: dt(4, 11) };
+  const sameDayLater = { checkIn: dt(2, 18), checkOut: dt(4, 11) };
+
+  it('같은 숙소·같은 날 → 1건 (시각이 조금 달라도 같은 날이면 1건)', () => {
+    assert.equal(countWeekCheckIns([prop('P1', [duplicate, { ...duplicate }, sameDayLater])], WS, WE), 1);
+    assert.equal(countWeekCheckOuts([prop('P1', [duplicate, { ...duplicate }, sameDayLater])], WS, WE), 1);
+  });
+
+  it('같은 숙소라도 다른 날이면 따로 센다 (숙소 id 만으로 합치지 않는다)', () => {
+    const p = prop('P1', [res(1, 3), res(3, 5)]);
+    assert.equal(countWeekCheckIns([p], WS, WE), 2);
+    assert.equal(countWeekCheckOuts([p], WS, WE), 2);
+  });
+
+  it('다른 숙소는 같은 날이어도 따로 센다', () => {
+    assert.equal(countWeekCheckOuts([prop('P1', [duplicate]), prop('P2', [duplicate])], WS, WE), 2);
   });
 });

@@ -10,7 +10,7 @@ import {
 } from '../../../domain/monthlyCalendarDomain.js';
 import { periodToRemainingRange } from '../../../domain/periodDomain.js';
 import { resolvePropertyName } from '../../../domain/propertyNameDomain.js';
-import { buildCleaningIssueRows, buildMixedCleaningIssueRows } from '../../../domain/violationDetailDomain.js';
+import { buildCleaningIssueRows, buildMixedCleaningIssueRows, buildOrphanCleaningRows } from '../../../domain/violationDetailDomain.js';
 import DrilldownSheet from './DrilldownSheet.jsx';
 import ViolationRow from './ViolationRow.jsx';
 import { NowCellMarker, NowLegendItem } from './NowMarker.jsx';
@@ -146,7 +146,7 @@ function DayStat({ label, value, color, onClick, isMobile, testId }) {
  * 청소 배정 요약 — "청소 배정 완료"는 일반 텍스트(하이라이트 없음), "청소 미배정"만 빨간 배경으로
  * 강조한다 (사용자 지시: 배정 완료는 굳이 강조할 필요 없고, 미배정만 눈에 띄면 됨).
  */
-function CleaningDaySummary({ assigned, unassigned, onAssignedClick, onUnassignedClick, isMobile }) {
+function CleaningDaySummary({ assigned, unassigned, orphan = 0, onAssignedClick, onUnassignedClick, onOrphanClick, isMobile }) {
   return (
     <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'center' }}>
       {assigned > 0 && (
@@ -163,6 +163,21 @@ function CleaningDaySummary({ assigned, unassigned, onAssignedClick, onUnassigne
           }}
         >
           청소 미배정 {unassigned}
+        </button>
+      )}
+      {/* 퇴실 없는 청소(DEC-05) — 배정 숫자와 별도, 있을 때만. 미배정(빨강 채움)과 구분되는 주황 테두리 */}
+      {orphan > 0 && (
+        <button
+          data-testid="future-cleaning-orphan"
+          data-value={orphan}
+          onClick={onOrphanClick}
+          style={{
+            alignSelf: 'flex-start', padding: isMobile ? '1px 4px' : '2px 6px',
+            border: '1px solid #fdba74', borderRadius: 8, background: '#fff7ed', color: '#c2410c',
+            fontSize: isMobile ? 8 : 9, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >
+          퇴실 없는 청소 {orphan}
         </button>
       )}
     </div>
@@ -216,7 +231,7 @@ export default function MonthlyCalendar({
 }) {
   const { data, loading, error } = monthlyCalendarState;
   const [selectedDay, setSelectedDay] = useState(null);
-  // 미래달 칸의 입실/퇴실/청소배정 팝업 — { day: 'YYYY-MM-DD', kind } / kind: checkin|checkout|assigned|unassigned|requesting|manual
+  // 미래달 칸의 입실/퇴실/청소배정 팝업 — { day: 'YYYY-MM-DD', kind } / kind: checkin|checkout|assigned|unassigned|requesting|manual|nojob|orphan
   const [futurePopup, setFuturePopup] = useState(null);
   const calendar = useMemo(() => monthCells(statsPeriod), [statsPeriod]);
   // "지금" 표시 — 리스트 화면과 같은 방식. 오늘 칸이 이 달력에 보일 때만 표시
@@ -302,6 +317,7 @@ export default function MonthlyCalendar({
         Date.now(),
       )
     : [];
+  const popupOrphanRows = futurePopup?.kind === 'orphan' ? buildOrphanCleaningRows(popupCleaning.orphan) : [];
 
   // 팝업 안에서 숙소 ID로 그 숙소를 선택 (없는 ID면 아무 일도 안 함 — 목업 데이터 불일치 방어)
   const selectPropertyById = (propertyId) => {
@@ -398,13 +414,15 @@ export default function MonthlyCalendar({
                         />
                       </span>
                     )}
-                    {(dayCleaning.assigned.length > 0 || dayUnassigned > 0) && (
+                    {(dayCleaning.assigned.length > 0 || dayUnassigned > 0 || dayCleaning.orphan.length > 0) && (
                       <CleaningDaySummary
                         assigned={dayCleaning.assigned.length}
                         unassigned={dayUnassigned}
+                        orphan={dayCleaning.orphan.length}
                         isMobile={isMobile}
                         onAssignedClick={() => setFuturePopup({ day: cell.key, kind: 'assigned' })}
                         onUnassignedClick={() => setFuturePopup({ day: cell.key, kind: 'unassigned' })}
+                        onOrphanClick={() => setFuturePopup({ day: cell.key, kind: 'orphan' })}
                       />
                     )}
                   </div>
@@ -583,6 +601,24 @@ export default function MonthlyCalendar({
         <DrilldownSheet
           metricLabel="수동배정 필요"
           staticItems={popupManualRows}
+          renderItem={({ item, view }) => (
+            <ViolationRow
+              key={`${item.property_id}-${item.checkout_at}`}
+              name={resolvePropertyName(properties, item.property_id, item.property_name)}
+              view={view}
+              dateLabel={view.when}
+              onClick={() => { setFuturePopup(null); selectPropertyById(item.property_id); }}
+            />
+          )}
+          emptyMessage="해당 건 없음"
+          onClose={() => setFuturePopup(null)}
+        />
+      )}
+
+      {futurePopup?.kind === 'orphan' && (
+        <DrilldownSheet
+          metricLabel={`${Number(futurePopup.day.slice(5, 7))}월 ${Number(futurePopup.day.slice(8, 10))}일 퇴실 없는 청소 ${popupCleaning.orphan.length}건`}
+          staticItems={popupOrphanRows}
           renderItem={({ item, view }) => (
             <ViolationRow
               key={`${item.property_id}-${item.checkout_at}`}

@@ -51,7 +51,7 @@ import {
 import DrilldownSheet from './DrilldownSheet.jsx';
 import ViolationRow from './ViolationRow.jsx';
 import { resolvePropertyName } from '../../../domain/propertyNameDomain.js';
-import { buildCleaningIssueRows, buildManualCleaningRows, buildNoJobRows } from '../../../domain/violationDetailDomain.js';
+import { buildCleaningIssueRows, buildManualCleaningRows, buildNoJobRows, buildOrphanCleaningRows } from '../../../domain/violationDetailDomain.js';
 import { summarizeFutureCleaning } from '../../../domain/monthlyCalendarDomain.js';
 import { useNow } from '../../../hooks/useNow.js';
 
@@ -68,9 +68,11 @@ const DIVIDER     = { borderTop: '1px solid #e2e8f0', margin: '6px 0' };
 const SECTION_HDR = { fontSize: 11, fontWeight: 600, color: '#94a3b8', letterSpacing: '0.05em', marginBottom: 4, marginTop: 8 };
 
 /** 한 줄 — 정보성(클릭 없음) 또는 팝업을 여는 줄(onClick 있으면 › 표시) */
-function Row({ label, value, red = false, onClick, last = false }) {
+function Row({ label, value, red = false, orange = false, onClick, last = false }) {
   const base = { ...ROW_BASE, borderBottom: last ? 'none' : '1px solid #f1f5f9' };
-  const valStyle = red ? { ...VAL_STYLE, color: '#dc2626' } : VAL_STYLE;
+  let valStyle = VAL_STYLE;
+  if (red) valStyle = { ...VAL_STYLE, color: '#dc2626' };
+  else if (orange) valStyle = { ...VAL_STYLE, color: '#c2410c' }; // 퇴실 없는 청소 — 미배정(빨강)과 구분되는 "확인 필요"
   if (!onClick) {
     return (
       <div style={base}>
@@ -165,6 +167,7 @@ export default function FutureMatrixPanel({ stats, period, properties = [], prop
   const [manualOpen,        setManualOpen]        = useState(false); // 수동배정 필요 상세 목록 팝업
   const [requestingOpen,    setRequestingOpen]    = useState(false); // 배정 요청중 상세 목록 팝업
   const [noJobOpen,         setNoJobOpen]         = useState(false); // 청소 계획 없음 상세 목록 팝업
+  const [orphanOpen,        setOrphanOpen]        = useState(false); // 퇴실 없는 청소 상세 목록 팝업
 
   // 청소 배정 4분류 + 드릴다운 아이템 — DB. 대시보드 캘린더와 같은 요청을 함께 쓴다(useFutureCleaningStats)
   // propertyIds: null=전체, [...]= 선택 숙소 필터
@@ -215,6 +218,8 @@ export default function FutureMatrixPanel({ stats, period, properties = [], prop
 
   // 청소 계획 없음 상세 목록 — 퇴실은 있는데 청소 작업이 없는 건. 팝업이 열려 있을 때만 계산.
   const noJobRows = useMemo(() => (noJobOpen ? buildNoJobRows(cleaningPlan?.noJob) : []), [noJobOpen, cleaningPlan]);
+  // 퇴실 없는 청소 상세 목록 — 담당자가 배정된 건이 위로(빨강). 팝업이 열려 있을 때만 계산.
+  const orphanRows = useMemo(() => (orphanOpen ? buildOrphanCleaningRows(cleaningPlan?.orphan) : []), [orphanOpen, cleaningPlan]);
 
   // 훅 호출이 모두 끝난 뒤에만 조건부 return (Rules of Hooks)
   if (!stats) return null;
@@ -238,6 +243,8 @@ export default function FutureMatrixPanel({ stats, period, properties = [], prop
   const manualClickable     = cleaningReady && (csManual ?? 0) > 0;
   const requestingClickable = cleaningReady && (csRequesting ?? 0) > 0;
   const noJobClickable      = cleaningReady && (csNoJob ?? 0) > 0;
+  const csOrphan            = cleaningReady ? cleaningPlan.orphan.length : null;  // 퇴실 없는 청소 (배정 숫자와 별도)
+  const orphanVisible       = (csOrphan ?? 0) > 0;
 
   // 공실률 — 기간 전체 박수 기준 (기존 "공실 예정" 줄의 %)
   const vacancyPct = forecast ? Math.round(forecast.vacancyRate * 100) : null;
@@ -263,8 +270,12 @@ export default function FutureMatrixPanel({ stats, period, properties = [], prop
           value={fmtCleaning(csUnassigned)}
           red={cleaningReady && csUnassigned > 0}
           onClick={unassignedClickable ? () => setUnassignedPopup(true) : undefined}
-          last
+          last={!orphanVisible}
         />
+        {/* 퇴실 없는 청소 — 퇴실과 맞지 않는데 살아 있는 작업(DEC-05). 배정 숫자에 섞지 않고, 있을 때만 따로 보인다 */}
+        {orphanVisible && (
+          <Row label="퇴실 없는 청소" value={fmtCleaning(csOrphan)} orange onClick={() => setOrphanOpen(true)} last />
+        )}
 
         <div style={DIVIDER} />
 
@@ -406,6 +417,29 @@ export default function FutureMatrixPanel({ stats, period, properties = [], prop
           emptyMessage="해당 건 없음"
           emptyIcon="✅"
           onClose={() => setNoJobOpen(false)}
+        />
+      )}
+
+      {/* 퇴실 없는 청소 상세 목록 팝업 — 숙소별, 담당자가 배정된 건(빨강)이 위로 */}
+      {orphanOpen && (
+        <DrilldownSheet
+          metricLabel="퇴실 없는 청소"
+          staticItems={orphanRows}
+          renderItem={({ item, view }) => (
+            <ViolationRow
+              key={`${item.property_id}-${item.checkout_at}`}
+              name={resolvePropertyName(properties, item.property_id, item.property_name)}
+              view={view}
+              dateLabel={view.when}
+              onClick={() => {
+                setOrphanOpen(false);
+                onSelectRoom?.(item.property_id);
+              }}
+            />
+          )}
+          emptyMessage="해당 건 없음"
+          emptyIcon="✅"
+          onClose={() => setOrphanOpen(false)}
         />
       )}
     </>

@@ -17,35 +17,32 @@ function dayOf(date) {
 }
 
 /**
- * 주간 체크인 건수 — checkIn ∈ [weekStart, weekEnd)
+ * 구간 안 입실(또는 퇴실) 건수. 숙소 하나는 하루(KST)에 입실·퇴실이 한 번씩이라, 같은 숙소·같은 날의 예약
+ * 여러 건(Airbnb 가 같은 예약을 다른 uid 로 다시 내보낸 중복 등)은 1건으로 센다 — 청소 작업도 숙소·퇴실 날짜마다
+ * 하나다(DEC-05). 다른 날의 예약은 숙소가 같아도 따로 센다.
  */
-export function countWeekCheckIns(properties, weekStart, weekEnd) {
+function countOncePerPropertyDay(properties, pickDate, weekStart, weekEnd) {
   const ws = weekStart.getTime();
   const we = weekEnd.getTime();
-  let count = 0;
+  const seen = new Set();
   for (const p of properties) {
     for (const r of (p.reservations ?? [])) {
-      const ci = r.checkIn.getTime();
-      if (ci >= ws && ci < we) count++;
+      const date = pickDate(r);
+      const at = date ? new Date(date).getTime() : NaN;
+      if (at >= ws && at < we) seen.add(`${p.id}|${dayOf(new Date(at))}`);
     }
   }
-  return count;
+  return seen.size;
 }
 
-/**
- * 주간 체크아웃 건수 — checkOut ∈ [weekStart, weekEnd)
- */
+/** 주간 체크인 건수 — checkIn ∈ [weekStart, weekEnd), 같은 숙소·같은 날은 1건 */
+export function countWeekCheckIns(properties, weekStart, weekEnd) {
+  return countOncePerPropertyDay(properties, r => r.checkIn, weekStart, weekEnd);
+}
+
+/** 주간 체크아웃 건수 — checkOut ∈ [weekStart, weekEnd), 같은 숙소·같은 날은 1건 */
 export function countWeekCheckOuts(properties, weekStart, weekEnd) {
-  const ws = weekStart.getTime();
-  const we = weekEnd.getTime();
-  let count = 0;
-  for (const p of properties) {
-    for (const r of (p.reservations ?? [])) {
-      const co = r.checkOut.getTime();
-      if (co >= ws && co < we) count++;
-    }
-  }
-  return count;
+  return countOncePerPropertyDay(properties, r => r.checkOut, weekStart, weekEnd);
 }
 
 /** 숙소 하나의 구간 내 체류 박수 (겹치는 예약은 같은 날짜를 한 번만 센다) */

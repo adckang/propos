@@ -18,8 +18,8 @@ import { kst, withFrozenNow } from '../helpers/testTime.js';
 import { requestFutureCleaningStats, sharesFutureCleaning, stateForRequest } from '../../src/hooks/useFutureCleaningStats.js';
 import { countWeekCheckOuts } from '../../src/domain/futureWeekDomain.js';
 import { PROPERTIES as DEMO_PROPERTIES } from '../../src/data/roomStateMockData.js';
-import { buildFutureCalendarDays, summarizeFutureCleaning } from '../../src/domain/monthlyCalendarDomain.js';
-import { buildManualCleaningRows, buildNoJobRows, SEVERITY } from '../../src/domain/violationDetailDomain.js';
+import { buildFutureCalendarDays, classifyDayCleaningItems, summarizeFutureCleaning } from '../../src/domain/monthlyCalendarDomain.js';
+import { buildManualCleaningRows, buildNoJobRows, buildOrphanCleaningRows, SEVERITY } from '../../src/domain/violationDetailDomain.js';
 
 const HOOK = 'src/hooks/useFutureCleaningStats.js';
 const NOW = '2026-11-10T12:00'; // 다음달 = 2026-12
@@ -76,7 +76,7 @@ async function renderReport(period, { properties = PROPERTIES, data = RESPONSE, 
   return { checkOuts: read('퇴실예정'), assigned: read('배정완료'), unassigned: read('미배정'), text };
 }
 
-async function renderCalendar(statsPeriod, { properties = PROPERTIES, data = RESPONSE, calls } = {}) {
+async function renderCalendarCells(statsPeriod, { properties = PROPERTIES, data = RESPONSE, calls } = {}) {
   const rendered = await renderComponent('src/components/v2/reporting/MonthlyCalendar.jsx', {
     statsPeriod, scopedProperties: properties, noSelection: false, properties,
     onSelectProperty() {}, onNavigateToList() {},
@@ -84,11 +84,24 @@ async function renderCalendar(statsPeriod, { properties = PROPERTIES, data = RES
   }, { replace: hookReturning(data, calls) });
   const sum = pattern => [...rendered.html.matchAll(pattern)].reduce((total, match) => total + Number(match[1]), 0);
   return {
-    checkOuts: sum(/data-testid="future-checkout-btn" data-value="(\d+)"/g),
-    assigned: sum(/data-testid="future-cleaning-assigned" data-value="(\d+)"/g),
-    unassigned: sum(/data-testid="future-cleaning-unassigned"[^>]*>청소 미배정 (?:<!-- -->)?(\d+)</g),
+    counts: {
+      checkOuts: sum(/data-testid="future-checkout-btn" data-value="(\d+)"/g),
+      assigned: sum(/data-testid="future-cleaning-assigned" data-value="(\d+)"/g),
+      unassigned: sum(/data-testid="future-cleaning-unassigned"[^>]*>청소 미배정 (?:<!-- -->)?(\d+)</g),
+    },
+    orphan: sum(/data-testid="future-cleaning-orphan" data-value="(\d+)"/g),
   };
 }
+
+async function renderCalendar(statsPeriod, options) {
+  return (await renderCalendarCells(statsPeriod, options)).counts;
+}
+
+/** 레포트의 "퇴실 없는 청소 N건" — 0건이면 줄 자체가 없다(null) */
+const reportOrphan = text => {
+  const match = /(?:^| )퇴실 없는 청소 (\d+)건/.exec(text);
+  return match ? Number(match[1]) : null;
+};
 
 describe('A. 레포트 미배정 = 배정 요청중 + 수동배정 필요 + 청소 계획 없음 (ACT-14)', () => {
   test('다음달 레포트: 배정완료 + 미배정 = 퇴실예정', () => withFrozenNow(NOW, async () => {
@@ -308,37 +321,78 @@ describe('C. 공통 집계 함수 summarizeFutureCleaning', () => {
   });
 });
 
-// 아래 두 경우는 "퇴실 1건 = 청소 작업 1건"이 아니라서 배정완료 + 미배정 = 퇴실예정이 성립하지 않는다.
-// 레포트와 캘린더는 지금도 똑같이 센다(같은 규칙). 어떻게 셀지는 사용자 결정 대기 — refactoring.md ACT-14.
-describe('D. 결정 대기 — 퇴실과 청소 작업이 1:1 이 아닌 경우', () => {
-  // 예약이 사라지거나 날짜가 바뀌어도 동기화는 이미 만든 청소 작업을 지우지 않는다(api/cleaning syncAllIcal).
+// DEC-05 (2026-11-10): 퇴실 하나에 청소 작업 하나를 맞춘다 — 그래서 늘 배정완료 + 미배정 = 퇴실예정이다.
+//   ① 퇴실과 맞지 않는 살아 있는 작업(예약이 바뀌거나 취소돼 남은 작업 등)은 배정 숫자에서 빼고 "퇴실 없는 청소"로 따로 보인다
+//   ② 같은 숙소·같은 날의 예약 여러 건은 입실·퇴실 1건
+describe('D. DEC-05 — 퇴실과 청소 작업을 1:1 로 맞춘다', () => {
+  // 손님이 날짜를 바꾸거나 취소해도 동기화는 이미 만든 청소 작업을 지우지 않는다(api/cleaning syncAllIcal, RF-16)
   const ORPHAN = response([...ITEMS, job('A', '2026-12-20T11:00', 'ASSIGNED')], { assigned: 2, requesting: 1, failed: 1, needsRequest: 1 });
-  // 같은 숙소·같은 퇴실 시각의 예약 두 건 → 청소 작업은 (숙소, 퇴실 시각)마다 하나(UNIQUE). DEMO 의 P020 12/16 과 같은 모양.
+  // 같은 숙소·같은 퇴실 시각의 예약 두 건 → 청소 작업은 (숙소, 퇴실 시각)마다 하나(UNIQUE). DEMO 의 P020 11/16 과 같은 모양
   const DUPLICATED = [...PROPERTIES.slice(0, 2), {
     ...PROPERTIES[2], reservations: [...PROPERTIES[2].reservations, stay('2026-12-06T18:00', '2026-12-08T11:00')],
   }];
 
-  test('예약 없는 청소 작업: 레포트와 캘린더가 같은 숫자 (둘 다 배정완료에 센다)', () => withFrozenNow(NOW, async () => {
+  test('퇴실 없는 청소 작업은 배정완료·미배정에 넣지 않고 따로 보인다 — 레포트와 캘린더가 같은 수', () => withFrozenNow(NOW, async () => {
     const report = await renderReport('next_month', { data: ORPHAN });
-    const calendar = await renderCalendar('next_month', { data: ORPHAN });
-    assert.deepEqual(calendar, { checkOuts: 6, assigned: 2, unassigned: 5 });
-    assert.deepEqual({ checkOuts: report.checkOuts, assigned: report.assigned, unassigned: report.unassigned }, calendar);
+    const calendar = await renderCalendarCells('next_month', { data: ORPHAN });
+    assert.deepEqual(calendar.counts, { checkOuts: 6, assigned: 1, unassigned: 5 });
+    assert.equal(calendar.orphan, 1, '캘린더 12/20 칸의 퇴실 없는 청소');
+    assert.deepEqual({ checkOuts: report.checkOuts, assigned: report.assigned, unassigned: report.unassigned }, calendar.counts);
+    assert.equal(report.assigned + report.unassigned, report.checkOuts);
+    assert.equal(reportOrphan(report.text), 1, '레포트의 퇴실 없는 청소');
   }));
 
-  test('같은 날 중복 예약: 레포트와 캘린더가 같은 숫자 (퇴실은 2건, 청소 작업은 1건)', () => withFrozenNow(NOW, async () => {
+  test('퇴실 없는 청소가 없으면 레포트·캘린더 어디에도 그 표시가 없다', () => withFrozenNow(NOW, async () => {
+    const report = await renderReport('next_month');
+    const calendar = await renderCalendarCells('next_month');
+    assert.equal(reportOrphan(report.text), null);
+    assert.equal(calendar.orphan, 0);
+  }));
+
+  test('같은 날 중복 예약은 퇴실 1건 — 배정완료 + 미배정 = 퇴실예정, 레포트와 캘린더가 같은 수', () => withFrozenNow(NOW, async () => {
     const report = await renderReport('next_month', { properties: DUPLICATED });
     const calendar = await renderCalendar('next_month', { properties: DUPLICATED });
-    assert.deepEqual(calendar, { checkOuts: 7, assigned: 1, unassigned: 5 });
+    assert.deepEqual(calendar, { checkOuts: 6, assigned: 1, unassigned: 5 });
     assert.deepEqual({ checkOuts: report.checkOuts, assigned: report.assigned, unassigned: report.unassigned }, calendar);
   }));
 
-  test('예약 없는 청소 작업이 있어도 배정완료 + 미배정 = 퇴실예정', { todo: 'ACT-14 결정 대기: 예약 없는 청소 작업을 어떻게 셀지' }, () => withFrozenNow(NOW, async () => {
-    const report = await renderReport('next_month', { data: ORPHAN });
-    assert.equal(report.assigned + report.unassigned, report.checkOuts);
-  }));
+  test('하루 분류: 퇴실 하나에 작업 하나 — 남는 살아 있는 작업만 퇴실 없는 청소, 취소·완료된 남은 작업은 뺀다', () => {
+    const items = [
+      { property_id: 'A', status: 'CANCELLED' },        // A 의 옛 작업(취소됨) — 같은 날 살아 있는 작업이 있으면 그쪽과 맞춘다
+      { property_id: 'A', status: 'PENDING' },
+      { property_id: 'B', status: 'ASSIGNED', cleaner_name: '김민지' }, // B 는 그날 퇴실이 없다
+      { property_id: 'C', status: 'CANCELLED' },        // C 도 퇴실이 없지만 이미 취소됨 → 더 일어날 일 없음
+      { property_id: 'D', status: 'ASSIGNED' },
+      { property_id: 'D', status: 'NOTIFYING_VIP_1' },  // D 는 이미 배정됐는데 요청이 또 나가는 작업
+    ];
+    const r = classifyDayCleaningItems(items, ['A', 'D', 'E', 'A']);
+    assert.deepEqual(r.requesting.map(item => item.property_id), ['A']);
+    assert.deepEqual(r.assigned.map(item => item.property_id), ['D']);
+    assert.deepEqual(r.manual, []);
+    assert.deepEqual(r.noJob, ['E']);
+    assert.equal(r.assigned.length + r.requesting.length + r.manual.length + r.noJob.length, 3, '퇴실 3건(A 중복 1건)');
+    assert.deepEqual(r.orphan.map(item => [item.property_id, item.status, item.orphanReason]),
+      [['D', 'NOTIFYING_VIP_1', 'sameDay'], ['B', 'ASSIGNED', 'noCheckout']]);
+  });
 
-  test('같은 날 중복 예약이 있어도 배정완료 + 미배정 = 퇴실예정', { todo: 'ACT-14 결정 대기: 중복 예약의 퇴실을 몇 건으로 셀지' }, () => withFrozenNow(NOW, async () => {
-    const report = await renderReport('next_month', { properties: DUPLICATED });
-    assert.equal(report.assigned + report.unassigned, report.checkOuts);
-  }));
+  test('알 수 없는 상태의 작업만 있는 퇴실은 청소 계획 없음 — 퇴실이 어느 칸에서도 사라지지 않는다', () => {
+    const r = classifyDayCleaningItems([{ property_id: 'A', status: 'SOMETHING_NEW' }, { property_id: 'B', status: 'ASSIGNED' }], ['A', 'B']);
+    assert.deepEqual(r.noJob, ['A']);
+    assert.equal(r.assigned.length + r.requesting.length + r.manual.length + r.noJob.length, 2);
+  });
+
+  test('퇴실 없는 청소 목록: 담당자가 배정된 건(사람이 올 수 있음)이 빨강으로 위, 사유별 문장', () => {
+    const rows = buildOrphanCleaningRows([
+      { property_id: 'A', status: 'PENDING', checkout_at: kst('2026-12-10T11:00').toISOString(), orphanReason: 'noCheckout' },
+      { property_id: 'B', status: 'ASSIGNED', cleaner_name: '김민지', checkout_at: kst('2026-12-20T11:00').toISOString(), orphanReason: 'noCheckout' },
+      { property_id: 'C', status: 'ESCALATED', checkout_at: kst('2026-12-08T11:00').toISOString(), orphanReason: 'sameDay' },
+    ]);
+    assert.deepEqual(rows.map(row => [row.item.property_id, row.view.severity]),
+      [['B', SEVERITY.SEVERE], ['C', SEVERITY.CAUTION], ['A', SEVERITY.CAUTION]]);
+    assert.equal(rows[0].view.text, '그날 퇴실 예약이 없는데 김민지님이 배정돼 있어요');
+    assert.equal(rows[1].view.text, '같은 날 다른 청소가 이미 잡혀 있는데 배정 실패로 남아 있어요');
+    assert.equal(rows[2].view.text, '그날 퇴실 예약이 없는데 청소 요청이 진행 중이에요');
+    assert.equal(rows[0].view.when, '12/20(일) 11:00');
+    assert.deepEqual(buildOrphanCleaningRows(undefined), []);
+  });
 });
