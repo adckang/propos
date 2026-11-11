@@ -255,10 +255,17 @@ function cleaningRank(item) {
   return 4;
 }
 
-// 퇴실과 맞지 않는 작업 중 아직 살아 있는 것 — 담당자에게 요청이 나가거나(요청중·배정 실패 후 재시도) 담당자가 올 수
-// 있다(배정완료). 발송은 예약이 남아 있는지 확인하지 않는다(RF-16). 취소·완료된 작업은 더 일어날 일이 없어 뺀다.
+/**
+ * 아직 일어날 일이 있는 청소 작업 상태 — 요청이 나가거나(요청중) 담당자가 오거나(배정완료) 운영자가 배정할 수 있다(배정 실패).
+ * 취소·완료된 작업은 더 일어날 일이 없다. 화면의 "퇴실 없는 청소"와 서버의 운영자 알림(RF-16)이 같은 목록을 쓴다.
+ */
+export const LIVE_CLEANING_STATUSES = Object.freeze(['ASSIGNED', 'ESCALATED', ...REQUESTING_CLEANING_STATUSES]);
+const LIVE_CLEANING_STATUS_SET = new Set(LIVE_CLEANING_STATUSES);
+
+// 퇴실과 맞지 않는 작업 중 아직 살아 있는 것만 "퇴실 없는 청소"로 보인다. 서버는 그날 퇴실이 없어진 작업에 새 요청을
+// 보내지 않고 운영자에게 알린다(RF-16) — 화면은 그래도 남아 있는 작업을 운영자가 정리하도록 보여 준다.
 function isLiveCleaningJob(item) {
-  return item.status === 'ASSIGNED' || item.status === 'ESCALATED' || REQUESTING_CLEANING_STATUSES.has(item.status);
+  return LIVE_CLEANING_STATUS_SET.has(item.status);
 }
 
 /**

@@ -4,6 +4,7 @@
  */
 
 import { notify } from "./_notify.js";
+import { isCheckoutCancelled } from "./_reservationSync.js";
 import { createNotif, prepareInitialDelivery, maySendInitialDelivery,
   recordInitialResult, projectAcceptedDelivery, findInitialDelivery, getInitialRecoveryJobs } from './_initialDelivery.js';
 export { createNotif, getVipFollowupJobs } from './_initialDelivery.js';
@@ -19,6 +20,9 @@ const BASE_URL =
 
 // sendSms, toE164 → _sms.js 로 이동 (re-export for backwards compat)
 export { sendSms, toE164 } from "./_sms.js";
+
+// RF-16: 그날 퇴실이 없어져 요청을 보내지 않음 — 다른 "보내지 않음" 결과와 같은 모양(호출부 변경 없음)
+const RESERVATION_CANCELLED = Object.freeze({ ok: false, state: 'CANCELLED', errorCode: 'RESERVATION_CANCELLED' });
 
 // ── SMS 메시지 빌더 ───────────────────────────────────────
 
@@ -93,12 +97,17 @@ export async function advanceJob(db, job, { deleteBlocker } = {}) {
   if (propCfg?.data_origin === 'SIMULATED') return { ok: false, state: 'CANCELLED', errorCode: 'DELIVERY_NOT_REAL' };
   const propertyName = propCfg?.name ?? job.property_id;
 
+  // RF-16: 그날 퇴실이 없어졌으면(예약 취소·같은 예약의 날짜 변경) 이번엔 요청을 보내지 않는다. 작업·요청 기록은 그대로 둔다 —
+  // 운영자 알림은 동기화가, 취소·연락은 운영자가 정하고, 예약이 다시 나타나면 다음 실행에서 이어서 진행한다.
   if (nextStatus === "NOTIFYING_BULK") {
+    if (await isCheckoutCancelled(db, job)) return RESERVATION_CANCELLED;
     return dispatchBulk(db, job, propertyName, propCfg);
   }
 
   const tier = nextStatus.replace("NOTIFYING_", ""); // VIP_1 | VIP_2 | VIP_3
   const savedRequest = await findInitialDelivery(db, job);
+  // 이미 접수된 요청(ACCEPTED)의 상태 반영은 보내는 일이 아니라서 그대로 한다
+  if (savedRequest?.initial_delivery_state !== 'ACCEPTED' && await isCheckoutCancelled(db, job)) return RESERVATION_CANCELLED;
   const cleaner = savedRequest?.initial_delivery_data.cleaner ?? await getAvailableVip(db, job, tier);
 
   if (!cleaner) {

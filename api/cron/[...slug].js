@@ -15,6 +15,7 @@ import {
   getPropertyConfig,
 } from "../../server/cleaning/_dispatch.js";
 import { notify } from "../../server/cleaning/_notify.js";
+import { isCheckoutCancelled } from "../../server/cleaning/_reservationSync.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 import {
   getGoogleToken,
@@ -292,6 +293,7 @@ async function handleCleaningFollowup(db, res) {
   // BULK 리마인드 (1시간 경과 + reminded_at IS NULL)
   const { rows: bulkNotifs } = await db.query(
     `SELECT n.*, j.property_id, j.cleaning_start_at, j.id AS job_id,
+            j.checkout_at AS job_checkout_at, j.reservation_uid AS job_reservation_uid,
             c.phone, c.fcm_token, c.fcm_status, c.name AS cleaner_name
      FROM cleaning_notifs n
      JOIN cleaning_jobs j ON j.id = n.job_id
@@ -304,6 +306,8 @@ async function handleCleaningFollowup(db, res) {
   );
 
   for (const notif of bulkNotifs) {
+    // RF-16: 그날 퇴실이 없어졌으면(예약 취소·같은 예약의 날짜 변경) 재안내를 보내지 않는다 — 운영자 알림은 동기화가 보낸다
+    if (await isCheckoutCancelled(db, { property_id: notif.property_id, checkout_at: notif.job_checkout_at, reservation_uid: notif.job_reservation_uid })) continue;
     const cfg = await getPropertyConfig(db, notif.property_id);
     const propName = cfg?.name ?? notif.property_id;
     const smsText = buildSmsRemind(
@@ -335,7 +339,7 @@ async function handleCleaningFollowup(db, res) {
 
   // 에스컬레이션: BULK 발송 3시간 경과
   const { rows: bulkJobs } = await db.query(
-    `SELECT j.id, j.property_id, j.cleaning_start_at
+    `SELECT j.id, j.property_id, j.cleaning_start_at, j.checkout_at, j.reservation_uid
      FROM cleaning_jobs j
      JOIN LATERAL (
        SELECT MIN(sent_at) AS first_sent FROM cleaning_notifs WHERE job_id = j.id AND tier = 'BULK'
@@ -346,6 +350,8 @@ async function handleCleaningFollowup(db, res) {
   );
 
   for (const job of bulkJobs) {
+    // RF-16: 그날 퇴실이 없어졌으면 "배정 실패 — 수동 처리" 로 넘기지 않는다(없는 퇴실에 사람을 구하지 않게). 운영자 알림은 동기화가 보낸다
+    if (await isCheckoutCancelled(db, job)) continue;
     const { rows } = await db.query(
       `UPDATE cleaning_jobs SET status='ESCALATED', updated_at=NOW()
        WHERE id=$1 AND status IN ('NOTIFYING_BULK','BULK_REMINDED')

@@ -22,6 +22,7 @@ import {
   getNextMonthDates,
 } from "../../server/cleaning/_calendar.js";
 import { notify } from "../../server/cleaning/_notify.js";
+import { alertGoneCheckoutJobs, listGoneCheckoutJobs, reservationUidOf, retireVanishedReservations } from "../../server/cleaning/_reservationSync.js";
 import { markRenewed } from "../../server/cleaning/_tokenHealth.js";
 import { periodToRemainingRange } from "../../src/domain/periodDomain.js";
 import { validatePropertyName } from "../../src/domain/propertyIdentityDomain.js";
@@ -427,6 +428,11 @@ async function dispatchJob(res, jobId, scope) {
   const result = await advanceJob(db, job, { deleteBlocker: makeBlockerDeleter() });
   if (result?.ok === false) {
     if (result.state === 'SENDING') return sendJson(res, 202, { ok: true, deliveryState: 'SENDING' });
+    // RF-16: 운영자 화면은 error 를 그대로 보여 주므로 내부 코드 대신 문장으로(코드는 errorCode 로 따로)
+    if (result.errorCode === 'RESERVATION_CANCELLED') {
+      return sendJson(res, 409, { ok: false, error: '그날 퇴실 예약이 없어 청소 요청을 보내지 않았어요. 예약을 확인해 주세요.',
+        errorCode: result.errorCode, deliveryState: result.state });
+    }
     return sendJson(res, 409, { ok: false, error: result.errorCode ?? 'DELIVERY_NOT_ACCEPTED', deliveryState: result.state });
   }
   return sendJson(res, 200, { ok: true });
@@ -735,6 +741,10 @@ async function handleGmailWebhook(req, res) {
 
 // ── 공통: 전체 숙소 iCal 재폴링 + 신규 예약 처리 ──────────────
 
+// RF-16 퇴실이 없어진 청소 작업 알림 — 숙소마다 "알린 작업" 목록 하나(보내졌을 때만 넣고, 정상으로 돌아오면 뺀다)
+const GONE_ALERT_TTL_S = 180 * 86_400;
+const goneAlertKey = propertyId => `cleaning:gone-checkout-alerts:${propertyId}`;
+
 async function syncAllPropertiesIcal(db, filterPropertyId = null) {
   const { rows: properties } = await db.query(
     filterPropertyId
@@ -747,6 +757,12 @@ async function syncAllPropertiesIcal(db, filterPropertyId = null) {
   const now = Date.now();
   let gToken = null;
   try { gToken = await getGoogleToken(kv); } catch { /* OAuth 실패 → 블로커 삭제 스킵 */ }
+
+  // RF-16: 이번 동기화의 시작 시각(DB 시계, 어떤 피드보다 먼저) — 사라진 예약을 정리할 때 이 뒤에(그리고 그 전 한 시간 안에)
+  // 확인된 예약은 건드리지 않는다. 겹쳐 돈 다른 동기화가 넣은 새 예약, 한 번 흔들린 피드로 잠깐 빠진 예약 보호
+  let syncStartedAt = null;
+  try { syncStartedAt = (await db.query('SELECT NOW() AS now')).rows[0]?.now ?? null; }
+  catch (e) { console.error('[syncAllIcal] 동기화 시작 시각 조회 실패:', e.message); }
 
   for (const prop of properties) {
     let icalText;
@@ -780,9 +796,39 @@ async function syncAllPropertiesIcal(db, filterPropertyId = null) {
            raw_data=EXCLUDED.raw_data,
            last_seen_at=NOW(),
            updated_at=NOW()`,
-        [prop.property_id, reservation.uid || `${prop.property_id}:${reservation.checkIn.toISOString()}`, reservation.guestName, reservation.platform,
+        [prop.property_id, reservationUidOf(prop.property_id, reservation), reservation.guestName, reservation.platform,
          reservation.checkIn.toISOString(), reservation.checkOut.toISOString(), prop.ical_url, reservation],
       );
+    }
+
+    // RF-16: 피드에서 사라진 미래 예약(취소·새 번호로 재발행)을 취소로 표시하고, 퇴실이 없어진 날(취소·같은 번호의 날짜 변경)의
+    // 살아 있는 청소 작업은 운영자에게 한 번 알린다(작업은 바꾸지 않음). 정리 실패가 새 예약·청소 생성을 막지 않게 따로 잡는다.
+    try {
+      if (syncStartedAt) {
+        const { skipped } = await retireVanishedReservations(db, {
+          propertyId: prop.property_id,
+          seenUids: parsedReservations.map(reservation => reservationUidOf(prop.property_id, reservation)),
+          syncStartedAt,
+          now: new Date(now),
+        });
+        if (skipped === 'MASS_VANISH') console.error(`[syncAllIcal] 예약이 한꺼번에 많이 사라져 정리하지 않음 — 피드 확인 필요 (${prop.property_id})`);
+      }
+      const alertKey = goneAlertKey(prop.property_id);
+      const previouslyAlertedIds = await kv.get(alertKey)
+        .then(saved => (Array.isArray(saved) ? saved : []))
+        .catch((e) => { console.error(`[syncAllIcal] 알림 기록 조회 실패 (${prop.property_id}):`, e.message); return null; });
+      const { alertedIds } = await alertGoneCheckoutJobs({
+        propertyName: prop.name ?? prop.property_id,
+        jobs: await listGoneCheckoutJobs(db, { propertyId: prop.property_id, now: new Date(now) }),
+        previouslyAlertedIds,
+        send: postSlack,
+      });
+      if (alertedIds && JSON.stringify(alertedIds) !== JSON.stringify(previouslyAlertedIds)) {
+        await kv.set(alertKey, alertedIds, { ex: GONE_ALERT_TTL_S })
+          .catch((e) => console.error(`[syncAllIcal] 알림 기록 저장 실패 (${prop.property_id}):`, e.message));
+      }
+    } catch (e) {
+      console.error(`[syncAllIcal] 사라진 예약 정리 실패 (${prop.property_id}):`, e.message);
     }
 
     for (const reservation of checkouts) {
@@ -809,7 +855,8 @@ async function syncAllPropertiesIcal(db, filterPropertyId = null) {
            (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source,source_ref,data_origin,dispatch_after)
          VALUES ($1,$2,$3,$4,$5,$6,$2,'REAL',$7)
          ON CONFLICT (property_id,checkout_at) DO NOTHING`,
-        [prop.property_id, uid ?? null, cleaning_start_at.toISOString(),
+        // 예약 행과 같은 번호 규칙(RF-16) — 번호 없는 피드 예약도 저장된 예약을 가리키게
+        [prop.property_id, reservationUidOf(prop.property_id, reservation), cleaning_start_at.toISOString(),
          cleaning_start_at.toISOString(), cleaning_end_at.toISOString(), source, dispatchAfter]
       );
 
