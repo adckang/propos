@@ -10,7 +10,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import { actualCleaningModule } from '../helpers/cleaningDeliveryFixture.js';
-import { alertGoneCheckoutJobs, describeOrphanedJobs, reservationUidOf, isCheckoutCancelled } from '../../server/cleaning/_reservationSync.js';
+import { alertGoneCheckoutJobs, alertGoneCheckouts, describeOrphanedJobs, goneAlertKeyOf, goneAlertStoreKey, isCheckoutCancelled,
+  isCompleteCalendar, lastSyncStoreKey, postAssignmentSlack, reservationUidOf, retireAfterSync } from '../../server/cleaning/_reservationSync.js';
 
 const api = readFileSync(new URL('../../api/cleaning/[...slug].js', import.meta.url), 'utf8');
 const cron = readFileSync(new URL('../../api/cron/[...slug].js', import.meta.url), 'utf8');
@@ -33,7 +34,47 @@ describe('동기화 연결', () => {
     const started = syncBlock.indexOf(`db.query('SELECT NOW() AS now')`);
     const fetched = syncBlock.indexOf('await fetch(prop.ical_url)');
     assert.ok(started > 0 && fetched > started, '시작 시각을 피드 요청보다 먼저 잡아야 함');
-    assert.match(syncBlock, /if \(syncStartedAt\) \{[\s\S]*retireVanishedReservations\(db, \{[\s\S]*syncStartedAt,/);
+    assert.match(syncBlock, /if \(syncStartedAt\) \{[\s\S]*retireAfterSync\(db, \{[\s\S]*feedIsCalendar: isCompleteCalendar\(icalText\),\s*syncStartedAt,[\s\S]*store: kv,/);
+  });
+
+  // 2026-11-11 리뷰 3차: 동기화는 정해진 주기 없이 돈다(화면·새 예약 메일·수동) — 한 번 흔들린 피드로 진짜 예약을 취소하지 않게
+  // 직전 정상 동기화에도 안 보였어야 하고, 숙소의 마지막 예약 취소(피드가 비어 있음)도 놓치지 않게 "온전한 달력"으로 판단한다.
+  test('온전한 달력 판단 — 예약 0건인 정상 달력은 판단, 오류 페이지·빈 응답·잘린 응답은 판단하지 않음', () => {
+    assert.equal(isCompleteCalendar('BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n'), true);
+    assert.equal(isCompleteCalendar('BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x\r\nEND:VEVENT\r\nEND:VCALENDAR'), true);
+    for (const text of ['', '<html>error</html>', 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x', null, undefined]) {
+      assert.equal(isCompleteCalendar(text), false, String(text));
+    }
+  });
+
+  const recordStore = ({ previous, failGet = false, failSet = false } = {}) => {
+    const writes = [];
+    return {
+      writes,
+      get: async () => { if (failGet) throw new Error('kv down'); return previous ?? null; },
+      set: async (key, value, options) => { if (failSet) throw new Error('kv down'); writes.push({ key, value, options }); },
+    };
+  };
+  const noDb = { query: async () => { throw new Error('직전 기록이 없으면 DB 를 보지 않아야 함'); } };
+  const started = new Date('2026-11-11T00:00:00Z');
+
+  test('동기화마다 직전 기록을 읽고, 판단할 수 있는 피드(온전한 달력 + 예약 1건 이상)였을 때만 이번 시작 시각을 남긴다', async () => {
+    const first = recordStore();
+    assert.deepEqual(await retireAfterSync(noDb, { propertyId: '파주201', seenUids: ['a'], feedIsCalendar: true, syncStartedAt: started, store: first }),
+      { retired: [], skipped: 'NO_PREVIOUS_SYNC' }, '반영 직후 첫 동기화는 기록만 남긴다');
+    assert.deepEqual(first.writes, [{ key: lastSyncStoreKey('파주201'), value: '2026-11-11T00:00:00.000Z', options: { ex: 30 * 86_400 } }]);
+    for (const [feedIsCalendar, seenUids, skipped] of [[false, ['a'], 'INVALID_FEED'], [true, [], 'NO_RESERVATIONS']]) {
+      const store = recordStore({ previous: '2026-11-10T23:45:00.000Z' });
+      assert.deepEqual(await retireAfterSync(noDb, { propertyId: '파주201', seenUids, feedIsCalendar, syncStartedAt: started, store }), { retired: [], skipped });
+      assert.deepEqual(store.writes, [], `${skipped} 피드는 "정상 동기화"로 남기지 않는다`);
+    }
+  });
+
+  test('직전 기록을 못 읽으면 정리하지 않고, 기록 저장 실패는 동기화를 멈추지 않는다', async () => {
+    assert.deepEqual(await retireAfterSync(noDb, { propertyId: '파주201', seenUids: ['a'], feedIsCalendar: true, syncStartedAt: started, store: recordStore({ failGet: true }) }),
+      { retired: [], skipped: 'NO_PREVIOUS_SYNC' });
+    assert.deepEqual(await retireAfterSync(noDb, { propertyId: '파주201', seenUids: ['a'], feedIsCalendar: true, syncStartedAt: started, store: recordStore({ failSet: true }) }),
+      { retired: [], skipped: 'NO_PREVIOUS_SYNC' });
   });
 
   test('다시 나타난 예약은 기존 저장이 "예약됨"으로 되돌린다 (취소 표시가 굳지 않는다)', () => {
@@ -43,10 +84,9 @@ describe('동기화 연결', () => {
   test('정리·알림이 실패해도 새 예약·청소 생성은 계속되고, 알림 기록은 숙소마다 하나(바뀌었을 때만 저장)', () => {
     const start = syncBlock.indexOf('// RF-16: 피드에서 사라진 미래 예약');
     const block = syncBlock.slice(start, syncBlock.indexOf('for (const reservation of checkouts)', start));
-    assert.match(block, /try \{[\s\S]*retireVanishedReservations[\s\S]*alertGoneCheckoutJobs\(\{[\s\S]*send: postSlack,[\s\S]*\} catch \(e\) \{\s*console\.error/);
-    assert.match(block, /jobs: await listGoneCheckoutJobs\(db, \{ propertyId: prop\.property_id/);
-    assert.match(block, /const previouslyAlertedIds = await kv\.get\(alertKey\)/);
-    assert.match(block, /if \(alertedIds && JSON\.stringify\(alertedIds\) !== JSON\.stringify\(previouslyAlertedIds\)\) \{\s*await kv\.set\(alertKey, alertedIds/);
+    // 2026-11-11 리뷰 3차: 알림 단계를 동기화·캘린더 배정이 같이 쓰는 alertGoneCheckouts 로 옮김(기록·보내기 동작은 아래 행동 테스트)
+    assert.match(block, /try \{[\s\S]*retireAfterSync[\s\S]*await alertGoneCheckouts\(db, \{ propertyId: prop\.property_id, propertyName: prop\.name, now: new Date\(now\), \.\.\.goneAlertDeps \}\);\s*\} catch \(e\) \{\s*console\.error/);
+    assert.match(api, /const goneAlertDeps = \{ store: kv, send: postSlack \};/);
   });
 
   test('새 청소 작업도 예약과 같은 번호 규칙으로 저장한다 (번호 없는 피드 예약도 저장된 예약을 가리킴)', () => {
@@ -82,7 +122,7 @@ describe('운영자 알림', () => {
   test('아직 알리지 않은 작업만 모아 한 번 보내고, 알린 목록에 더한다', async () => {
     const s = sender(true);
     const result = await alertGoneCheckoutJobs({ propertyName: '파주201', jobs, previouslyAlertedIds: ['a'], send: s.send });
-    assert.deepEqual(result, { alerted: 1, alertedIds: ['a', 'b'] });
+    assert.deepEqual(result, { alerted: 1, alertedIds: ['a', 'b'], sentIds: ['b'] });
     assert.equal(s.sent.length, 1);
     assert.match(s.sent[0], /12\/27/);
     assert.doesNotMatch(s.sent[0], /12\/20/);
@@ -90,22 +130,132 @@ describe('운영자 알림', () => {
 
   test('보내기에 실패하면 알린 목록에 넣지 않는다 — 다음 동기화에 다시 보낸다', async () => {
     const result = await alertGoneCheckoutJobs({ propertyName: '파주201', jobs, previouslyAlertedIds: [], send: sender(false).send });
-    assert.deepEqual(result, { alerted: 0, alertedIds: [] });
+    assert.deepEqual(result, { alerted: 0, alertedIds: [], sentIds: [] });
   });
 
   test('정상으로 돌아온 작업은 목록에서 빠진다 — 나중에 다시 사라지면 다시 알린다', async () => {
     const s = sender(true);
     const restored = await alertGoneCheckoutJobs({ propertyName: '파주201', jobs: [jobs[1]], previouslyAlertedIds: ['a', 'b'], send: s.send });
-    assert.deepEqual(restored, { alerted: 0, alertedIds: ['b'] });
+    assert.deepEqual(restored, { alerted: 0, alertedIds: ['b'], sentIds: [] });
     assert.equal(s.sent.length, 0);
     const again = await alertGoneCheckoutJobs({ propertyName: '파주201', jobs, previouslyAlertedIds: restored.alertedIds, send: s.send });
-    assert.deepEqual(again, { alerted: 1, alertedIds: ['b', 'a'] });
+    assert.deepEqual(again, { alerted: 1, alertedIds: ['b', 'a'], sentIds: ['a'] });
   });
 
   test('기록을 못 읽었으면 이번엔 보내지 않고 저장도 하지 않는다 — 동기화마다 같은 알림이 반복되지 않게', async () => {
     const s = sender(true);
-    assert.deepEqual(await alertGoneCheckoutJobs({ propertyName: '파주201', jobs, previouslyAlertedIds: null, send: s.send }), { alerted: 0, alertedIds: null });
+    assert.deepEqual(await alertGoneCheckoutJobs({ propertyName: '파주201', jobs, previouslyAlertedIds: null, send: s.send }), { alerted: 0, alertedIds: null, sentIds: [] });
     assert.equal(s.sent.length, 0);
+  });
+
+  // 2026-11-11 리뷰 3차: 손님 취소 알림(요청 중)이 나간 뒤 담당자가 이미 받은 요청을 수락하면, 담당자가 퇴실 없는 날 온다.
+  // 같은 작업이라도 담당자가 배정되면 다시 알린다(가장 위험한 순간). 요청 중 상태끼리 바뀌는 건 다시 알리지 않는다.
+  test('요청 중일 때 알린 작업에 담당자가 배정되면 다시 알린다 — 요청 중 상태끼리는 다시 알리지 않는다', async () => {
+    const s = sender(true);
+    const first = await alertGoneCheckoutJobs({ propertyName: '파주201', jobs: [{ ...jobs[0], status: 'NOTIFYING_VIP_1' }], previouslyAlertedIds: [], send: s.send });
+    assert.deepEqual(first, { alerted: 1, alertedIds: ['a'], sentIds: ['a'] });
+    const stillRequesting = await alertGoneCheckoutJobs({ propertyName: '파주201', jobs: [{ ...jobs[0], status: 'NOTIFYING_BULK' }], previouslyAlertedIds: first.alertedIds, send: s.send });
+    assert.deepEqual(stillRequesting, { alerted: 0, alertedIds: ['a'], sentIds: [] });
+    const assigned = await alertGoneCheckoutJobs({ propertyName: '파주201',
+      jobs: [{ ...jobs[0], status: 'ASSIGNED', has_cleaner: true, cleaner_name: '김민지' }], previouslyAlertedIds: stillRequesting.alertedIds, send: s.send });
+    assert.deepEqual(assigned, { alerted: 1, alertedIds: ['a:assigned'], sentIds: ['a:assigned'] });
+    assert.equal(s.sent.length, 2);
+    assert.match(s.sent[1], /12\/20\(일\) 11:00 퇴실 청소 — 김민지님 배정됨/);
+    const again = await alertGoneCheckoutJobs({ propertyName: '파주201',
+      jobs: [{ ...jobs[0], status: 'ASSIGNED', has_cleaner: true, cleaner_name: '김민지' }], previouslyAlertedIds: assigned.alertedIds, send: s.send });
+    assert.deepEqual(again, { alerted: 0, alertedIds: ['a:assigned'], sentIds: [] });
+    assert.equal(goneAlertKeyOf({ id: 7, status: 'ESCALATED', has_cleaner: true }), '7');
+    assert.equal(goneAlertKeyOf({ id: 7, status: 'ASSIGNED', has_cleaner: false }), '7', '상태만 배정됨이고 담당자가 없으면 아직 아무도 오지 않는다');
+  });
+});
+
+describe('알림 기록·캘린더 배정 경고 (동기화와 캘린더 배정이 같은 함수)', () => {
+  // 퇴실 확인 결과(gone)와 퇴실이 없어진 작업 목록만 돌려주는 가짜 DB
+  const fakeDb = ({ gone, goneJobs = [] }) => ({
+    query: async (sql) => {
+      if (/AS gone/.test(sql)) return { rows: [{ gone }] };
+      if (/FROM cleaning_jobs j/.test(sql)) return { rows: goneJobs };
+      throw new Error(`예상하지 못한 쿼리: ${sql.slice(0, 60)}`);
+    },
+  });
+  const fakeStore = (initial, { failGet = false } = {}) => {
+    const saved = new Map(initial === undefined ? [] : [[goneAlertStoreKey('파주201'), initial]]);
+    const writes = [];
+    return {
+      saved, writes,
+      get: async key => { if (failGet) throw new Error('kv down'); return saved.get(key) ?? null; },
+      set: async (key, value, options) => { writes.push({ key, value, options }); saved.set(key, value); },
+    };
+  };
+  const sender = ok => { const sent = []; return { sent, send: async text => { sent.push(text); return ok; } }; };
+  const job = { id: 'j1', property_id: '파주201', checkout_at: '2026-12-20T02:00:00Z', reservation_uid: 'old@airbnb.com' };
+  const goneJob = { id: 'j1', checkout_at: '2026-12-20T02:00:00Z', status: 'ASSIGNED', has_cleaner: true, cleaner_name: '김민지' };
+
+  test('알린 기록은 숙소마다 하나, 바뀌었을 때만 반년 보관으로 저장한다', async () => {
+    const store = fakeStore(undefined);
+    const s = sender(true);
+    const result = await alertGoneCheckouts(fakeDb({ gone: true, goneJobs: [goneJob] }), { propertyId: '파주201', propertyName: '파주201', store, send: s.send });
+    assert.equal(result.alerted, 1);
+    assert.deepEqual(store.writes, [{ key: 'cleaning:gone-checkout-alerts:파주201', value: ['j1:assigned'], options: { ex: 180 * 86_400 } }]);
+    await alertGoneCheckouts(fakeDb({ gone: true, goneJobs: [goneJob] }), { propertyId: '파주201', store, send: s.send });
+    assert.equal(store.writes.length, 1, '바뀌지 않았는데 다시 저장함');
+    assert.equal(s.sent.length, 1);
+  });
+
+  test('기록 저장소가 고장 나면 보내지 않는다 (예외 없이)', async () => {
+    const s = sender(true);
+    const result = await alertGoneCheckouts(fakeDb({ gone: true, goneJobs: [goneJob] }), { propertyId: '파주201', store: fakeStore(undefined, { failGet: true }), send: s.send });
+    assert.deepEqual(result, { alerted: 0, alertedIds: null, sentIds: [] });
+    assert.equal(s.sent.length, 0);
+  });
+
+  test('퇴실이 있는 날의 캘린더 배정은 예전 "배정 완료" 그대로', async () => {
+    const s = sender(true);
+    const store = fakeStore(undefined);
+    await postAssignmentSlack(fakeDb({ gone: false }), { job, propertyName: '파주201', cleanerName: '김민지', normalText: '✅ 배정 완료', store, send: s.send });
+    assert.deepEqual(s.sent, ['✅ 배정 완료']);
+    assert.equal(store.writes.length, 0);
+  });
+
+  test('퇴실이 없어진 날의 캘린더 배정은 "배정 완료" 대신 경고 — 기록에 남겨 다음 동기화에 다시 가지 않는다', async () => {
+    const s = sender(true);
+    const store = fakeStore(['j1']); // 요청 중일 때 이미 한 번 알림
+    await postAssignmentSlack(fakeDb({ gone: true, goneJobs: [goneJob] }), { job, propertyName: '파주201', cleanerName: '김민지', normalText: '✅ 배정 완료', store, send: s.send });
+    assert.equal(s.sent.length, 1);
+    assert.doesNotMatch(s.sent[0], /✅/);
+    assert.match(s.sent[0], /그날 퇴실이 없어요[\s\S]*12\/20\(일\) 11:00 퇴실 청소 — 김민지님 배정됨/);
+    assert.deepEqual(store.saved.get(goneAlertStoreKey('파주201')), ['j1:assigned']);
+    // 다음 동기화: 같은 상태라 다시 보내지 않는다
+    const next = await alertGoneCheckouts(fakeDb({ gone: true, goneJobs: [goneJob] }), { propertyId: '파주201', store, send: s.send });
+    assert.equal(next.alerted, 0);
+    assert.equal(s.sent.length, 1);
+  });
+
+  test('기록을 못 읽었거나 이미 알렸어도 "배정 완료"라고는 하지 않는다 — 이 작업만 경고', async () => {
+    for (const store of [fakeStore(undefined, { failGet: true }), fakeStore(['j1:assigned'])]) {
+      const s = sender(true);
+      await postAssignmentSlack(fakeDb({ gone: true, goneJobs: [goneJob] }), { job, propertyName: '파주201', cleanerName: '김민지', normalText: '✅ 배정 완료', store, send: s.send });
+      assert.equal(s.sent.length, 1);
+      assert.doesNotMatch(s.sent[0], /✅/);
+      assert.match(s.sent[0], /12\/20\(일\) 11:00 퇴실 청소 — 김민지님 배정됨/);
+    }
+  });
+
+  test('같은 숙소의 다른 작업만 이번 메시지에 들어갔으면 방금 배정된 작업을 따로 알린다', async () => {
+    const s = sender(true);
+    const store = fakeStore(['j1:assigned']);
+    const other = { id: 'j2', checkout_at: '2026-12-27T02:00:00Z', status: 'PENDING', has_cleaner: false };
+    await postAssignmentSlack(fakeDb({ gone: true, goneJobs: [goneJob, other] }), { job, propertyName: '파주201', cleanerName: '김민지', normalText: '✅ 배정 완료', store, send: s.send });
+    assert.equal(s.sent.length, 2);
+    assert.match(s.sent[0], /12\/27/);
+    assert.doesNotMatch(s.sent[0], /12\/20/);
+    assert.match(s.sent[1], /12\/20\(일\) 11:00 퇴실 청소 — 김민지님 배정됨/);
+  });
+
+  test('캘린더 웹훅·관리자 캘린더 스캔 두 곳 모두 이 함수로 알린다 (예전 "배정" Slack 직접 호출이 남지 않음)', () => {
+    const calls = api.match(/await postAssignmentSlack\(db, \{ job, propertyName: propCfg\.name, cleanerName: cleaner\.name, \.\.\.goneAlertDeps,/g) ?? [];
+    assert.equal(calls.length, 2);
+    assert.ok(!/await postSlack\(`\[PROPOS\] ✅ \$\{propCfg\.name\} \$\{eventDate\} 청소 배정/.test(api), '배정 Slack 직접 호출이 남아 있음');
   });
 
   test('Slack 보내기는 성공 여부를 돌려준다 (실패해도 예외 없음)', async () => {
@@ -185,6 +335,32 @@ describe('발송 전 확인 — 퇴실이 없어진 날만 막는다', () => {
     assert.match(cron, /for \(const notif of bulkNotifs\) \{\s*\/\/ RF-16[^\n]*\n\s*if \(await isCheckoutCancelled\(db, \{ property_id: notif\.property_id, checkout_at: notif\.job_checkout_at, reservation_uid: notif\.job_reservation_uid \}\)\) continue;/);
     assert.match(cron, /SELECT j\.id, j\.property_id, j\.cleaning_start_at, j\.checkout_at, j\.reservation_uid/);
     assert.match(cron, /for \(const job of bulkJobs\) \{\s*\/\/ RF-16[^\n]*\n\s*if \(await isCheckoutCancelled\(db, job\)\) continue;/);
+  });
+
+  // 2026-11-11 리뷰 3차: 단체 요청을 모두 거절한 경우·화면이 열릴 때 도는 후속 처리의 "배정 실패 — 수동 처리 필요" 넘김도 같은 규칙으로
+  test('단체 요청을 모두 거절해도 퇴실이 없어진 날이면 "배정 실패"로 넘기지 않는다', () => {
+    assert.match(api, /j\.status AS job_status, j\.data_origin, j\.property_id, j\.cleaning_start_at, j\.checkout_at, j\.reservation_uid\s+FROM cleaning_notifs n/);
+    assert.match(api, /if \(parseInt\(total\) === parseInt\(declined\) && !\(await isCheckoutCancelled\(db, notif\)\)\) \{\s*await db\.query\(`UPDATE cleaning_jobs SET status='ESCALATED'/);
+  });
+
+  test('화면이 열릴 때 도는 후속 처리(runFollowupChecks)도 퇴실이 없어진 날은 "배정 실패"로 넘기지 않는다', () => {
+    const block = api.slice(api.indexOf('async function runFollowupChecks'), api.indexOf('async function listJobs'));
+    assert.match(block, /SELECT j\.id, j\.property_id, j\.cleaning_start_at, j\.checkout_at, j\.reservation_uid FROM cleaning_jobs j/);
+    assert.match(block, /for \(const job of bulkJobs\) \{\s*\/\/ RF-16[^\n]*\n\s*if \(await isCheckoutCancelled\(db, job\)\) continue;/);
+  });
+
+  test('"배정 실패"로 넘기는 곳은 모두 바로 앞에서 퇴실을 확인한다 — 새로 만든 넘김이 확인을 빠뜨리면 깨진다', () => {
+    // 각 넘김 바로 앞(같은 파일의 앞 넘김 뒤부터, 최대 700자)만 본다 — 앞 넘김의 확인으로 새 넘김이 통과하지 않게
+    const sites = [];
+    for (const [file, text] of [['api/cleaning', api], ['api/cron', cron]]) {
+      let previousEnd = 0;
+      for (const match of text.matchAll(/SET status='ESCALATED'/g)) {
+        sites.push([file, text.slice(Math.max(previousEnd, match.index - 700), match.index)]);
+        previousEnd = match.index + match[0].length;
+      }
+    }
+    assert.equal(sites.length, 3, '넘김 위치 수가 바뀌었다 — 새 위치도 퇴실 확인을 넣고 이 숫자를 고칠 것');
+    for (const [file, before] of sites) assert.match(before, /isCheckoutCancelled\(db, /, `${file} 의 "배정 실패" 넘김 앞에 퇴실 확인이 없음`);
   });
 
   test('운영자가 직접 보낸 경우엔 내부 코드 대신 문장으로 알린다', () => {

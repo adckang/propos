@@ -22,7 +22,8 @@ import {
   getNextMonthDates,
 } from "../../server/cleaning/_calendar.js";
 import { notify } from "../../server/cleaning/_notify.js";
-import { alertGoneCheckoutJobs, listGoneCheckoutJobs, reservationUidOf, retireVanishedReservations } from "../../server/cleaning/_reservationSync.js";
+import { alertGoneCheckouts, isCheckoutCancelled, isCompleteCalendar, postAssignmentSlack, reservationUidOf, retireAfterSync }
+  from "../../server/cleaning/_reservationSync.js";
 import { markRenewed } from "../../server/cleaning/_tokenHealth.js";
 import { periodToRemainingRange } from "../../src/domain/periodDomain.js";
 import { validatePropertyName } from "../../src/domain/propertyIdentityDomain.js";
@@ -301,7 +302,7 @@ async function runFollowupChecks() {
 
   // BULK 3시간 경과 → ESCALATED + Slack
   const { rows: bulkJobs } = await db.query(
-    `SELECT j.id, j.property_id, j.cleaning_start_at FROM cleaning_jobs j
+    `SELECT j.id, j.property_id, j.cleaning_start_at, j.checkout_at, j.reservation_uid FROM cleaning_jobs j
      JOIN LATERAL (
        SELECT MIN(sent_at) AS first_sent FROM cleaning_notifs WHERE job_id=j.id
      ) n ON true
@@ -310,6 +311,8 @@ async function runFollowupChecks() {
        AND n.first_sent < NOW() - INTERVAL '3 hours'`
   );
   for (const job of bulkJobs) {
+    // RF-16: 그날 퇴실이 없어졌으면 "배정 실패 — 수동 처리"로 넘기지 않는다(크론·거절 링크와 같은 규칙). 운영자 알림은 동기화가 보낸다
+    if (await isCheckoutCancelled(db, job)) continue;
     const { rows } = await db.query(
       `UPDATE cleaning_jobs SET status='ESCALATED', updated_at=NOW()
        WHERE id=$1 AND status IN ('NOTIFYING_BULK','BULK_REMINDED') RETURNING id`,
@@ -482,7 +485,7 @@ async function handleDecline(req, res, token) {
   if (!t || !/^[A-Z0-9]{6}$/.test(t)) return respond(404, "링크 오류", "유효하지 않은 링크입니다.");
   const { rows: [notif] } = await db.query(
     `SELECT n.id, n.job_id, n.cleaner_id, n.token, n.response,
-            j.status AS job_status, j.data_origin, j.property_id, j.cleaning_start_at
+            j.status AS job_status, j.data_origin, j.property_id, j.cleaning_start_at, j.checkout_at, j.reservation_uid
      FROM cleaning_notifs n JOIN cleaning_jobs j ON j.id=n.job_id WHERE n.token=$1`,
     [t]
   );
@@ -505,7 +508,8 @@ async function handleDecline(req, res, token) {
       [notif.job_id]
     );
     const { total, declined } = rows[0];
-    if (parseInt(total) === parseInt(declined)) {
+    // RF-16: 그날 퇴실이 없어졌으면 "배정 실패 — 수동 처리"로 넘기지 않는다(크론의 넘김과 같은 규칙). 운영자 알림은 동기화가 보낸다
+    if (parseInt(total) === parseInt(declined) && !(await isCheckoutCancelled(db, notif))) {
       await db.query(`UPDATE cleaning_jobs SET status='ESCALATED',updated_at=NOW() WHERE id=$1`, [notif.job_id]);
       const date = new Date(notif.cleaning_start_at).toISOString().slice(0, 10);
       await postSlack(`[PROPOS] 🚨 ${notif.property_id} ${date} 청소 배정 실패 (전원 거절). 수동 처리 필요.`);
@@ -685,7 +689,8 @@ async function handleCalendarWebhook(req, res) {
     if (!updated.length) continue;
     if (job.status !== 'ASSIGNED' || !job.assigned_cleaner_id) {
       await sendCompletionSmsToRest(db, job.id, cleaner.id).catch(() => {});
-      await postSlack(`[PROPOS] ✅ ${propCfg.name} ${eventDate} 청소 배정 완료 (${cleaner.name})`);
+      await postAssignmentSlack(db, { job, propertyName: propCfg.name, cleanerName: cleaner.name, ...goneAlertDeps,
+        normalText: `[PROPOS] ✅ ${propCfg.name} ${eventDate} 청소 배정 완료 (${cleaner.name})` });
     }
   }
   return res.status(200).end();
@@ -741,9 +746,8 @@ async function handleGmailWebhook(req, res) {
 
 // ── 공통: 전체 숙소 iCal 재폴링 + 신규 예약 처리 ──────────────
 
-// RF-16 퇴실이 없어진 청소 작업 알림 — 숙소마다 "알린 작업" 목록 하나(보내졌을 때만 넣고, 정상으로 돌아오면 뺀다)
-const GONE_ALERT_TTL_S = 180 * 86_400;
-const goneAlertKey = propertyId => `cleaning:gone-checkout-alerts:${propertyId}`;
+// RF-16 퇴실이 없어진 청소 작업 알림 — 알린 기록은 KV(숙소마다 하나), 보내기는 운영자 Slack. 규칙은 _reservationSync.js
+const goneAlertDeps = { store: kv, send: postSlack };
 
 async function syncAllPropertiesIcal(db, filterPropertyId = null) {
   const { rows: properties } = await db.query(
@@ -805,28 +809,18 @@ async function syncAllPropertiesIcal(db, filterPropertyId = null) {
     // 살아 있는 청소 작업은 운영자에게 한 번 알린다(작업은 바꾸지 않음). 정리 실패가 새 예약·청소 생성을 막지 않게 따로 잡는다.
     try {
       if (syncStartedAt) {
-        const { skipped } = await retireVanishedReservations(db, {
+        const { skipped } = await retireAfterSync(db, {
           propertyId: prop.property_id,
           seenUids: parsedReservations.map(reservation => reservationUidOf(prop.property_id, reservation)),
+          feedIsCalendar: isCompleteCalendar(icalText),
           syncStartedAt,
           now: new Date(now),
+          store: kv,
         });
         if (skipped === 'MASS_VANISH') console.error(`[syncAllIcal] 예약이 한꺼번에 많이 사라져 정리하지 않음 — 피드 확인 필요 (${prop.property_id})`);
+        if (skipped === 'INVALID_FEED') console.error(`[syncAllIcal] 피드가 온전한 달력이 아니라 사라진 예약을 정리하지 않음 (${prop.property_id})`);
       }
-      const alertKey = goneAlertKey(prop.property_id);
-      const previouslyAlertedIds = await kv.get(alertKey)
-        .then(saved => (Array.isArray(saved) ? saved : []))
-        .catch((e) => { console.error(`[syncAllIcal] 알림 기록 조회 실패 (${prop.property_id}):`, e.message); return null; });
-      const { alertedIds } = await alertGoneCheckoutJobs({
-        propertyName: prop.name ?? prop.property_id,
-        jobs: await listGoneCheckoutJobs(db, { propertyId: prop.property_id, now: new Date(now) }),
-        previouslyAlertedIds,
-        send: postSlack,
-      });
-      if (alertedIds && JSON.stringify(alertedIds) !== JSON.stringify(previouslyAlertedIds)) {
-        await kv.set(alertKey, alertedIds, { ex: GONE_ALERT_TTL_S })
-          .catch((e) => console.error(`[syncAllIcal] 알림 기록 저장 실패 (${prop.property_id}):`, e.message));
-      }
+      await alertGoneCheckouts(db, { propertyId: prop.property_id, propertyName: prop.name, now: new Date(now), ...goneAlertDeps });
     } catch (e) {
       console.error(`[syncAllIcal] 사라진 예약 정리 실패 (${prop.property_id}):`, e.message);
     }
@@ -1376,7 +1370,8 @@ async function handleCalendarScan(req, res) {
     if (updated.length) {
       results.push({ eventDate, attendeeEmail, cleaner: cleaner.name, result: "ASSIGNED" });
       if (job.status !== 'ASSIGNED' || !job.assigned_cleaner_id) {
-        await postSlack(`[PROPOS] ✅ ${propCfg.name} ${eventDate} 청소 배정 (${cleaner.name})`);
+        await postAssignmentSlack(db, { job, propertyName: propCfg.name, cleanerName: cleaner.name, ...goneAlertDeps,
+          normalText: `[PROPOS] ✅ ${propCfg.name} ${eventDate} 청소 배정 (${cleaner.name})` });
       }
     } else {
       results.push({ eventDate, attendeeEmail, result: "이미 ASSIGNED" });

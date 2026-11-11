@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { parse } from '@babel/parser';
 import * as calendarDomain from '../../src/domain/calendarAssignmentDomain.js';
 import { toKstDateKey } from '../../server/cleaning/_dispatch.js';
+import { postAssignmentSlack } from '../../server/cleaning/_reservationSync.js';
 
 const source = readFileSync(new URL('../../api/cleaning/[...slug].js', import.meta.url), 'utf8');
 const ast = parse(source, { sourceType: 'module' });
@@ -23,7 +24,7 @@ function booking(overrides = {}) {
 }
 
 function job(overrides = {}) {
-  return { id: 'job-1', checkout_at: checkout, status: 'ASSIGNED',
+  return { id: 'job-1', property_id: 'property-1', checkout_at: checkout, status: 'ASSIGNED',
     assigned_cleaner_id: cleaner.id, google_event_id: 'event-1',
     cleaning_start_at: checkout, cleaning_end_at: '2026-10-30T05:00:00.000Z',
     ...overrides };
@@ -35,11 +36,16 @@ function load(name, dependencies) {
   return new Function(...Object.keys(dependencies), `return (${source.slice(node.start, node.end)});`)(...Object.values(dependencies));
 }
 
-async function execute(name, { row = job(), events = [booking()], pages, calendarOk = true } = {}) {
+async function execute(name, { row = job(), events = [booking()], pages, calendarOk = true, checkoutGone = false } = {}) {
   const updates = [], notices = [], reads = [];
+  const postSlack = async value => { notices.push({ type: 'slack', value }); return true; };
   const deps = {
     db: { query: async (sql, params) => {
       if (sql.includes('UPDATE cleaning_jobs')) { updates.push({ sql, params }); return { rowCount: 1, rows: [{ id: row.id }] }; }
+      // RF-16 배정 Slack 의 퇴실 확인 — 실제 postAssignmentSlack 이 묻는다(checkoutGone 이면 그날 퇴실이 없어진 작업)
+      if (sql.includes('AS gone')) return { rows: [{ gone: checkoutGone }] };
+      // 퇴실이 없어진 작업 목록 — 방금 배정된 뒤의 모양(담당자 붙음)
+      if (sql.includes('LEFT JOIN cleaners c')) return { rows: checkoutGone ? [{ ...row, status: 'ASSIGNED', has_cleaner: true }] : [] };
       reads.push({ sql, params });
       if (sql.includes('FROM property_cleaning_config')) return { rows: [{ property_id: 'property-1', google_calendar_id: 'calendar-1' }] };
       if (sql.includes('FROM cleaning_jobs')) return { rows: [row] };
@@ -57,7 +63,9 @@ async function execute(name, { row = job(), events = [booking()], pages, calenda
       return { attendeeEmail: event.attendees?.[0]?.email, cleaner: matched?.cleaner ?? null };
     },
     ...calendarDomain,
-    postSlack: async value => { notices.push({ type: 'slack', value }); },
+    postSlack,
+    postAssignmentSlack,
+    goneAlertDeps: { store: { get: async () => [], set: async () => {} }, send: postSlack },
     sendCompletionSmsToRest: async () => { notices.push({ type: 'sms' }); },
     console: { error() {} },
   };
@@ -148,6 +156,16 @@ for (const handler of ['handleCalendarWebhook', 'handleCalendarScan']) describe(
     const state = await execute(handler, { row: job({ status: 'PENDING', assigned_cleaner_id: null, google_event_id: null }) });
     assertBookedTimes(state.updates[0]);
     assert.equal(state.status, 200);
+    assert.match(state.notices.find(n => n.type === 'slack')?.value ?? '', /✅/);
+  });
+  // RF-16 리뷰 3차(2026-11-11): 손님 취소 뒤 이미 나간 요청을 수락 → "배정 완료" 대신 퇴실 없음 경고(배정 자체는 그대로 저장)
+  test('new assignment on a day whose checkout is gone warns instead of "배정 완료"', async () => {
+    const state = await execute(handler, { checkoutGone: true, row: job({ status: 'PENDING', assigned_cleaner_id: null, google_event_id: null }) });
+    assertBookedTimes(state.updates[0]);
+    const slack = state.notices.filter(n => n.type === 'slack').map(n => n.value);
+    assert.equal(slack.length, 1);
+    assert.doesNotMatch(slack[0], /✅/);
+    assert.match(slack[0], /그날 퇴실이 없어요/);
   });
   test('time correction for same linked event sends no duplicate assignment notice', async () => {
     const state = await execute(handler);

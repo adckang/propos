@@ -4,6 +4,7 @@
 //
 // RF-16: 피드에서 사라진 예약 정리 — 실제 SQL 로 번호 재발행·진짜 취소·같은 번호의 날짜 변경·겹친 동기화·잘린 피드·빈 피드·
 // 지난 예약·다른 숙소를 확인하고, 실제 발송 함수(advanceJob)가 퇴실이 없어진 날에만 요청을 보내지 않는지 본다.
+// 2026-11-11 리뷰 3차: 직전 정상 동기화에도 안 보였어야 정리(동기화 간격이 길 때 한 번 흔들린 피드 보호), 예약 0건인 정상 달력은 판단.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createCleaningSqlFixture, actualCleaningModule, installDeliveryIO } from '../helpers/cleaningDeliveryFixture.js';
@@ -16,6 +17,7 @@ const sync = await actualCleaningModule('server/cleaning/_reservationSync.js');
 const NOW = new Date('2026-11-01T00:00:00Z');
 const SYNC_STARTED = new Date('2026-10-31T23:59:00Z'); // 이번 동기화가 시작된 시각
 const BEFORE_SYNC = '2026-10-20T00:00:00Z';           // 지난 동기화에서 마지막으로 본 시각
+const PREVIOUS_SYNC = '2026-10-31T23:44:00Z';         // 직전 정상 동기화가 시작된 시각(15분 전)
 
 async function run(options, fn) {
   const io = installDeliveryIO(options.io);
@@ -32,8 +34,8 @@ const reservation = (pool, propertyId, uid, checkIn, checkOut, { status = 'ACTIV
    VALUES($1,$2,$3,$4,$5,'AIRBNB_ICAL','REAL',$6)`, [propertyId, uid, checkIn, checkOut, status, lastSeen]);
 const statusOf = async (pool, propertyId, uid) =>
   (await pool.query('SELECT status FROM property_reservations WHERE property_id=$1 AND reservation_uid=$2', [propertyId, uid])).rows[0]?.status;
-const retire = (f, seenUids, extra = {}) =>
-  sync.retireVanishedReservations(f.pool, { propertyId: 'fixture-property', seenUids, syncStartedAt: SYNC_STARTED, now: NOW, ...extra });
+const retire = (f, seenUids, extra = {}) => sync.retireVanishedReservations(f.pool, {
+  propertyId: 'fixture-property', seenUids, feedIsCalendar: true, syncStartedAt: SYNC_STARTED, previousSyncStartedAt: PREVIOUS_SYNC, now: NOW, ...extra });
 const goneJobs = f => sync.listGoneCheckoutJobs(f.pool, { propertyId: 'fixture-property', now: NOW });
 
 test('SQL: 번호만 바뀐 재발행 — 옛 번호는 취소, 같은 날 새 예약이 있어 알림 없음, 요청은 그대로 나간다', { skip: !enabled }, () => run({}, async (f, io) => {
@@ -54,7 +56,7 @@ test('SQL: 진짜 취소 — 예약은 취소, 그날 작업을 알릴 목록에
   await reservation(f.pool, 'fixture-property', 'kept-uid', '2026-11-20T06:00:00Z', '2026-11-22T02:00:00Z');
   const result = await retire(f, ['kept-uid']);
   assert.deepEqual(result.retired.map(row => row.reservation_uid), ['gone-uid']);
-  assert.deepEqual((await goneJobs(f)).map(job => [job.id, job.status, job.has_cleaner]), [[f.jobId, 'PENDING', false]]);
+  assert.deepEqual((await goneJobs(f)).map(job => [job.id, job.status, job.cleaner_name]), [[f.jobId, 'PENDING', null]]);
 
   const sent = await dispatch.advanceJob(f.pool, await f.currentJob());
   assert.deepEqual(sent, { ok: false, state: 'CANCELLED', errorCode: 'RESERVATION_CANCELLED' });
@@ -96,10 +98,40 @@ test('SQL: 미래 예약이 한꺼번에 절반 넘게(3건 이상) 사라지면
   assert.deepEqual((await retire(f, ['b', 'c', 'd'])).retired.map(row => row.reservation_uid), ['a'], '한두 건은 평소대로 정리');
 }));
 
-test('SQL: 피드에 예약이 하나도 없으면(일시 장애·"예약 불가" 표시뿐) 아무것도 바꾸지 않는다', { skip: !enabled }, () => run({}, async f => {
+test('SQL: 피드가 온전한 달력이 아니면(오류 페이지·빈 응답·잘린 응답) 아무것도 바꾸지 않는다', { skip: !enabled }, () => run({}, async f => {
   await reservation(f.pool, 'fixture-property', 'kept-uid', '2026-11-08T06:00:00Z', '2026-11-10T02:00:00Z');
-  assert.deepEqual(await retire(f, []), { retired: [], skipped: 'NO_RESERVATIONS' });
+  assert.deepEqual(await retire(f, ['other-uid'], { feedIsCalendar: false }), { retired: [], skipped: 'INVALID_FEED' });
   assert.equal(await statusOf(f.pool, 'fixture-property', 'kept-uid'), 'ACTIVE');
+}));
+
+test('SQL: 예약이 0건인 피드로는 정리하지 않는다 — 피드엔 앞으로의 숙박만 와서 "모두 취소"와 "형식이 바뀌어 못 읽음"을 구별할 수 없다', { skip: !enabled }, () => run({}, async (f, io) => {
+  await reservation(f.pool, 'fixture-property', 'only-uid', '2026-11-08T06:00:00Z', '2026-11-10T02:00:00Z');
+  assert.deepEqual(await retire(f, []), { retired: [], skipped: 'NO_RESERVATIONS' });
+  assert.equal(await statusOf(f.pool, 'fixture-property', 'only-uid'), 'ACTIVE');
+  await dispatch.advanceJob(f.pool, await f.currentJob());
+  assert.equal(io.calls.sms.length, 1, '진짜 퇴실일 수 있으니 청소 요청은 평소대로');
+  // 다른 예약이 하나라도 생기면 그때 정리된다
+  await reservation(f.pool, 'fixture-property', 'new-uid', '2026-11-20T06:00:00Z', '2026-11-22T02:00:00Z', { lastSeen: NOW.toISOString() });
+  assert.deepEqual((await retire(f, ['new-uid'])).retired.map(row => row.reservation_uid), ['only-uid']);
+}));
+
+test('SQL: 직전 정상 동기화에 보였던 예약은 이번에 처음 빠진 것 — 동기화 간격이 길어도 바로 취소하지 않고, 다음에도 없으면 취소', { skip: !enabled }, () => run({}, async f => {
+  // 밤새 동기화가 없다가(직전 동기화 08:00 에 보임) 아침 동기화에서 처음 빠짐 — 1시간은 넘었지만 한 번 흔들린 피드일 수 있다
+  await reservation(f.pool, 'fixture-property', 'blip-uid', '2026-11-08T06:00:00Z', '2026-11-10T02:00:00Z', { lastSeen: '2026-10-31T08:00:05Z' });
+  await reservation(f.pool, 'fixture-property', 'kept-uid', '2026-11-20T06:00:00Z', '2026-11-22T02:00:00Z', { lastSeen: '2026-10-31T08:00:05Z' });
+  assert.deepEqual((await retire(f, ['kept-uid'], { previousSyncStartedAt: '2026-10-31T08:00:00Z' })).retired, []);
+  assert.equal(await statusOf(f.pool, 'fixture-property', 'blip-uid'), 'ACTIVE');
+  // 다음 동기화(직전 = 방금 그 동기화)에도 없으면 취소
+  const next = await retire(f, ['kept-uid'], { previousSyncStartedAt: SYNC_STARTED, syncStartedAt: new Date('2026-11-01T00:15:00Z') });
+  assert.deepEqual(next.retired.map(row => row.reservation_uid), ['blip-uid']);
+}));
+
+test('SQL: 직전 동기화 기록이 없으면(반영 직후 첫 동기화·기록 조회 실패) 판단하지 않는다', { skip: !enabled }, () => run({}, async f => {
+  await reservation(f.pool, 'fixture-property', 'gone-uid', '2026-11-08T06:00:00Z', '2026-11-10T02:00:00Z');
+  for (const previousSyncStartedAt of [null, 'not-a-date', SYNC_STARTED.toISOString()]) {
+    assert.deepEqual(await retire(f, ['other-uid'], { previousSyncStartedAt }), { retired: [], skipped: 'NO_PREVIOUS_SYNC' });
+  }
+  assert.equal(await statusOf(f.pool, 'fixture-property', 'gone-uid'), 'ACTIVE');
 }));
 
 test('SQL: 지난 예약·다른 숙소·이미 취소된 예약은 건드리지 않는다', { skip: !enabled }, () => run({}, async f => {
