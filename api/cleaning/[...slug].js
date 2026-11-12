@@ -21,15 +21,16 @@ import {
   createBlockerEvent,
   deleteBlockerEvent,
   getNextMonthDates,
+  openCleaningSlot,
+  requestedCleaningDays,
 } from "../../server/cleaning/_calendar.js";
 import { notify } from "../../server/cleaning/_notify.js";
-import { alertGoneCheckouts, isCheckoutCancelled, isCompleteCalendar, postAssignmentSlack, reservationUidOf, retireAfterSync }
-  from "../../server/cleaning/_reservationSync.js";
+import { syncAllPropertiesIcal } from "../../server/cleaning/_icalSync.js";
+import { isCheckoutCancelled, postAssignmentSlack } from "../../server/cleaning/_reservationSync.js";
 import { markRenewed } from "../../server/cleaning/_tokenHealth.js";
 import { periodToRemainingRange } from "../../src/domain/periodDomain.js";
 import { validatePropertyName } from "../../src/domain/propertyIdentityDomain.js";
 import { renamePropertyId, PropertyRenameError } from "../../src/infrastructure/propertyRenameRepository.js";
-import { airbnbEventsToReservations, parseVEvents } from "../../src/domain/room-state/icalParser.js";
 import { attendeeEmailsForCleaner, matchCleanerAttendee, calendarCleaningTimes } from "../../src/domain/calendarAssignmentDomain.js";
 import { getDemoCleaningStats, getDemoPropertyConfigs } from "../../src/application/demoReportingService.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
@@ -404,18 +405,10 @@ async function syncJobs(req, res) {
     );
     if (rowCount > 0) {
       created++;
-      // 해당 날짜 블로커 삭제 (예약 확정 → 슬롯 오픈)
-      const { rows: blocker } = await db.query(
-        `DELETE FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2 RETURNING event_id`,
-        [property_id, date]
-      );
-      if (blocker.length && cfg.google_calendar_id) {
-        try {
-          const gTok = await getGoogleToken(kv);
-          await deleteBlockerEvent(cfg.google_calendar_id, blocker[0].event_id, gTok);
-        } catch (e) {
-          console.error(`[syncJobs] 블로커 삭제 실패 (${property_id}/${date}):`, e.message);
-        }
+      // 칸은 요청 보내는 날 연다(DEC-07) — 2주 안이라 바로 요청 대상인 일정만 지금 연다(동기화와 같음). 먼 일정은 요청 날 열린다
+      if (source === "SHORT_NOTICE") {
+        await openCleaningSlot(db, { propertyId: property_id, date, kv }).catch(e =>
+          console.error(`[syncJobs] 칸 열기 실패 (${property_id}/${date}):`, e.message));
       }
     } else {
       skipped++;
@@ -444,21 +437,10 @@ async function dispatchJob(res, jobId, scope) {
   return sendJson(res, 200, { ok: true });
 }
 
+// 수동 발송도 첫 요청과 함께 그날 칸을 연다(매일 요청 작업과 같은 함수)
 function makeBlockerDeleter() {
   return async (job) => {
-    const date = new Date(job.checkout_at).toISOString().slice(0, 10);
-    const { rows: [cfg] } = await db.query(
-      `SELECT google_calendar_id FROM property_cleaning_config WHERE property_id=$1`,
-      [job.property_id]
-    );
-    const { rows: blocker } = await db.query(
-      `DELETE FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2 RETURNING event_id`,
-      [job.property_id, date]
-    );
-    if (blocker.length && cfg?.google_calendar_id) {
-      const gTok = await getGoogleToken(kv);
-      await deleteBlockerEvent(cfg.google_calendar_id, blocker[0].event_id, gTok);
-    }
+    await openCleaningSlot(db, { propertyId: job.property_id, date: toKstDateKey(job.checkout_at), kv }); // 칸 날짜는 한국 날짜
   };
 }
 
@@ -736,7 +718,7 @@ async function handleGmailWebhook(req, res) {
         const subject = (msg.payload?.headers ?? []).find((hdr) => hdr.name === "Subject")?.value ?? "";
         if (RESERVATION_SUBJECTS.some((s) => subject.toLowerCase().includes(s))) {
           await postSlack("[PROPOS] 📬 에어비앤비 신규 예약 이메일 감지. iCal 재폴링 트리거.");
-          await syncAllPropertiesIcal(db).catch((e) =>
+          await syncAllPropertiesIcal(db, { kv }).catch((e) =>
             console.error("[gmail-webhook] iCal 재폴링 실패:", e.message)
           );
           return res.status(200).end();
@@ -752,136 +734,6 @@ async function handleGmailWebhook(req, res) {
 // RF-16 퇴실이 없어진 청소 작업 알림 — 알린 기록은 KV(숙소마다 하나), 보내기는 운영자 Slack. 규칙은 _reservationSync.js
 const goneAlertDeps = { store: kv, send: postSlack };
 
-async function syncAllPropertiesIcal(db, filterPropertyId = null) {
-  const { rows: properties } = await db.query(
-    filterPropertyId
-      ? `SELECT * FROM property_cleaning_config WHERE data_origin='REAL' AND ical_url IS NOT NULL AND property_id=$1`
-      : `SELECT * FROM property_cleaning_config WHERE data_origin='REAL' AND ical_url IS NOT NULL`,
-    filterPropertyId ? [filterPropertyId] : []
-  );
-  if (!properties.length) return;
-
-  const now = Date.now();
-  let gToken = null;
-  try { gToken = await getGoogleToken(kv); } catch { /* OAuth 실패 → 블로커 삭제 스킵 */ }
-
-  // RF-16: 이번 동기화의 시작 시각(DB 시계, 어떤 피드보다 먼저) — 사라진 예약을 정리할 때 이 뒤에(그리고 그 전 한 시간 안에)
-  // 확인된 예약은 건드리지 않는다. 겹쳐 돈 다른 동기화가 넣은 새 예약, 한 번 흔들린 피드로 잠깐 빠진 예약 보호
-  let syncStartedAt = null;
-  try { syncStartedAt = (await db.query('SELECT NOW() AS now')).rows[0]?.now ?? null; }
-  catch (e) { console.error('[syncAllIcal] 동기화 시작 시각 조회 실패:', e.message); }
-
-  for (const prop of properties) {
-    let icalText;
-    try {
-      const r = await fetch(prop.ical_url);
-      if (!r.ok) throw new Error(`iCal HTTP ${r.status}`);
-      icalText = await r.text();
-    } catch (e) {
-      console.error(`[syncAllIcal] iCal 폴링 실패 (${prop.property_id}):`, e.message);
-      continue;
-    }
-
-    const parsedReservations = airbnbEventsToReservations(
-      parseVEvents(icalText),
-      prop.checkin_hour ?? 15,
-      prop.checkout_hour ?? 11,
-    );
-    const checkouts = parsedReservations.filter(r => r.checkOut.getTime() >= now);
-
-    for (const reservation of parsedReservations) {
-      await db.query(
-        `INSERT INTO property_reservations
-           (property_id,reservation_uid,guest_name,platform,check_in,check_out,status,source_system,source_ref,raw_data,data_origin,last_seen_at,updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,'ACTIVE','AIRBNB_ICAL',$7,$8,'REAL',NOW(),NOW())
-         ON CONFLICT (property_id,reservation_uid) DO UPDATE SET
-           guest_name=EXCLUDED.guest_name,
-           check_in=EXCLUDED.check_in,
-           check_out=EXCLUDED.check_out,
-           status='ACTIVE',
-           source_ref=EXCLUDED.source_ref,
-           raw_data=EXCLUDED.raw_data,
-           last_seen_at=NOW(),
-           updated_at=NOW()`,
-        [prop.property_id, reservationUidOf(prop.property_id, reservation), reservation.guestName, reservation.platform,
-         reservation.checkIn.toISOString(), reservation.checkOut.toISOString(), prop.ical_url, reservation],
-      );
-    }
-
-    // RF-16: 피드에서 사라진 미래 예약(취소·새 번호로 재발행)을 취소로 표시하고, 퇴실이 없어진 날(취소·같은 번호의 날짜 변경)의
-    // 살아 있는 청소 작업은 운영자에게 한 번 알린다(작업은 바꾸지 않음). 정리 실패가 새 예약·청소 생성을 막지 않게 따로 잡는다.
-    try {
-      if (syncStartedAt) {
-        const { skipped } = await retireAfterSync(db, {
-          propertyId: prop.property_id,
-          seenUids: parsedReservations.map(reservation => reservationUidOf(prop.property_id, reservation)),
-          feedIsCalendar: isCompleteCalendar(icalText),
-          syncStartedAt,
-          now: new Date(now),
-          store: kv,
-        });
-        if (skipped === 'MASS_VANISH') console.error(`[syncAllIcal] 예약이 한꺼번에 많이 사라져 정리하지 않음 — 피드 확인 필요 (${prop.property_id})`);
-        if (skipped === 'INVALID_FEED') console.error(`[syncAllIcal] 피드가 온전한 달력이 아니라 사라진 예약을 정리하지 않음 (${prop.property_id})`);
-      }
-      await alertGoneCheckouts(db, { propertyId: prop.property_id, propertyName: prop.name, now: new Date(now), ...goneAlertDeps });
-    } catch (e) {
-      console.error(`[syncAllIcal] 사라진 예약 정리 실패 (${prop.property_id}):`, e.message);
-    }
-
-    for (const reservation of checkouts) {
-      const { uid } = reservation;
-      const date = toKstDateKey(reservation.checkOut);
-      if (!date) {
-        console.error(`[syncAllIcal] 잘못된 체크아웃 날짜 (${prop.property_id}/${uid ?? 'unknown'})`);
-        continue;
-      }
-      const { cleaning_start_at, cleaning_end_at } = calcCleaningTimes(
-        date, prop.checkout_hour ?? 11, prop.cleaning_duration_hours ?? 2.5
-      );
-      // MONTHLY_BATCH: 청소 시작 14일 전에 요청 / SHORT_NOTICE: 지금 → 아래에서 즉시 advanceJob (작업을 만드는 곳 모두 같은 규칙)
-      const { source, dispatchAfter } = planJobDispatch(cleaning_start_at, now);
-
-      const { rowCount } = await db.query(
-        `INSERT INTO cleaning_jobs
-           (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source,source_ref,data_origin,dispatch_after)
-         VALUES ($1,$2,$3,$4,$5,$6,$2,'REAL',$7)
-         ON CONFLICT (property_id,checkout_at) DO NOTHING`,
-        // 예약 행과 같은 번호 규칙(RF-16) — 번호 없는 피드 예약도 저장된 예약을 가리키게
-        [prop.property_id, reservationUidOf(prop.property_id, reservation), cleaning_start_at.toISOString(),
-         cleaning_start_at.toISOString(), cleaning_end_at.toISOString(), source, dispatchAfter.toISOString()]
-      );
-
-      // SHORT_NOTICE만 즉시 블로커 삭제 (MONTHLY_BATCH는 dispatch_after 도달 시 makeCronBlockerDeleter가 처리)
-      if (source === "SHORT_NOTICE") {
-        const { rows: blocker } = await db.query(
-          `DELETE FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2 RETURNING event_id`,
-          [prop.property_id, date]
-        );
-        if (blocker.length && gToken && prop.google_calendar_id) {
-          await deleteBlockerEvent(prop.google_calendar_id, blocker[0].event_id, gToken).catch(
-            (e) => console.error(`[syncAllIcal] 블로커 삭제 실패 (${prop.property_id}/${date}):`, e.message)
-          );
-        }
-      }
-
-      if (rowCount > 0 && source === "SHORT_NOTICE") {
-        // 즉시 발동 (followup 크론 대기 없이)
-        const { rows: [newJob] } = await db.query(
-          `SELECT * FROM cleaning_jobs WHERE property_id=$1 AND checkout_at=$2`,
-          [prop.property_id, cleaning_start_at.toISOString()]
-        );
-        if (newJob) {
-          await advanceJob(db, newJob).catch(
-            (e) => console.error(`[syncAllIcal] advanceJob 실패 (${prop.property_id}/${date}):`, e.message)
-          );
-        }
-        await postSlack(
-          `[PROPOS] 🚀 SHORT_NOTICE 신규 예약: ${prop.name ?? prop.property_id} ${date} → 즉시 알림 발송`
-        );
-      }
-    }
-  }
-}
 
 // ── iCal 수동 동기화 트리거 ───────────────────────────────────────
 
@@ -991,7 +843,7 @@ async function handleIcalSync(req, res, scope) {
     },
   };
 
-  await syncAllPropertiesIcal(countingDb, property_id ?? null);
+  await syncAllPropertiesIcal(countingDb, { kv, filterPropertyId: property_id ?? null });
   let assignmentRepair = { scanned: 0, repaired: 0 };
   if (property_id) {
     try {
@@ -1059,7 +911,10 @@ async function bootstrapBlockers(req, res) {
   let created = 0, skipped = 0;
   const errors = [];
   for (const prop of properties) {
+    // 이미 요청이 나갔거나 배정된 날은 막지 않는다(15일 월간 작업과 같은 판단 — 막으면 요청 받은 담당자가 예약할 수 없다, DEC-07)
+    const keepOpen = await requestedCleaningDays(db, prop.property_id, targetDates);
     for (const date of targetDates) {
+      if (keepOpen.has(date)) { skipped++; continue; }
       const { rows: existing } = await db.query(
         `SELECT 1 FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2`,
         [prop.property_id, date]

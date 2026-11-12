@@ -30,6 +30,21 @@ function load(name, deps) {
   return new Function(...Object.keys(deps), `return (${handlerSource.slice(node.start, node.end)});`)(...Object.values(deps));
 }
 
+// 예약 가져오기는 화면 API·정기 작업이 같이 쓰는 공용 모듈(RF-20)
+const icalSyncSource = read('server/cleaning/_icalSync.js');
+const icalSyncAst = parse(icalSyncSource, { sourceType: 'module' });
+function exportedFunctionNode(ast, name) {
+  return ast.program.body.find(n => n.type === 'ExportNamedDeclaration' && n.declaration?.type === 'FunctionDeclaration'
+    && n.declaration.id?.name === name)?.declaration;
+}
+function loadSync(deps) {
+  const node = exportedFunctionNode(icalSyncAst, 'syncAllPropertiesIcal');
+  assert.ok(node, 'syncAllPropertiesIcal 없음');
+  // 전체(syncAllPropertiesIcal) + 숙소 하나(syncOneProperty) 를 함께 — 모듈 끝까지가 두 함수다
+  const body = icalSyncSource.slice(node.start);
+  return new Function(...Object.keys(deps), `${body}\nreturn syncAllPropertiesIcal;`)(...Object.values(deps));
+}
+
 /** 오늘(KST)부터 days 일 뒤의 날짜 'YYYY-MM-DD' */
 function kstDay(days) {
   return new Date(Date.now() + 9 * 3_600_000 + days * DAY).toISOString().slice(0, 10);
@@ -72,7 +87,7 @@ describe('planJobDispatch — 출처와 첫 요청 시각 규칙', () => {
 
 describe('관리자 일괄 등록(jobs/sync) — 실제 핸들러 실행', () => {
   async function runSyncJobs(checkouts) {
-    const inserts = [];
+    const inserts = [], opened = [];
     const deps = {
       db: { query: async (sql, params) => {
         if (sql.includes('INSERT INTO cleaning_jobs')) { inserts.push({ sql, params }); return { rowCount: 1, rows: [] }; }
@@ -83,13 +98,13 @@ describe('관리자 일괄 등록(jobs/sync) — 실제 핸들러 실행', () =>
       sendJson: (res, code, body) => res.status(code).json(body),
       getPropertyConfig: async () => ({ property_id: '파주201', checkout_hour: 11, cleaning_duration_hours: 2.5, data_origin: 'REAL', google_calendar_id: null }),
       calcCleaningTimes, planJobDispatch,
-      getGoogleToken: async () => 'token', kv: {}, deleteBlockerEvent: async () => {},
+      kv: {}, openCleaningSlot: async (_db, { date }) => { opened.push(date); return true; },
       console: { error() {} },
     };
     const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
     const before = Date.now();
     await load('syncJobs', deps)({ method: 'POST' }, res);
-    return { res, inserts, before, after: Date.now() };
+    return { res, inserts, opened, before, after: Date.now() };
   }
 
   const dispatchParam = insert => {
@@ -101,12 +116,13 @@ describe('관리자 일괄 등록(jobs/sync) — 실제 핸들러 실행', () =>
 
   test('200일 뒤 퇴실: 시작 14일 전에 요청하도록 저장한다', async () => {
     const date = kstDay(200);
-    const { res, inserts } = await runSyncJobs([{ date, uid: 'uid-far' }]);
+    const { res, inserts, opened } = await runSyncJobs([{ date, uid: 'uid-far' }]);
     assert.equal(res.code, 200);
     assert.equal(inserts.length, 1);
     const start = calcCleaningTimes(date, 11, 2.5).cleaning_start_at;
     assert.equal(dispatchParam(inserts[0]).toISOString(), new Date(start.getTime() - 14 * DAY).toISOString());
     assert.ok(inserts[0].params.includes('MONTHLY_BATCH'));
+    assert.deepEqual(opened, [], '먼 일정의 칸은 요청 날 열린다(DEC-07) — 지금 열지 않는다');
   });
 
   test('지난 퇴실: 작업을 만들지 않고(블로커도 그대로) 건너뛴 건수로 센다', async () => {
@@ -118,10 +134,11 @@ describe('관리자 일괄 등록(jobs/sync) — 실제 핸들러 실행', () =>
   });
 
   test('3일 뒤 퇴실: 바로 요청(SHORT_NOTICE)', async () => {
-    const { inserts, before, after } = await runSyncJobs([{ date: kstDay(3), uid: 'uid-near' }]);
+    const { inserts, opened, before, after } = await runSyncJobs([{ date: kstDay(3), uid: 'uid-near' }]);
     const at = dispatchParam(inserts[0]).getTime();
     assert.ok(at >= before - 1000 && at <= after + 1000, '지금 요청');
     assert.ok(inserts[0].params.includes('SHORT_NOTICE'));
+    assert.deepEqual(opened, [kstDay(3)], '바로 요청할 일정은 칸도 바로 연다');
   });
 });
 
@@ -144,18 +161,47 @@ describe('iCal 동기화 — 실제 핸들러 실행(같은 규칙을 쓰는지)
         if (sql.includes('DELETE FROM property_calendar_blockers')) return { rows: [] };
         throw new Error(`예상하지 못한 쿼리: ${sql.slice(0, 60)}`);
       } },
-      getGoogleToken: async () => null, kv: {},
+      openCleaningSlot: async () => true,
       fetch: async () => ({ ok: true, text: async () => 'BEGIN:VCALENDAR\nEND:VCALENDAR' }),
       parseVEvents: () => [], airbnbEventsToReservations: () => reservations,
       reservationUidOf, retireAfterSync: async () => ({}), isCompleteCalendar: () => true,
-      alertGoneCheckouts: async () => {}, goneAlertDeps: {},
+      alertGoneCheckouts: async () => {},
       toKstDateKey, calcCleaningTimes, planJobDispatch,
-      deleteBlockerEvent: async () => {}, advanceJob: async () => {}, postSlack: async () => true,
+      advanceJob: async () => {}, postSlack: async () => true,
       console: { error() {} },
     };
-    await load('syncAllPropertiesIcal', deps)(deps.db);
+    await loadSync(deps)(deps.db, { kv: {} });
     return inserts;
   }
+
+  test('숙소 하나에서 오류가 나도 다른 숙소의 예약 가져오기는 계속된다(정기 작업이 혼자 돈다)', async () => {
+    const jobs = [], errors = [];
+    const date = kstDay(40);
+    const reservations = [{ uid: 'uid-0', guestName: null, platform: 'Airbnb',
+      checkIn: new Date(new Date(`${date}T15:00:00+09:00`).getTime() - 2 * DAY), checkOut: new Date(`${date}T11:00:00+09:00`) }];
+    const db = { query: async (sql, params) => {
+      if (sql.includes('FROM property_cleaning_config')) {
+        return { rows: ['A숙소', 'B숙소'].map(id => ({ property_id: id, name: id, ical_url: `https://example.invalid/${id}`, checkout_hour: 11, cleaning_duration_hours: 2.5 })) };
+      }
+      if (sql.includes('SELECT NOW()')) return { rows: [{ now: new Date() }] };
+      if (sql.includes('INSERT INTO property_reservations')) {
+        if (params[0] === 'A숙소') throw Object.assign(new Error('저장 거절'), { code: '23514' });
+        return { rowCount: 1, rows: [] };
+      }
+      if (sql.includes('INSERT INTO cleaning_jobs')) { jobs.push(params[0]); return { rowCount: 0, rows: [] }; }
+      throw new Error(`예상하지 못한 쿼리: ${sql.slice(0, 60)}`);
+    } };
+    const deps = {
+      openCleaningSlot: async () => true, fetch: async () => ({ ok: true, text: async () => 'BEGIN:VCALENDAR\nEND:VCALENDAR' }),
+      parseVEvents: () => [], airbnbEventsToReservations: () => reservations,
+      reservationUidOf, retireAfterSync: async () => ({}), isCompleteCalendar: () => true, alertGoneCheckouts: async () => {},
+      toKstDateKey, calcCleaningTimes, planJobDispatch, advanceJob: async () => {}, postSlack: async () => true,
+      console: { error: (...a) => errors.push(a.join(' ')) },
+    };
+    await loadSync(deps)(db, { kv: {} });
+    assert.deepEqual(jobs, ['B숙소'], 'A숙소가 실패해도 B숙소는 청소 일정까지 간다');
+    assert.ok(errors.some(e => e.includes('A숙소')), 'A숙소 실패는 기록');
+  });
 
   test('먼 퇴실은 시작 14일 전, 가까운 퇴실은 바로 — planJobDispatch 와 같은 값', async () => {
     const far = kstDay(90);
@@ -182,13 +228,15 @@ describe('월간 배치(매월 15일) — 실제 핸들러 실행 (RF-19, 시나
   }
   const start = date => calcCleaningTimes(date, 11, 3).cleaning_start_at;
 
-  async function runMonthly({ checkouts, pendingJobs, failInsertOn = [] }) {
-    const inserts = [], updates = [], blockerDeletes = [], errors = [], slack = [], ranges = [];
+  async function runMonthly({ checkouts, pendingJobs, failInsertOn = [], google = false, monthDates = null, requestedDays = [] }) {
+    const inserts = [], updates = [], blockerDeletes = [], errors = [], slack = [], ranges = [], blockersMade = [];
     const db = { query: async (sql, params) => {
       if (sql.includes('FROM property_cleaning_config')) {
         return { rows: [{ property_id: '파주201', name: '파주201', ical_url: 'https://example.invalid/ical', checkout_hour: 11,
-          cleaning_duration_hours: 3, google_calendar_id: null, data_origin: 'REAL' }] };
+          cleaning_duration_hours: 3, google_calendar_id: google ? 'calendar-1' : null, data_origin: 'REAL' }] };
       }
+      if (sql.includes('SELECT 1 FROM property_calendar_blockers')) return { rows: [] };
+      if (sql.includes('INSERT INTO property_calendar_blockers')) { blockersMade.push(params[1]); return { rowCount: 1, rows: [] }; }
       if (sql.includes('INSERT INTO cleaning_jobs')) {
         inserts.push({ sql, params });
         if (failInsertOn.some(date => params[2] === start(date).toISOString())) {
@@ -205,17 +253,29 @@ describe('월간 배치(매월 15일) — 실제 핸들러 실행 (RF-19, 시나
       throw new Error(`예상하지 못한 쿼리: ${sql.slice(0, 60)}`);
     } };
     const deps = {
-      getGoogleToken: async () => { throw new Error('no google in test'); }, kv: {},
-      getNextMonthDates: () => [checkouts[0]], createBlockerEvent: async () => 'evt', deleteBlockerEvent: async () => {},
+      getGoogleToken: async () => { if (!google) throw new Error('no google in test'); return 'token'; }, kv: {},
+      getNextMonthDates: () => monthDates ?? [checkouts[0]], createBlockerEvent: async () => 'evt', deleteBlockerEvent: async () => {},
       fetch: async () => ({ ok: true, text: async () => 'BEGIN:VCALENDAR\nEND:VCALENDAR' }),
       parseCheckoutsFromIcal: () => checkouts.map((date, i) => ({ date, uid: `uid-${i}` })),
       calcCleaningTimes, planJobDispatch, toKstDateKey,
+      requestedCleaningDays: async () => new Set(requestedDays),
       postSlack: async text => { slack.push(text); return true; }, console: { error: (...a) => errors.push(a.join(' ')) },
     };
     const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
     await loadCron('handleMonthlyClean', deps)(db, res);
-    return { res, inserts, updates, blockerDeletes, errors, slack, ranges };
+    return { res, inserts, updates, blockerDeletes, errors, slack, ranges, blockersMade };
   }
+
+  test('칸은 요청 보내는 날 연다(DEC-07): 15일 작업은 퇴실 날을 포함해 다음 달 모든 날을 막고 칸을 열지 않는다. 이미 요청이 나갔거나 배정된 날만 막지 않는다', async () => {
+    const days = [kstDay(40), kstDay(41), kstDay(42), kstDay(43)];
+    const { blockersMade, blockerDeletes, inserts, res } = await runMonthly({
+      google: true, monthDates: days, checkouts: [days[1], days[3]], requestedDays: [days[3]], pendingJobs: [],
+    });
+    assert.equal(res.code, 200);
+    assert.deepEqual(blockersMade, [days[0], days[1], days[2]], '퇴실 날(days[1])도 막는다 / 요청이 이미 나간 날(days[3])은 막지 않는다');
+    assert.deepEqual(blockerDeletes, [], '15일 작업은 칸을 열지 않는다 — 요청 보내는 날 연다');
+    assert.equal(inserts.length, 2, '청소 일정은 그대로 만든다');
+  });
 
   test('새로 만드는 일정은 처음부터 "청소 2주 전" 요청 시각을 저장한다', async () => {
     const date = kstDay(40);
@@ -239,14 +299,14 @@ describe('월간 배치(매월 15일) — 실제 핸들러 실행 (RF-19, 시나
     assert.ok(updates.every(u => /AND status='PENDING'/.test(u.sql)), '그 사이 진행된 일정은 건드리지 않는다');
   });
 
-  test('한 날짜의 일정 생성이 거절돼도(예약 목록에 아직 없는 새 예약) 나머지 날짜의 일정·칸 열기·일정 잡기는 계속한다', async () => {
+  test('한 날짜의 일정 생성이 거절돼도(예약 목록에 아직 없는 새 예약) 나머지 날짜의 일정 생성·요청 시각 잡기는 계속한다', async () => {
     const d1 = kstDay(40), d2 = kstDay(41), d3 = kstDay(42);
     const { inserts, blockerDeletes, updates, res, errors, slack } = await runMonthly({
       checkouts: [d1, d2, d3], failInsertOn: [d2], pendingJobs: [{ id: 'j1', cleaning_start_at: start(d1) }],
     });
     assert.equal(res.code, 200);
     assert.equal(inserts.length, 3, '실패한 날 다음 날짜도 일정 생성을 시도');
-    assert.deepEqual(blockerDeletes, [d1, d2, d3], '퇴실이 있는 날은 모두 칸을 연다');
+    assert.deepEqual(blockerDeletes, [], '15일 작업은 칸을 열지 않는다(요청 날 연다)');
     assert.equal(updates.length, 1, '요청 시각 잡기 단계까지 간다');
     assert.ok(errors.some(e => e.includes(d2)), '실패는 기록한다');
     assert.equal(res.body.jobsFailed, 1);
@@ -279,8 +339,9 @@ describe('월간 배치(매월 15일) — 실제 핸들러 실행 (RF-19, 시나
 describe('소스 계약 — 작업을 만드는 모든 곳', () => {
   test('동기화·관리자 일괄 등록은 planJobDispatch 를 쓰고 14일 규칙을 따로 두지 않는다', () => {
     for (const name of ['syncAllPropertiesIcal', 'syncJobs']) {
-      const node = handlerAst.program.body.find(n => n.type === 'FunctionDeclaration' && n.id?.name === name);
-      const body = handlerSource.slice(node.start, node.end);
+      const body = name === 'syncAllPropertiesIcal'
+        ? icalSyncSource.slice(exportedFunctionNode(icalSyncAst, name).start) // 전체 + 숙소 하나
+        : (node => handlerSource.slice(node.start, node.end))(handlerAst.program.body.find(n => n.type === 'FunctionDeclaration' && n.id?.name === name));
       assert.ok(/planJobDispatch\(/.test(body), `${name}: 공통 규칙 사용`);
       assert.ok(!/<=\s*14\s*\?/.test(body), `${name}: 14일 규칙을 따로 두지 않는다`);
       assert.ok(/dispatch_after/.test(body), `${name}: 발송 시각 저장`);
@@ -325,6 +386,7 @@ describe('소스 계약 — 작업을 만드는 모든 곳', () => {
   test('cleaning_jobs 를 만드는 곳은 발송 시각을 정하거나, 따로 정하는 이유가 있는 곳뿐이다', () => {
     const sites = {
       'api/cleaning/[...slug].js': read('api/cleaning/[...slug].js'),
+      'server/cleaning/_icalSync.js': read('server/cleaning/_icalSync.js'),
       'api/cron/[...slug].js': read('api/cron/[...slug].js'),
       'scripts/backfill-real-reservations.mjs': read('scripts/backfill-real-reservations.mjs'),
       'scripts/seed-simulated-data.mjs': read('scripts/seed-simulated-data.mjs'),

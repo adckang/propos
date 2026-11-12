@@ -102,7 +102,7 @@ describe("실제 복구 함수 — Google 이벤트와 DB 담당자 연결", () 
       readBody: async () => ({ property_id: "fixture-property" }),
       isAdminScope: () => true, canAccessProperty: () => true,
       db: { query: async () => ({ rows: [{ ical_url: "https://example.invalid/calendar.ics" }] }) },
-      syncAllPropertiesIcal: async () => {},
+      syncAllPropertiesIcal: async () => {}, kv: {},
       repairCalendarAssignments: async () => { throw new Error("fixture OAuth failure"); },
       sendJson: (_res, code, value) => { status = code; body = value; },
       console: { error() {} },

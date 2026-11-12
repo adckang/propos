@@ -115,6 +115,48 @@ export async function deleteBlockerEvent(calendarId, eventId, googleToken) {
 }
 
 /**
+ * 그날 청소 칸을 연다(블로커 삭제) — 요청을 보내는 곳(매일 요청 작업·수동 발송·2주 안 신규 예약)이 같이 쓴다.
+ * 구글 캘린더에서 실제로 지워졌을 때만 기록도 지운다: 구글 연결이 실패하면 기록이 남아 다음 요청 작업이 다시 연다.
+ * (예전엔 기록을 먼저 지워, 구글 실패 시 칸은 막힌 채 아무도 다시 열지 않았다 — 요청 받은 담당자가 예약할 수 없음. DEC-07로
+ * 칸이 요청 날에만 열리게 되면서 중요해짐, 2026-11-12)
+ * 숙소에 구글 캘린더가 설정돼 있지 않으면 열 칸이 없으므로 기록만 지운다. 구글에 없는 칸(404/410)은 이미 열린 것으로 본다.
+ *
+ * @param {{ query: Function }} db
+ * @param {{ propertyId: string, date: string, kv: object }} options  date = 한국 날짜 'YYYY-MM-DD'
+ * @returns {Promise<boolean>} 이번에 막힌 기록을 지웠으면 true(막힌 기록이 없었으면 false)
+ */
+export async function openCleaningSlot(db, { propertyId, date, kv }) {
+  const { rows: [blocker] } = await db.query(
+    `SELECT event_id FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2`, [propertyId, date]);
+  if (!blocker) return false;
+  const { rows: [cfg] } = await db.query(
+    `SELECT google_calendar_id FROM property_cleaning_config WHERE property_id=$1`, [propertyId]);
+  if (cfg?.google_calendar_id) {
+    const token = await getGoogleToken(kv);
+    await deleteBlockerEvent(cfg.google_calendar_id, blocker.event_id, token);
+  }
+  await db.query(
+    `DELETE FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2 AND event_id=$3`,
+    [propertyId, date, blocker.event_id]);
+  return true;
+}
+
+/**
+ * 칸을 막으면 안 되는 날 — 그날 청소 요청이 이미 나갔거나 담당자가 배정된 날(한국 날짜). 칸을 일괄로 막는 곳(15일 월간 작업·
+ * 수동 일괄 생성)이 같이 쓴다: 막으면 요청 받은 담당자가 예약할 수 없다. 요청 전(PENDING)·취소된 날은 막아도 된다(칸은 요청 날 열림).
+ *
+ * @returns {Promise<Set<string>>} 'YYYY-MM-DD' 집합
+ */
+export async function requestedCleaningDays(db, propertyId, dates) {
+  const { rows } = await db.query(
+    `SELECT DISTINCT to_char(checkout_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD') AS day FROM cleaning_jobs
+      WHERE property_id=$1 AND status NOT IN ('PENDING','CANCELLED')
+        AND to_char(checkout_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD') = ANY($2::text[])`,
+    [propertyId, dates]);
+  return new Set(rows.map(row => row.day));
+}
+
+/**
  * 다음 달 날짜 전체를 "YYYY-MM-DD" 문자열 배열로 반환.
  * now는 테스트 주입용 (기본값: 현재 시각).
  */

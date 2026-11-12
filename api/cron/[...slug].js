@@ -17,15 +17,17 @@ import {
   getPropertyConfig,
 } from "../../server/cleaning/_dispatch.js";
 import { notify } from "../../server/cleaning/_notify.js";
+import { syncAllPropertiesIcal } from "../../server/cleaning/_icalSync.js";
 import { isCheckoutCancelled } from "../../server/cleaning/_reservationSync.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 import {
   getGoogleToken,
   getGmailToken,
   createBlockerEvent,
-  deleteBlockerEvent,
   getNextMonthDates,
+  openCleaningSlot,
   parseCheckoutsFromIcal,
+  requestedCleaningDays,
 } from "../../server/cleaning/_calendar.js";
 import { getStatsForPeriod } from "../../src/application/reportingService.js";
 import { countPeriodEvents } from "../../src/domain/reportingDomain.js";
@@ -44,21 +46,10 @@ const DASHBOARD_URL =
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
+// 첫 요청과 함께 그날 칸을 연다(DEC-07) — 구글에서 지워졌을 때만 기록을 지워, 실패하면 아래 "다시 열기"가 재시도한다
 function makeCronBlockerDeleter(db) {
   return async (job) => {
-    const date = new Date(job.checkout_at).toISOString().slice(0, 10);
-    const { rows: [cfg] } = await db.query(
-      `SELECT google_calendar_id FROM property_cleaning_config WHERE property_id=$1`,
-      [job.property_id]
-    );
-    const { rows: blocker } = await db.query(
-      `DELETE FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2 RETURNING event_id`,
-      [job.property_id, date]
-    );
-    if (blocker.length && cfg?.google_calendar_id) {
-      const gTok = await getGoogleToken(kv);
-      await deleteBlockerEvent(cfg.google_calendar_id, blocker[0].event_id, gTok);
-    }
+    await openCleaningSlot(db, { propertyId: job.property_id, date: toKstDateKey(job.checkout_at), kv }); // 칸 날짜는 한국 날짜
   };
 }
 
@@ -152,9 +143,13 @@ async function handleMonthlyClean(db, res) {
   let blockersCreated = 0, blockersSkipped = 0, jobsCreated = 0, jobsSkipped = 0, jobsFailed = 0;
 
   for (const prop of properties) {
-    // [1] 다음 달 전체 날짜 블로커 생성 (google_calendar_id 있을 때만)
+    // [1] 다음 달 전체 날짜 블로커 생성 (google_calendar_id 있을 때만) — 퇴실 날도 막는다. 칸은 요청을 보내는 날 연다(DEC-07):
+    // 매일 요청 작업이 첫 요청과 함께 그날 블로커를 지운다. 단 이미 요청이 나갔거나 배정된 날은 막지 않는다
+    // (막으면 요청 받은 담당자가 예약할 수 없다)
     if (gToken && prop.google_calendar_id) {
+      const keepOpen = await requestedCleaningDays(db, prop.property_id, nextMonthDates);
       for (const date of nextMonthDates) {
+        if (keepOpen.has(date)) { blockersSkipped++; continue; }
         const { rows: existing } = await db.query(
           `SELECT 1 FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2`,
           [prop.property_id, date]
@@ -193,7 +188,9 @@ async function handleMonthlyClean(db, res) {
 
       const checkouts = parseCheckoutsFromIcal(icalText, targetYM);
 
-      // [3] checkout_at마다 cleaning_job 생성 + 블로커 삭제
+      // [3] checkout_at마다 cleaning_job 생성 — 칸(블로커)은 여기서 열지 않는다. 요청을 보내는 날 첫 요청과 함께 연다(DEC-07,
+      // 설계 문서 핵심 정책 "dispatch_after 도달 시 블로커 삭제 + 알림 발송"). 예전엔 15일에 바로 열어, 요청이 2주 전으로 바뀐 뒤
+      // 몇 주 동안 칸이 열려 있었다(요청 순서와 상관없이 링크를 아는 담당자가 먼저 잡을 수 있음)
       for (const { date, uid } of checkouts) {
         const { cleaning_start_at, cleaning_end_at } = calcCleaningTimes(
           date, prop.checkout_hour, prop.cleaning_duration_hours
@@ -218,22 +215,11 @@ async function handleMonthlyClean(db, res) {
           );
           if (rowCount > 0) jobsCreated++; else jobsSkipped++;
         } catch (e) {
-          // 예: 마지막 예약 동기화 뒤 피드에 새로 생긴 예약은 아직 예약 목록에 없어(청소 일정은 실제 예약에 연결돼야 한다) 저장이
-          // 거절된다 — 이 날짜만 건너뛰고(다음 예약 동기화가 일정을 만든다) 나머지 날짜의 일정 생성·칸 열기는 계속한다.
+          // 예: 예약 목록에 아직 없는 새 예약은(청소 일정은 실제 예약에 연결돼야 한다) 저장이 거절된다 — 이 날짜만 건너뛰고
+          // (다음 예약 동기화가 일정을 만든다) 나머지 날짜는 계속한다. 아침 작업은 이 단계 전에 예약을 먼저 가져오므로(RF-20) 드물다.
           // 실패 건수는 아래 Slack 요약에 따로 보여 조용히 묻히지 않게 한다
           jobsFailed++;
           console.error(`[monthly-clean] 청소 일정 생성 실패 (${prop.property_id}/${date}):`, e.code ?? e.message);
-        }
-
-        // 해당 날짜 블로커 삭제 → 예약 가능 슬롯 오픈
-        const { rows: blocker } = await db.query(
-          `DELETE FROM property_calendar_blockers WHERE property_id=$1 AND block_date=$2 RETURNING event_id`,
-          [prop.property_id, date]
-        );
-        if (blocker.length && gToken && prop.google_calendar_id) {
-          await deleteBlockerEvent(prop.google_calendar_id, blocker[0].event_id, gToken).catch((e) =>
-            console.error(`[monthly-clean] 블로커 삭제 실패 (${prop.property_id}/${date}):`, e.message)
-          );
         }
       }
     }
@@ -301,6 +287,20 @@ async function handleCleaningFollowup(db, res) {
       if (result?.ok !== false) advanced++;
     }
     catch (e) { console.error(`[followup] PENDING advance 실패 (${job.id}):`, e.message); }
+  }
+
+  // 요청은 나갔는데 그날 칸이 아직 막혀 있으면 다시 연다 — 칸은 요청 날 첫 요청과 함께 여는데(DEC-07) 그때 구글 연결이 실패했을 수
+  // 있다(실패하면 막힌 기록을 남겨 두므로 여기서 다시 시도). 칸이 막혀 있으면 요청 받은 담당자가 예약할 수 없다
+  const { rows: stillBlocked } = await db.query(
+    `SELECT DISTINCT j.property_id, b.block_date::text AS day FROM cleaning_jobs j
+       JOIN property_calendar_blockers b
+         ON b.property_id = j.property_id AND b.block_date = (j.checkout_at AT TIME ZONE 'Asia/Seoul')::date
+      WHERE j.data_origin = 'REAL' AND j.checkout_at > NOW()
+        AND j.status IN ('NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED','ESCALATED','ASSIGNED')`
+  );
+  for (const { property_id, day } of stillBlocked) {
+    await openCleaningSlot(db, { propertyId: property_id, date: day, kv })
+      .catch(e => console.error(`[followup] 칸 다시 열기 실패 (${property_id}/${day}):`, e.message));
   }
 
   // VIP 타임아웃 체크 (1시간 창)
@@ -472,19 +472,25 @@ export default async function handler(req, res) {
       // 각 단계를 개별 try/catch로 격리한다 — 하나가 실패해도 나머지(특히 아래 매일
       // 돌아가야 하는 staleness 사전경고)가 계속 실행되게 하기 위함. 예전엔 여기서 하나가
       // throw하면 전체가 바깥 catch로 빠져서 그날 staleness 점검 자체가 아예 안 돌았다.
+      // RF-20: 다른 일보다 먼저 Airbnb 예약을 가져온다 — 화면을 열지 않아도 새 예약·취소·날짜 변경이 반영되고, 아래 브리핑·요청
+      // 작업·15일 월간 작업이 최신 예약으로 돈다. 실패해도 나머지는 그대로 돈다(예전 예약 기준)
+      try { await syncAllPropertiesIcal(db, { kv }); ran.push("ical-sync"); }
+      catch (e) { console.error("[morning] ical-sync 실패:", e.message); }
+
       try { await handleDailyPlan(db, nullRes); ran.push("daily-plan"); }
       catch (e) { console.error("[morning] daily-plan 실패:", e.message); }
 
       try { await handleWorkerHealthCheck(db, nullRes); ran.push("worker-health-check"); }
       catch (e) { console.error("[morning] worker-health-check 실패:", e.message); }
 
-      try { await handleCleaningFollowup(db, nullRes); ran.push("cleaning-followup"); }
-      catch (e) { console.error("[morning] cleaning-followup 실패:", e.message); }
-
+      // 15일엔 월간 작업(다음 달 칸 막기·일정 만들기)을 요청 작업보다 먼저 — 요청 시각이 된 일정은 바로 뒤 요청 작업이 칸을 열며 보낸다
       if (kstDay === 15) {
         try { await handleMonthlyClean(db, nullRes); ran.push("monthly-cleaning"); }
         catch (e) { console.error("[morning] monthly-cleaning 실패:", e.message); }
       }
+
+      try { await handleCleaningFollowup(db, nullRes); ran.push("cleaning-followup"); }
+      catch (e) { console.error("[morning] cleaning-followup 실패:", e.message); }
 
       // Gmail Watch 7일 만료 → 마지막 성공 갱신으로부터 WATCH_STALE_MS 이상 지났으면 매일 재시도.
       // (예전엔 "매주 월요일에만" 시도했는데, 그 월요일 시도가 하필 OAuth 리프레시 토큰 장애와
@@ -573,6 +579,9 @@ export default async function handler(req, res) {
     // Vercel Hobby 크론: /api/cron/evening (UTC 13:00 = KST 22:00)
     if (action === "evening") {
       const nullRes = { status: () => ({ json: () => {} }), json: () => {} };
+      // RF-20: 밤 요청 작업 전에도 예약을 가져온다 — 취소는 "두 번 연속 안 보여야" 확정이라 하루 두 번 돌아야 반나절~하루 안에 반영된다
+      try { await syncAllPropertiesIcal(db, { kv }); }
+      catch (e) { console.error("[evening] ical-sync 실패:", e.message); }
       await handleCleaningFollowup(db, nullRes);
       return await handleDailyResult(db, res);
     }

@@ -15,10 +15,9 @@ import { alertGoneCheckoutJobs, alertGoneCheckouts, describeOrphanedJobs, goneAl
 
 const api = readFileSync(new URL('../../api/cleaning/[...slug].js', import.meta.url), 'utf8');
 const cron = readFileSync(new URL('../../api/cron/[...slug].js', import.meta.url), 'utf8');
-const syncBlock = (() => {
-  const start = api.indexOf('async function syncAllPropertiesIcal');
-  return api.slice(start, api.indexOf('\n}\n', start));
-})();
+// 예약 가져오기는 화면 API·정기 작업이 같이 쓰도록 공용 모듈로 옮겼다(RF-20)
+const icalSync = readFileSync(new URL('../../server/cleaning/_icalSync.js', import.meta.url), 'utf8');
+const syncBlock = icalSync.slice(icalSync.indexOf('export async function syncAllPropertiesIcal')); // 전체 + 숙소 하나(syncOneProperty)
 
 describe('동기화 연결', () => {
   test('피드 번호가 있으면 그대로, 없으면 "숙소:입실시각" — 저장과 정리가 같은 함수', () => {
@@ -86,7 +85,7 @@ describe('동기화 연결', () => {
     const block = syncBlock.slice(start, syncBlock.indexOf('for (const reservation of checkouts)', start));
     // 2026-11-11 리뷰 3차: 알림 단계를 동기화·캘린더 배정이 같이 쓰는 alertGoneCheckouts 로 옮김(기록·보내기 동작은 아래 행동 테스트)
     assert.match(block, /try \{[\s\S]*retireAfterSync[\s\S]*await alertGoneCheckouts\(db, \{ propertyId: prop\.property_id, propertyName: prop\.name, now: new Date\(now\), \.\.\.goneAlertDeps \}\);\s*\} catch \(e\) \{\s*console\.error/);
-    assert.match(api, /const goneAlertDeps = \{ store: kv, send: postSlack \};/);
+    assert.match(syncBlock, /const goneAlertDeps = \{ store: kv, send: postSlack \};/);
   });
 
   test('새 청소 작업도 예약과 같은 번호 규칙으로 저장한다 (번호 없는 피드 예약도 저장된 예약을 가리킴)', () => {
