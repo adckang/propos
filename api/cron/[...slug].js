@@ -11,6 +11,8 @@ import {
   recoverInitialDeliveries,
   buildSmsRemind,
   calcCleaningTimes,
+  planJobDispatch,
+  toKstDateKey,
   postSlack,
   getPropertyConfig,
 } from "../../server/cleaning/_dispatch.js";
@@ -135,6 +137,7 @@ async function handleDailyResult(db, res) {
 async function handleMonthlyClean(db, res) {
   // Google OAuth 실패해도 iCal 파트(cleaning_jobs 생성)는 계속 진행한다.
   // 실패 시 알림은 getGoogleToken(kv) 내부(_tokenHealth.js)가 Slack으로 일괄 처리한다.
+  const batchNow = Date.now(); // 이번 배치의 요청 시각 계산 기준([3]·[4]가 같은 "지금"을 쓴다)
   let gToken = null;
   try { gToken = await getGoogleToken(kv); }
   catch (e) { console.error("[monthly-clean] Google OAuth 실패:", e.message); }
@@ -146,7 +149,7 @@ async function handleMonthlyClean(db, res) {
     `SELECT * FROM property_cleaning_config WHERE data_origin = 'REAL'`
   );
 
-  let blockersCreated = 0, blockersSkipped = 0, jobsCreated = 0, jobsSkipped = 0;
+  let blockersCreated = 0, blockersSkipped = 0, jobsCreated = 0, jobsSkipped = 0, jobsFailed = 0;
 
   for (const prop of properties) {
     // [1] 다음 달 전체 날짜 블로커 생성 (google_calendar_id 있을 때만)
@@ -195,20 +198,32 @@ async function handleMonthlyClean(db, res) {
         const { cleaning_start_at, cleaning_end_at } = calcCleaningTimes(
           date, prop.checkout_hour, prop.cleaning_duration_hours
         );
-        const { rowCount } = await db.query(
-          `INSERT INTO cleaning_jobs
-             (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source)
-           VALUES ($1,$2,$3,$4,$5,'MONTHLY_BATCH')
-           ON CONFLICT (property_id,checkout_at) DO NOTHING`,
-          [
-            prop.property_id,
-            uid ?? null,
-            cleaning_start_at.toISOString(),
-            cleaning_start_at.toISOString(),
-            cleaning_end_at.toISOString(),
-          ]
-        );
-        if (rowCount > 0) jobsCreated++; else jobsSkipped++;
+        // 요청 시각은 만들 때부터 저장한다(시나리오 S01: 청소 2주 전) — 아래 [4]가 실패해도 DB 기본값(지금)으로 바로 나가지 않게
+        const { source, dispatchAfter } = planJobDispatch(cleaning_start_at, batchNow);
+        try {
+          const { rowCount } = await db.query(
+            `INSERT INTO cleaning_jobs
+               (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source,dispatch_after)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)
+             ON CONFLICT (property_id,checkout_at) DO NOTHING`,
+            [
+              prop.property_id,
+              uid ?? null,
+              cleaning_start_at.toISOString(),
+              cleaning_start_at.toISOString(),
+              cleaning_end_at.toISOString(),
+              source,
+              dispatchAfter.toISOString(),
+            ]
+          );
+          if (rowCount > 0) jobsCreated++; else jobsSkipped++;
+        } catch (e) {
+          // 예: 마지막 예약 동기화 뒤 피드에 새로 생긴 예약은 아직 예약 목록에 없어(청소 일정은 실제 예약에 연결돼야 한다) 저장이
+          // 거절된다 — 이 날짜만 건너뛰고(다음 예약 동기화가 일정을 만든다) 나머지 날짜의 일정 생성·칸 열기는 계속한다.
+          // 실패 건수는 아래 Slack 요약에 따로 보여 조용히 묻히지 않게 한다
+          jobsFailed++;
+          console.error(`[monthly-clean] 청소 일정 생성 실패 (${prop.property_id}/${date}):`, e.code ?? e.message);
+        }
 
         // 해당 날짜 블로커 삭제 → 예약 가능 슬롯 오픈
         const { rows: blocker } = await db.query(
@@ -224,10 +239,13 @@ async function handleMonthlyClean(db, res) {
     }
   }
 
-  // [4] 다음 달 PENDING job → dispatch_after 설정 (같은 날 여러 건: 10분 간격)
-  const kstNow = new Date(Date.now() + 9 * 3_600_000);
-  const nextMonthStart = new Date(Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth() + 1, 1));
-  const nextMonthEnd   = new Date(Date.UTC(nextMonthStart.getUTCFullYear(), nextMonthStart.getUTCMonth() + 1, 1));
+  // [4] 다음 달 PENDING job → dispatch_after 설정 — 시나리오 S01(cleaning-scenario-matrix.md): 청소 2주 전, 같은 날 여러 건은 10분 간격.
+  // (예전엔 "지금"으로 덮어써 다음 달 요청이 15일에 한꺼번에 나갔다 — 10/15 배치가 11월 요청을 한 달 일찍 보냄, RF-19)
+  const KST_MS = 9 * 3_600_000;
+  const kstNow = new Date(batchNow + KST_MS);
+  // 다음 달 범위는 한국 시간 자정 기준(날짜 묶음도 한국 날짜라 같은 달력으로)
+  const nextMonthStart = new Date(Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth() + 1, 1) - KST_MS);
+  const nextMonthEnd   = new Date(Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth() + 2, 1) - KST_MS);
 
   const { rows: pendingJobs } = await db.query(
     `SELECT * FROM cleaning_jobs
@@ -240,20 +258,24 @@ async function handleMonthlyClean(db, res) {
   );
 
   const dateCount = {};
+  let scheduled = 0;
   for (const job of pendingJobs) {
-    const dateKey = new Date(job.cleaning_start_at).toISOString().slice(0, 10);
+    const dateKey = toKstDateKey(job.cleaning_start_at);
     const seq = dateCount[dateKey] ?? 0;
     dateCount[dateKey] = seq + 1;
-    await db.query(
-      `UPDATE cleaning_jobs SET dispatch_after=$1 WHERE id=$2`,
-      [new Date(Date.now() + seq * 10 * 60_000).toISOString(), job.id]
+    const { dispatchAfter } = planJobDispatch(job.cleaning_start_at, batchNow);
+    const { rowCount } = await db.query(
+      `UPDATE cleaning_jobs SET dispatch_after=$1 WHERE id=$2 AND status='PENDING'`,
+      [new Date(dispatchAfter.getTime() + seq * 10 * 60_000).toISOString(), job.id]
     );
+    scheduled += rowCount ?? 0;
   }
 
   await postSlack(
-    `[PROPOS] 🗓 월간 청소 배치 완료 — 블로커 ${blockersCreated}건 생성 · 일정 ${jobsCreated}건 생성 · 발송 스케줄링 ${pendingJobs.length}건`
+    `[PROPOS] 🗓 월간 청소 배치 완료 — 블로커 ${blockersCreated}건 생성 · 일정 ${jobsCreated}건 생성 · 발송 스케줄링 ${scheduled}건`
+    + (jobsFailed ? ` · ⚠️ 일정 생성 실패 ${jobsFailed}건(로그 확인 — 다음 예약 동기화 때 다시 만들어짐)` : "")
   );
-  return res.status(200).json({ ok: true, blockersCreated, jobsCreated, scheduled: pendingJobs.length });
+  return res.status(200).json({ ok: true, blockersCreated, jobsCreated, jobsFailed, scheduled });
 }
 
 // ── 후속 처리 크론 (30분마다) ─────────────────────────────

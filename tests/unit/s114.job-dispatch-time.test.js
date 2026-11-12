@@ -172,6 +172,110 @@ describe('iCal 동기화 — 실제 핸들러 실행(같은 규칙을 쓰는지)
   });
 });
 
+describe('월간 배치(매월 15일) — 실제 핸들러 실행 (RF-19, 시나리오 S01: 요청은 청소 2주 전)', () => {
+  const cronSource = read('api/cron/[...slug].js');
+  const cronAst = parse(cronSource, { sourceType: 'module' });
+  function loadCron(name, deps) {
+    const node = cronAst.program.body.find(n => n.type === 'FunctionDeclaration' && n.id?.name === name);
+    assert.ok(node, `${name} 없음`);
+    return new Function(...Object.keys(deps), `return (${cronSource.slice(node.start, node.end)});`)(...Object.values(deps));
+  }
+  const start = date => calcCleaningTimes(date, 11, 3).cleaning_start_at;
+
+  async function runMonthly({ checkouts, pendingJobs, failInsertOn = [] }) {
+    const inserts = [], updates = [], blockerDeletes = [], errors = [], slack = [], ranges = [];
+    const db = { query: async (sql, params) => {
+      if (sql.includes('FROM property_cleaning_config')) {
+        return { rows: [{ property_id: '파주201', name: '파주201', ical_url: 'https://example.invalid/ical', checkout_hour: 11,
+          cleaning_duration_hours: 3, google_calendar_id: null, data_origin: 'REAL' }] };
+      }
+      if (sql.includes('INSERT INTO cleaning_jobs')) {
+        inserts.push({ sql, params });
+        if (failInsertOn.some(date => params[2] === start(date).toISOString())) {
+          throw Object.assign(new Error('violates foreign key constraint'), { code: '23503' });
+        }
+        return { rowCount: 1, rows: [] };
+      }
+      if (sql.includes('DELETE FROM property_calendar_blockers')) { blockerDeletes.push(params[1]); return { rows: [] }; }
+      if (sql.includes('SELECT * FROM cleaning_jobs')) { ranges.push(params); return { rows: pendingJobs }; }
+      if (sql.includes('UPDATE cleaning_jobs SET dispatch_after')) {
+        updates.push({ sql, params });
+        return { rowCount: pendingJobs.find(j => j.id === params[1])?.movedOn ? 0 : 1, rows: [] };
+      }
+      throw new Error(`예상하지 못한 쿼리: ${sql.slice(0, 60)}`);
+    } };
+    const deps = {
+      getGoogleToken: async () => { throw new Error('no google in test'); }, kv: {},
+      getNextMonthDates: () => [checkouts[0]], createBlockerEvent: async () => 'evt', deleteBlockerEvent: async () => {},
+      fetch: async () => ({ ok: true, text: async () => 'BEGIN:VCALENDAR\nEND:VCALENDAR' }),
+      parseCheckoutsFromIcal: () => checkouts.map((date, i) => ({ date, uid: `uid-${i}` })),
+      calcCleaningTimes, planJobDispatch, toKstDateKey,
+      postSlack: async text => { slack.push(text); return true; }, console: { error: (...a) => errors.push(a.join(' ')) },
+    };
+    const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
+    await loadCron('handleMonthlyClean', deps)(db, res);
+    return { res, inserts, updates, blockerDeletes, errors, slack, ranges };
+  }
+
+  test('새로 만드는 일정은 처음부터 "청소 2주 전" 요청 시각을 저장한다', async () => {
+    const date = kstDay(40);
+    const { inserts } = await runMonthly({ checkouts: [date], pendingJobs: [] });
+    const columns = /\(([^)]*)\)\s*VALUES/.exec(inserts[0].sql)[1].split(',').map(s => s.trim());
+    assert.ok(columns.includes('dispatch_after'), '요청 시각을 비워 두지 않는다');
+    assert.equal(inserts[0].params[columns.indexOf('dispatch_after')], new Date(start(date).getTime() - 14 * DAY).toISOString());
+  });
+
+  test('다음 달 "요청 전" 일정의 요청 시각을 "지금"이 아니라 청소 2주 전으로 잡고, 같은 날 두 번째는 10분 뒤', async () => {
+    const d1 = kstDay(40), d2 = kstDay(45);
+    const jobs = [{ id: 'j1', cleaning_start_at: start(d1) }, { id: 'j2', cleaning_start_at: start(d1) }, { id: 'j3', cleaning_start_at: start(d2) }];
+    const before = Date.now();
+    const { updates, res } = await runMonthly({ checkouts: [d1], pendingJobs: jobs });
+    assert.equal(res.code, 200);
+    const at = Object.fromEntries(updates.map(u => [u.params[1], new Date(u.params[0]).getTime()]));
+    assert.equal(at.j1, start(d1).getTime() - 14 * DAY);
+    assert.equal(at.j2, start(d1).getTime() - 14 * DAY + 10 * 60_000);
+    assert.equal(at.j3, start(d2).getTime() - 14 * DAY);
+    for (const value of Object.values(at)) assert.ok(value > before + 7 * DAY, '15일에 바로 요청하지 않는다');
+    assert.ok(updates.every(u => /AND status='PENDING'/.test(u.sql)), '그 사이 진행된 일정은 건드리지 않는다');
+  });
+
+  test('한 날짜의 일정 생성이 거절돼도(예약 목록에 아직 없는 새 예약) 나머지 날짜의 일정·칸 열기·일정 잡기는 계속한다', async () => {
+    const d1 = kstDay(40), d2 = kstDay(41), d3 = kstDay(42);
+    const { inserts, blockerDeletes, updates, res, errors, slack } = await runMonthly({
+      checkouts: [d1, d2, d3], failInsertOn: [d2], pendingJobs: [{ id: 'j1', cleaning_start_at: start(d1) }],
+    });
+    assert.equal(res.code, 200);
+    assert.equal(inserts.length, 3, '실패한 날 다음 날짜도 일정 생성을 시도');
+    assert.deepEqual(blockerDeletes, [d1, d2, d3], '퇴실이 있는 날은 모두 칸을 연다');
+    assert.equal(updates.length, 1, '요청 시각 잡기 단계까지 간다');
+    assert.ok(errors.some(e => e.includes(d2)), '실패는 기록한다');
+    assert.equal(res.body.jobsFailed, 1);
+    assert.match(slack[0], /일정 생성 실패 1건/, '운영자 요약에 실패가 보인다');
+  });
+
+  test('요약의 "발송 스케줄링" 건수는 실제로 요청 시각을 잡은 일정만 센다(그 사이 진행된 일정 제외)', async () => {
+    const d1 = kstDay(40);
+    const { res, slack } = await runMonthly({ checkouts: [d1], pendingJobs: [
+      { id: 'j1', cleaning_start_at: start(d1) }, { id: 'j2', cleaning_start_at: start(kstDay(41)), movedOn: true },
+    ] });
+    assert.equal(res.body.scheduled, 1);
+    assert.match(slack[0], /발송 스케줄링 1건/);
+    assert.doesNotMatch(slack[0], /실패/);
+  });
+
+  test('다음 달 범위는 한국 시간 자정부터 다음다음 달 자정 전까지', async () => {
+    const { ranges } = await runMonthly({ checkouts: [kstDay(40)], pendingJobs: [] });
+    const [from, to] = ranges[0].map(v => new Date(v));
+    const kst = d => new Date(d.getTime() + 9 * 3_600_000);
+    assert.equal(kst(from).getUTCDate(), 1);
+    assert.equal(kst(from).getUTCHours(), 0, '한국 시간 1일 0시');
+    assert.equal(kst(to).getUTCDate(), 1);
+    assert.equal(kst(to).getUTCHours(), 0);
+    const nowKst = kst(new Date());
+    assert.equal(kst(from).getUTCMonth(), (nowKst.getUTCMonth() + 1) % 12, '다음 달');
+  });
+});
+
 describe('소스 계약 — 작업을 만드는 모든 곳', () => {
   test('동기화·관리자 일괄 등록은 planJobDispatch 를 쓰고 14일 규칙을 따로 두지 않는다', () => {
     for (const name of ['syncAllPropertiesIcal', 'syncJobs']) {
@@ -225,8 +329,8 @@ describe('소스 계약 — 작업을 만드는 모든 곳', () => {
       'scripts/backfill-real-reservations.mjs': read('scripts/backfill-real-reservations.mjs'),
       'scripts/seed-simulated-data.mjs': read('scripts/seed-simulated-data.mjs'),
     };
-    // 이유가 있는 예외: 월간 크론은 다음 달 작업만 만들고 같은 실행의 [4] 단계가 발송 일정을 잡는다 / 시드는 SIMULATED(외부 발송 없음)
-    const exempt = { 'api/cron/[...slug].js': /\[4\] 다음 달 PENDING job → dispatch_after 설정/, 'scripts/seed-simulated-data.mjs': /SIMULATED/ };
+    // 이유가 있는 예외: 시뮬레이션 시드는 SIMULATED(외부 발송 없음). 월간 배치도 이제 요청 시각을 저장한다(RF-19)
+    const exempt = { 'scripts/seed-simulated-data.mjs': /SIMULATED/ };
     let count = 0;
     for (const [file, text] of Object.entries(sites)) {
       for (const match of text.matchAll(/INSERT INTO cleaning_jobs\s*\(([^)]*)\)/g)) {

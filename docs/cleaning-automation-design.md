@@ -509,7 +509,8 @@ extendedProperties.shared["goo.createdByAvailId"] = "6l42efisiehi77mscb5qoh295f"
     - 해당 날짜 블로커 이벤트 삭제 (슬롯 오픈)
     - google_blocker_event_id = NULL로 갱신
     ↓
-[4] dispatch_after 설정 (같은 날 여러 건 → 10분 간격 순차)
+[4] dispatch_after 설정 = 청소 2주 전 (같은 날 여러 건 → 10분 간격 순차) — 15일에 바로 보내지 않는다
+    (cleaning-scenario-matrix.md S01. 2026-11-12 RF-19: 코드가 "지금"으로 덮어써 15일에 한꺼번에 보내던 것을 바로잡음)
     ↓
 슬랙 요약 알림 발송 후 종료
 ```
