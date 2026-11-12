@@ -10,6 +10,7 @@ import {
   recoverInitialDeliveries,
   getPropertyConfig,
   calcCleaningTimes,
+  planJobDispatch,
   toKstDateKey,
   sendCompletionSmsToRest,
   postSlack,
@@ -389,15 +390,17 @@ async function syncJobs(req, res) {
   for (const { date, uid } of checkouts) {
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { skipped++; continue; }
     const { cleaning_start_at, cleaning_end_at } = calcCleaningTimes(date, cfg.checkout_hour, cfg.cleaning_duration_hours);
-    const diffDays = (cleaning_start_at.getTime() - now) / (1000 * 60 * 60 * 24);
-    const source = diffDays <= 14 ? "SHORT_NOTICE" : "MONTHLY_BATCH";
+    // 지난 퇴실은 만들지 않는다(동기화와 같음) — 지난 날짜에 "요청 전" 작업이 남거나 그날 블로커를 지우지 않게
+    if (cleaning_start_at.getTime() < now) { skipped++; continue; }
+    // 동기화와 같은 규칙으로 첫 요청 시각을 저장한다 — 비워 두면 DB 기본값(지금)이라 먼 퇴실도 다음 크론이 바로 요청한다(RF-12)
+    const { source, dispatchAfter } = planJobDispatch(cleaning_start_at, now);
     const checkoutAt = cleaning_start_at.toISOString();
     const { rowCount } = await db.query(
       `INSERT INTO cleaning_jobs
-         (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source,data_origin,source_ref)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source,data_origin,source_ref,dispatch_after)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT (property_id,checkout_at) DO NOTHING`,
-      [property_id, uid ?? null, checkoutAt, checkoutAt, cleaning_end_at.toISOString(), source, cfg.data_origin ?? "REAL", `api:syncJobs:${uid ?? checkoutAt}`]
+      [property_id, uid ?? null, checkoutAt, checkoutAt, cleaning_end_at.toISOString(), source, cfg.data_origin ?? "REAL", `api:syncJobs:${uid ?? checkoutAt}`, dispatchAfter.toISOString()]
     );
     if (rowCount > 0) {
       created++;
@@ -835,14 +838,8 @@ async function syncAllPropertiesIcal(db, filterPropertyId = null) {
       const { cleaning_start_at, cleaning_end_at } = calcCleaningTimes(
         date, prop.checkout_hour ?? 11, prop.cleaning_duration_hours ?? 2.5
       );
-      const diffDays = (cleaning_start_at.getTime() - now) / 86_400_000;
-      const source = diffDays <= 14 ? "SHORT_NOTICE" : "MONTHLY_BATCH";
-
-      // MONTHLY_BATCH: dispatch_after = cleaning_start_at - 14 days (2주 전 발동)
-      // SHORT_NOTICE: dispatch_after = NOW() (default) → 즉시 advanceJob
-      const dispatchAfter = source === "MONTHLY_BATCH"
-        ? new Date(cleaning_start_at.getTime() - 14 * 86_400_000).toISOString()
-        : new Date(now).toISOString();
+      // MONTHLY_BATCH: 청소 시작 14일 전에 요청 / SHORT_NOTICE: 지금 → 아래에서 즉시 advanceJob (작업을 만드는 곳 모두 같은 규칙)
+      const { source, dispatchAfter } = planJobDispatch(cleaning_start_at, now);
 
       const { rowCount } = await db.query(
         `INSERT INTO cleaning_jobs
@@ -851,7 +848,7 @@ async function syncAllPropertiesIcal(db, filterPropertyId = null) {
          ON CONFLICT (property_id,checkout_at) DO NOTHING`,
         // 예약 행과 같은 번호 규칙(RF-16) — 번호 없는 피드 예약도 저장된 예약을 가리키게
         [prop.property_id, reservationUidOf(prop.property_id, reservation), cleaning_start_at.toISOString(),
-         cleaning_start_at.toISOString(), cleaning_end_at.toISOString(), source, dispatchAfter]
+         cleaning_start_at.toISOString(), cleaning_end_at.toISOString(), source, dispatchAfter.toISOString()]
       );
 
       // SHORT_NOTICE만 즉시 블로커 삭제 (MONTHLY_BATCH는 dispatch_after 도달 시 makeCronBlockerDeleter가 처리)

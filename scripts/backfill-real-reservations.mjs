@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
 import { parseVEvents, airbnbEventsToReservations } from '../src/domain/room-state/icalParser.js';
-import { calcCleaningTimes } from '../server/cleaning/_dispatch.js';
+import { calcCleaningTimes, planJobDispatch, toKstDateKey } from '../server/cleaning/_dispatch.js';
 
 for (const line of (() => { try { return readFileSync('.env.local', 'utf8').split('\n'); } catch { return []; } })()) {
   const match = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
@@ -47,19 +47,34 @@ try {
       );
       reservationCount++;
 
-      const date = new Date(checkOut).toISOString().slice(0, 10);
+      // 지난 퇴실: 새 작업은 만들지 않고(동기화와 같이 — 지난 청소에 "요청 전" 작업이 생기지 않게) 이미 있는 작업의 추적 필드만
+      // 보강한다(아래 upsert 의 ON CONFLICT 와 같은 값). 보강을 건너뛰면 아래 레거시 표시가 예약이 있는 작업까지 레거시로 찍는다
+      if (reservation.checkOut.getTime() < Date.now()) {
+        const supplemented = await pool.query(
+          `UPDATE cleaning_jobs
+              SET reservation_uid=COALESCE(reservation_uid, $3), source_ref=COALESCE(source_ref, $4),
+                  data_origin='REAL', updated_at=NOW()
+            WHERE property_id=$1 AND checkout_at=$2`,
+          [property.property_id, checkOut, uid, `ical:${property.property_id}:${uid}`],
+        );
+        if (supplemented.rowCount) jobCount += supplemented.rowCount;
+        continue;
+      }
+      // 날짜는 한국 시간 기준(동기화와 같음)
+      const date = toKstDateKey(reservation.checkOut);
       const times = calcCleaningTimes(date, property.checkout_hour ?? 11, property.cleaning_duration_hours ?? 2.5);
-      const source = (times.cleaning_start_at.getTime() - Date.now()) / 86_400_000 <= 14
-        ? 'SHORT_NOTICE' : 'MONTHLY_BATCH';
+      // 동기화와 같은 규칙으로 첫 요청 시각을 저장한다(새 작업만 — 이미 있는 작업의 발송 일정은 바꾸지 않는다).
+      // 2026-10-12 실행 때는 이 값이 비어 DB 기본값(지금)이 들어가, 다음 날 몇 달 뒤 청소 요청이 나갔다(RF-12)
+      const { source, dispatchAfter } = planJobDispatch(times.cleaning_start_at);
       const result = await pool.query(
         `INSERT INTO cleaning_jobs
-          (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source,source_ref,data_origin)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'REAL')
+          (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source,source_ref,data_origin,dispatch_after)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'REAL',$8)
          ON CONFLICT (property_id,checkout_at) DO UPDATE SET
            reservation_uid=COALESCE(cleaning_jobs.reservation_uid, EXCLUDED.reservation_uid),
            source_ref=COALESCE(cleaning_jobs.source_ref, EXCLUDED.source_ref),
            data_origin='REAL', updated_at=NOW()`,
-        [property.property_id, uid, checkOut, times.cleaning_start_at.toISOString(), times.cleaning_end_at.toISOString(), source, `ical:${property.property_id}:${uid}`],
+        [property.property_id, uid, checkOut, times.cleaning_start_at.toISOString(), times.cleaning_end_at.toISOString(), source, `ical:${property.property_id}:${uid}`, dispatchAfter.toISOString()],
       );
       if (result.rowCount) jobCount += result.rowCount;
     }

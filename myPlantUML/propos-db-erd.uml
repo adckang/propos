@@ -98,7 +98,7 @@ entity "cleaning_notifs\n<size:11>알림 발송 내역 · 연결 테이블</size
   job_id : uuid  ◆ FK → cleaning_jobs  ◇ UQ(복합)
   cleaner_id : uuid  ◆ FK → cleaners  ◇ UQ(복합)
   token : character(6)  ◇ UQ
-  … 그 밖의 칼럼 7개 (전체 버전 참고)
+  … 그 밖의 칼럼 10개 (전체 버전 참고)
   ..
   ◇ UQ (job_id, cleaner_id)
 }

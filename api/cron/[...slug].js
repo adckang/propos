@@ -263,11 +263,14 @@ async function handleCleaningFollowup(db, res) {
   let reminded = 0;
   let escalated = 0;
 
-  // dispatch_after 도래한 PENDING job 즉시 발동
+  // dispatch_after 도래한 PENDING job 즉시 발동 — 청소 시작이 이미 지난 작업에는 첫 요청을 보내지 않는다(RF-12: 작업은 앞으로의
+  // 퇴실에만 만들지만, 어떤 경로로든 지난 작업이 "요청 전"으로 남아 있으면 지난 청소 요청이 담당자에게 나가지 않게. 운영자 수동 발송은
+  // 그대로 가능. 이미 진행 중인 요청(VIP 다음 단계·단체 재안내)을 시작 시각에 멈출지는 별도 판단이라 바꾸지 않았다)
   const { rows: readyJobs } = await db.query(
     `SELECT * FROM cleaning_jobs
      WHERE data_origin = 'REAL'
        AND status = 'PENDING' AND dispatch_after <= NOW()
+       AND cleaning_start_at > NOW()
      ORDER BY dispatch_after ASC`
   );
   for (const job of readyJobs) {

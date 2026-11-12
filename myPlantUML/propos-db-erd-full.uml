@@ -179,10 +179,14 @@ entity "cleaning_notifs\n<size:11>알림 발송 내역 · 연결 테이블</size
   response_at : timestamp with time zone (null)
   channel : text (null)
   data_origin : text
+  initial_delivery_state : text (null)
+  initial_delivery_data : jsonb (null)
+  initial_accepted_at : timestamp with time zone (null)
   ..
   ◇ UQ (job_id, cleaner_id)
   CHECK (((channel IS NULL) OR (channel = ANY (ARRAY['FCM'::text, 'SMS'::text, 'SMS_FALLBACK
   CHECK ((data_origin = ANY (ARRAY['REAL'::text, 'SIMULATED'::text])))
+  CHECK ((((initial_delivery_state IS NULL) AND (initial_delivery_data IS NULL) AND (initial
   CHECK (((response IS NULL) OR (response = ANY (ARRAY['DECLINED'::text, 'DECLINED_AFTER_ASS
 }
 
