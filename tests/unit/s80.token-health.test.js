@@ -285,7 +285,8 @@ describe('소스 계약 — registerCalendarWatch가 Gmail Watch와 같은 모�
 
   test('POST 성공 시 calendar_id별로 만료일을 KV에 저장한다(캘린더가 여러 개여도 서로 안 섞임)', () => {
     const body = fnMatch[0];
-    assert.match(body, /kv\.set\(`calendar_watch_expiration:\$\{calendarId\}`, result\.expiration/);
+    // 2026-11-13: 저장은 6일마다 아침 자동 갱신과 같은 함수로(키 `calendar_watch_expiration:<calendarId>`·보관 기간은 s117 이 실행해 확인)
+    assert.match(body, /await saveCalendarWatchExpiration\(kv, calendarId, result\.expiration\);/);
   });
 });
 

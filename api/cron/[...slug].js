@@ -28,6 +28,7 @@ import {
   openCleaningSlot,
   parseCheckoutsFromIcal,
   requestedCleaningDays,
+  saveCalendarWatchExpiration,
 } from "../../server/cleaning/_calendar.js";
 import { getStatsForPeriod } from "../../src/application/reportingService.js";
 import { countPeriodEvents } from "../../src/domain/reportingDomain.js";
@@ -552,7 +553,12 @@ export default async function handler(req, res) {
                   }),
                 }
               );
-              if (r.ok) calWatchCount++;
+              if (r.ok) {
+                calWatchCount++;
+                // 수동 등록과 같은 자리에 만료 시각을 남긴다 — 청소 관리 › 절차 점검이 "자동 배정 알림 구독"이 살아 있는지 본다
+                const watched = await r.json().catch(() => null);
+                await saveCalendarWatchExpiration(kv, calId, watched?.expiration);
+              }
             }
             // 전부 성공해야만 markRenewed 하면, 숙소가 늘어 캘린더가 여러 개일 때 하나만 계속
             // 깨져있어도 markRenewed가 영원히 안 돼서 staleness 경고가 매일 영구 오탐으로 남는다.

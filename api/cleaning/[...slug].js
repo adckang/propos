@@ -23,6 +23,7 @@ import {
   getNextMonthDates,
   openCleaningSlot,
   requestedCleaningDays,
+  saveCalendarWatchExpiration,
 } from "../../server/cleaning/_calendar.js";
 import { notify } from "../../server/cleaning/_notify.js";
 import { syncAllPropertiesIcal } from "../../server/cleaning/_icalSync.js";
@@ -338,6 +339,13 @@ async function listJobs(req, res, scope) {
   const vals = [];
   const conds = [];
   if (status) { vals.push(status); conds.push(`j.status=$${vals.length}`); }
+  // 숙소 하나·날짜부터(절차 점검) — 여러 숙소·먼 일정이 많아도 그 숙소의 가까운 일정이 200건 제한에 잘리지 않게 서버에서 거른다
+  const propertyId = typeof req.query?.property_id === "string" ? req.query.property_id : null;
+  if (propertyId) { vals.push(propertyId); conds.push(`j.property_id=$${vals.length}`); }
+  const fromDay = typeof req.query?.from === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.from) ? req.query.from : null;
+  if (fromDay) { vals.push(fromDay); conds.push(`(j.checkout_at AT TIME ZONE 'Asia/Seoul')::date >= $${vals.length}::date`); }
+  // 날짜부터 볼 때는 가까운 순서로 — 일정이 아주 많아도 가까운 일정이 200건 제한에 잘리지 않게(기존 목록은 최근순 그대로)
+  const order = fromDay ? "ASC" : "DESC";
   const scoped = scopeQueryIds(scope); // D-034: 관리자=null(전체), 운영자=배정된 숙소만
   if (scoped) { vals.push(scoped); conds.push(`j.property_id = ANY($${vals.length}::text[])`); }
   const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
@@ -346,7 +354,7 @@ async function listJobs(req, res, scope) {
      FROM cleaning_jobs j
      LEFT JOIN property_cleaning_config p ON p.property_id = j.property_id
      LEFT JOIN cleaners c ON c.id = j.assigned_cleaner_id
-     ${where} ORDER BY j.cleaning_start_at DESC LIMIT ${limit}`,
+     ${where} ORDER BY j.cleaning_start_at ${order} LIMIT ${limit}`,
     vals
   );
   return sendJson(res, 200, rows);
@@ -856,6 +864,22 @@ async function handleIcalSync(req, res, scope) {
   return sendJson(res, 200, { ok: true, property_id: property_id ?? "all", created, assignmentRepair });
 }
 
+// ── 막힌 칸 목록(읽기 전용) — 청소 관리 › 절차 점검의 "날짜별 칸 상태" ─────────
+// 시스템이 막아 둔 날(한국 날짜)만 돌려준다. 관리자 전용(OPERATOR_ALLOWED 에 없음).
+async function listBlockers(req, res) {
+  const { property_id: propertyId, from, to } = req.query ?? {};
+  const isDay = value => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  if (typeof propertyId !== "string" || !propertyId || !isDay(from) || !isDay(to)) {
+    return sendJson(res, 400, { error: "property_id, from, to(YYYY-MM-DD) 필수" });
+  }
+  const { rows } = await db.query(
+    `SELECT block_date::text AS day FROM property_calendar_blockers
+      WHERE property_id=$1 AND block_date BETWEEN $2::date AND $3::date ORDER BY block_date`,
+    [propertyId, from, to]
+  );
+  return sendJson(res, 200, { property_id: propertyId, days: rows.map(row => row.day) });
+}
+
 // ── 부트스트랩: 현재 달(또는 지정 월) 블로커 일괄 생성 ────────────
 
 async function bootstrapBlockers(req, res) {
@@ -1073,11 +1097,8 @@ async function registerCalendarWatch(req, res) {
   );
   const result = await r.json();
   if (!r.ok) return sendJson(res, 502, { error: "Calendar Watch 등록 실패", detail: result });
-  // 만료일 KV에 저장 (7일 + 1시간 여유로 TTL 설정) — registerGmailWatch와 같은 패턴.
-  if (result.expiration) {
-    const ttlSec = Math.floor((Number(result.expiration) - Date.now()) / 1000) + 3600;
-    await kv.set(`calendar_watch_expiration:${calendarId}`, result.expiration, { ex: ttlSec }).catch(() => {});
-  }
+  // 만료 시각 기록 — 6일마다 아침 자동 갱신과 같은 함수(절차 점검이 이 기록으로 자동 배정 구독 상태를 본다)
+  await saveCalendarWatchExpiration(kv, calendarId, result.expiration);
   // 수동 재등록도 "성공 갱신"으로 기록 — 안 하면 자동 갱신(isRenewalDue)이 몇 주 끊겨 있던 동안의
   // staleness 경고(checkStaleness)가 이 수동 복구 이후에도 다음 날까지 계속 오탐으로 남는다.
   await markRenewed(kv, "calendar_watch");
@@ -1136,7 +1157,7 @@ async function handleBlockerCleanup(req, res) {
 // GET: 이벤트 목록만 반환 (디버그). POST: 매칭해서 ASSIGNED 업데이트.
 
 async function handleCalendarScan(req, res) {
-  const { calendar_id, date, hours = 72 } = req.method === "POST"
+  const { calendar_id, date, hours = 72, property_id: scanPropertyId } = req.method === "POST"
     ? await readBody(req) : req.query ?? {};
   if (!calendar_id) return sendJson(res, 400, { error: "calendar_id 필수" });
   let gToken;
@@ -1166,7 +1187,11 @@ async function handleCalendarScan(req, res) {
   );
 
   if (req.method !== "POST") {
-    return sendJson(res, 200, { total: items.length, bookings: filtered.map((ev) => ({
+    // 읽기 전용 — 절차 점검이 "구글 캘린더에서 실제로 막혀 있는지"를 보도록 PROPOS 블로커 수도 함께 돌려준다
+    // 캘린더를 여러 숙소가 같이 쓸 수 있어 숙소가 주어지면 그 숙소의 블로커만 센다
+    const blockers = items.filter((ev) => ev.extendedProperties?.private?.propos === "blocker"
+      && (!scanPropertyId || ev.extendedProperties?.private?.property_id === scanPropertyId)).length;
+    return sendJson(res, 200, { total: items.length, blockers, bookings: filtered.map((ev) => ({
       id: ev.id, summary: ev.summary,
       start: ev.start?.dateTime ?? ev.start?.date,
       attendees: ev.attendees?.map((a) => a.email),
@@ -1401,6 +1426,7 @@ export default async function handler(req, res) {
     }
     if (resource === "stats")     return await getCleaningStats(req, res, scope);
     if (resource === "bootstrap") return await bootstrapBlockers(req, res);
+    if (resource === "blockers" && req.method === "GET") return await listBlockers(req, res);
     if (resource === "ical-sync")    return await handleIcalSync(req, res, scope);
     if (resource === "gmail-watch")      return await registerGmailWatch(req, res);
     if (resource === "calendar-watch")   return await registerCalendarWatch(req, res);

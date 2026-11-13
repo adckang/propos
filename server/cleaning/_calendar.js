@@ -142,6 +142,21 @@ export async function openCleaningSlot(db, { propertyId, date, kv }) {
 }
 
 /**
+ * 캘린더 알림(담당자 예약 → 자동 배정) 구독의 만료 시각을 남긴다 — 수동 등록과 6일마다 아침 자동 갱신이 같이 쓴다.
+ * 청소 관리 › 절차 점검이 이 기록으로 "자동 배정이 살아 있는지"를 본다. 만료 뒤에도 2주 동안 남겨 "만료됨"이 보이게 한다
+ * (예전엔 만료 1시간 뒤 기록이 사라져 끊긴 구독이 "기록 없음"으로만 보였다).
+ */
+export async function saveCalendarWatchExpiration(kv, calendarId, expiration) {
+  const expiresAt = Number(expiration);
+  if (!expiration || !Number.isFinite(expiresAt)) {
+    if (expiration) console.error(`[calendar-watch] 만료 시각 형식이 이상해 기록하지 못함 (${calendarId})`);
+    return;
+  }
+  const ttlSec = Math.max(60, Math.floor((expiresAt - Date.now()) / 1000) + 14 * 86_400);
+  await kv.set(`calendar_watch_expiration:${calendarId}`, expiration, { ex: ttlSec }).catch(() => {});
+}
+
+/**
  * 칸을 막으면 안 되는 날 — 그날 청소 요청이 이미 나갔거나 담당자가 배정된 날(한국 날짜). 칸을 일괄로 막는 곳(15일 월간 작업·
  * 수동 일괄 생성)이 같이 쓴다: 막으면 요청 받은 담당자가 예약할 수 없다. 요청 전(PENDING)·취소된 날은 막아도 된다(칸은 요청 날 열림).
  *

@@ -17,6 +17,8 @@ const root = new URL('../../', import.meta.url);
 const files = [
   'api/cleaning/[...slug].js', 'api/cron/[...slug].js', 'api/stats.js',
   ...readdirSync(new URL('server/cleaning/', root)).filter(f => f.endsWith('.js')).map(f => `server/cleaning/${f}`),
+  'src/components/v2/CleaningProcessCheck.jsx', 'src/components/v2/CleaningManager.jsx',
+  'src/domain/cleaningProcessCheckDomain.js', 'src/domain/cleaningDispatchRule.js',
 ];
 // Node·Vercel 실행 환경이 기본으로 주는 이름
 const GLOBALS = new Set(['fetch', 'console', 'Date', 'JSON', 'Promise', 'Number', 'String', 'Object', 'Array', 'Set', 'Map', 'WeakMap',
