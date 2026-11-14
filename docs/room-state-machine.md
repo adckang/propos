@@ -1,6 +1,6 @@
 # Room State Machine
 > PROPOS 숙소 상태 전환 규칙 정본
-> 버전: v2.5 | 업데이트: 2026-11-06 · 센서 기반 입실 준비
+> 버전 v2.5.1 | 업데이트 2026-11-14 · 정비 수동 처리·보고서 복원 범위 보완
 
 ---
 
@@ -78,7 +78,7 @@ Airbnb iCal·Google Calendar는 지난 일정을 내보내지 않지만 PROPOS�
 
 중복 정의 없이 `GLOBAL_TRANSITIONS`로 관리. 상태별 TRANSITIONS에 포함하지 않는다.
 
-| 이벤트 | 트리거 | 전환 대상 | 구현 |
+| 이벤트 | 자동 감지 설계의 트리거 | 전환 대상 | 자동 감지 구현 |
 |--------|--------|-----------|------|
 | `maintenance_required` | Google Calendar 정비 일정 도래 | `VACANT / MAINTENANCE` | 미구현 |
 | `maintenance_started` | 모션/도어 감지 → 운영자 확인 "방문하셨습니까?" | `VACANT / MAINTENANCE` | 미구현 |
@@ -86,6 +86,8 @@ Airbnb iCal·Google Calendar는 지난 일정을 내보내지 않지만 PROPOS�
 
 **구현 방식:** 청소와 동일 구조 — 캘린더 기반 예약 → 방문/퇴장 이벤트 감지 → 운영자 확인 다이얼로그 → 상태 전환.  
 실제 정비는 항상 VACANT/MAINTENANCE 상태에서 진행. OCCUPIED 중 일정이 잡혀도 체크아웃 후 처리.
+
+현재 수동 경로는 운영자가 숙소 상세에서 ‘정비 시작·완료’를 선택하면 공통 운영 API → 지정 Pi → 이벤트 DB로 처리한다. Pi의 전이 함수와 수동 처리는 구현돼 있다. 현재 보고서는 `maintenance_started/finished`를 상태 복원의 기준 이벤트로 사용하며, 이전 입실·청소 기록이 없는 첫 정비 기록도 포함한다. `VACANT/MAINTENANCE`는 현재 보고서에서 공실 1건으로 집계한다. 자동 감지·운영자 확인 다이얼로그와 기간별 정비 전용 KPI는 후속 설계 범위다.
 
 ### 3B. 상태별 이벤트
 
@@ -244,9 +246,9 @@ VACANT / CLEANING_FINISHED
 
 | # | Event | To (Main/Sub) | 구현 |
 |---|-------|---------------|------|
-| G1 | maintenance_required | VACANT/MAINTENANCE | 미구현 |
-| G2 | maintenance_started  | VACANT/MAINTENANCE | 미구현 |
-| G3 | maintenance_finished | VACANT/CLEANING_FINISHED | 미구현 |
+| G1 | maintenance_required | VACANT/MAINTENANCE | 전이 함수 구현 · 캘린더 자동 발행 미구현 |
+| G2 | maintenance_started  | VACANT/MAINTENANCE | 전이·수동 Pi·보고서 상태 복원 구현 |
+| G3 | maintenance_finished | VACANT/CLEANING_FINISHED | 전이·수동 Pi·보고서 상태 복원 구현 |
 
 ### 5B. OCCUPIED 공통 전환 (OCCUPIED_COMMON)
 

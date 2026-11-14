@@ -404,7 +404,7 @@ function nextStateForEvent(state, type) {
 }
 
 /**
- * 월 시작 전 마지막 anchor부터 월 안의 상태 이벤트를 재생해 실제 상태 구간을 만든다.
+ * 월 시작 전 마지막 anchor와 이후 이벤트부터 월 안의 실제 상태 구간을 만든다.
  * events는 시간 오름차순/내림차순 어느 쪽이든 허용한다.
  */
 export function buildStateSegmentsFromEvents(events = [], range, now = new Date()) {
@@ -415,9 +415,9 @@ export function buildStateSegmentsFromEvents(events = [], range, now = new Date(
   if (capTo <= from) return [];
 
   const sorted = [...events]
-    .map(event => ({ ...event, at: asDate(event.device_time) }))
+    .map(event => ({ ...event, at: asDate(event.device_time), recordedAt: asDate(event.server_time)?.getTime() ?? 0 }))
     .filter(event => event.at)
-    .sort((a, b) => a.at - b.at);
+    .sort((a, b) => a.at - b.at || a.recordedAt - b.recordedAt);
 
   let state = null;
   let cursor = from;

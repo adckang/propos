@@ -66,10 +66,11 @@ export async function updateEventStatus(db, id, status, notifiedAt = null) {
 /**
  * 이벤트 기록으로 숙소들의 "지금 상태"를 계산한다 (현재 상태 레포트의 원천).
  *
- * 숙소마다 마지막 "큰 상태 변화"(체크인·체크아웃·청소 시작·청소 완료)를 찾고, 그 뒤의 세부 이벤트
+ * 숙소마다 마지막 "큰 상태 변화"(입실·퇴실·청소·정비 시작/완료)를 찾고, 그 뒤의 세부 이벤트
  * (민원·에너지 낭비·입실 준비)를 상태 규칙에 순서대로 적용한다 — roomStateFromEventsDomain.
  * 임시 저장소(KV)와 달리 시간이 지나도 사라지지 않으며 체류 중 이상·입실 준비 같은 세부 상태도 담는다.
  * 기록이 하나도 없는 숙소는 결과에 없다 (상태를 알 수 없음).
+ * 같은 발생 시각의 이벤트는 서버 기록 시각 순서로 적용한다.
  *
  * @param {object} db
  * @param {string[]|null} propertyIds - null=기록이 있는 모든 숙소, []=DB 호출 없이 빈 결과, [...]=그 숙소들만
@@ -81,18 +82,19 @@ export async function getLastKnownStatesFromDB(db, propertyIds = null) {
   const { rows } = await db.query(
     `WITH last_anchor AS (
        SELECT DISTINCT ON (property_id)
-              property_id, type AS anchor_type, device_time AS anchor_time
+              property_id, type AS anchor_type, device_time AS anchor_time,
+              server_time AS anchor_server_time
          FROM events
         WHERE type = ANY($1::text[])
           AND ($2::text[] IS NULL OR property_id = ANY($2::text[]))
-        ORDER BY property_id, device_time DESC
+        ORDER BY property_id, device_time DESC, server_time DESC
      )
      SELECT a.property_id, a.anchor_type, f.type AS follow_type
        FROM last_anchor a
        LEFT JOIN events f
          ON f.property_id = a.property_id
         AND f.type = ANY($3::text[])
-        AND f.device_time > a.anchor_time
+        AND (f.device_time, f.server_time) > (a.anchor_time, a.anchor_server_time)
       ORDER BY a.property_id, f.device_time, f.server_time`,
     [ANCHOR_EVENT_TYPES, Array.isArray(propertyIds) ? propertyIds : null, FOLLOW_EVENT_TYPES]
   );
@@ -187,7 +189,8 @@ export async function queryPreStayRunOutcomes(db, after, through, runs) {
 
 /**
  * 단일 숙소의 월간 상태 구간 계산용 이벤트를 조회한다.
- * 월 시작 전 마지막 anchor 1건과 월 범위 안의 anchor/follow 이벤트를 시간순으로 반환한다.
+ * 월 시작 전 마지막 anchor와 그 뒤의 세부 이벤트부터 월 범위 끝까지 반환한다.
+ * 월초 상태를 만드는 앞선 준비·이상 기록도 포함하며 발생·서버 기록 시각순으로 정렬한다.
  */
 export async function queryStateEventsForProperty(db, range, propertyId) {
   if (!propertyId) return [];
@@ -200,20 +203,21 @@ export async function queryStateEventsForProperty(db, range, propertyId) {
         WHERE property_id = $1
           AND type = ANY($2::text[])
           AND device_time < $3
-        ORDER BY device_time DESC
+        ORDER BY device_time DESC, server_time DESC
         LIMIT 1
      ), range_events AS (
-       SELECT *
-         FROM events
-        WHERE property_id = $1
-          AND type = ANY($4::text[])
-          AND device_time >= $3
-          AND device_time <= $5
+       SELECT e.*
+         FROM events e
+        WHERE e.property_id = $1
+          AND e.type = ANY($4::text[])
+          AND e.device_time <= $5
+          AND (e.device_time >= $3
+            OR (e.device_time, e.server_time) > (SELECT device_time, server_time FROM previous_anchor))
      )
      SELECT * FROM previous_anchor
      UNION ALL
      SELECT * FROM range_events
-     ORDER BY device_time ASC`,
+     ORDER BY device_time ASC, server_time ASC`,
     [propertyId, ANCHOR_EVENT_TYPES, range.from, eventTypes, range.to]
   );
   return rows;

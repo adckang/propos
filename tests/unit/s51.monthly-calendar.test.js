@@ -76,6 +76,43 @@ test('단일 숙소 상태 구간은 월 시작 전 마지막 anchor부터 월 �
   assert.equal(segments.at(-1).end.toISOString(), '2026-09-03T00:00:00.000Z');
 });
 
+test('동일 발생 시각의 주요 이벤트도 서버 기록 순서로 재생한다', () => {
+  const from = new Date('2026-11-01T00:00:00+09:00');
+  const to = new Date('2026-11-02T00:00:00+09:00');
+  const events = [
+    { type: 'maintenance_started', device_time: from, server_time: '2026-10-31T15:00:02Z' },
+    { type: 'cleaning_finished', device_time: from, server_time: '2026-10-31T15:00:01Z' },
+  ];
+  const segments = buildStateSegmentsFromEvents(events, { from, to }, to);
+  assert.deepEqual(segments.map(({ mainStatus, subStatus }) => ({ mainStatus, subStatus })), [
+    { mainStatus: 'VACANT', subStatus: 'MAINTENANCE' },
+  ]);
+});
+
+test('동일 발생 시각의 정비·준비·완료는 입력 배열 순서와 독립적으로 복원한다', () => {
+  const from = new Date('2026-11-01T00:00:00+09:00');
+  const to = new Date('2026-11-02T00:00:00+09:00');
+  const events = [
+    { type: 'optimization_finished', device_time: from, server_time: '2026-10-31T15:00:03Z' },
+    { type: 'checkin_prep_time_reached', device_time: from, server_time: '2026-10-31T15:00:02Z' },
+    { type: 'maintenance_started', device_time: from, server_time: '2026-10-31T15:00:01Z' },
+  ];
+  const segments = buildStateSegmentsFromEvents(events, { from, to }, to);
+  assert.equal(segments.length, 1);
+  assert.equal(segments[0].mainStatus, 'PRE_STAY_READY');
+  assert.equal(segments[0].subStatus, 'OPTIMIZED');
+});
+
+test('서버 시각을 생략한 기존 호출의 동시각 이벤트는 주어진 순서를 유지한다', () => {
+  const from = new Date('2026-11-01T00:00:00+09:00');
+  const to = new Date('2026-11-02T00:00:00+09:00');
+  const events = ['maintenance_started', 'checkin_prep_time_reached', 'optimization_finished']
+    .map(type => ({ type, device_time: from }));
+  const segments = buildStateSegmentsFromEvents(events, { from, to }, to);
+  assert.equal(segments.length, 1);
+  assert.equal(segments[0].subStatus, 'OPTIMIZED');
+});
+
 test('월간 지표 상세는 선택 숙소 ID를 이벤트 조회에 전달한다', async () => {
   const calls = [];
   const db = {

@@ -1,5 +1,5 @@
 # PROPOS Report Architecture
-> 버전: v1.4 | 작성: 2026-09-03 | 업데이트: 2026-09-16
+> 버전 v1.4.2 | 작성 2026-09-03 | 업데이트 2026-11-14 · 정비·월간 상태 복원 범위 보완
 > 구현 기준 문서 — 레포트 데이터 모델, 템플릿 정의, 분석 레이어의 정본.
 
 ---
@@ -95,7 +95,7 @@ Room State
 │
 ├─ VACANT
 │   ├─ CLEANING_FINISHED          초기/정상 공실 (초기 상태)
-│   └─ MAINTENANCE                정비 중 (미구현)
+│   └─ MAINTENANCE                정비 중 (수동 Pi·현재 상태 복원)
 │
 ├─ PRE_STAY_READY
 │   ├─ OPTIMIZING                 체크인 준비 실행 중
@@ -137,7 +137,15 @@ Resolution 열은 ANOMALY 그룹에만 적용. LIFECYCLE/OPERATIONS는 발생 �
 | | `early_checkin_suspected` | 없음 | O | acknowledged Y/N |
 | | `no_show_suspected` | 없음 | O | acknowledged Y/N |
 | **OPERATIONAL ALERT** | `vacancy_energy_alert` | 없음 (State Machine 외부) | O | O (별도 섹션) |
-| **GLOBAL (미구현)** | `maintenance_required/started/finished` | VACANT/MAINTENANCE | 예약 | 예약 |
+| **GLOBAL** | `maintenance_required` | VACANT/MAINTENANCE | 전용 집계 예약 | 예약 |
+| | `maintenance_started` | VACANT/MAINTENANCE | 전용 집계 예약 | X |
+| | `maintenance_finished` | VACANT/CLEANING_FINISHED | 전용 집계 예약 | X |
+
+수동 정비의 Pi 처리·DB 저장·현재 상태 복원은 구현돼 있다. 지금·오늘 보고서는 정비 시작·완료를 주요 이벤트로 사용하고 `VACANT/MAINTENANCE`를 공실에 포함한다. 첫 정비 기록만 있는 숙소도 집계 대상이다. 같은 발생 시각의 이벤트는 현재 상태 조회에서 서버 기록 시각으로 순서를 보완한다. 두 시각이 모두 같은 경우의 실제 선후 관계에는 추가 근거가 필요하다. 월간 이벤트 상태 구간도 같은 주요 이벤트 목록을 사용한다. 기간별 정비 전용 카운터와 캘린더·모션 기반 자동 감지는 후속 설계 범위다.
+
+정비 상태 복원 변경의 적용·검증·배포 상태는 [refactoring.md의 RF-13](refactoring.md#rf13-implementation)에서 관리한다.
+
+단일 숙소의 월간 상태 구간은 월 시작 전 마지막 주요 이벤트와 그 뒤의 준비·이상 이벤트까지 함께 읽어 월초 상태를 복원한다. SQL 조회와 상태 재생 모두 발생 시각·서버 기록 시각 순서를 사용한다. 서버 기록 시각을 모두 생략한 기존 호출의 동시각 이벤트는 입력 순서를 유지한다. 월초 이전의 주요 이벤트도 월 안의 주요 이벤트도 없으면 상태 구간을 추측해 만들지 않는다.
 
 ---
 

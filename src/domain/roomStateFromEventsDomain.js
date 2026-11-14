@@ -1,7 +1,7 @@
 /**
  * roomStateFromEventsDomain — 이벤트 기록으로 "지금 상태"를 계산 (순수 함수)
  *
- * 방 상태의 진짜 원천은 기록(이벤트)이다. 마지막 "큰 상태 변화"(체크인·체크아웃·청소 시작·청소 완료)를
+ * 방 상태의 진짜 원천은 기록(이벤트)이다. 마지막 "큰 상태 변화"(입실·퇴실·청소·정비 시작/완료)를
  * 출발점으로 잡고, 그 뒤에 일어난 세부 이벤트(민원·에너지 낭비·입실 준비 …)를
  * 방 상태 규칙(roomStateDomain)에 시간 순서대로 적용한다. 규칙에 맞지 않는 이벤트는 무시한다.
  */
@@ -14,6 +14,8 @@ export const ANCHOR_EVENT_STATES = Object.freeze({
   check_out_detected: { mainStatus: "CLEANING", subStatus: "CLEANING_PENDING" },
   cleaning_started:   { mainStatus: "CLEANING", subStatus: "CLEANING_IN_PROGRESS" },
   cleaning_finished:  { mainStatus: "VACANT",   subStatus: "CLEANING_FINISHED" },
+  maintenance_started:  { mainStatus: "VACANT", subStatus: "MAINTENANCE" },
+  maintenance_finished: { mainStatus: "VACANT", subStatus: "CLEANING_FINISHED" },
 });
 
 export const ANCHOR_EVENT_TYPES = Object.freeze(Object.keys(ANCHOR_EVENT_STATES));

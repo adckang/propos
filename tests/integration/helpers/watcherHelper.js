@@ -1,12 +1,14 @@
 /**
  * watcherHelper — occupancyWatcher 제어 헬퍼
  *
- * 테스트마다 깨끗한 워처 상태를 보장한다.
+ * 시험 사이 진행 중 준비·설정·방 상태를 정리한다.
  * - stopWatcher(): ws + calendarTimer + reconnectTimer + debounceTimer 모두 해제
  * - setRoomState(INITIAL_STATE): 상태 머신 리셋
  * - setMonitoringConfig(cfg): 새 config 주입 → initEntityMap + checkCalendarEvents 재실행
  */
 
+import '../../helpers/isolateDataDir.js';
+import { wait } from './setup.js';
 import {
   startWatcher,
   stopWatcher,
@@ -15,18 +17,19 @@ import {
   setRoomState,
 } from '../../../server/occupancyWatcher.js';
 import { INITIAL_STATE } from '../../../src/domain/room-state/roomStateDomain.js';
-import { wait } from './setup.js';
 
 export { startWatcher, stopWatcher, getMonitoringState, setMonitoringConfig, setRoomState };
 
 /**
- * 워처를 완전히 초기화한다.
+ * 진행 중 준비를 종결하고 설정·방 상태를 초기화한다.
  * @param {object} [cfg]  null이면 areaName 없이 초기화 (캘린더 테스트용)
  */
 export async function resetWatcher(cfg = null) {
   stopWatcher();
-  await wait(50); // clearTimeout/clearInterval 정리 대기
-  setRoomState(INITIAL_STATE);
+  setMonitoringConfig({ areaName: null, reservation: null, optimization: null, devices: null, district: null });
+  await waitForWatcherState(state => state.config?.areaName === null
+    && state.preparation.run?.status !== 'PREPARING' && !state.preparation.run?.pendingOff?.length);
+  setRoomState({ ...INITIAL_STATE });
   if (cfg) setMonitoringConfig(cfg);
 }
 

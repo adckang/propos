@@ -1,5 +1,5 @@
 claude# PROPOS Reporting Feature 설계
-> 버전: v1.2 | 작성: 2026-08-04 | 업데이트: 2026-09-02
+> 버전 v1.2.1 | 작성 2026-08-04 | 업데이트 2026-11-14 · 정비 처리 경로의 적용 범위 보완
 > 구현 기준 문서 — 이 파일과 data-storage-design.md를 축으로 삼아 reporting 코드를 작성·수정한다.
 > 저장소 설계: `data-storage-design.md` / 이벤트 감지: `event-detection-design.md` / 상태 기계: `room-state-machine.md`
 
@@ -341,7 +341,7 @@ export const EVENT_TYPES = Object.freeze({
   OPTIMIZATION_FINISHED:         'optimization_finished',
   RESERVATION_CANCELLED:         'reservation_cancelled',
 
-  // 글로벌 이벤트 (미구현 — 상수만 선언)
+  // 글로벌 이벤트 (수동 Pi 경로·전이 함수 구현)
   MAINTENANCE_REQUIRED:          'maintenance_required',
   MAINTENANCE_STARTED:           'maintenance_started',
   MAINTENANCE_FINISHED:          'maintenance_finished',
@@ -358,7 +358,7 @@ export const SOFT_EVENT_TYPES = new Set([
   'no_show_suspected',
 ]);
 
-// 미구현 이벤트 (Zod 검증 통과시키되 파이프라인 처리 건너뜀)
+// 구형 POST /api/events의 저장 후 후처리 생략 목록
 export const UNIMPLEMENTED_EVENT_TYPES = new Set([
   'maintenance_required',
   'maintenance_started',
@@ -368,6 +368,8 @@ export const UNIMPLEMENTED_EVENT_TYPES = new Set([
   'reservation_cancelled',
 ]);
 ```
+
+`UNIMPLEMENTED_EVENT_TYPES`는 구형 `POST /api/events`의 후처리 생략 분기에 쓰인다. 현재 수동 정비는 공통 운영 API → Pi → `/api/events/write` → DB로 처리한다. 정비 시작·완료의 상태 복원과 집계 범위는 `room-state-machine.md` 3A·5A와 `report-architecture.md` 3-2를 따른다.
 
 ---
 

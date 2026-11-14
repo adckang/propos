@@ -44,6 +44,18 @@ describe("deriveRoomState — 마지막 큰 변화가 출발점", () => {
   test("청소를 마쳤다 → 공실(청소 완료)", () => {
     assert.deepEqual(deriveRoomState("cleaning_finished"), st("VACANT", "CLEANING_FINISHED"));
   });
+  test("첫 기록이 정비 시작이어도 공실(정비 중)을 복원한다", () => {
+    assert.deepEqual(deriveRoomState("maintenance_started"), st("VACANT", "MAINTENANCE"));
+  });
+  test("첫 기록이 정비 완료여도 공실(청소 완료)을 복원한다", () => {
+    assert.deepEqual(deriveRoomState("maintenance_finished"), st("VACANT", "CLEANING_FINISHED"));
+  });
+  test("정비 뒤 입실 준비·최적화 완료를 공통 전이 규칙으로 적용한다", () => {
+    assert.deepEqual(
+      deriveRoomState("maintenance_started", ["checkin_prep_time_reached", "optimization_finished"]),
+      st("PRE_STAY_READY", "OPTIMIZED"),
+    );
+  });
   test("큰 변화 기록이 하나도 없으면 상태를 알 수 없다(null)", () => {
     assert.equal(deriveRoomState(undefined), null);
     assert.equal(deriveRoomState("complaint_detected"), null); // 세부 이벤트만으로는 출발점이 될 수 없음
@@ -108,11 +120,14 @@ describe("deriveRoomState — 규칙에 맞지 않는 기록은 무시", () => {
 });
 
 describe("이벤트 종류 목록", () => {
-  test("큰 변화 4종과 세부 이벤트 10종(최적화 실패·취소 포함), 서로 겹치지 않는다", () => {
-    assert.equal(ANCHOR_EVENT_TYPES.length, 4);
+  test("입실·퇴실·청소·정비의 주요 이벤트와 세부 이벤트가 겹치지 않는다", () => {
+    assert.deepEqual(ANCHOR_EVENT_TYPES, [
+      'check_in_detected', 'check_out_detected', 'cleaning_started', 'cleaning_finished',
+      'maintenance_started', 'maintenance_finished',
+    ]);
     assert.equal(FOLLOW_EVENT_TYPES.length, 10);
     assert.ok(FOLLOW_EVENT_TYPES.includes('optimization_failed'));
-    assert.equal(new Set([...ANCHOR_EVENT_TYPES, ...FOLLOW_EVENT_TYPES]).size, 14);
+    assert.equal(new Set([...ANCHOR_EVENT_TYPES, ...FOLLOW_EVENT_TYPES]).size, ANCHOR_EVENT_TYPES.length + FOLLOW_EVENT_TYPES.length);
     assert.deepEqual(deriveRoomState('cleaning_finished', ['checkin_prep_time_reached', 'optimization_failed']), st('PRE_STAY_READY', 'OPTIMIZATION_FAILED'));
   });
 });
