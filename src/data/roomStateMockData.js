@@ -347,7 +347,7 @@ const RAW_PROPERTIES = [
       outdoorTemp: 30, doorOpen: false, motionDetected: false, smokeDetected: false },
   },
 
-  // P010: 이틀 뒤 토요일 체크인 (2박)
+  // P010: 다음 토요일 체크인 (2박)
   {
     id: 'P010', name: '삼성 J호', district: '강남구',
     checkInHour: 15, checkOutHour: 11, cleaningDurationHours: 2,
@@ -359,9 +359,9 @@ const RAW_PROPERTIES = [
       { mainStatus: 'VACANT',         subStatus: 'CLEANING_FINISHED',    start: o(_d.pSat, 14), end: null            },
     ],
     reservation: { guestName: '강다솜 가족', platform: 'Airbnb',
-      checkIn: o(2, 15), checkOut: o(_d.nSun, 11) },
+      checkIn: o(_d.nSat, 15), checkOut: o(_d.nSat+2, 11) },
     reservations: [
-      { guestName: '강다솜 가족',     platform: 'Airbnb',      checkIn: o(2, 15),            checkOut: o(_d.nSun, 11) },
+      { guestName: '강다솜 가족',     platform: 'Airbnb',      checkIn: o(_d.nSat, 15),      checkOut: o(_d.nSat+2, 11) },
       { guestName: '오준혁 (비즈)',   platform: '에어클라우드', checkIn: o(_d.nFri+3, 16),    checkOut: o(_d.nFri+7, 11) },
       { guestName: '서지안 커플',     platform: '야놀자',       checkIn: o(_d.nFri+7, 15),    checkOut: o(_d.nFri+9, 11) },
       { guestName: '임하나',          platform: 'Airbnb',      checkIn: o(_d.nFri+10, 15),   checkOut: o(_d.nFri+14, 11) },
@@ -388,15 +388,15 @@ const RAW_PROPERTIES = [
       checkIn: o(2, 15), checkOut: o(4, 11) },
     reservations: [
       { guestName: '조민서',          platform: '야놀자',      checkIn: o(2, 15),            checkOut: o(4, 11) },
-      { guestName: '최태양 커플',     platform: 'Airbnb',      checkIn: o(_d.nFri, 16),      checkOut: o(_d.nFri+3, 11) },
-      { guestName: '정소희 (비즈)',   platform: '에어클라우드', checkIn: o(_d.nFri+4, 16),    checkOut: o(_d.nFri+9, 11) },
-      { guestName: '한도현',          platform: 'Airbnb',      checkIn: o(_d.nFri+9, 15),    checkOut: o(_d.nFri+11, 11) },
-      { guestName: '오미래 가족',     platform: 'Airbnb',      checkIn: o(_d.nFri+14, 14),   checkOut: o(_d.nFri+21, 11) },
-      { guestName: '강준수',          platform: '야놀자',      checkIn: o(_d.nFri+21, 15),   checkOut: o(_d.nFri+23, 11) },
-      { guestName: '윤지현 커플',     platform: '여기어때',    checkIn: o(_d.nFri+24, 15),   checkOut: o(_d.nFri+27, 11) },
-      { guestName: '백서준',          platform: 'Airbnb',      checkIn: o(_d.nFri+28, 15),   checkOut: o(_d.nFri+30, 11) },
-      { guestName: '김아린 (비즈)',   platform: '에어클라우드', checkIn: o(_d.nFri+31, 16),   checkOut: o(_d.nFri+35, 11) },
-      { guestName: '류다솜',          platform: 'Airbnb',      checkIn: o(_d.nFri+35, 15),   checkOut: o(_d.nFri+42, 11) },
+      { guestName: '최태양 커플',     platform: 'Airbnb',      checkIn: o(_d.nFri2, 16),      checkOut: o(_d.nFri2+3, 11) },
+      { guestName: '정소희 (비즈)',   platform: '에어클라우드', checkIn: o(_d.nFri2+4, 16),    checkOut: o(_d.nFri2+9, 11) },
+      { guestName: '한도현',          platform: 'Airbnb',      checkIn: o(_d.nFri2+9, 15),    checkOut: o(_d.nFri2+11, 11) },
+      { guestName: '오미래 가족',     platform: 'Airbnb',      checkIn: o(_d.nFri2+14, 14),   checkOut: o(_d.nFri2+21, 11) },
+      { guestName: '강준수',          platform: '야놀자',      checkIn: o(_d.nFri2+21, 15),   checkOut: o(_d.nFri2+23, 11) },
+      { guestName: '윤지현 커플',     platform: '여기어때',    checkIn: o(_d.nFri2+24, 15),   checkOut: o(_d.nFri2+27, 11) },
+      { guestName: '백서준',          platform: 'Airbnb',      checkIn: o(_d.nFri2+28, 15),   checkOut: o(_d.nFri2+30, 11) },
+      { guestName: '김아린 (비즈)',   platform: '에어클라우드', checkIn: o(_d.nFri2+31, 16),   checkOut: o(_d.nFri2+35, 11) },
+      { guestName: '류다솜',          platform: 'Airbnb',      checkIn: o(_d.nFri2+35, 15),   checkOut: o(_d.nFri2+42, 11) },
     ],
     sensors: { temp: 22.6, humidity: 55, noise: 19, power: 285, co2: 408,
       outdoorTemp: 28, doorOpen: false, motionDetected: false, smokeDetected: false },
@@ -643,7 +643,7 @@ const RAW_PROPERTIES = [
       outdoorTemp: 30, doorOpen: false, motionDetected: false, smokeDetected: false },
   },
 
-  // P020: 이번 주 수~토 예약 (3박)
+  // P020: 3일 뒤 체크인 (3박)
   {
     id: 'P020', name: '풍납 T호', district: '송파구',
     checkInHour: 18, checkOutHour: 11, cleaningDurationHours: 2,
@@ -657,15 +657,15 @@ const RAW_PROPERTIES = [
       checkIn: o(3, 16), checkOut: o(6, 11) },
     reservations: [
       { guestName: '임도현',          platform: '야놀자',      checkIn: o(3, 16),            checkOut: o(6, 11) },
-      { guestName: '권소율 커플',     platform: 'Airbnb',      checkIn: o(_d.nFri, 18),      checkOut: o(_d.nFri+3, 11) },
-      { guestName: '홍민준',          platform: '야놀자',      checkIn: o(_d.nFri+4, 16),    checkOut: o(_d.nFri+7, 11) },
-      { guestName: '남서아 가족',     platform: 'Airbnb',      checkIn: o(_d.nFri+7, 14),    checkOut: o(_d.nFri+14, 11) },
-      { guestName: '이지훈 (비즈)',   platform: '에어클라우드', checkIn: o(_d.nFri+14, 18),   checkOut: o(_d.nFri+19, 11) },
-      { guestName: '방현아',          platform: 'Airbnb',      checkIn: o(_d.nFri+21, 18),   checkOut: o(_d.nFri+23, 11) },
-      { guestName: '조수민 커플',     platform: '여기어때',    checkIn: o(_d.nFri+24, 18),   checkOut: o(_d.nFri+27, 11) },
-      { guestName: '서준하 (비즈)',   platform: '에어클라우드', checkIn: o(_d.nFri+28, 18),   checkOut: o(_d.nFri+33, 11) },
-      { guestName: '최아현',          platform: '야놀자',      checkIn: o(_d.nFri+33, 16),   checkOut: o(_d.nFri+35, 11) },
-      { guestName: '이민경 가족',     platform: 'Airbnb',      checkIn: o(_d.nFri+36, 14),   checkOut: o(_d.nFri+43, 11) },
+      { guestName: '권소율 커플',     platform: 'Airbnb',      checkIn: o(_d.nFri2, 18),      checkOut: o(_d.nFri2+3, 11) },
+      { guestName: '홍민준',          platform: '야놀자',      checkIn: o(_d.nFri2+4, 16),    checkOut: o(_d.nFri2+7, 11) },
+      { guestName: '남서아 가족',     platform: 'Airbnb',      checkIn: o(_d.nFri2+7, 14),    checkOut: o(_d.nFri2+14, 11) },
+      { guestName: '이지훈 (비즈)',   platform: '에어클라우드', checkIn: o(_d.nFri2+14, 18),   checkOut: o(_d.nFri2+19, 11) },
+      { guestName: '방현아',          platform: 'Airbnb',      checkIn: o(_d.nFri2+21, 18),   checkOut: o(_d.nFri2+23, 11) },
+      { guestName: '조수민 커플',     platform: '여기어때',    checkIn: o(_d.nFri2+24, 18),   checkOut: o(_d.nFri2+27, 11) },
+      { guestName: '서준하 (비즈)',   platform: '에어클라우드', checkIn: o(_d.nFri2+28, 18),   checkOut: o(_d.nFri2+33, 11) },
+      { guestName: '최아현',          platform: '야놀자',      checkIn: o(_d.nFri2+33, 16),   checkOut: o(_d.nFri2+35, 11) },
+      { guestName: '이민경 가족',     platform: 'Airbnb',      checkIn: o(_d.nFri2+36, 14),   checkOut: o(_d.nFri2+43, 11) },
     ],
     sensors: { temp: 23.2, humidity: 55, noise: 17, power: 270, co2: 410,
       outdoorTemp: 29, doorOpen: false, motionDetected: false, smokeDetected: false },

@@ -76,6 +76,8 @@ cleaners (id) ─┬─< cleaning_jobs.assigned_cleaner_id
 9. 배정된 청소자와 알림은 각각 `cleaners`, `cleaning_jobs`에 존재해야 하며, 알림의 `data_origin`은 연결된 작업과 같아야 한다.
 10. 작업·이벤트·블로커·알림의 중복 키와 알림 token 중복을 검수한다.
 
+담당자를 참조하는 데이터셋은 대상 `cleaners` 목록을 함께 제공한다. 목록이 비어 있거나 생략된 경우에도 참조 검사를 수행한다. 존재하지 않는 작업 담당자는 `JOB_CLEANER_MISSING`, 알림 담당자는 `NOTIF_CLEANER_MISSING`으로 판정한다. 과거 기록이 비활성 담당자를 가리키는 관계는 유효하다. 이 규칙은 REAL·SIMULATED에 동일하게 적용한다.
+
 ## 파주201 검수 결과
 
 2026-10-12 초기 검수 당시 파주201의 구성은 다음과 같았다. 이 절의 건수는 당시 스냅샷이며 최신 운영 상태를 뜻하지 않는다.
@@ -102,7 +104,7 @@ cleaners (id) ─┬─< cleaning_jobs.assigned_cleaner_id
 - Webhook·수동 Scan·iCal 담당자 복구가 모두 같은 `calendarCleaningTimes` 검증을 사용한다. 시간대가 없는 시각, 종일 이벤트, 취소·블로커, 종료 역전, 퇴실 전 시작은 반영하지 않는다. 날짜 매칭은 KST 기준이다.
 - 기존 배정의 시각 갱신은 저장된 이벤트 ID·담당자와 일치할 때만 허용한다. 담당자 누락 복구에서 후보가 여럿이면 추측하지 않는다. 반복 동기화는 같은 값을 다시 쓰지 않으며 시간만 갱신할 때 배정 알림을 재발송하지 않는다.
 - `s88.calendar-cleaning-times.test.js`는 실제 API 함수에 가짜 I/O를 주입해 원본 시각 반영·잘못된 입력 거부·연결 보존을 검수한다.
-- `RUN_LIVE_DB=1 node --test tests/integration/s89.calendar-cleaning-times.test.js`는 실제 Postgres 스키마를 복제한 세션 임시 테이블에서 같은 UPDATE SQL·중복 실행·동시 완료 보존을 검사한다. 운영 행은 변경하지 않으며 종료 시 ROLLBACK한다.
+- `s89.calendar-cleaning-times.test.js`는 `CLEANING_TEST_DATABASE_URL`의 격리 loopback PostgreSQL 또는 `PGLITE_TEST_ROOT`의 PGlite에서 실제 스키마·UPDATE SQL·중복 실행·동시 완료 보존을 검증한다. 실행은 해당 환경변수를 지정한 `node --test tests/integration/s89.calendar-cleaning-times.test.js`이며, fixture가 임시 저장소의 생성·종료 정리를 담당한다.
 - 유효한 Calendar 자격증명이 있는 실행 환경에서 `RUN_LIVE_DB=1 RUN_LIVE_GOOGLE=1 node --test tests/integration/s85.real-cleaner-assignment.test.js`를 실행하면 실제 배정과 Google 원본의 담당자·이벤트 ID·시작·종료 일치까지 검수한다. 토큰은 실행 환경에만 설정하며 커밋하지 않는다.
 
 ## 자동 검수·생성 도구

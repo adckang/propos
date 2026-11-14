@@ -214,7 +214,7 @@ export function validateDataset(dataset = {}, options = {}) {
     } else {
       addWarning(warnings, 'REAL_LEGACY_JOB_UID_MISSING', 'cleaning_jobs', key, 'REAL 레거시 작업에 reservation_uid가 없습니다.');
     }
-    if (hasValue(row.assigned_cleaner_id) && cleanerIndex.size && !cleanerIndex.has(text(row.assigned_cleaner_id))) {
+    if (hasValue(row.assigned_cleaner_id) && !cleanerIndex.has(text(row.assigned_cleaner_id))) {
       addIssue(issues, 'JOB_CLEANER_MISSING', 'cleaning_jobs', key, '청소작업의 assigned_cleaner_id가 cleaners에 없습니다.');
     }
     if (['ASSIGNED', 'COMPLETED'].includes(status) && !hasValue(row.assigned_cleaner_id) && !hasValue(row.google_event_id)) {
@@ -248,7 +248,7 @@ export function validateDataset(dataset = {}, options = {}) {
     if (!cleanerId) addIssue(issues, 'NOTIF_CLEANER_REQUIRED', 'cleaning_notifs', key, '알림의 cleaner_id가 없습니다.');
     const job = jobId ? jobIndex.get(jobId) : null;
     if (jobId && !job) addIssue(issues, 'NOTIF_JOB_MISSING', 'cleaning_notifs', key, '알림의 청소작업이 없습니다.');
-    if (cleanerId && cleanerIndex.size && !cleanerIndex.has(cleanerId)) addIssue(issues, 'NOTIF_CLEANER_MISSING', 'cleaning_notifs', key, '알림의 청소자가 없습니다.');
+    if (cleanerId && !cleanerIndex.has(cleanerId)) addIssue(issues, 'NOTIF_CLEANER_MISSING', 'cleaning_notifs', key, '알림의 청소자가 없습니다.');
     if (job && originOf(row) !== originOf(job)) addIssue(issues, 'NOTIF_ORIGIN_MISMATCH', 'cleaning_notifs', key, '알림과 청소작업의 data_origin이 다릅니다.');
     const relationKey = keyOf(jobId, cleanerId);
     if (jobId && cleanerId && notifKeyIndex.has(relationKey)) addIssue(issues, 'NOTIF_DUPLICATE_RELATION', 'cleaning_notifs', key, '청소작업·청소자 조합이 중복됩니다.');

@@ -6,15 +6,43 @@ import {
   validateDataset,
 } from '../../src/data/dataSimulator.js';
 
-function validDataset() {
-  return buildSimulatedDataset(generateSyntheticProperties({
+function validDataset(origin = 'SIMULATED') {
+  const dataset = buildSimulatedDataset(generateSyntheticProperties({
     propertyCount: 2,
     reservationsPerProperty: 4,
     startDate: '2026-10-12T00:00:00Z',
   }));
+  for (const rows of [dataset.properties, dataset.reservations, dataset.jobs, dataset.events]) {
+    for (const row of rows) row.data_origin = origin;
+  }
+  for (const property of dataset.properties) {
+    property.source_system = origin === 'REAL' ? 'MANUAL' : 'SIMULATED_FIXTURE';
+  }
+  return dataset;
 }
 
 describe('data simulator contract', () => {
+  test('DEMO 예약은 모든 KST 요일에서 날짜가 유효하고 P010의 다음 토요일 2박을 유지한다', async t => {
+    const monday = Date.parse('2026-11-09T03:00:00Z');
+    t.mock.timers.enable({ apis: ['Date'], now: monday });
+    const findings = [];
+    for (let day = 0; day < 7; day++) {
+      t.mock.timers.setTime(monday + day * 86_400_000);
+      const { PROPERTIES } = await import(`../../src/data/roomStateMockData.js?weekday-contract=${day}`);
+      const dataset = buildSimulatedDataset(PROPERTIES);
+      const result = validateDataset(dataset, { allowLegacyRealJobs: false });
+      findings.push(...result.issues.map(issue => ({ day, code: issue.code, key: issue.key })));
+      const property = PROPERTIES.find(row => row.id === 'P010');
+      for (const reservation of [property.reservation, property.reservations[0]]) {
+        const checkIn = new Date(reservation.checkIn.getTime() + 9 * 3_600_000);
+        const checkOut = new Date(reservation.checkOut.getTime() + 9 * 3_600_000);
+        if (checkIn.getUTCDay() !== 6 || checkOut.getUTCDay() !== 1
+          || reservation.checkOut - reservation.checkIn !== 44 * 3_600_000) findings.push({ day, code: 'P010_TWO_NIGHT_SATURDAY_STAY' });
+      }
+    }
+    assert.deepEqual(findings, []);
+  });
+
   test('결정적 생성 결과는 관계형 행 수와 출처를 일관되게 만든다', () => {
     const dataset = validDataset();
     const result = validateDataset(dataset, { allowLegacyRealJobs: false });
@@ -128,5 +156,45 @@ describe('data simulator contract', () => {
     const result = validateDataset(dataset);
     assert.equal(result.ok, false);
     assert.ok(result.issues.some(issue => issue.code === 'NOTIF_ORIGIN_MISMATCH'));
+  });
+
+  for (const origin of ['REAL', 'SIMULATED']) {
+    test(`${origin} 담당자 목록이 비어 있어도 작업의 없는 담당자 참조를 탐지한다`, () => {
+      const dataset = validDataset(origin);
+      dataset.jobs[0].assigned_cleaner_id = '11111111-1111-4111-8111-111111111111';
+      const result = validateDataset(dataset);
+      assert.equal(result.ok, false);
+      assert.equal(result.issues.filter(issue => issue.code === 'JOB_CLEANER_MISSING').length, 1);
+    });
+
+    test(`${origin} 담당자 목록이 비어 있어도 알림의 없는 담당자 참조를 탐지한다`, () => {
+      const dataset = validDataset(origin);
+      dataset.jobs[0].id = '22222222-2222-4222-8222-222222222222';
+      dataset.notifs = [{ job_id: dataset.jobs[0].id, cleaner_id: '11111111-1111-4111-8111-111111111111', data_origin: origin }];
+      const result = validateDataset(dataset);
+      assert.equal(result.ok, false);
+      assert.equal(result.issues.filter(issue => issue.code === 'NOTIF_CLEANER_MISSING').length, 1);
+    });
+
+    test(`${origin} 기록에 남은 비활성 담당자와 연결된 관계는 유효하다`, () => {
+      const dataset = validDataset(origin);
+      const cleanerId = '11111111-1111-4111-8111-111111111111';
+      dataset.cleaners = [{ id: cleanerId, name: 'Fixture Cleaner', active: false }];
+      dataset.jobs[0].id = '22222222-2222-4222-8222-222222222222';
+      dataset.jobs[0].assigned_cleaner_id = cleanerId;
+      dataset.notifs = [{ job_id: dataset.jobs[0].id, cleaner_id: cleanerId, data_origin: origin }];
+      const result = validateDataset(dataset);
+      assert.equal(result.ok, true);
+      assert.equal(result.issues.filter(issue => ['JOB_CLEANER_MISSING', 'NOTIF_CLEANER_MISSING'].includes(issue.code)).length, 0);
+    });
+  }
+
+  test('담당자 테이블이 생략된 입력의 참조도 검증한다', () => {
+    const dataset = validDataset();
+    delete dataset.cleaners;
+    dataset.jobs[0].assigned_cleaner_id = '11111111-1111-4111-8111-111111111111';
+    const result = validateDataset(dataset);
+    assert.equal(result.ok, false);
+    assert.ok(result.issues.some(issue => issue.code === 'JOB_CLEANER_MISSING'));
   });
 });
