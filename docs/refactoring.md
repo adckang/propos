@@ -1396,7 +1396,7 @@ RF-06의 선행 조건은 현재 수정분의 안전성과 실사용 경로의 �
 | RF-13 | `4169698` · 단위/기능 2,994개·격리 통합 193개/선택 3 skip·build·smoke 통과 | Vercel READY·Production SHA 일치·CI success |
 | RF-05.1 | `041a230` · 단위·기능 3,002개·CLI 검수/생성·build·smoke·시나리오/배포 검증 통과 | Vercel READY·Production SHA 일치·CI success |
 | RF-05.3 | `181c10c` · seed 연결 고정·장애 회귀 7개·격리 SQL 3개·전체 단위 3,009개·통합 196개 통과/선택 3 skip | Vercel READY·Production SHA 일치·CI success |
-| RF-05.4 | 검사기 1곳·s72 5개 추가·변형 4개·전체 단위 3,014개·운영 DB 읽기 전용 검사 새 경고 0 | 푸시 뒤 확인 |
+| RF-05.4 | `a979fe6` · 검사기 1곳·s72 5개 추가·변형 4개·리뷰 5건(반영 3)·전체 단위 3,014개·운영 DB 읽기 전용 검사 새 경고 0 | Vercel READY·Production SHA 일치·CI success |
 
 <a id="handover-20261114"></a>
 
