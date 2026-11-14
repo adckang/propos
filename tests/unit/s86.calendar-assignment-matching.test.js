@@ -56,37 +56,30 @@ describe('Calendar 담당자 매칭 도메인', () => {
 });
 
 describe('Calendar Webhook/Scan — 담당자 없는 ASSIGNED 오염 방지 및 복구', () => {
-  test('Webhook은 attendees[0]만 사용하지 않고 공용 담당자 매칭을 사용한다', () => {
-    const block = functionBlock('handleCalendarWebhook', 'handleGmailWebhook');
-    assert.match(block, /resolveCalendarCleaner/);
-    assert.doesNotMatch(block, /evt\.attendees\?\.\[0\]\?\.email/);
-  });
+  // RF-14(2026-11-13): 캘린더 알림(Webhook)·수동 Scan 은 같은 배정 함수(server/cleaning/_calendarAssign.js)를 쓴다 — 규칙은 그 함수에서 본다
+  const shared = read('server/cleaning/_calendarAssign.js');
+  const delegates = () => {
+    for (const [name, next] of [['handleCalendarWebhook', 'handleGmailWebhook'], ['handleCalendarScan', 'registerGmailWatch']]) {
+      assert.match(functionBlock(name, next), /await assignFromCalendarEvents\(db, \{ property: propCfg, events/, `${name} 가 공용 배정 함수를 쓴다`);
+    }
+  };
 
-  test('수동 Scan도 attendees[0]만 사용하지 않고 공용 담당자 매칭을 사용한다', () => {
-    const block = functionBlock('handleCalendarScan', 'registerGmailWatch');
-    assert.match(block, /resolveCalendarCleaner/);
-    assert.doesNotMatch(block, /evt\.attendees\[0\]\.email/);
+  test('Webhook·Scan 은 attendees[0]만 사용하지 않고 공용 담당자 매칭을 사용한다', () => {
+    delegates();
+    assert.match(shared, /await resolveCalendarCleaner\(evt\)/);
+    assert.doesNotMatch(shared, /evt\.attendees\??\.\[?0\]?\??\.email/);
+    assert.match(apiSource, /const calendarAssignDeps = \{[^}]*resolveCalendarCleaner[^}]*\};/);
   });
 
   test('Webhook/Scan 모두 assigned_cleaner_id가 없는 ASSIGNED 작업을 복구 대상으로 포함한다', () => {
-    const blocks = [
-      functionBlock('handleCalendarWebhook', 'handleGmailWebhook'),
-      functionBlock('handleCalendarScan', 'registerGmailWatch'),
-    ];
-    for (const block of blocks) {
-      assert.match(block, /status\s*=\s*'ASSIGNED'\s+AND\s+\(assigned_cleaner_id\s+IS\s+NULL/);
-      assert.match(block, /status!='ASSIGNED' OR assigned_cleaner_id IS NULL OR \(assigned_cleaner_id=\$1 AND google_event_id=\$2\)/);
-    }
+    delegates();
+    assert.match(shared, /status\s*=\s*'ASSIGNED'\s+AND\s+\(assigned_cleaner_id\s+IS\s+NULL/);
+    assert.match(shared, /status!='ASSIGNED' OR assigned_cleaner_id IS NULL OR \(assigned_cleaner_id=\$1 AND google_event_id=\$2\)/);
   });
 
   test('담당자 매칭 실패 시에도 ASSIGNED + NULL을 새로 저장하지 않는다', () => {
-    const blocks = [
-      functionBlock('handleCalendarWebhook', 'handleGmailWebhook'),
-      functionBlock('handleCalendarScan', 'registerGmailWatch'),
-    ];
-    for (const block of blocks) {
-      assert.match(block, /if \(!cleaner\)/);
-      assert.match(block, /continue/);
-    }
+    delegates();
+    assert.match(shared, /if \(!cleaner\) \{[^]*?await alertUnregisteredCleaner\(evt\.id, [^]*?\);\s*continue;\s*\n\s*\}/, '등록되지 않은 담당자면 알리고 건너뜀');
+    assert.ok(shared.indexOf('if (!cleaner) {') < shared.indexOf("UPDATE cleaning_jobs SET status='ASSIGNED'"), '저장 전에 건너뜀');
   });
 });

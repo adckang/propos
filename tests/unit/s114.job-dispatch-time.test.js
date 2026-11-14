@@ -13,6 +13,8 @@ import { readFileSync } from 'node:fs';
 import { parse } from '@babel/parser';
 import * as dispatchModule from '../../server/cleaning/_dispatch.js';
 import { reservationUidOf } from '../../server/cleaning/_reservationSync.js';
+import { parseCheckoutsFromIcal } from '../../server/cleaning/_calendar.js';
+import { parseVEvents, airbnbEventsToReservations } from '../../src/domain/room-state/icalParser.js';
 
 const { calcCleaningTimes, toKstDateKey } = dispatchModule;
 const planJobDispatch = (...args) => {
@@ -255,8 +257,12 @@ describe('월간 배치(매월 15일) — 실제 핸들러 실행 (RF-19, 시나
     const deps = {
       getGoogleToken: async () => { if (!google) throw new Error('no google in test'); return 'token'; }, kv: {},
       getNextMonthDates: () => monthDates ?? [checkouts[0]], createBlockerEvent: async () => 'evt', deleteBlockerEvent: async () => {},
-      fetch: async () => ({ ok: true, text: async () => 'BEGIN:VCALENDAR\nEND:VCALENDAR' }),
-      parseCheckoutsFromIcal: () => checkouts.map((date, i) => ({ date, uid: `uid-${i}` })),
+      fetch: async () => ({ ok: true, text: async () => ['BEGIN:VCALENDAR', ...checkouts.flatMap((date, i) => [
+        'BEGIN:VEVENT', `UID:uid-${i}`, 'SUMMARY:Reserved',
+        `DTSTART;VALUE=DATE:${toKstDateKey(new Date(Date.parse(`${date}T00:00:00+09:00`) - 2 * DAY)).replaceAll('-', '')}`,
+        `DTEND;VALUE=DATE:${date.replaceAll('-', '')}`, 'END:VEVENT',
+      ]), 'END:VCALENDAR'].join('\r\n') }),
+      parseCheckoutsFromIcal, parseVEvents, airbnbEventsToReservations, reservationUidOf,
       calcCleaningTimes, planJobDispatch, toKstDateKey,
       requestedCleaningDays: async () => new Set(requestedDays),
       postSlack: async text => { slack.push(text); return true; }, console: { error: (...a) => errors.push(a.join(' ')) },
@@ -282,7 +288,9 @@ describe('월간 배치(매월 15일) — 실제 핸들러 실행 (RF-19, 시나
     const { inserts } = await runMonthly({ checkouts: [date], pendingJobs: [] });
     const columns = /\(([^)]*)\)\s*VALUES/.exec(inserts[0].sql)[1].split(',').map(s => s.trim());
     assert.ok(columns.includes('dispatch_after'), '요청 시각을 비워 두지 않는다');
-    assert.equal(inserts[0].params[columns.indexOf('dispatch_after')], new Date(start(date).getTime() - 14 * DAY).toISOString());
+    const values = /VALUES\s*\(([^)]*)\)/.exec(inserts[0].sql)[1].split(',').map(s => s.trim());
+    const dispatchBinding = Number(values[columns.indexOf('dispatch_after')].slice(1)) - 1;
+    assert.equal(inserts[0].params[dispatchBinding], new Date(start(date).getTime() - 14 * DAY).toISOString());
   });
 
   test('다음 달 "요청 전" 일정의 요청 시각을 "지금"이 아니라 청소 2주 전으로 잡고, 같은 날 두 번째는 10분 뒤', async () => {

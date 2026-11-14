@@ -252,8 +252,12 @@ describe('알림 기록·캘린더 배정 경고 (동기화와 캘린더 배정�
   });
 
   test('캘린더 웹훅·관리자 캘린더 스캔 두 곳 모두 이 함수로 알린다 (예전 "배정" Slack 직접 호출이 남지 않음)', () => {
-    const calls = api.match(/await postAssignmentSlack\(db, \{ job, propertyName: propCfg\.name, cleanerName: cleaner\.name, \.\.\.goneAlertDeps,/g) ?? [];
-    assert.equal(calls.length, 2);
+    // RF-14(2026-11-13): 두 곳이 같은 배정 함수(server/cleaning/_calendarAssign.js)를 쓴다 — 알림은 그 함수 한 곳에서
+    const shared = readFileSync(new URL('../../server/cleaning/_calendarAssign.js', import.meta.url), 'utf8');
+    const calls = shared.match(/await postAssignmentSlack\(db, \{ job, propertyName: property\.name \?\? property\.property_id, cleanerName: cleaner\.name, \.\.\.goneAlertDeps,/g) ?? [];
+    assert.equal(calls.length, 1);
+    assert.match(api, /const calendarAssignDeps = \{[^}]*postAssignmentSlack[^}]*goneAlertDeps,[^}]*\};/);
+    assert.equal((api.match(/await assignFromCalendarEvents\(db, \{ property: propCfg, events/g) ?? []).length, 2, '캘린더 알림·수동 스캔');
     assert.ok(!/await postSlack\(`\[PROPOS\] ✅ \$\{propCfg\.name\} \$\{eventDate\} 청소 배정/.test(api), '배정 Slack 직접 호출이 남아 있음');
   });
 

@@ -63,7 +63,7 @@ describe("iCal 수동 동기화 — 기존 Calendar 담당자 복구 연결", ()
 describe("실제 복구 함수 — Google 이벤트와 DB 담당자 연결", () => {
   async function runRepair(cleaners) {
     const writes = [];
-    const repair = loadFunction("api/cleaning/[...slug].js", "repairCalendarAssignments", {
+    const deps = {
       db: { query: async (sql, params) => {
         if (sql.includes("FROM property_cleaning_config")) return { rows: [{ property_id: "fixture-property", google_calendar_id: "fixture-calendar" }] };
         if (sql.includes("FROM cleaning_jobs")) return { rows: [{ id: "fixture-job", checkout_at: new Date("2026-10-30T02:00:00Z") }] };
@@ -80,7 +80,9 @@ describe("실제 복구 함수 — Google 이벤트와 DB 담당자 연결", () 
         attendees: [{ email: "host@example.invalid" }, { email: "cleaner@example.invalid" }],
       }] }) }),
       attendeeEmailsForCleaner, matchCleanerAttendee, calendarCleaningTimes, toKstDateKey,
-    });
+    };
+    deps.listCalendarEvents = loadFunction("api/cleaning/[...slug].js", "listCalendarEvents", deps);
+    const repair = loadFunction("api/cleaning/[...slug].js", "repairCalendarAssignments", deps);
     return { result: await repair("fixture-property"), writes };
   }
 

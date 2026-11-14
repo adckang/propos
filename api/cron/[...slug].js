@@ -18,7 +18,8 @@ import {
 } from "../../server/cleaning/_dispatch.js";
 import { notify } from "../../server/cleaning/_notify.js";
 import { syncAllPropertiesIcal } from "../../server/cleaning/_icalSync.js";
-import { isCheckoutCancelled } from "../../server/cleaning/_reservationSync.js";
+import { isCheckoutCancelled, reservationUidOf } from "../../server/cleaning/_reservationSync.js";
+import { parseVEvents, airbnbEventsToReservations } from "../../src/domain/room-state/icalParser.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 import {
   getGoogleToken,
@@ -26,7 +27,6 @@ import {
   createBlockerEvent,
   getNextMonthDates,
   openCleaningSlot,
-  parseCheckoutsFromIcal,
   requestedCleaningDays,
   saveCalendarWatchExpiration,
 } from "../../server/cleaning/_calendar.js";
@@ -187,12 +187,16 @@ async function handleMonthlyClean(db, res) {
         continue;
       }
 
-      const checkouts = parseCheckoutsFromIcal(icalText, targetYM);
+      // 예약 불가 표시·줄 접힌 UID·한국 시각을 예약 동기화와 같은 파서로 판별한다.
+      const reservations = airbnbEventsToReservations(
+        parseVEvents(icalText), prop.checkin_hour ?? 15, prop.checkout_hour ?? 11,
+      ).filter(reservation => toKstDateKey(reservation.checkOut).startsWith(targetYM));
 
       // [3] checkout_at마다 cleaning_job 생성 — 칸(블로커)은 여기서 열지 않는다. 요청을 보내는 날 첫 요청과 함께 연다(DEC-07,
       // 설계 문서 핵심 정책 "dispatch_after 도달 시 블로커 삭제 + 알림 발송"). 예전엔 15일에 바로 열어, 요청이 2주 전으로 바뀐 뒤
       // 몇 주 동안 칸이 열려 있었다(요청 순서와 상관없이 링크를 아는 담당자가 먼저 잡을 수 있음)
-      for (const { date, uid } of checkouts) {
+      for (const reservation of reservations) {
+        const date = toKstDateKey(reservation.checkOut);
         const { cleaning_start_at, cleaning_end_at } = calcCleaningTimes(
           date, prop.checkout_hour, prop.cleaning_duration_hours
         );
@@ -201,12 +205,12 @@ async function handleMonthlyClean(db, res) {
         try {
           const { rowCount } = await db.query(
             `INSERT INTO cleaning_jobs
-               (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source,dispatch_after)
-             VALUES ($1,$2,$3,$4,$5,$6,$7)
+               (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source,source_ref,data_origin,dispatch_after)
+             VALUES ($1,$2,$3,$4,$5,$6,$2,'REAL',$7)
              ON CONFLICT (property_id,checkout_at) DO NOTHING`,
             [
               prop.property_id,
-              uid ?? null,
+              reservationUidOf(prop.property_id, reservation),
               cleaning_start_at.toISOString(),
               cleaning_start_at.toISOString(),
               cleaning_end_at.toISOString(),

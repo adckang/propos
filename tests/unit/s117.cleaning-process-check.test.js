@@ -273,7 +273,7 @@ describe('서버 — 새 조회는 읽기 전용·관리자 전용', () => {
   });
 
   test('구글 캘린더 읽기(수동 스캔 GET)는 PROPOS 블로커 수도 돌려주고 아무것도 바꾸지 않는다', () => {
-    const scan = api.slice(api.indexOf('async function handleCalendarScan'), api.indexOf('// POST: ASSIGNED 업데이트'));
+    const scan = api.slice(api.indexOf('async function handleCalendarScan'), api.indexOf('// POST: 배정'));
     assert.match(scan, /ev\.extendedProperties\?\.private\?\.propos === "blocker"\s*&& \(!scanPropertyId \|\| ev\.extendedProperties\?\.private\?\.property_id === scanPropertyId\)/,
       '캘린더를 여러 숙소가 같이 써도 이 숙소의 블로커만');
     assert.ok(!/UPDATE |INSERT |DELETE /.test(scan.slice(scan.indexOf('if (req.method !== "POST")'))), 'GET 쪽은 읽기만');

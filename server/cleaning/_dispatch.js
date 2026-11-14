@@ -242,7 +242,7 @@ export async function sendCompletionSmsToRest(db, jobId, assignedCleanerId) {
   if (job[0].data_origin === "SIMULATED") return;
 
   const propertyName = job[0].prop_name ?? job[0].property_id;
-  const date = new Date(job[0].cleaning_start_at).toISOString().slice(0, 10);
+  const date = toKstDateKey(job[0].cleaning_start_at); // 안내 날짜는 한국 날짜
   const smsText = buildSmsComplete(propertyName, date);
 
   const { rows: notifs } = await db.query(

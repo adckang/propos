@@ -27,6 +27,7 @@ import {
 } from "../../server/cleaning/_calendar.js";
 import { notify } from "../../server/cleaning/_notify.js";
 import { syncAllPropertiesIcal } from "../../server/cleaning/_icalSync.js";
+import { assignFromCalendarEvents } from "../../server/cleaning/_calendarAssign.js";
 import { isCheckoutCancelled, postAssignmentSlack } from "../../server/cleaning/_reservationSync.js";
 import { markRenewed } from "../../server/cleaning/_tokenHealth.js";
 import { periodToRemainingRange } from "../../src/domain/periodDomain.js";
@@ -633,59 +634,11 @@ async function handleCalendarWebhook(req, res) {
   if (!propCfg) return res.status(200).end();
   // updatedMin: 최근 30분 이내에 생성/수정된 이벤트만 — 신규 예약 감지용
   // timeMin 제거: 청소 종료 후 Webhook 지연 도착 시 이벤트 누락 방지 (BUG-003 fix)
+  // 끝까지(여러 쪽) 읽는다 — 예전엔 오래된 것부터 10개만 읽어, 15일 작업이 블로커 30개를 만든 직후의 담당자 예약이 빠질 수 있었다(RF-14)
   const since = new Date(Date.now() - 30 * 60_000).toISOString();
-  const evtRes = await fetch(
-    `${CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events?updatedMin=${since}&singleEvents=true&orderBy=updated&showDeleted=false&maxResults=10`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  const events = (await evtRes.json()).items ?? [];
-  for (const evt of events) {
-    // propos=blocker 속성이 있으면 PROPOS 블로커 이벤트 → 건너뜀
-    if (evt.extendedProperties?.private?.propos === "blocker") continue;
-    const times = calendarCleaningTimes(evt);
-    if (!times) continue;
-    const { attendeeEmail, cleaner } = await resolveCalendarCleaner(evt);
-    if (!attendeeEmail) continue;
-    // 예약 이벤트의 날짜로 해당 날짜 cleaning_job만 매칭
-    const eventDate = times.date;
-    if (!eventDate) continue;
-    const { rows: [job] } = await db.query(
-      `SELECT * FROM cleaning_jobs WHERE property_id=$1
-       AND to_char(checkout_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD') = $2
-       AND data_origin='REAL'
-       AND (
-         status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED','ESCALATED')
-         OR (status = 'ASSIGNED' AND (assigned_cleaner_id IS NULL OR google_event_id=$3))
-       )
-       LIMIT 1`,
-      [propCfg.property_id, eventDate, evt.id]
-    );
-    if (!job) continue;
-    if (!cleaner) {
-      await postSlack(`[PROPOS] ⚠️ 미등록 이메일: ${attendeeEmail} — 수동 확인 필요`);
-      continue;
-    }
-    if (!calendarCleaningTimes(evt, job.checkout_at)) continue;
-    if (job.status === 'ASSIGNED' && job.assigned_cleaner_id
-        && (job.assigned_cleaner_id !== cleaner.id || job.google_event_id !== evt.id)) continue;
-    const { rows: updated } = await db.query(
-      `UPDATE cleaning_jobs SET status='ASSIGNED',assigned_cleaner_id=$1,google_event_id=$2,
-         cleaning_start_at=$4,cleaning_end_at=$5,updated_at=NOW()
-       WHERE id=$3 AND data_origin='REAL' AND status=$6
-         AND (status!='ASSIGNED' OR assigned_cleaner_id IS NULL OR (assigned_cleaner_id=$1 AND google_event_id=$2))
-         AND checkout_at <= $4::timestamptz
-         AND (status!='ASSIGNED' OR assigned_cleaner_id IS DISTINCT FROM $1 OR google_event_id IS DISTINCT FROM $2
-              OR cleaning_start_at IS DISTINCT FROM $4::timestamptz OR cleaning_end_at IS DISTINCT FROM $5::timestamptz)
-       RETURNING id`,
-      [cleaner.id, evt.id, job.id, times.cleaning_start_at, times.cleaning_end_at, job.status]
-    );
-    if (!updated.length) continue;
-    if (job.status !== 'ASSIGNED' || !job.assigned_cleaner_id) {
-      await sendCompletionSmsToRest(db, job.id, cleaner.id).catch(() => {});
-      await postAssignmentSlack(db, { job, propertyName: propCfg.name, cleanerName: cleaner.name, ...goneAlertDeps,
-        normalText: `[PROPOS] ✅ ${propCfg.name} ${eventDate} 청소 배정 완료 (${cleaner.name})` });
-    }
-  }
+  const events = await listCalendarEvents(calendarId, token, { updatedMin: since, orderBy: "updated" });
+  if (!events) return res.status(200).end();
+  await assignFromCalendarEvents(db, { property: propCfg, events }, calendarAssignDeps);
   return res.status(200).end();
 }
 
@@ -742,6 +695,64 @@ async function handleGmailWebhook(req, res) {
 // RF-16 퇴실이 없어진 청소 작업 알림 — 알린 기록은 KV(숙소마다 하나), 보내기는 운영자 Slack. 규칙은 _reservationSync.js
 const goneAlertDeps = { store: kv, send: postSlack };
 
+// 성공한 "미등록 담당자" 경고만 하루 동안 억제한다. 전송 중 표시는 1분 뒤 저절로 사라져,
+// 실패·프로세스 중단을 하루짜리 성공으로 남기지 않는다. KV 장애 때는 기존대로 경고 전송을 시도한다.
+async function alertUnregisteredCleanerOnce(eventId, text) {
+  const key = `cleaning:unregistered-cleaner-alert:${eventId}`;
+  try {
+    if (await kv.get(key)) return;
+    if (!await kv.set(`${key}:pending`, 1, { nx: true, ex: 60 })) return;
+    // 선점하는 동안 앞선 호출이 전송을 마쳤을 수도 있다.
+    if (await kv.get(key)) return;
+  } catch {
+    console.error("[calendar] 미등록 담당자 경고의 중복 방지 확인 실패");
+  }
+  if (await postSlack(text)) {
+    await kv.set(key, 1, { ex: 86_400 }).catch(() => {
+      console.error("[calendar] 미등록 담당자 경고의 전송 성공 기록 실패");
+    });
+  }
+}
+
+// 캘린더 예약 → 청소 배정(캘린더 알림·수동 스캔 공용) 에 넘기는 동작 — 테스트는 가짜를 끼운다
+const calendarAssignDeps = {
+  calendarCleaningTimes, resolveCalendarCleaner, sendCompletionSmsToRest, postAssignmentSlack, goneAlertDeps,
+  alertUnregisteredCleaner: alertUnregisteredCleanerOnce,
+};
+
+/**
+ * 구글 캘린더 일정을 끝까지(여러 쪽) 읽는다. 조회가 실패하면 null(호출한 쪽이 판단).
+ * @param {Record<string,string>} query  updatedMin·timeMin·timeMax·orderBy 등
+ */
+async function listCalendarEvents(calendarId, token, query, { maxPages = 10 } = {}) {
+  const items = [];
+  let pageToken;
+  try {
+    for (let page = 0; page < maxPages; page++) {
+      const params = new URLSearchParams({ singleEvents: "true", showDeleted: "false", maxResults: "250", ...query });
+      if (pageToken) params.set("pageToken", pageToken);
+      const response = await fetch(`${CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
+        { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) {
+        // 구글이 알려 준 이유(날짜 형식·권한 등)를 기록에 남긴다
+        const reason = await response.text().catch(() => "");
+        console.error(`[calendar] 일정 조회 실패 (${response.status}): ${reason.slice(0, 300)}`);
+        return null;
+      }
+      const body = await response.json();
+      items.push(...(body.items ?? []));
+      pageToken = body.nextPageToken;
+      if (!pageToken) return items;
+    }
+    console.error(`[calendar] 일정이 ${maxPages}쪽을 넘어 전체 조회 실패 (${calendarId})`);
+    return null;
+  } catch (e) {
+    // 네트워크 오류·응답 해석 실패도 "조회 실패"로(호출한 쪽이 판단)
+    console.error(`[calendar] 일정 조회 실패: ${e.message}`);
+    return null;
+  }
+}
+
 
 // ── iCal 수동 동기화 트리거 ───────────────────────────────────────
 
@@ -766,26 +777,9 @@ async function repairCalendarAssignments(propertyId) {
   const timeMin = new Date(Math.min(...timestamps) - 24 * 3600_000).toISOString();
   const timeMax = new Date(Math.max(...timestamps) + 24 * 3600_000).toISOString();
   const token = await getGoogleToken(kv);
-  const params = new URLSearchParams({
-    timeMin,
-    timeMax,
-    singleEvents: 'true',
-    showDeleted: 'false',
-    maxResults: '250',
-  });
-  const items = [];
-  let nextPageToken;
-  do {
-    if (nextPageToken) params.set('pageToken', nextPageToken);
-    const eventsResponse = await fetch(
-      `${CALENDAR_API}/calendars/${encodeURIComponent(property.google_calendar_id)}/events?${params}`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    if (!eventsResponse.ok) throw new Error(`Calendar 조회 실패 (${eventsResponse.status})`);
-    const page = await eventsResponse.json();
-    items.push(...(page.items ?? []));
-    nextPageToken = page.nextPageToken;
-  } while (nextPageToken);
+  // 캘린더 알림·수동 스캔과 같은 여러 쪽 읽기(배정된 일정 전체 기간이라 쪽 수를 넉넉히)
+  const items = await listCalendarEvents(property.google_calendar_id, token, { timeMin, timeMax }, { maxPages: 40 });
+  if (!items) throw new Error("Calendar 조회 실패");
   const { rows: cleaners } = await db.query(
     `SELECT id, name, email FROM cleaners WHERE email IS NOT NULL AND email <> ''`,
   );
@@ -1123,19 +1117,12 @@ async function handleBlockerCleanup(req, res) {
   const lastDay = ym ? new Date(Date.UTC(y, m, 0)).getUTCDate() : null;
   const timeMax = ym ? `${ym}-${String(lastDay).padStart(2, "0")}T23:59:59+09:00` : null;
 
-  const params = new URLSearchParams({
+  // 여러 쪽 읽기(예전엔 250개까지만 — 여러 달치 블로커면 뒤쪽 고아 블로커를 못 지웠다)
+  const items = await listCalendarEvents(calendar_id, gToken, {
     privateExtendedProperty: "propos=blocker",
-    maxResults: "250",
-    singleEvents: "true",
     ...(timeMin && { timeMin, timeMax }),
-  });
-
-  const r = await fetch(
-    `${CALENDAR_API}/calendars/${encodeURIComponent(calendar_id)}/events?${params}`,
-    { headers: { Authorization: `Bearer ${gToken}` } }
-  );
-  if (!r.ok) return sendJson(res, 502, { error: "이벤트 목록 조회 실패", detail: await r.text() });
-  const { items = [] } = await r.json();
+  }, { maxPages: 40 });
+  if (!items) return sendJson(res, 502, { error: "이벤트 목록 조회 실패" });
 
   // DB에 있는 event_id 목록 조회
   const { rows: dbBlockers } = await db.query(
@@ -1164,23 +1151,11 @@ async function handleCalendarScan(req, res) {
   try { gToken = await getGoogleToken(kv); }
   catch (e) { return sendJson(res, 500, { error: `Google OAuth 실패: ${e.message}` }); }
 
-  // date 지정 시 해당 날짜 범위로 조회 (maxResults 제한 우회)
-  const params = date
-    ? new URLSearchParams({
-        timeMin: `${date}T00:00:00+09:00`,
-        timeMax: `${date}T23:59:59+09:00`,
-        singleEvents: "true", showDeleted: "false", maxResults: "50",
-      })
-    : new URLSearchParams({
-        updatedMin: new Date(Date.now() - Number(hours) * 3_600_000).toISOString(),
-        singleEvents: "true", orderBy: "updated", showDeleted: "false", maxResults: "50",
-      });
-  const r = await fetch(
-    `${CALENDAR_API}/calendars/${encodeURIComponent(calendar_id)}/events?${params}`,
-    { headers: { Authorization: `Bearer ${gToken}` } }
-  );
-  if (!r.ok) return sendJson(res, 502, { error: "캘린더 조회 실패", detail: await r.text() });
-  const { items = [] } = await r.json();
+  // date 지정 시 해당 날짜 범위로, 아니면 최근 hours 시간 안에 바뀐 일정 — 끝까지(여러 쪽) 읽는다
+  const items = await listCalendarEvents(calendar_id, gToken, date
+    ? { timeMin: `${date}T00:00:00+09:00`, timeMax: `${date}T23:59:59+09:00` }
+    : { updatedMin: new Date(Date.now() - Number(hours) * 3_600_000).toISOString(), orderBy: "updated" });
+  if (!items) return sendJson(res, 502, { error: "캘린더 조회 실패" });
 
   const filtered = items.filter(
     (ev) => ev.extendedProperties?.private?.propos !== "blocker" && ev.attendees?.length
@@ -1199,61 +1174,12 @@ async function handleCalendarScan(req, res) {
     })) });
   }
 
-  // POST: ASSIGNED 업데이트
+  // POST: 배정 — 캘린더 알림과 같은 함수(요청 받은 나머지 담당자에게 "배정 완료" 안내 + 운영자 Slack, 시나리오 S22)
   const { rows: [propCfg] } = await db.query(
     `SELECT * FROM property_cleaning_config WHERE google_calendar_id=$1 AND data_origin='REAL'`, [calendar_id]
   );
   if (!propCfg) return sendJson(res, 404, { error: "숙소 미등록" });
-
-  const results = [];
-  for (const evt of filtered) {
-    const times = calendarCleaningTimes(evt);
-    if (!times) continue;
-    const { attendeeEmail, cleaner } = await resolveCalendarCleaner(evt);
-    if (!attendeeEmail) continue;
-    const eventDate = times.date;
-    if (date && eventDate !== date) continue;
-    const { rows: [job] } = await db.query(
-      `SELECT * FROM cleaning_jobs WHERE property_id=$1
-       AND to_char(checkout_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD') = $2
-       AND data_origin='REAL'
-       AND (
-         status IN ('PENDING','NOTIFYING_VIP_1','NOTIFYING_VIP_2','NOTIFYING_VIP_3','NOTIFYING_BULK','BULK_REMINDED','ESCALATED')
-         OR (status = 'ASSIGNED' AND (assigned_cleaner_id IS NULL OR google_event_id=$3))
-       )
-       LIMIT 1`,
-      [propCfg.property_id, eventDate, evt.id]
-    );
-    if (!job) { results.push({ eventDate, attendeeEmail, result: "job 없음" }); continue; }
-    if (!cleaner) {
-      results.push({ eventDate, attendeeEmail, result: "미등록 담당자" });
-      await postSlack(`[PROPOS] ⚠️ 미등록 청소담당자: ${attendeeEmail}`);
-      continue;
-    }
-    if (!calendarCleaningTimes(evt, job.checkout_at)) continue;
-    if (job.status === 'ASSIGNED' && job.assigned_cleaner_id
-        && (job.assigned_cleaner_id !== cleaner.id || job.google_event_id !== evt.id)) continue;
-    const { rows: updated } = await db.query(
-      `UPDATE cleaning_jobs SET status='ASSIGNED',assigned_cleaner_id=$1,google_event_id=$2,
-         cleaning_start_at=$4,cleaning_end_at=$5,updated_at=NOW()
-       WHERE id=$3 AND data_origin='REAL' AND status=$6
-         AND (status!='ASSIGNED' OR assigned_cleaner_id IS NULL OR (assigned_cleaner_id=$1 AND google_event_id=$2))
-         AND checkout_at <= $4::timestamptz
-         AND (status!='ASSIGNED' OR assigned_cleaner_id IS DISTINCT FROM $1 OR google_event_id IS DISTINCT FROM $2
-              OR cleaning_start_at IS DISTINCT FROM $4::timestamptz OR cleaning_end_at IS DISTINCT FROM $5::timestamptz)
-       RETURNING id`,
-      [cleaner.id, evt.id, job.id, times.cleaning_start_at, times.cleaning_end_at, job.status]
-    );
-    if (updated.length) {
-      results.push({ eventDate, attendeeEmail, cleaner: cleaner.name, result: "ASSIGNED" });
-      if (job.status !== 'ASSIGNED' || !job.assigned_cleaner_id) {
-        await postAssignmentSlack(db, { job, propertyName: propCfg.name, cleanerName: cleaner.name, ...goneAlertDeps,
-          normalText: `[PROPOS] ✅ ${propCfg.name} ${eventDate} 청소 배정 (${cleaner.name})` });
-      }
-    } else {
-      results.push({ eventDate, attendeeEmail, result: "이미 ASSIGNED" });
-    }
-  }
+  const results = await assignFromCalendarEvents(db, { property: propCfg, events: items, onlyDate: date ?? null }, calendarAssignDeps);
   return sendJson(res, 200, { ok: true, results });
 }
 
