@@ -44,8 +44,12 @@ console.log(JSON.stringify({
 
 if (!APPLY) process.exit(0);
 
-const db = new Pool({ connectionString: process.env.POSTGRES_URL });
+const pool = new Pool({ connectionString: process.env.POSTGRES_URL });
+let db;
+let releaseError;
 try {
+  // BEGIN부터 COMMIT/ROLLBACK까지 같은 연결을 사용한다. pool.query는 호출마다 연결을 반환한다.
+  db = await pool.connect();
   await db.query('BEGIN');
 
   // 대상 property_id 또는 name이 이미 REAL이면 하위 행을 절대 쓰지 않는다.
@@ -127,9 +131,13 @@ try {
   await db.query('COMMIT');
   console.log('✅ SIMULATED 데이터 저장 완료');
 } catch (error) {
-  await db.query('ROLLBACK').catch(() => {});
+  if (db) {
+    try { await db.query('ROLLBACK'); }
+    catch (rollbackError) { releaseError = rollbackError; }
+  }
   console.error('❌ 시드 실패:', error.message);
   process.exitCode = 1;
 } finally {
-  await db.end();
+  db?.release(releaseError);
+  await pool.end();
 }

@@ -135,3 +135,10 @@ node scripts/data-simulator.mjs check-db --strict
 `check-db`의 기본 모드는 운영을 막지 않는 오류 기준이다. `--strict`는 경고도 실패로 처리하므로, 현재처럼 과거 REAL 레거시 작업을 보존해야 하는 운영 DB에서는 기본 검수와 별도로 이력 정리 완료 여부를 판단하는 QA 게이트로 사용한다.
 
 `scripts/seed-simulated-data.mjs`는 `property_cleaning_config`, `property_reservations`, `cleaning_jobs`, `events`만 비파괴 upsert한다. `cleaning_notifs`는 배정 발송 과정에서 생성되므로 seed 대상이 아니다. 기존 SIMULATED 잔여 행을 삭제하지 않으며, 대상 숙소 ID·이름이 REAL 또는 다른 숙소와 충돌하면 DB 저장을 시작하지 않고 중단한다.
+
+
+### seed 트랜잭션과 담당자 관계 검수 · 2026-11-14
+
+seed는 `pool.connect()`로 얻은 한 연결에서 사전 충돌 검사와 전체 upsert를 실행한다. 실패 시 같은 연결에서 롤백하고, 롤백 실패 연결은 폐기한다. dry-run은 DB 연결을 열지 않는다. 실제 CLI를 호출하는 단위·격리 SQL s121에서 중간 실패 복구·반복 저장·REAL 보존을 검증한다.
+
+[RF-05.2 감사](refactoring.md#rf05-assignment-relations)에서 SIMULATED 배정의 담당자 목록·FK 저장 공백과 가상 Google ID가 이를 가리는 검수 공백을 확인했다. 현재 기본 검수 PASS는 이 필수 관계까지 검증됐다는 뜻이 아니다. 생성·검수·seed의 동시 보완은 RF-05.4의 다음 작업이며, 이번 연결 수정으로 기존 운영 데이터를 바꾸지 않았다.
