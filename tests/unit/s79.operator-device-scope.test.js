@@ -2,6 +2,9 @@
 process.env.PROPOS_WATCHER_URL = 'http://pi.test';
 process.env.PROPOS_WATCHER_URLS = JSON.stringify({ watcher1: 'http://pi.test' });
 process.env.PROPOS_DATA_PROFILE = 'hybrid';
+// RF-21: 서버 → 워처 호출에 붙는 공유키(시험용 값)
+const PI_KEY = 'pi-shared-key-for-tests-0123456789';
+process.env.PROPOS_PI_SECRET = PI_KEY;
 
 import { describe, test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -318,9 +321,20 @@ const mkRes = () => ({ statusCode: 200, body: null, headers: {}, setHeader(k, v)
 const mkReq = ({ method = 'GET', url, query = {}, body, cookie }) => ({ method, url, query, headers: cookie ? { cookie } : {}, async *[Symbol.asyncIterator]() { if (body !== undefined) yield Buffer.from(JSON.stringify(body)); } });
 // 실제 서비스(HA·워처)로 나가는 요청은 전부 여기서 가로채 기록한다 — 테스트가 집의 Home Assistant 를 건드리지 않게
 let outbound; let realFetch;
-const stubFetch = (reply) => { outbound = []; realFetch = globalThis.fetch; globalThis.fetch = async (url, init) => { outbound.push({ url: String(url), method: init?.method ?? 'GET' }); return reply(String(url), init); }; };
+const stubFetch = (reply) => { outbound = []; realFetch = globalThis.fetch; globalThis.fetch = async (url, init) => { outbound.push({ url: String(url), method: init?.method ?? 'GET', headers: init?.headers ?? {} }); return reply(String(url), init); }; };
 const restoreFetch = () => { globalThis.fetch = realFetch; };
 const jsonReply = (data) => ({ ok: true, status: 200, json: async () => data, text: async () => JSON.stringify(data), headers: { get: () => 'application/json' }, arrayBuffer: async () => new ArrayBuffer(0) });
+
+describe('RF-21: 운영자 범위 확인용 워처 숙소 목록 조회도 공유키를 붙인다', () => {
+  test('기본 조회 함수가 워처에 보내는 요청', async () => {
+    const seen = [];
+    const lookup = createWatcherPropertyLookup({ getUrls: () => ['http://pi.test'], fetchImpl: async (url, init) => { seen.push({ url, init }); return { ok: true, json: async () => [] }; } });
+    await lookup();
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].url, 'http://pi.test/api/properties');
+    assert.equal(seen[0].init.headers['x-pi-secret'], PI_KEY);
+  });
+});
 
 describe('실제 핸들러: /api/ha', () => {
   let mod;
@@ -460,6 +474,18 @@ describe('실제 핸들러: /api/properties (워처 메타데이터)', () => {
     assert.equal((await call({ cookie: adminCookie() })).body.length, 2);
     assert.equal((await call({})).statusCode, 401);
   });
+  test('RF-21: 워처 숙소 설정을 읽고 저장할 때 공유키를 붙인다', async () => {
+    await call({ cookie: adminCookie() });
+    await call({ method: 'PUT', body: [], cookie: adminCookie() });
+    assert.deepEqual(outbound.map((o) => [o.method, o.headers['x-pi-secret']]), [['GET', PI_KEY], ['PUT', PI_KEY]]);
+  });
+  test('RF-21: 워처가 서버 요청을 거절하면 관리자에게 502, 운영자에게는 빈 목록(기존과 같음)', async () => {
+    restoreFetch(); stubFetch(() => ({ ok: false, status: 401, json: async () => ({ error: 'Unauthorized' }) }));
+    const admin = await call({ cookie: adminCookie() });
+    assert.deepEqual([admin.statusCode, admin.body.code], [502, 'WATCHER_AUTH']);
+    assert.equal((await call({ method: 'PUT', body: [], cookie: adminCookie() })).statusCode, 502);
+    assert.deepEqual(await call({ cookie: opCookie() }).then((r) => [r.statusCode, r.body]), [200, []]);
+  });
   test('저장(PUT)은 관리자만 — 운영자 403, 익명 401', async () => {
     assert.equal((await call({ method: 'PUT', body: [], cookie: opCookie() })).statusCode, 403);
     assert.equal((await call({ method: 'PUT', body: [] })).statusCode, 401);
@@ -488,6 +514,29 @@ describe('실제 핸들러: /api/monitoring 과 /api/camera/snapshot', () => {
     assert.equal((await callMon({ method: 'POST', query: { watcherId: 'watcher1' }, body: {}, cookie })).statusCode, 403);
     assert.equal((await callMon({ slug: 'config', method: 'POST', query: { watcherId: 'watcher1' }, body: {}, cookie })).statusCode, 403); // 설정 전송은 관리자 전용
     assert.equal((await callMon({ slug: 'event', method: 'POST', query: { watcherId: 'watcher1' }, body: { type: 'cleaning_finished', propertyId: '파주201' }, cookie })).statusCode, 403);
+  });
+  test('RF-21: 상태 조회·덮어쓰기·설정·청소/정비 요청·사진을 워처에 물을 때 모두 공유키를 붙인다', async () => {
+    const cookie = adminCookie();
+    await callMon({ query: { watcherId: 'watcher1' }, cookie });
+    await callMon({ method: 'PUT', query: { watcherId: 'watcher1' }, body: { roomState: { mainStatus: 'VACANT' } }, cookie });
+    await callMon({ slug: 'config', method: 'POST', query: { watcherId: 'watcher1' }, body: {}, cookie });
+    await callMon({ slug: 'event', method: 'POST', query: { watcherId: 'watcher1' }, body: { type: 'cleaning_finished', propertyId: '파주201' }, cookie });
+    await callCam({ cookie });
+    const paths = outbound.map((o) => new URL(o.url).pathname);
+    assert.deepEqual(paths, ['/api/monitoring/state', '/api/monitoring/state', '/api/monitoring/config', '/api/monitoring/event', '/api/camera/snapshot']);
+    for (const o of outbound) assert.equal(o.headers['x-pi-secret'], PI_KEY, `${o.method} ${o.url}`);
+  });
+  test('RF-21: 워처가 서버 요청을 거절(401)하면 502 로 알린다 — 401 이면 화면이 로그인 만료로 알고 로그아웃시킨다', async () => {
+    restoreFetch(); stubFetch(() => ({ ok: false, status: 401, json: async () => ({ error: 'Unauthorized' }), headers: { get: () => 'application/json' } }));
+    const admin = adminCookie();
+    const state = await callMon({ query: { watcherId: 'watcher1' }, cookie: admin });
+    assert.deepEqual([state.statusCode, state.body.code], [502, 'WATCHER_AUTH']);
+    const config = await callMon({ slug: 'config', method: 'POST', query: { watcherId: 'watcher1' }, body: {}, cookie: admin });
+    assert.deepEqual([config.statusCode, config.body.code], [502, 'WATCHER_AUTH']);
+    const op = await callMon({ query: { watcherId: 'watcher1' }, cookie: opCookie() });
+    assert.equal(op.statusCode, 502);
+    assert.equal(op.body.code, undefined, '운영자에게는 일반 안내만');
+    assert.equal((await callCam({ cookie: admin })).statusCode, 502);
   });
   test('수동 작업은 지정 워처의 event로 중계하며 기존 state 요청도 유지한다', async () => {
     restoreFetch();

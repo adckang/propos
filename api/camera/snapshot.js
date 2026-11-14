@@ -11,7 +11,7 @@ import { DATA_PROFILE, resolveServerDataProfile } from '../../src/config/dataPro
 
 import { requireScope } from '../../server/auth/operatorAuth.js';
 import { isAdminScope } from '../../server/auth/operatorAccounts.js';
-import { createWatcherPropertyLookup, operatorMayUseWatcher, resolveWatcherUrl } from '../../server/auth/watcherScope.js';
+import { createWatcherPropertyLookup, operatorMayUseWatcher, resolveWatcherUrl, watcherRequestHeaders, watcherRejectedServer } from '../../server/auth/watcherScope.js';
 import { _setAuthDbForTest, getAuthDb } from '../../server/auth/authDb.js';
 
 let watcherLookup = createWatcherPropertyLookup();
@@ -52,8 +52,8 @@ export default async function handler(req, res) {
 
   try {
     const upstream = `${WATCHER_URL.replace(/\/$/, '')}/api/camera/snapshot?path=${encodeURIComponent(path)}`;
-    const r = await fetch(upstream);
-    if (!r.ok) { res.statusCode = r.status; res.end(); return; }
+    const r = await fetch(upstream, { headers: watcherRequestHeaders() });
+    if (!r.ok) { res.statusCode = watcherRejectedServer(r.status) ? 502 : r.status; res.end(); return; }
 
     const buf = Buffer.from(await r.arrayBuffer());
     res.setHeader('Content-Type', r.headers.get('content-type') || 'image/jpeg');

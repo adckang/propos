@@ -16,7 +16,7 @@ import { canAccessProperty, isAdminScope } from '../server/auth/operatorAccounts
 
 import { _setAuthDbForTest, getAuthDb } from '../server/auth/authDb.js';
 export { _setAuthDbForTest };
-import { resolveWatcherUrl } from '../server/auth/watcherScope.js';
+import { resolveWatcherUrl, watcherRequestHeaders, watcherRejectedServer, WATCHER_AUTH_REJECTED } from '../server/auth/watcherScope.js';
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -73,11 +73,13 @@ export default async function handler(req, res) {
 
   try {
     const upstream = `${WATCHER_URL.replace(/\/$/, '')}/api/properties`;
-    const options = { method: req.method, headers: { 'Content-Type': 'application/json' } };
+    const options = { method: req.method, headers: watcherRequestHeaders({ 'Content-Type': 'application/json' }) };
     if (req.method === 'PUT') {
       options.body = JSON.stringify(await readBody(req));
     }
     const r = await fetch(upstream, options);
+    // 워처가 서버 요청을 거절(공유키 문제)하면 401 대신 502 — 운영자는 아래 분기에서 빈 목록 그대로
+    if (watcherRejectedServer(r.status) && !(req.method === 'GET' && scope && !isAdminScope(scope))) return sendJson(res, 502, WATCHER_AUTH_REJECTED);
     const body = await r.json().catch(() => ({}));
     if (req.method === 'GET' && scope && !isAdminScope(scope)) {
       // 운영자에게는 워처의 오류 메시지·다른 숙소 정보를 내려주지 않는다: 자기 숙소 항목만, 배열이 아니면 빈 목록

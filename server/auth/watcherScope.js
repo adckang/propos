@@ -6,6 +6,7 @@
  * 한계: 워처 하나가 여러 숙소를 맡으면 그 워처의 데이터는 숙소별로 나눌 수 없다(현재는 숙소 1개 = 워처 1개).
  */
 import { canAccessProperty } from './operatorAccounts.js';
+import { WATCHER_SECRET_HEADER } from '../watcherAuth.js';
 
 export function parseWatcherUrls(env = process.env) {
   let byId = {};
@@ -16,6 +17,24 @@ export function parseWatcherUrls(env = process.env) {
 }
 
 const normUrl = (u) => String(u ?? '').replace(/\/$/, '');
+
+/**
+ * 서버 → 워처 호출에 붙이는 헤더 (RF-21). 워처는 Pi → 서버 이벤트 전송과 같은 공유키(PROPOS_PI_SECRET, 헤더 x-pi-secret)를
+ * 확인한다 — 키를 아는 쪽은 원래 서버와 Pi 두 곳뿐이라 새 키가 필요 없다. 키가 설정돼 있지 않으면 붙이지 않는다.
+ */
+export function watcherRequestHeaders(extra = {}, env = process.env) {
+  const secret = env.PROPOS_PI_SECRET;
+  return typeof secret === 'string' && secret ? { ...extra, [WATCHER_SECRET_HEADER]: secret } : { ...extra };
+}
+
+/**
+ * 워처가 서버 요청을 거절했는가(키가 없거나 다름). 이 401/403 을 그대로 브라우저에 넘기면 화면이 "로그인 만료"로 알고
+ * 로그인 화면으로 보내 5초 폴링마다 다시 로그아웃된다 — 서버와 Pi 의 공유키 문제이므로 502 로 바꿔 알린다.
+ */
+export const WATCHER_AUTH_REJECTED = { error: '워처가 서버 요청을 거절했어요 — 서버와 Pi 의 공유키를 확인하세요', code: 'WATCHER_AUTH' };
+export function watcherRejectedServer(status) {
+  return status === 401 || status === 403;
+}
 
 /** watcherId → 실제로 호출할 주소. (주소 맵에 없는 이름은 기본 워처로 폴백 — 기존 동작. 그래서 운영자 검사는 이 결과 주소를 쓴다) */
 export function resolveWatcherUrl(watcherId, env = process.env) {
@@ -61,7 +80,7 @@ export function createWatcherPropertyLookup({ getUrls = () => parseWatcherUrls()
     const run = (async () => {
       await null; // 동기 예외가 나도 아래 try/finally 가 st.inflight 대입 **뒤에** 실행되게 한다(대입 전에 비워져 영원히 남는 문제 방지)
       try {
-        const r = await fetchImpl(`${key}/api/properties`, { signal: AbortSignal.timeout(timeoutMs) });
+        const r = await fetchImpl(`${key}/api/properties`, { signal: AbortSignal.timeout(timeoutMs), headers: watcherRequestHeaders() });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const body = await r.json();
         if (!Array.isArray(body)) throw new Error('목록이 아님');

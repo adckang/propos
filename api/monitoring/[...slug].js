@@ -10,7 +10,7 @@ import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataPro
 
 import { requireScope } from "../../server/auth/operatorAuth.js";
 import { isAdminScope } from "../../server/auth/operatorAccounts.js";
-import { createWatcherPropertyLookup, operatorMayUseWatcher, resolveWatcherUrl } from "../../server/auth/watcherScope.js";
+import { createWatcherPropertyLookup, operatorMayUseWatcher, resolveWatcherUrl, watcherRequestHeaders, watcherRejectedServer, WATCHER_AUTH_REJECTED } from "../../server/auth/watcherScope.js";
 import { _setAuthDbForTest, getAuthDb } from "../../server/auth/authDb.js";
 
 let watcherLookup = createWatcherPropertyLookup();
@@ -74,9 +74,10 @@ export default async function handler(req, res) {
       const upstream = `${watcherUrl.replace(/\/$/, "")}/api/monitoring/${action}`;
       const r = await fetch(upstream, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: watcherRequestHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(body),
       });
+      if (watcherRejectedServer(r.status)) { sendJson(res, 502, WATCHER_AUTH_REJECTED); return; }
       const result = await r.json().catch(() => ({}));
       sendJson(res, r.status, result);
       return;
@@ -84,11 +85,12 @@ export default async function handler(req, res) {
 
     if (action === "state") {
       const upstream = `${watcherUrl.replace(/\/$/, "")}/api/monitoring/state`;
-      const options = { method: req.method, headers: { "Content-Type": "application/json" } };
+      const options = { method: req.method, headers: watcherRequestHeaders({ "Content-Type": "application/json" }) };
       if (req.method === "POST" || req.method === "PUT") {
         options.body = JSON.stringify(await readBody(req));
       }
       const r = await fetch(upstream, options);
+      if (watcherRejectedServer(r.status)) { sendJson(res, 502, isAdminScope(scope) ? WATCHER_AUTH_REJECTED : { error: "워처에서 상태를 가져오지 못했어요" }); return; }
       const body = await r.json().catch(() => ({}));
       if (!isAdminScope(scope) && !r.ok) { sendJson(res, 502, { error: "워처에서 상태를 가져오지 못했어요" }); return; } // 운영자에게 워처의 오류 내용을 그대로 주지 않는다
       sendJson(res, r.status, body);

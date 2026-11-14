@@ -19,8 +19,13 @@ import { startWatcher, stopWatcher, shutdownPreparation, getMonitoringState, set
 import { loadProperties, saveProperties } from '../server/propertiesStore.js';
 import { getHaBaseUrl, getHaToken } from '../server/haProxy.js';
 import { handleMonitoringEventRequest } from '../server/monitoringEventHandler.js';
+import { createUnauthenticatedLogger, decideWatcherRequest, watcherAuthMode } from '../server/watcherAuth.js';
 
 const PORT = Number(process.env.PROPOS_WATCHER_PORT ?? 3001);
+// 키 없는 요청 기록 — 같은 경로는 10분에 한 번만(인터넷의 봇이 기록 파일을 채우지 않게)
+const logUnauthenticated = createUnauthenticatedLogger({
+  knownPaths: new Set(['/api/monitoring/event', '/api/monitoring/state', '/api/monitoring/config', '/api/properties', '/api/camera/snapshot']),
+});
 
 // ── HTTP 서버 ─────────────────────────────────────────────────────────────────
 function sendJson(res, status, body) {
@@ -46,6 +51,11 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { sendJson(res, 204, {}); return; }
 
   const url = new URL(req.url, `http://localhost:${PORT}`);
+
+  // RF-21: 서버(Vercel)만 공유키를 붙여 부른다 — 키 없는 요청은 기록 모드에선 처리하되 기록, 차단 모드에선 401
+  const access = decideWatcherRequest(req.headers);
+  if (access === 'reject') { sendJson(res, 401, { error: 'Unauthorized' }); return; }
+  if (access === 'log') logUnauthenticated(req.method, url.pathname);
 
   if (req.method === 'POST' && url.pathname === '/api/monitoring/event') {
     await handleMonitoringEventRequest(req, res);
@@ -117,6 +127,8 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`[PROPOS Watcher] HTTP :${PORT}`);
+  // 재시작 때 설정이 빠져 기록 모드로 돌아가면 바로 보이게 시작할 때마다 모드를 남긴다(RF-21)
+  console.log(`[watcher-auth] 모드: ${watcherAuthMode() === 'enforce' ? '차단(키 없는 요청 401)' : '기록(키 없는 요청도 처리하고 기록)'}`);
   startWatcher();
 });
 
