@@ -217,8 +217,16 @@ export function validateDataset(dataset = {}, options = {}) {
     if (hasValue(row.assigned_cleaner_id) && !cleanerIndex.has(text(row.assigned_cleaner_id))) {
       addIssue(issues, 'JOB_CLEANER_MISSING', 'cleaning_jobs', key, '청소작업의 assigned_cleaner_id가 cleaners에 없습니다.');
     }
-    if (['ASSIGNED', 'COMPLETED'].includes(status) && !hasValue(row.assigned_cleaner_id) && !hasValue(row.google_event_id)) {
-      addWarning(warnings, 'JOB_ASSIGNMENT_TRACE_MISSING', 'cleaning_jobs', key, '배정 완료 상태지만 담당자 또는 Google 이벤트 추적키가 없습니다.');
+    const assignedLike = ['ASSIGNED', 'COMPLETED'].includes(status);
+    if (assignedLike && !hasValue(row.assigned_cleaner_id)) {
+      if (!hasValue(row.google_event_id)) {
+        addWarning(warnings, 'JOB_ASSIGNMENT_TRACE_MISSING', 'cleaning_jobs', key, '배정 완료 상태지만 담당자 또는 Google 이벤트 추적키가 없습니다.');
+      } else if (origin === DATA_ORIGINS.REAL) {
+        // RF-05.4: 캘린더 배정은 담당자와 구글 일정을 함께 저장한다. 일정 번호만 있고 담당자가 없는 실제 배정은
+        // "누가 청소하는지 모르는 배정 완료"다(과거 참석자 이메일 불일치 사고, 담당자 없이도 저장되는 수동 배정 입구).
+        // 가상 숙소는 D-032 계약 그대로(가상 일정 번호만으로 충분)라 실제 숙소에만 적용한다
+        addWarning(warnings, 'REAL_ASSIGNED_CLEANER_MISSING', 'cleaning_jobs', key, '실제 숙소의 배정 완료 작업에 담당자가 없습니다.');
+      }
     }
   }
 

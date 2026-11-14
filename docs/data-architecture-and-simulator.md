@@ -97,7 +97,7 @@ cleaners (id) ─┬─< cleaning_jobs.assigned_cleaner_id
 - Google 원본의 이름·예약 이메일과 전화번호 근거를 대조하고 사용자 승인을 받아 담당자 이메일 1건 및 기존 배정 21건의 담당자 연결을 정정했다. 10월 8일은 취소된 이벤트 참조를 현재 유효한 이벤트 ID로 교체했다.
 - 복구 후 실DB 검수에서 담당자 ID/이름 누락은 0건이다. 실제 API 함수와 운영 DB를 연결한 검수에서 10월 배정 9건 모두 이름을 반환했다. 같은 응답을 사용한 데스크톱·모바일 상세 타임라인에서도 이름을 확인했다.
 - 담당자 연결 복구 시점에는 배정 상태·일시·예약을 변경하지 않았다. 이후 시간 정합성 후속 작업에서 사용자 승인에 따라 21건의 청소 시각만 Google 원본 12:00~15:00로 정정했고 퇴실 11:00과 기존 관계를 보존했다.
-- `google_event_id` 존재만으로 화면의 담당자 이름까지 보장되지는 않는다. `cleaning_jobs.assigned_cleaner_id → cleaners.id` 연결과 Google 예약 이메일 일치도 검수해야 한다. `RUN_LIVE_DB=1 node --test tests/integration/s85.real-cleaner-assignment.test.js`가 담당자 연결 누락을 실패로 판정한다.
+- `google_event_id` 존재만으로 화면의 담당자 이름까지 보장되지는 않는다. `cleaning_jobs.assigned_cleaner_id → cleaners.id` 연결과 Google 예약 이메일 일치도 검수해야 한다. `RUN_LIVE_DB=1 node --test tests/integration/s85.real-cleaner-assignment.test.js`가 담당자 연결 누락을 실패로 판정한다. 2026-11-14(RF-05.4)부터는 평소 데이터 검사(`npm run data:check:db`)도 실제 숙소의 배정 완료에 담당자가 없으면 경고 `REAL_ASSIGNED_CLEANER_MISSING`을 낸다(가상 숙소는 D-032대로 제외).
 
 시간 정합성 검수는 다음 경계를 포함한다.
 

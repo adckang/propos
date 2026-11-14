@@ -114,7 +114,13 @@ describe('data simulator contract', () => {
     dataset.properties[0].source_system = 'AIRBNB_ICAL';
     dataset.properties[0].source_ref = 'ical:실제숙소';
     dataset.reservations = dataset.reservations.map(row => ({ ...row, data_origin: 'REAL', source_system: 'AIRBNB_ICAL', source_ref: 'ical:실제숙소' }));
-    dataset.jobs = dataset.jobs.map(row => ({ ...row, data_origin: 'REAL', source_ref: `legacy:cleaning_job:${row.reservation_uid}` }));
+    // 실제 배정 완료는 담당자와 함께 저장된다(RF-05.4) — 생성기의 가상 모양(담당자 없음)을 그대로 실제로 바꾸지 않는다
+    const realCleanerId = '44444444-4444-4444-8444-444444444444';
+    dataset.cleaners = [...(dataset.cleaners ?? []), { id: realCleanerId, name: 'Fixture Cleaner', active: true }];
+    dataset.jobs = dataset.jobs.map(row => ({
+      ...row, data_origin: 'REAL', source_ref: `legacy:cleaning_job:${row.reservation_uid}`,
+      ...(['ASSIGNED', 'COMPLETED'].includes(row.status) && { assigned_cleaner_id: realCleanerId }),
+    }));
     dataset.events = dataset.events.map(row => ({ ...row, data_origin: 'REAL', source_system: 'HA_WATCHER', source_ref: `legacy:event:${row.id}` }));
     dataset.reservations = dataset.reservations.slice(1);
     const result = validateDataset(dataset);
@@ -196,5 +202,64 @@ describe('data simulator contract', () => {
     const result = validateDataset(dataset);
     assert.equal(result.ok, false);
     assert.ok(result.issues.some(issue => issue.code === 'JOB_CLEANER_MISSING'));
+  });
+});
+
+// RF-05.4(2026-11-14, 사용자 선택 "실제 데이터 검사만 강화"): 실제 숙소의 배정 완료는 담당자가 있어야 한다.
+// 캘린더 배정 공용 함수는 담당자 + 구글 일정을 함께 저장한다. 구글 일정 번호만 있고 담당자가 없으면
+// 예전에 있었던 "배정 완료인데 담당자 없음" 오염과 같은 모양이다(담당자 없이도 저장되는 수동 배정 입구도 있다). 가상 숙소는 D-032 계약 그대로(일정 번호만으로 충분).
+describe('RF-05.4 — 실제 숙소의 배정 완료는 담당자가 있어야 한다', () => {
+  const cleanerId = '33333333-3333-4333-8333-333333333333';
+  const cleanerWarnings = result => result.warnings.filter(issue => issue.code === 'REAL_ASSIGNED_CLEANER_MISSING');
+
+  // 실제 숙소 데이터: 배정 완료 작업에는 실제처럼 담당자와 구글 일정이 함께 있다
+  function realDataset() {
+    const dataset = validDataset('REAL');
+    dataset.cleaners = [...(dataset.cleaners ?? []), { id: cleanerId, name: 'Fixture Cleaner', active: true }];
+    for (const job of dataset.jobs) {
+      if (['ASSIGNED', 'COMPLETED'].includes(job.status)) {
+        job.assigned_cleaner_id = cleanerId;
+        job.google_event_id = `google-event-${job.reservation_uid}`;
+      }
+    }
+    return dataset;
+  }
+
+  test('담당자·구글 일정이 함께 있는 실제 배정은 경고하지 않는다', () => {
+    const result = validateDataset(realDataset());
+    assert.equal(result.strictOk, true, JSON.stringify(result.warnings));
+  });
+
+  for (const status of ['ASSIGNED', 'COMPLETED']) {
+    test(`실제 숙소의 ${status}에 구글 일정 번호만 있고 담당자가 없으면 경고한다`, () => {
+      const dataset = realDataset();
+      dataset.jobs[0].status = status;
+      dataset.jobs[0].google_event_id = 'google-event-only';
+      dataset.jobs[0].assigned_cleaner_id = null;
+      const result = validateDataset(dataset);
+      assert.equal(result.ok, true, '오류가 아니라 경고다(기존 기록을 보존하고 사람이 확인)');
+      assert.equal(cleanerWarnings(result).length, 1);
+      assert.equal(result.strictOk, false);
+    });
+  }
+
+  test('실제 숙소에 담당자·일정 번호가 둘 다 없으면 기존 경고 하나만 낸다(중복 경고 없음)', () => {
+    const dataset = realDataset();
+    dataset.jobs[0].status = 'ASSIGNED';
+    dataset.jobs[0].google_event_id = null;
+    dataset.jobs[0].assigned_cleaner_id = null;
+    const result = validateDataset(dataset);
+    const forJob = result.warnings.filter(issue => issue.table === 'cleaning_jobs');
+    assert.deepEqual(forJob.map(issue => issue.code), ['JOB_ASSIGNMENT_TRACE_MISSING']);
+  });
+
+  test('가상 숙소는 D-032 계약 그대로 — 가상 일정 번호만 있어도 경고하지 않는다', () => {
+    const dataset = validDataset('SIMULATED');
+    const assigned = dataset.jobs.filter(job => job.status === 'ASSIGNED');
+    assert.ok(assigned.length > 0, '생성기가 배정 완료 작업을 만든다');
+    assert.ok(assigned.every(job => !job.assigned_cleaner_id && job.google_event_id), '지금 생성기 모양: 담당자 없이 가상 일정 번호');
+    const result = validateDataset(dataset);
+    assert.equal(cleanerWarnings(result).length, 0);
+    assert.equal(result.strictOk, true);
   });
 });
