@@ -1437,6 +1437,7 @@ RF-06의 선행 조건은 현재 수정분의 안전성과 실사용 경로의 �
 | RF-05.1 | `041a230` · 단위·기능 3,002개·CLI 검수/생성·build·smoke·시나리오/배포 검증 통과 | Vercel READY·Production SHA 일치·CI success |
 | RF-05.3 | `181c10c` · seed 연결 고정·장애 회귀 7개·격리 SQL 3개·전체 단위 3,009개·통합 196개 통과/선택 3 skip | Vercel READY·Production SHA 일치·CI success |
 | RF-05.4 | `a979fe6` · 검사기 1곳·s72 5개 추가·변형 4개·리뷰 5건(반영 3)·전체 단위 3,014개·운영 DB 읽기 전용 검사 새 경고 0 | Vercel READY·Production SHA 일치·CI success |
+| RF-21 서버 쪽 | `ec9f5ed` · 워처 호출 5곳 공유키 첨부·워처 거절 502·워처 확인 코드(기본 기록 모드, Pi 미반영)·테스트 18개·변형 18/18·리뷰 10건(반영 6)·전체 단위 3,032개 | Vercel READY·Production SHA 일치·CI success. 로그인 없는 `/api/monitoring/state`·`/api/properties`·`/api/camera/snapshot` 401 유지(오류 500 아님). 워처 직접 GET은 Pi 반영 전이라 아직 200. 로그인 후 화면 경유 확인은 자격증명이 없어 미실행 |
 
 <a id="handover-20261114"></a>
 
