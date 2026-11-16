@@ -46,6 +46,8 @@ export function _setDbForTest(fake) { db = fake; }
 
 const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 const GMAIL_API    = "https://gmail.googleapis.com/gmail/v1";
+// 담당자 번호(cleaners.id UUID) 형식 — DB 형식 오류(22P02) 대신 "없는 담당자"로 답하려고 미리 본다
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BASE_URL     =
   process.env.PROPOS_BASE_URL ||
   (process.env.VERCEL_PROJECT_PRODUCTION_URL
@@ -1319,18 +1321,25 @@ export default async function handler(req, res) {
         if (targetJob.data_origin === "SIMULATED") {
           return sendJson(res, 409, { error: "시뮬레이션 일정은 외부 배정 처리를 하지 않습니다.", data_origin: "SIMULATED" });
         }
+        // RF-22: 실제 숙소의 배정 완료는 활동 중인 담당자가 있어야 한다(RF-05.4 검사와 같은 규칙).
+        // 비우거나, 없는 번호거나, 활동을 멈춘(삭제는 active=false) 담당자면 저장하지 않는다.
+        const cleanerId = typeof b.assigned_cleaner_id === "string" ? b.assigned_cleaner_id.trim() : "";
+        if (!cleanerId) return sendJson(res, 400, { error: "실제 숙소 배정에는 담당자가 필요해요", code: "CLEANER_REQUIRED" });
+        const { rows: [cleaner] } = UUID_PATTERN.test(cleanerId)
+          ? await db.query(`SELECT active FROM cleaners WHERE id=$1`, [cleanerId])
+          : { rows: [] };
+        if (!cleaner) return sendJson(res, 400, { error: "없는 담당자예요", code: "CLEANER_NOT_FOUND" });
+        if (!cleaner.active) return sendJson(res, 400, { error: "활동하지 않는 담당자예요", code: "CLEANER_INACTIVE" });
         const { rows } = await db.query(
           `UPDATE cleaning_jobs SET status='ASSIGNED', assigned_cleaner_id=$1, google_event_id=$2, updated_at=NOW()
-           WHERE id=$3 AND status!='ASSIGNED' RETURNING id, status`,
-          [b.assigned_cleaner_id ?? null, b.google_event_id ?? null, id]
+           WHERE id=$3 AND data_origin='REAL' AND status!='ASSIGNED' RETURNING id, status`,
+          [cleanerId, b.google_event_id ?? null, id]
         );
         if (!rows.length) return sendJson(res, 409, { error: "이미 ASSIGNED 상태" });
-        // 배정 완료 알림 발송 (GAP-004 fix)
-        if (b.assigned_cleaner_id) {
-          await sendCompletionSmsToRest(db, id, b.assigned_cleaner_id).catch((e) =>
-            console.error(`[PATCH ASSIGNED] 완료 알림 실패:`, e.message)
-          );
-        }
+        // 배정 완료 알림 발송 (GAP-004 fix) — 위에서 담당자를 확인했으므로 항상 보낸다
+        await sendCompletionSmsToRest(db, id, cleanerId).catch((e) =>
+          console.error(`[PATCH ASSIGNED] 완료 알림 실패:`, e.message)
+        );
         return sendJson(res, 200, { ok: true, job: rows[0] });
       }
       if (b.status === "PENDING" && b._test_reset) {

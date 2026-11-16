@@ -147,6 +147,75 @@ describe('일정: 목록·단건·발송·취소', () => {
   });
 });
 
+describe('RF-22: 관리자 수동 배정 — 실제 숙소는 활동 중인 담당자가 있어야 저장', () => {
+  const CLEANER = '11111111-1111-4111-8111-111111111111';
+  const assignDb = ({ origin = 'REAL', cleaner = { active: true }, updatedRows = [{ id: 'job-a', status: 'ASSIGNED' }] } = {}) => fakeDb({ answer: (sql) => {
+    if (sql.includes('SELECT data_origin FROM cleaning_jobs WHERE id')) return { rows: origin ? [{ data_origin: origin }] : [] };
+    if (sql.includes('SELECT active FROM cleaners WHERE id')) return { rows: cleaner ? [cleaner] : [] };
+    if (/UPDATE cleaning_jobs SET status='ASSIGNED'/.test(sql)) return { rows: updatedRows };
+    return { rows: [] };
+  } });
+  const assign = (body) => call({ method: 'PATCH', resource: 'jobs', id: 'job-a', body: { status: 'ASSIGNED', ...body }, cookie: adminCookie() });
+  const updated = (db) => db.log.filter((l) => /UPDATE cleaning_jobs SET status='ASSIGNED'/.test(l.sql));
+  const notified = (db) => db.log.some((l) => l.sql.includes('p.name AS prop_name')); // 배정 완료 알림(sendCompletionSmsToRest)의 첫 조회
+
+  test('담당자를 비우거나 문자열이 아니면 400 CLEANER_REQUIRED — 저장·알림 없음', async () => {
+    setAuth('enforce');
+    for (const body of [{}, { assigned_cleaner_id: null }, { assigned_cleaner_id: '' }, { assigned_cleaner_id: '   ' }, { assigned_cleaner_id: 123 }, { google_event_id: 'g-only' }]) {
+      const db = assignDb(); _setDbForTest(db);
+      const res = await assign(body);
+      assert.equal(res.statusCode, 400, JSON.stringify(body));
+      assert.equal(res.body.code, 'CLEANER_REQUIRED');
+      assert.equal(updated(db).length, 0, `저장 없음 ${JSON.stringify(body)}`);
+      assert.equal(notified(db), false);
+    }
+  });
+
+  test('없는 담당자·번호 형식 오류는 400 CLEANER_NOT_FOUND, 활동을 멈춘 담당자는 400 CLEANER_INACTIVE — 저장·알림 없음', async () => {
+    setAuth('enforce');
+    for (const [opts, id, code] of [[{ cleaner: null }, CLEANER, 'CLEANER_NOT_FOUND'], [{}, 'not-a-uuid', 'CLEANER_NOT_FOUND'], [{ cleaner: { active: false } }, CLEANER, 'CLEANER_INACTIVE']]) {
+      const db = assignDb(opts); _setDbForTest(db);
+      const res = await assign({ assigned_cleaner_id: id });
+      assert.equal(res.statusCode, 400, code);
+      assert.equal(res.body.code, code);
+      assert.equal(updated(db).length, 0);
+      assert.equal(notified(db), false);
+    }
+    const db = assignDb(); _setDbForTest(db);
+    await assign({ assigned_cleaner_id: 'not-a-uuid' });
+    assert.ok(!db.log.some((l) => l.sql.includes('FROM cleaners WHERE id')), '형식이 틀리면 DB 에 묻지 않는다(형식 오류 22P02 방지)');
+  });
+
+  test('활동 중인 담당자면 앞뒤 공백을 지우고 실제 숙소 조건으로 저장하고, 완료 알림을 보낸다', async () => {
+    setAuth('enforce');
+    const db = assignDb(); _setDbForTest(db);
+    const res = await assign({ assigned_cleaner_id: `  ${CLEANER} `, google_event_id: 'g-1' });
+    assert.equal(res.statusCode, 200);
+    const [u] = updated(db);
+    assert.deepEqual(u.params, [CLEANER, 'g-1', 'job-a']);
+    assert.match(u.sql, /WHERE id=\$3 AND data_origin='REAL' AND status!='ASSIGNED'/, '확인과 저장 사이에 가상 일정으로 바뀌어도 저장하지 않게');
+    assert.equal(notified(db), true);
+  });
+
+  test('이미 배정 완료(저장 0행)면 409 — 알림 없음', async () => {
+    setAuth('enforce');
+    const db = assignDb({ updatedRows: [] }); _setDbForTest(db);
+    assert.equal((await assign({ assigned_cleaner_id: CLEANER })).statusCode, 409);
+    assert.equal(notified(db), false);
+  });
+
+  test('가상 일정은 담당자 여부와 관계없이 409, 없는 일정은 404 — 담당자 검사보다 먼저', async () => {
+    setAuth('enforce');
+    for (const body of [{}, { assigned_cleaner_id: CLEANER }]) {
+      const db = assignDb({ origin: 'SIMULATED' }); _setDbForTest(db);
+      assert.equal((await assign(body)).statusCode, 409);
+      assert.equal(updated(db).length, 0);
+    }
+    _setDbForTest(assignDb({ origin: null }));
+    assert.equal((await assign({})).statusCode, 404);
+  });
+});
+
 describe('담당자·통계·동기화', () => {
   test('담당자: 운영자는 내 숙소 일정에 연결된 담당자만, 이메일·푸시 토큰·관리자 메모 제외', async () => {
     setAuth('enforce');
