@@ -1,9 +1,9 @@
 // RF-21(2026-11-14): 집 Pi 워처가 로그인 없이 외부에서 열려 있었다. 서버(Vercel)는 워처를 부를 때 기존 공유키를 붙이고,
-// 워처는 키가 맞는 요청만 처리한다(기록 모드 → 차단 모드). 실제 확인 함수와 워처 서버 소스의 순서를 검증한다.
+// 워처는 키가 맞는 요청만 처리한다(기록 모드 관찰 → 2026-11-16 기본값 차단). 실제 확인 함수와 워처 서버 소스의 순서를 검증한다.
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createUnauthenticatedLogger, decideWatcherRequest, hasWatcherSecret, watcherAuthMode, WATCHER_SECRET_HEADER } from '../../server/watcherAuth.js';
+import { createUnauthenticatedLogger, decideWatcherRequest, hasWatcherSecret, watcherAuthMode, watcherAuthStartupMessage, WATCHER_SECRET_HEADER } from '../../server/watcherAuth.js';
 import { watcherRequestHeaders } from '../../server/auth/watcherScope.js';
 
 const KEY = 'k'.repeat(40);
@@ -16,9 +16,10 @@ describe('워처가 받는 요청 확인', () => {
     }
   });
 
-  test('키 없는 요청: 기록 모드(기본)는 처리하되 기록, 차단 모드는 거절', () => {
-    assert.equal(decideWatcherRequest({}, { PROPOS_PI_SECRET: KEY }), 'log', '기본은 기록 모드 — 모르는 호출자가 갑자기 막히지 않게');
+  test('키 없는 요청: 기본·차단 모드는 거절, 기록 모드만 처리하되 기록', () => {
+    assert.equal(decideWatcherRequest({}, { PROPOS_PI_SECRET: KEY }), 'reject', '기본은 차단 — 재시작 때 설정이 빠져도 다시 열리지 않게');
     assert.equal(decideWatcherRequest({}, { PROPOS_PI_SECRET: KEY, PROPOS_WATCHER_AUTH_MODE: 'enforce' }), 'reject');
+    assert.equal(decideWatcherRequest({}, { PROPOS_PI_SECRET: KEY, PROPOS_WATCHER_AUTH_MODE: 'log' }), 'log');
   });
 
   test('틀린 키·길이가 다른 키·빈 키는 맞는 키가 아니다(예외 없이)', () => {
@@ -29,20 +30,28 @@ describe('워처가 받는 요청 확인', () => {
     assert.equal(decideWatcherRequest(withKey(['a', 'b']), env), 'reject', '문자열이 아닌 헤더 값');
   });
 
-  test('차단 모드에서 Pi 에 키가 없으면 키를 보내도 전부 거절한다(설정 실수로 열리지 않게)', () => {
+  test('Pi 에 키가 없으면 키를 보내도 전부 거절한다 — 기본값·차단 모드 모두(설정 실수로 열리지 않게)', () => {
     for (const secret of [undefined, '']) {
       assert.equal(hasWatcherSecret(withKey(''), { PROPOS_PI_SECRET: secret }), false);
       assert.equal(decideWatcherRequest(withKey(), { PROPOS_PI_SECRET: secret, PROPOS_WATCHER_AUTH_MODE: 'enforce' }), 'reject');
+      assert.equal(decideWatcherRequest(withKey(), { PROPOS_PI_SECRET: secret }), 'reject', '모드 설정 없음(기본) + 키 없음');
+      assert.equal(decideWatcherRequest({}, { PROPOS_PI_SECRET: secret }), 'reject');
     }
   });
 
-  test('차단은 정확히 "enforce" 일 때만 — 나머지 값은 기록 모드', () => {
-    for (const value of [undefined, '', 'off', 'ENFORCE', 'log']) assert.equal(watcherAuthMode({ PROPOS_WATCHER_AUTH_MODE: value }), 'log', String(value));
-    assert.equal(watcherAuthMode({ PROPOS_WATCHER_AUTH_MODE: 'enforce' }), 'enforce');
+  test('기록 모드는 정확히 "log" 일 때만 — 값 없음·빈 값·오타·다른 값은 차단', () => {
+    for (const value of [undefined, '', 'off', 'LOG', 'log ', 'enforce', 'ENFORCE']) assert.equal(watcherAuthMode({ PROPOS_WATCHER_AUTH_MODE: value }), 'enforce', JSON.stringify(value));
+    assert.equal(watcherAuthMode({ PROPOS_WATCHER_AUTH_MODE: 'log' }), 'log');
+  });
+
+  test('시작 기록: 모드를 남기고, 차단 모드인데 Pi 에 키가 없으면 경고한다', () => {
+    assert.equal(watcherAuthStartupMessage({ PROPOS_PI_SECRET: KEY }), '[watcher-auth] 모드: 차단(키 없는 요청 401)');
+    assert.match(watcherAuthStartupMessage({ PROPOS_PI_SECRET: KEY, PROPOS_WATCHER_AUTH_MODE: 'log' }), /모드: 기록/);
+    for (const secret of [undefined, '']) assert.match(watcherAuthStartupMessage({ PROPOS_PI_SECRET: secret }), /차단 — 경고: 공유키\(PROPOS_PI_SECRET\)가 없어/);
   });
 });
 
-describe('기록 모드의 키 없는 요청 기록', () => {
+describe('키가 없거나 틀린 요청 기록', () => {
   const knownPaths = new Set(['/api/monitoring/state', '/api/properties']);
   test('같은 경로는 10분에 한 번만 남기고, 그 사이 건수를 다음 기록에 적는다', () => {
     let t = 0; const lines = [];
@@ -60,7 +69,14 @@ describe('기록 모드의 키 없는 요청 기록', () => {
     const log = createUnauthenticatedLogger({ knownPaths, now: () => 0, log: (m) => lines.push(m) });
     log('GET', '/api/properties'); log('PUT', '/api/properties');
     for (let i = 0; i < 20; i++) log('GET', `/random-${i}`);
-    assert.deepEqual(lines, ['[watcher-auth] 키 없는 요청 GET /api/properties', '[watcher-auth] 키 없는 요청 PUT /api/properties', '[watcher-auth] 키 없는 요청 GET (기타 경로)']);
+    assert.deepEqual(lines, ['[watcher-auth] 키가 없거나 틀린 요청 GET /api/properties', '[watcher-auth] 키가 없거나 틀린 요청 PUT /api/properties', '[watcher-auth] 키가 없거나 틀린 요청 GET (기타 경로)']);
+  });
+  test('거절한 요청은 → 401 거절 로 남긴다(서버 키가 틀렸거나 모르는 호출자가 막힌 것을 Pi 에서 보게)', () => {
+    const lines = [];
+    const log = createUnauthenticatedLogger({ knownPaths, now: () => 0, log: (m) => lines.push(m) });
+    log('GET', '/api/monitoring/state', { rejected: true });
+    log('GET', '/api/monitoring/state', { rejected: true });
+    assert.deepEqual(lines, ['[watcher-auth] 키가 없거나 틀린 요청 GET /api/monitoring/state → 401 거절']);
   });
 });
 
@@ -93,15 +109,17 @@ describe('워처 서버 소스 계약', () => {
     assert.ok(check > 0, '요청 확인이 있다');
     const firstRoute = handler.indexOf('url.pathname ===');
     assert.ok(firstRoute > check, '첫 경로(청소·정비 요청 포함)보다 앞');
-    assert.match(handler.slice(check, firstRoute), /if \(access === 'reject'\) \{ sendJson\(res, 401, \{ error: 'Unauthorized' \}\); return; \}/);
+    const gate = handler.slice(check, firstRoute);
+    assert.match(gate, /if \(access === 'reject'\) \{ sendJson\(res, 401, \{ error: 'Unauthorized' \}\); return; \}/);
+    const logCall = gate.indexOf("if (access !== 'allow') logUnauthenticated(req.method, url.pathname, { rejected: access === 'reject' });");
+    assert.ok(logCall >= 0 && logCall < gate.indexOf("if (access === 'reject')"), '거절하기 전에 기록한다(처리·거절 모두)');
     assert.match(src, /import \{[^}]*\bdecideWatcherRequest\b[^}]*\} from '\.\.\/server\/watcherAuth\.js';/);
   });
 
-  test('키 없는 요청은 줄인 기록으로 남기고, 시작할 때마다 모드를 남긴다(설정이 빠져 기록 모드로 돌아가면 보이게)', () => {
-    assert.match(handler, /if \(access === 'log'\) logUnauthenticated\(req\.method, url\.pathname\);/);
+  test('키가 없거나 틀린 요청은 줄인 기록으로 남기고, 시작할 때마다 모드를 남긴다(기록 모드를 잊고 두거나 키가 안 읽혔으면 보이게)', () => {
     assert.doesNotMatch(handler, /console\.warn\(`\[watcher-auth\]/, '요청마다 바로 쓰는 기록이 남아 있으면 안 된다');
     const listen = src.slice(src.indexOf('server.listen('));
-    assert.match(listen, /watcherAuthMode\(\) === 'enforce'/);
+    assert.match(listen, /console\.log\(watcherAuthStartupMessage\(\)\);/);
     for (const route of ['/api/monitoring/event', '/api/monitoring/state', '/api/monitoring/config', '/api/properties', '/api/camera/snapshot']) {
       assert.ok(src.includes(`url.pathname === '${route}'`), route);
       assert.match(src.slice(0, src.indexOf('http.createServer(')), new RegExp(`'${route.replaceAll('/', '\\/')}'`), `기록의 아는 경로 목록에 ${route}`);
