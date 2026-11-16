@@ -39,7 +39,7 @@ npm run verify:scenarios  시나리오 드리프트 확인
 ## Vercel 배포 현황 (2026-08-06 확정)
 - **프로덕션 프로젝트**: `propos-project-v2` (커스텀 도메인 구매, GitHub 자동배포 연결됨)
 - **프로덕션 URL**: `www.proposonline.com`
-- **주의**: `propos` (propos-henna.vercel.app)는 중복 프로젝트 — 무시할 것
+- **중복 프로젝트 `propos` (propos-henna.vercel.app)는 2026-11-16 삭제함** — 로그인 없이 운영 DB·HA에 연결된 채 공개돼 있었다(`docs/refactoring.md` RF-24). Vercel 프로젝트는 `propos-project-v2` 하나만 둔다
 - **배포 성공**: API 함수 17개 → 10개 통합 (Hobby 12함수 한도 해소)
 - **API catch-all 구조**:
   - `api/ha/[...slug].js` — state/states/service/history/template
