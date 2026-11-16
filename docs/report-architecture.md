@@ -448,8 +448,10 @@ iCal 마지막 동기화: N분 전 ✅ / ⚠ N시간 전 (오래된 경우 강�
 
 ### 6-1. 안심지수 (North Star Metric)
 
+> **2026-11-17 정의 확정(DEC-02, 사용자):** 안심지수 = **최종적으로 성공한 비율** = 측정 가능한 운영 지표 7개(게스트 맞이 준비·퇴실 후 절전/보안·빈방 절전/보안 유지·청소시간 준수·청소 담당자 배정) 성공률의 평균, 반올림 정수 %. 분모가 0이거나 분자가 없는 지표는 뺀다. 표 하단과 요약 등급이 같은 함수(`src/domain/operationalMetricsDomain.js`의 `computeSafetyIndex`)를 쓴다. 아래 `auto_resolved / total_anomalies`는 안심지수가 아니라 **자동화 개선율**의 설계이며 아직 계산하지 않는다(이상 건마다 자동 해결 여부를 남기는 데이터가 없음, [refactoring RF-25](refactoring.md#rf-25)).
+
 ```
-안심지수 = auto_resolved / total_anomalies × 100 (%)
+자동화 개선율(구 표기: 안심지수) = auto_resolved / total_anomalies × 100 (%)
 
 분모 정의 (total_anomalies):
   complaint_detected   — OCCUPIED 내에서 발생. severity 무관 전수 포함.

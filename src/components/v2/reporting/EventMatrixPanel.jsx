@@ -2,7 +2,7 @@ import { useState } from 'react';
 import DrilldownSheet from './DrilldownSheet';
 import SharedMetricRow, { ROW_GRID_TEMPLATE, ROW_GRID_TEMPLATE_MOBILE } from './SharedMetricRow';
 import { pctColor } from '../../../domain/metricRowDomain.js';
-import { computeOperationalMetrics } from '../../../domain/operationalMetricsDomain.js';
+import { computeOperationalMetrics, computeSafetyIndex, describeSafetyIndexBasis } from '../../../domain/operationalMetricsDomain.js';
 
 /**
  * Template-P — 7개 운영 지표 (건수 / 성공률)
@@ -34,11 +34,9 @@ export default function EventMatrixPanel({ stats, period, isMobile = false, onSe
 
   const METRICS = computeOperationalMetrics(stats);
 
-  // 안심지수: 측정 가능한 지표(noData 아니고 분모 > 0)만 평균
-  const measurable = METRICS.filter(m => !m.noData && (m.denominator ?? 0) > 0);
-  const avgScore   = measurable.length > 0
-    ? Math.round(measurable.reduce((s, m) => s + (m.numerator / m.denominator) * 100, 0) / measurable.length)
-    : null;
+  // 안심지수(최종 성공한 비율, DEC-02): 요약의 등급과 같은 함수 — 측정 가능한 지표만 평균(RF-09)
+  const safety   = computeSafetyIndex(stats);
+  const avgScore = safety.score;
 
   const scoreColor = avgScore != null ? pctColor(avgScore) : '#94a3b8';
   const scoreBg    = avgScore != null
@@ -113,9 +111,7 @@ export default function EventMatrixPanel({ stats, period, isMobile = false, onSe
             안심지수
           </div>
           <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 2 }}>
-            {measurable.length > 0
-              ? `측정가능 ${measurable.length}개 지표 평균 · ${METRICS.filter(m => m.noData).length}개 지표 연동 후 포함`
-              : '측정가능 지표 없음'}
+            {describeSafetyIndexBasis(safety)}
           </div>
         </div>
         <div style={{

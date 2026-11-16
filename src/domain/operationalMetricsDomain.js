@@ -56,7 +56,40 @@ export function computeMeasurableMetrics(stats) {
     }));
 }
 
-// 5단계 등급 — measurable 지표의 평균 점수(= 표 하단 "안심지수"와 같은 계산) 기준.
+/**
+ * 안심지수 — 최종적으로 성공한 비율(DEC-02, 2026-11-17 사용자 확정): 측정 가능한 운영 지표 성공률의 평균(반올림 정수 %).
+ * 분모가 0이거나 분자가 없는(청소 데이터 조회 실패 등) 지표는 뺀다. 측정 가능한 지표가 없으면 score=null.
+ * 표 하단 "안심지수"와 요약의 5단계 등급이 이 함수 하나를 쓴다(RF-09) — 한쪽만 바뀌어 서로 다른 숫자를 말하지 않게.
+ * "이상이 생겼을 때 자동화가 해결한 비율"은 안심지수가 아니라 별도 지표 "자동화 개선율"이다(아직 계산하지 않음).
+ * 뺀 지표는 이유별로 센다 — noTarget: 이 기간 대상이 없음(분모 0), noData: 대상은 있는데 데이터를 못 불러옴(분자 없음).
+ * @param {object} stats
+ * @returns {{ score: number|null, measurable: ReturnType<typeof computeMeasurableMetrics>, noTarget: number, noData: number }}
+ */
+export function computeSafetyIndex(stats) {
+  const all = computeOperationalMetrics(stats);
+  const measurable = computeMeasurableMetrics(stats);
+  const score = measurable.length > 0
+    ? Math.round(measurable.reduce((sum, m) => sum + (m.numerator / m.denominator) * 100, 0) / measurable.length)
+    : null;
+  const noTarget = all.filter(m => !((m.denominator ?? 0) > 0)).length;
+  return { score, measurable, noTarget, noData: all.length - measurable.length - noTarget };
+}
+
+/**
+ * 표 하단 안심지수 아래의 설명 한 줄. 데이터를 못 불러와 뺀 지표를 "대상 없음"으로 적지 않는다 —
+ * 운영자가 "할 일이 없었다"로 오해하지 않게.
+ * @param {ReturnType<typeof computeSafetyIndex>} safety
+ * @returns {string}
+ */
+export function describeSafetyIndexBasis({ measurable, noTarget, noData }) {
+  if (!measurable.length) return '측정가능 지표 없음';
+  const parts = [`측정가능 ${measurable.length}개 지표 평균`];
+  if (noTarget > 0) parts.push(`${noTarget}개는 이 기간 대상 없음`);
+  if (noData > 0) parts.push(`${noData}개는 데이터를 못 불러와 제외`);
+  return parts.join(' · ');
+}
+
+// 5단계 등급 — measurable 지표의 평균 점수(= 표 하단 "안심지수", computeSafetyIndex) 기준.
 // "완벽해요"는 평균이 아니라 실패 총건수 0으로 직접 판정한다 — 평균은 반올림되므로 실패가
 // 있어도 100으로 반올림될 여지가 있고, 그러면 "완벽해요 (실패 1건)" 같은 모순 문장이 나온다.
 const TIER_BY_MIN_SCORE = [
@@ -84,10 +117,9 @@ export function summarizeOperationalMetrics(period, stats) {
   const desc = describePeriod(period);
   if (!desc || (desc.tense !== 'past' && desc.tense !== 'active')) return null;
 
-  const measurable = computeMeasurableMetrics(stats);
+  const { score: avgScore, measurable } = computeSafetyIndex(stats);
   if (measurable.length === 0) return null;
 
-  const avgScore    = Math.round(measurable.reduce((sum, m) => sum + (m.numerator / m.denominator) * 100, 0) / measurable.length);
   const totalFails  = measurable.reduce((sum, m) => sum + m.failCount, 0);
 
   return `${desc.label} ${tierLabel(avgScore, totalFails)} (실패 ${totalFails}건)`;

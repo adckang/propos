@@ -24,6 +24,8 @@ import path from 'node:path';
 import {
   computeOperationalMetrics,
   computeMeasurableMetrics,
+  computeSafetyIndex,
+  describeSafetyIndexBasis,
   summarizeOperationalMetrics,
 } from '../../src/domain/operationalMetricsDomain.js';
 import { generateSummary } from '../../src/application/reportingService.js';
@@ -189,7 +191,7 @@ describe('EventMatrixPanel — computeOperationalMetrics를 표 정의의 단일
   const src = read('src/components/v2/reporting/EventMatrixPanel.jsx');
 
   test('자체 METRICS 배열을 인라인으로 다시 정의하지 않고 도메인 함수를 쓴다', () => {
-    assert.match(src, /import \{ computeOperationalMetrics \} from '\.\.\/\.\.\/\.\.\/domain\/operationalMetricsDomain\.js';/);
+    assert.match(src, /import \{ computeOperationalMetrics\b[^}]*\} from '\.\.\/\.\.\/\.\.\/domain\/operationalMetricsDomain\.js';/);
     assert.match(src, /const METRICS = computeOperationalMetrics\(stats\);/);
     assert.ok(!src.includes("label:       '입실전 숙소 최적화율'"), '옛 인라인 라벨이 아직 남아 있음');
   });
@@ -270,5 +272,58 @@ describe('SummaryBanner — isUrgent가 5단계 등급의 하위 두 단계를 �
   test('이제 사라진 "운영 문제 N건"/"신경 쓸 부분이" 문구는 없다', () => {
     assert.ok(!src.includes('운영 문제'));
     assert.ok(!src.includes('신경 쓸 부분이'));
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// E. DEC-02·RF-09 (2026-11-17) — 안심지수 = 최종적으로 성공한 비율(운영 지표 성공률 평균).
+//    표 하단 안심지수와 요약 등급이 한 함수(computeSafetyIndex)를 쓴다.
+//    "이상이 생겼을 때 자동화가 해결한 비율"은 별도 지표 "자동화 개선율"(아직 계산 없음).
+// ══════════════════════════════════════════════════════════════════════════
+describe('DEC-02·RF-09 — 안심지수는 표와 요약이 한 함수로 계산한다', () => {
+  const twoOk = { checkOuts: 10, postCheckoutEnergyWaste: 0, postCheckoutSecurityBreach: 0 };
+
+  test('측정 가능한 지표만 평균하고, 요약 등급과 같은 점수 구간이다', () => {
+    const { score, measurable } = computeSafetyIndex(EXAMPLE_STATS);
+    assert.deepEqual(measurable, computeMeasurableMetrics(EXAMPLE_STATS));
+    assert.match(summarizeOperationalMetrics('last_week', EXAMPLE_STATS), /보통이에요/);
+    assert.ok(score >= 75 && score < 90, `보통이에요 구간(75~89) — 실제 ${score}`);
+    assert.ok(Number.isInteger(score), '표에 정수 %로 보인다(반올림)');
+  });
+
+  test('분자가 없는 지표(청소 데이터 조회 실패)는 0%로 넣지 않고 뺀다 — 표가 요약보다 낮게 나오던 차이', () => {
+    const base = computeSafetyIndex(twoOk);
+    const failedAssign = computeSafetyIndex({ ...twoOk, cleaningAssigned: null, cleaningCreated: 4 });
+    assert.equal(base.score, 100);
+    assert.equal(failedAssign.score, 100, '배정 조회가 실패해도 안심지수가 67%로 떨어지지 않는다');
+    assert.equal(failedAssign.measurable.length, base.measurable.length);
+  });
+
+  test('측정 가능한 지표가 없으면 점수 없음(null)', () => {
+    assert.deepEqual(computeSafetyIndex({ checkIns: 3 }), { score: null, measurable: [], noTarget: 7, noData: 0 });
+    assert.deepEqual(computeSafetyIndex(null), { score: null, measurable: [], noTarget: 0, noData: 0 });
+  });
+
+  test('표 아래 설명: 뺀 이유를 나눠 적는다 — 데이터를 못 불러온 지표를 "대상 없음"으로 적지 않는다', () => {
+    assert.equal(describeSafetyIndexBasis(computeSafetyIndex(EXAMPLE_STATS)), '측정가능 7개 지표 평균');
+    assert.equal(describeSafetyIndexBasis(computeSafetyIndex(twoOk)), '측정가능 2개 지표 평균 · 5개는 이 기간 대상 없음');
+    assert.equal(describeSafetyIndexBasis(computeSafetyIndex({ ...EXAMPLE_STATS, cleaningAssigned: null })),
+      '측정가능 6개 지표 평균 · 1개는 데이터를 못 불러와 제외');
+    assert.equal(describeSafetyIndexBasis(computeSafetyIndex({ checkIns: 3 })), '측정가능 지표 없음');
+  });
+
+  test('표(EventMatrixPanel)는 자체 평균·설명을 만들지 않고 도메인 함수를 쓴다', () => {
+    const src = read('src/components/v2/reporting/EventMatrixPanel.jsx');
+    assert.match(src, /computeSafetyIndex\(stats\)/);
+    assert.match(src, /describeSafetyIndexBasis\(/);
+    assert.ok(!/numerator \/ \w+\.denominator|\.reduce\(/.test(src), '표 안에 평균 계산이 다시 생기면 안 된다');
+    assert.ok(!src.includes('연동 후 포함') && !src.includes('측정가능'), '설명 문구는 도메인 함수가 만든다');
+  });
+
+  test('요약(summarizeOperationalMetrics)도 같은 함수를 쓴다', () => {
+    const src = read('src/domain/operationalMetricsDomain.js');
+    const body = src.slice(src.indexOf('export function summarizeOperationalMetrics'));
+    assert.match(body, /computeSafetyIndex\(stats\)/);
+    assert.ok(!/numerator \/ \w+\.denominator/.test(body), '요약 안에 평균 계산이 다시 생기면 안 된다');
   });
 });

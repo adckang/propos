@@ -2,7 +2,10 @@
  * 기간별 KPI 타일 4개 (report-architecture.md 섹션 11-3).
  *
  * ACTIVE (now/today/this_week/this_month): 체류중 / 입실전 / 청소중 / 공실
- * PAST (yesterday/last_week/last_hour/last_month): 체크인 / 이상감지 / 에너지낭비 / 안심지수
+ * PAST (yesterday/last_week/last_hour/last_month): 체크인 / 이상감지 / 에너지낭비 / 자동화 개선율
+ *
+ * (2026-11-17 DEC-02) 이 파일은 어디서도 불러 쓰지 않는다. 마지막 칸은 "이상이 생겼을 때 자동화가 해결한 비율"의
+ * 자리표시라 이름을 안심지수에서 자동화 개선율로 바꿨다 — 안심지수(최종 성공한 비율)는 EventMatrixPanel·computeSafetyIndex.
  * FUTURE (tomorrow/next_week/next_hour/next_month): 예정체크인 / 예정체크아웃 / 청소배정 / 미배정
  */
 
@@ -122,7 +125,7 @@ function buildTiles(type, stats, isMobile) {
     ];
   }
 
-  // PAST: 체크인 | 이상감지 | 에너지낭비 | 안심지수 (report-architecture.md 섹션 11-3)
+  // PAST: 체크인 | 이상감지 | 에너지낭비 | 자동화 개선율 (report-architecture.md 섹션 11-3, DEC-02로 이름 정정)
   if (type === 'past') {
     const anomalies  = stats.anomalies ?? 0;
     const safetyScore = anomalies === 0 ? 100 : null; // resolution 데이터 없으면 100% or null
@@ -131,7 +134,7 @@ function buildTiles(type, stats, isMobile) {
       { label: '이상감지',  value: `${anomalies}건`,            accent: '#dc2626', warn: anomalies > 0 },
       { label: '에너지낭비', value: `${stats.energyWaste ?? 0}건`, accent: '#d97706' },
       {
-        label: '안심지수',
+        label: '자동화 개선율',
         value: safetyScore !== null ? `${safetyScore}%` : '—',
         sub: anomalies > 0 ? '미해결 확인 필요' : null,
         accent: anomalies === 0 ? '#059669' : '#dc2626',
