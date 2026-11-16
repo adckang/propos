@@ -9,7 +9,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test tests/unit/*.test.js tests/functional/*.test.js",
+    "test": "node --import ./tests/helpers/productionFetchTrap.js --test tests/unit/*.test.js tests/functional/*.test.js",
     "test:integration": "node --test tests/integration/*.test.js",
     "test:e2e": "playwright test --config playwright.e2e.config.mjs",
     "verify:all": "node scripts/run-verification.mjs",

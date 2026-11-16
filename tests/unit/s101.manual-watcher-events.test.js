@@ -5,6 +5,10 @@ import { Readable } from 'node:stream';
 process.env.PROPOS_HA_BASE_URL = 'http://ha.test';
 process.env.PROPOS_HA_TOKEN = 'fixture-token';
 process.env.PROPOS_PI_SECRET = 'fixture-secret';
+// RF-23: 워처는 테스트가 끝난 뒤에도 쌓인 이벤트를 운영 주소(proposonline.com/api/events/write)로 다시 보내려 한다.
+// 각 테스트는 가짜 fetch 를 "원래 값"으로 돌려놓으므로, 원래 값을 진짜 네트워크 대신 이 차단 함수로 둔다(실패 응답 → 큐에 남고 끝).
+// 이 줄이 없으면 npm test 의 운영 주소 차단 장치(tests/helpers/productionFetchTrap.js)가 이 파일을 실패로 만든다.
+global.fetch = async () => ({ ok: false, status: 503, json: async () => ({}), text: async () => '' });
 const watcher = await import('../../server/occupancyWatcher.js');
 const { handleMonitoringEventRequest } = await import('../../server/monitoringEventHandler.js');
 
