@@ -462,7 +462,7 @@ iCal 마지막 동기화: N분 전 ✅ / ⚠ N시간 전 (오래된 경우 강�
 
 <a id="safety-index-exclusions"></a>
 
-#### 점수·비율에서 빼는 지표 (RF-26 — 변경안 승인 2026-11-17, 구현 대기)
+#### 점수·비율에서 빼는 지표 (RF-26 — 사용자 승인·구현 완료 2026-11-17)
 
 **결정 (2026-11-17, 사용자):** 성공·실패·측정 불가를 **명시적으로 판정한 기록**이 생기기 전까지 아래 4개 지표는 **안심지수 점수와 성공률 계산에서만** 뺀다. 실제로 감지된 실패와, 실패 건수로 찾는 패턴은 그대로 둔다. 실패 이벤트만 추가하는 방식으로 해결하지 않는다 — "대상 수 − 실패 기록 수"는 실패를 놓치면 그만큼 성공으로 세기 때문이다.
 
@@ -484,22 +484,24 @@ iCal 마지막 동기화: N분 전 ✅ / ⚠ N시간 전 (오래된 경우 강�
 
 - 표 아래 설명은 이유를 나눠 적는다: "측정가능 N개 지표 평균 · 4개는 판정 기록이 없어 측정 제외 · K개는 이 기간 대상 없음 · J개는 데이터를 못 불러와 제외".
 - 요약 등급의 점수는 `eligible`만으로 낸다. "완벽해요"는 `observedFailCount` 합이 0일 때만이라, 4개 지표에 실제 실패가 있으면 완벽해요가 아니다.
+- **계산 가능한 지표가 0개인데 실제 실패가 있으면**(사용자 결정 2026-11-17) 등급 없이 "지난주 실패 1건이 있었어요."로 말한다 — 진행 중 기간은 "이번 주 실패 1건이 있어요.". 기존 문장으로 넘기면 "이상 없었어요"라고 해 실패를 가리기 때문이다. 실패도 없으면 기존 문장 그대로다. 이 문장의 배너 색은 [기능 설계 0-2](reporting-feature-design.md#safety-index-display).
+- 표의 성공률 칸: `excluded` → "측정 제외"(대상 건수는 0이어도 "0건"으로 유지), `no_data` → "데이터 없음", `no_target` → "해당 없음". 로딩 중 "준비 중"은 별도 상태다.
 
-**데이터 경로 변경안**
+**데이터 경로 (반영됨)**
 
-| 위치 | 지금 | 바꾸는 것 |
+| 위치 | 예전 | 지금 |
 | --- | --- | --- |
 | `operationalMetricsDomain` `computeOperationalMetrics` | 지표마다 분자·분모 | `rateEligibility`·`observedFailCount`를 붙인다. 측정 제외 목록(4개)은 이 파일 한 곳 |
 | `operationalMetricsDomain` `computeMeasurableMetrics` | 비율과 실패를 한 목록으로 | 둘로 나눈다 — 비율 대상(`eligible`) 목록, 실패 건수 목록(`observedFailCount`가 있는 모든 지표) |
 | `computeSafetyIndex`·`describeSafetyIndexBasis`·`summarizeOperationalMetrics` | 측정 가능 목록 하나 | 점수는 비율 대상, 실패 합계는 `observedFailCount`, 빠진 이유 3가지 |
 | `reportingService` `computeAggregateMetricsForRange` ([L216](../src/application/reportingService.js#L216)) | `computeMeasurableMetrics` 결과 하나를 돌려준다 | 비율 대상 목록과 실패 건수 목록을 따로 돌려준다 |
 | `reportingService` `buildInsightDetectorInputs` ([L264](../src/application/reportingService.js#L264)) | 전월 대비(`currentAgg`·`previousAgg`)·연속(`periodHistory`)·반복·쏠림(`propertyMetricRows`)이 같은 목록을 쓴다 | 전월 대비는 비율 대상만, 연속·반복·쏠림은 `observedFailCount`(모든 지표) |
-| `EventMatrixPanel`·`SharedMetricRow` | 성공률과 실패 배지 | 4개 행은 대상 건수와 실패 배지를 그대로 두고 성공률 칸만 "측정 제외" |
+| `EventMatrixPanel`·`SharedMetricRow`·`metricRowDomain` | 성공률과 실패 배지 | 4개 행은 대상 건수와 실패 배지를 그대로 두고 성공률 칸만 "측정 제외". 값을 못 불러온 행은 "데이터 없음" |
+| `reportSummaryDomain` `isUrgentSummary`·`SummaryBanner` | 배너 안에 경고 패턴 | 경고 판정을 도메인 한 곳으로 옮기고, "실패 N건이 있(었)어요" 문장에만 경고색을 더함 |
 | `vite.config.mjs`(개발 스텁)·DEMO | 같은 도메인 함수 사용 | 같은 규칙(DEMO 포함) |
 
 - 그대로 두는 것: 실패 이벤트 저장, 달력의 문제 배지, 상세 실패 목록(`metricDrilldownDomain`).
-- 테스트 범위: s62(이유 4가지·점수에서 제외·실패 합계에 포함·완벽해요 판정), 표 행(측정 제외 + 실패 배지), s63·s65·s67(4개 지표가 전월 대비에서만 빠지고 반복·쏠림·연속에는 남음), 회귀(s38·s54 실패 목록, s51 달력, s20·s21·s45·s70·s94, s11·s17·s48), 변형 검사(제외 목록 무력화, 이유 오표기, 패턴 누락), DEMO 화면 확인, 리뷰.
-- ⚠️ **지금 코드는 아직 네 지표를 넣어 계산한다.** 변경안은 사용자가 승인했고(2026-11-17), 코드 반영은 다음 작업이다([RF-26](refactoring.md#rf-26)).
+- 검증·변경 파일·남은 한계는 [RF-26 결과](refactoring.md#rf26-result)에 있다.
 
 <a id="automation-rate"></a>
 
@@ -990,7 +992,7 @@ EventMatrixPanel과 FutureMatrixPanel이 공유하는 3-컬럼 행 포맷:
 > **역산 패턴 (지표 #2~#5):** 위반 건수를 분모에서 빼서 달성 건수로 환산.
 > `max(0, 분모 - 위반건수)` — 음수 방지.
 >
-> ⚠️ **RF-26(2026-11-17 사용자 지시):** 이 역산은 실패를 놓치면 그만큼 성공으로 센다. #2~#5는 성공·실패·측정 불가를 명시적으로 판정한 기록이 생기기 전까지 안심지수 측정에서 뺀다([6-1](#safety-index-exclusions)). 실패 이벤트만 추가하는 방식으로 해결하지 않는다. 지금 코드는 아직 넣어 계산한다.
+> ⚠️ **RF-26(2026-11-17 사용자 승인·구현 완료):** 이 역산은 실패를 놓치면 그만큼 성공으로 센다. #2~#5는 성공·실패·측정 불가를 명시적으로 판정한 기록이 생기기 전까지 안심지수 점수·성공률에서 빠지고 표에는 "측정 제외"로 보인다([6-1](#safety-index-exclusions)). 실제 감지 실패는 배지·패턴에 그대로 쓴다. 실패 이벤트만 추가하는 방식으로 해결하지 않는다.
 
 **드릴다운:** `DrilldownSheet` → `GET /api/stats/drilldown?period=&metric=` (섹션 12 참조)
 

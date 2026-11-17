@@ -1,6 +1,6 @@
 import { getPeriodRange, countCurrentStats, countPeriodEvents } from "../domain/reportingDomain.js";
 import { describePeriod, monthsAgoRange, periodCapabilities, periodForOffset, periodToDateRange } from "../domain/periodDomain.js";
-import { summarizeOperationalMetrics, computeMeasurableMetrics } from "../domain/operationalMetricsDomain.js";
+import { summarizeOperationalMetrics, computeMeasurableMetrics, computeObservedFailures } from "../domain/operationalMetricsDomain.js";
 import {
   detectCleaningTimeFailures,
   detectPreStayOptimizationFailures,
@@ -209,8 +209,9 @@ const INSIGHT_LOOKBACK_MONTHS = 4;
 const INSIGHT_LOOKBACK_WEEKS  = 4;
 
 /**
- * [from, to) 구간의 스코프 전체 합산 지표(measurable) + 그 구간 이벤트를 계산한다 — 월간·주간
- * 인사이트 오케스트레이션(getMonthlyInsights/getWeeklyInsights)이 공유하는 부분(D-029). 날짜
+ * [from, to) 구간의 스코프 전체 합산 지표 + 그 구간 이벤트를 계산한다. 지표는 둘로 나눠 돌려준다(RF-26) —
+ * metrics: 성공률 대상(전월·전주 대비용), failures: 실제로 감지된 실패(연속·반복·쏠림용, 측정 제외 지표 포함).
+ * 월간·주간 인사이트 오케스트레이션(getMonthlyInsights/getWeeklyInsights)이 공유하는 부분(D-029). 날짜
  * 범위를 구하는 방식(월 오프셋 vs 주 오프셋)만 호출부가 다르고, 그 뒤 집계 로직은 완전히 동일.
  */
 async function computeAggregateMetricsForRange(db, { from, to }, propertyIds, logLabel, now, preparationBefore) {
@@ -232,7 +233,7 @@ async function computeAggregateMetricsForRange(db, { from, to }, propertyIds, lo
     stats.cleaningCreated  = null;
     stats.cleaningAssigned = null;
   }
-  return { events, preStayContext, metrics: computeMeasurableMetrics(stats) };
+  return { events, preStayContext, metrics: computeMeasurableMetrics(stats), failures: computeObservedFailures(stats) };
 }
 
 /** reportPeriod 기준 monthOffset달 전의 집계 지표 + 이벤트. */
@@ -240,8 +241,8 @@ async function computeAggregateMonthMetrics(db, monthOffset, propertyIds, now) {
   const { from, to, monthKey } = monthsAgoRange(monthOffset, now.getTime());
   // 이번 달은 완료 구간만 본다. 미래 checkout을 완료 이력의 실패 패턴으로 세지 않는다.
   const effectiveTo = monthOffset === 0 ? new Date(Math.min(to.getTime(), now.getTime())) : to;
-  const { events, preStayContext, metrics } = await computeAggregateMetricsForRange(db, { from, to: effectiveTo }, propertyIds, "getMonthlyInsights", now, to);
-  return { period: monthKey, from, to: effectiveTo, events, preStayContext, preparationBefore: to, metrics };
+  const { events, preStayContext, metrics, failures } = await computeAggregateMetricsForRange(db, { from, to: effectiveTo }, propertyIds, "getMonthlyInsights", now, to);
+  return { period: monthKey, from, to: effectiveTo, events, preStayContext, preparationBefore: to, metrics, failures };
 }
 
 /** reportPeriod 기준 weekOffset주 전(그 주 월요일 KST)의 집계 지표 + 이벤트. */
@@ -251,8 +252,8 @@ async function computeAggregateWeekMetrics(db, weekOffset, propertyIds, now) {
   // 이번 주도 getStatsForPeriod와 같은 완료 시점(now)까지만 집계한다.
   const effectiveTo = weekOffset === 0 ? new Date(Math.min(to.getTime(), now.getTime())) : to;
   const weekKey = toKstDateKey(from); // 그 주 월요일, KST
-  const { events, preStayContext, metrics } = await computeAggregateMetricsForRange(db, { from, to: effectiveTo }, propertyIds, "getWeeklyInsights", now, to);
-  return { period: weekKey, from, to: effectiveTo, events, preStayContext, preparationBefore: to, metrics };
+  const { events, preStayContext, metrics, failures } = await computeAggregateMetricsForRange(db, { from, to: effectiveTo }, propertyIds, "getWeeklyInsights", now, to);
+  return { period: weekKey, from, to: effectiveTo, events, preStayContext, preparationBefore: to, metrics, failures };
 }
 
 /**
@@ -264,11 +265,12 @@ async function computeAggregateWeekMetrics(db, weekOffset, propertyIds, now) {
 async function buildInsightDetectorInputs(db, periodDataList, propertyIds, logLabel) {
   const [current, previous] = periodDataList;
 
+  // RF-26: 전월·전주 대비(비율)는 성공률 대상만, 연속(실패 건수)은 실제로 감지된 실패 전부를 쓴다.
   const toAggRow = (m) => ({ metricKey: m.key, metricLabel: m.label, numerator: m.numerator, denominator: m.denominator });
   const currentAgg  = current.metrics.map(toAggRow);
   const previousAgg = previous.metrics.map(toAggRow);
-  const periodHistory = periodDataList.flatMap(({ period, metrics }) =>
-    metrics.map(m => ({ period, metricKey: m.key, metricLabel: m.label, failCount: m.failCount }))
+  const periodHistory = periodDataList.flatMap(({ period, failures }) =>
+    failures.map(m => ({ period, metricKey: m.key, metricLabel: m.label, failCount: m.failCount }))
   );
 
   // 이번 기간 이벤트를 숙소별로 나눠서 REPEAT/CONCENTRATION용 rows 생성. 전체 숙소 스코프
@@ -304,7 +306,8 @@ async function buildInsightDetectorInputs(db, periodDataList, propertyIds, logLa
     const cj = cleaningMap.get(propId) ?? { created: 0, assigned: 0 };
     stats.cleaningCreated  = cj.created;
     stats.cleaningAssigned = cj.assigned;
-    for (const m of computeMeasurableMetrics(stats)) {
+    // RF-26: 반복·쏠림은 실패 건수 기반 — 성공률 측정 제외 지표의 실제 실패도 그대로 센다.
+    for (const m of computeObservedFailures(stats)) {
       propertyMetricRows.push({ propertyId: propId, propertyName: propId, metricKey: m.key, metricLabel: m.label, failCount: m.failCount });
     }
   }

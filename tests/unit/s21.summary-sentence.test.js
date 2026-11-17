@@ -96,14 +96,18 @@ describe("generateSummary — 이번 주 / 이번 달", () => {
   });
 
   // D-026(2026-09-25 후속: 5단계 등급 요약으로 단순화): anomalies는 이 요약 문장이 다루는
-  // 신호가 아니다 — checkOuts>0인데 위반 이벤트가 없으면 "퇴실 후 절전/보안"이 측정 가능해져
-  // 실패 0건 → "완벽해요"를 말한다.
+  // 신호가 아니다 — 성공률 대상 지표가 있고 실패가 0건이면 "완벽해요"를 말한다.
+  // (RF-26 이후 "퇴실 후 절전/보안"은 판정 기록이 없어 성공률 측정 제외 — 퇴실 수만으로는 측정 가능해지지 않는다.)
   test("this_week, anomalies 필드는 요약 문장에 영향 없음 — 운영 지표가 있으면 그걸 말한다", () => {
+    // RF-26(2026-11-17): 퇴실 수만으로는 계산 가능한 지표가 없다(퇴실 후 절전·보안은 판정 기록이 없어 측정 제외) —
+    // 운영 지표가 있는 경우를 보려고 청소 배정(성공률 대상)을 넣는다
     const s = generateSummary("this_week", {
       checkIns: 3,
       checkOuts: 5,
       anomalies: 1,
       energyWaste: 0,
+      cleaningCreated: 5,
+      cleaningAssigned: 5,
     });
     assert.equal(s, '이번 주 완벽해요 (실패 0건)');
   });
@@ -151,14 +155,17 @@ describe("generateSummary — 지난주 / 지난달", () => {
     assert.ok(!hasInternalTerm(s), `내부 용어 노출됨: "${s}"`);
   });
 
-  // D-026(2026-09-25 후속): anomalies는 이 요약이 다루는 신호가 아니다 — checkOuts>0인데
-  // 위반 이벤트가 없으면 "완벽해요 (실패 0건)"을 말한다.
+  // D-026(2026-09-25 후속): anomalies는 이 요약이 다루는 신호가 아니다 — 성공률 대상 지표가 있고
+  // 실패가 없으면 "완벽해요 (실패 0건)"을 말한다(RF-26: 퇴실 수만으로는 측정 제외).
   test("last_month, anomalies 필드는 요약 문장에 영향 없음 — 운영 지표가 있으면 그걸 말한다", () => {
+    // RF-26: 성공률 대상 지표(청소 배정)를 넣어야 운영 지표 요약이 나온다 — 퇴실 수만으로는 측정 제외
     const s = generateSummary("last_month", {
       checkIns: 30,
       checkOuts: 29,
       anomalies: 2,
       energyWaste: 1,
+      cleaningCreated: 29,
+      cleaningAssigned: 29,
     });
     assert.equal(s, '지난달 완벽해요 (실패 0건)');
     assert.ok(countNumbers(s) <= 2, `숫자 ${countNumbers(s)}개 초과: "${s}"`);
@@ -213,14 +220,17 @@ describe("generateSummary — 일 단위 (yesterday / today / tomorrow)", () => 
 
   // D-026: 완료 기간(어제/지난주/지난달/이번 주/이번 달)의 요약 문장은 이제 7개 운영 지표
   // 기준으로 만들어진다 — anomalies(실시간 이상감지 건수)는 이 문장이 다루는 신호가 아니다
-  // (대시보드 상단 상태칩 등 다른 곳에서 이미 보여줌). checkOuts는 있지만 위반 이벤트가 하나도
-  // 없으면(이 픽스처처럼) "퇴실 후 절전/보안" 두 지표가 100%로 측정 가능해져 그 결과를 말한다.
+  // (대시보드 상단 상태칩 등 다른 곳에서 이미 보여줌). RF-26 이후 "퇴실 후 절전/보안"은 판정 기록이 없어
+  // 성공률 측정 제외라, 이 픽스처는 성공률 대상인 청소 배정을 넣어 운영 지표 요약을 확인한다.
   test("yesterday, anomalies 필드는 요약 문장에 영향 없음 — 운영 지표가 있으면 그걸 말한다", () => {
+    // RF-26: 성공률 대상 지표(청소 배정)를 넣어야 운영 지표 요약이 나온다 — 퇴실 수만으로는 측정 제외
     const s = generateSummary("yesterday", {
       checkIns: 2,
       checkOuts: 2,
       anomalies: 1,
       energyWaste: 0,
+      cleaningCreated: 2,
+      cleaningAssigned: 2,
     });
     assert.equal(s, '어제 완벽해요 (실패 0건)');
     assert.ok(countNumbers(s) <= 2, `숫자 ${countNumbers(s)}개 초과: "${s}"`);

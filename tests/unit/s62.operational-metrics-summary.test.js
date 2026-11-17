@@ -55,20 +55,24 @@ describe('computeOperationalMetrics — 7개 지표, 짧은 라벨', () => {
   });
 
   test('예시 숫자대로 분자/분모가 92/83/92/75/92/83/100%를 만든다', () => {
-    const metrics = computeMeasurableMetrics(EXAMPLE_STATS);
-    const pctByKey = Object.fromEntries(metrics.map(m => [m.key, m.pct]));
-    assert.equal(pctByKey.pre_stay_optimization, 92);
-    assert.equal(pctByKey.post_checkout_energy, 83);
-    assert.equal(pctByKey.post_checkout_security, 92);
-    assert.equal(pctByKey.vacant_energy, 75);
-    assert.equal(pctByKey.post_cleaning_security, 92);
-    assert.equal(pctByKey.cleaning_time, 83);
-    assert.equal(pctByKey.cleaning_assign, 100);
+    // RF-26(2026-11-17): 성공률 목록(computeMeasurableMetrics)에는 판정 기록이 없는 4개 지표가 없다 —
+    // 분자/분모 자체는 computeOperationalMetrics에 그대로 있다(표의 대상 건수용).
+    const rows = Object.fromEntries(computeOperationalMetrics(EXAMPLE_STATS).map(m => [m.key, m]));
+    const pct = (k) => Math.round((rows[k].numerator / rows[k].denominator) * 100);
+    assert.equal(pct('pre_stay_optimization'), 92);
+    assert.equal(pct('post_checkout_energy'), 83);
+    assert.equal(pct('post_checkout_security'), 92);
+    assert.equal(pct('vacant_energy'), 75);
+    assert.equal(pct('post_cleaning_security'), 92);
+    assert.equal(pct('cleaning_time'), 83);
+    assert.equal(pct('cleaning_assign'), 100);
+    const pctByKey = Object.fromEntries(computeMeasurableMetrics(EXAMPLE_STATS).map(m => [m.key, m.pct]));
+    assert.deepEqual(pctByKey, { pre_stay_optimization: 92, cleaning_time: 83, cleaning_assign: 100 });
   });
 
-  test('실패 건수 = 분모 - 분자 (표의 빨간 배지 기준)', () => {
-    const metrics = computeMeasurableMetrics(EXAMPLE_STATS);
-    const failByKey = Object.fromEntries(metrics.map(m => [m.key, m.failCount]));
+  test('실패 건수 = 실제로 감지된 실패 (표의 빨간 배지 기준)', () => {
+    // RF-26: 배지는 observedFailCount — 성공률 측정 제외 지표도 감지된 실패를 그대로 보인다
+    const failByKey = Object.fromEntries(computeOperationalMetrics(EXAMPLE_STATS).map(m => [m.key, m.observedFailCount]));
     assert.equal(failByKey.vacant_energy, 3);
     assert.equal(failByKey.cleaning_time, 2);
     assert.equal(failByKey.cleaning_assign, 0);
@@ -97,20 +101,20 @@ describe('computeOperationalMetrics — 7개 지표, 짧은 라벨', () => {
 // 단순화해 달라고 요청. 등급 기준은 표 하단 "안심지수"와 같은 평균 점수를 그대로 재사용한다.
 // ══════════════════════════════════════════════════════════════════════════
 describe('summarizeOperationalMetrics — 5단계 등급 + 실패 총건수', () => {
-  test('사용자 예시 숫자(평균 88점) → "보통이에요 (실패 10건)" (지난주=past)', () => {
-    // 92,83,92,75,92,83,100의 raw 평균은 88.09... → round 88 → 75~89 구간 "보통이에요"
-    // 실패 총건수 = 1+2+1+3+1+2+0 = 10
-    assert.equal(summarizeOperationalMetrics('last_week', EXAMPLE_STATS), '지난주 보통이에요 (실패 10건)');
+  test('사용자 예시 숫자 → "양호해요 (실패 10건)" (지난주=past)', () => {
+    // RF-26(2026-11-17): 등급 점수는 성공률 대상 3개(92·83·100)의 평균 91.67 → 92 → "양호해요".
+    // (예전엔 7개 평균 88 → "보통이에요"였다.) 실패 총건수는 실제 감지 실패 전부 = 1+2+1+3+1+2+0 = 10
+    assert.equal(summarizeOperationalMetrics('last_week', EXAMPLE_STATS), '지난주 양호해요 (실패 10건)');
   });
 
   test('진행중 기간(이번 주)은 "지금까지"를 붙이지 않는다', () => {
     const s = summarizeOperationalMetrics('this_week', EXAMPLE_STATS);
-    assert.equal(s, '이번 주 보통이에요 (실패 10건)');
+    assert.equal(s, '이번 주 양호해요 (실패 10건)');
   });
 
   test('대시보드 월 기간(지난달/이번달)에도 같은 함수가 적용된다', () => {
-    assert.equal(summarizeOperationalMetrics('last_month', EXAMPLE_STATS), '지난달 보통이에요 (실패 10건)');
-    assert.equal(summarizeOperationalMetrics('this_month', EXAMPLE_STATS), '이번 달 보통이에요 (실패 10건)');
+    assert.equal(summarizeOperationalMetrics('last_month', EXAMPLE_STATS), '지난달 양호해요 (실패 10건)');
+    assert.equal(summarizeOperationalMetrics('this_month', EXAMPLE_STATS), '이번 달 양호해요 (실패 10건)');
   });
 
   test('실패 총건수 0 → 평균 점수와 무관하게 "완벽해요" (반올림으로 100 되는 것과 별개 판정)', () => {
@@ -171,7 +175,7 @@ describe('summarizeOperationalMetrics — 5단계 등급 + 실패 총건수', ()
 describe('generateSummary — 운영 지표 데이터가 있으면 새 요약을, 없으면 기존 문장을 쓴다', () => {
   test('완전한 stats(EXAMPLE_STATS + checkIns)를 주면 운영 지표 요약을 쓴다', () => {
     const s = generateSummary('last_week', { ...EXAMPLE_STATS, checkIns: 5, anomalies: 0 });
-    assert.equal(s, '지난주 보통이에요 (실패 10건)');
+    assert.equal(s, '지난주 양호해요 (실패 10건)'); // RF-26: 등급은 성공률 대상 3개 평균
   });
 
   test('checkIns만 있는 얕은 stats는 기존 "체크인 N건" 문장으로 그대로 대체(fallback)된다', () => {
@@ -256,7 +260,16 @@ describe('EventMatrixPanel — 헤더가 행과 같은 그리드 템플릿(모�
 });
 
 describe('SummaryBanner — isUrgent가 5단계 등급의 하위 두 단계를 인식하고, "이상감지 0건"엔 안 걸린다', () => {
-  const src = read('src/components/v2/reporting/SummaryBanner.jsx');
+  // RF-26(2026-11-17): 경고 판정 패턴은 도메인 한 곳(reportSummaryDomain.isUrgentSummary)으로 옮겼다 —
+  // 결과 기반 회귀는 s124가 실제 함수로 확인한다. 여기서는 패턴 정의와 배너 배선을 본다.
+  const src = read('src/domain/reportSummaryDomain.js');
+  const banner = read('src/components/v2/reporting/SummaryBanner.jsx');
+
+  test('배너는 도메인의 isUrgentSummary 하나를 쓴다(자체 패턴 없음)', () => {
+    assert.match(banner, /import \{ isUrgentSummary \} from '\.\.\/\.\.\/\.\.\/domain\/reportSummaryDomain\.js';/);
+    assert.match(banner, /isUrgentSummary\(summary\)/);
+    assert.ok(!/URGENT_PATTERNS|불안정해요\//.test(banner), '배너 안에 경고 패턴이 다시 생기면 안 된다');
+  });
 
   test('"이상감지"는 반드시 1 이상 숫자가 붙어야 매칭한다 (0건에 안 걸리는 버그 수정, 2026-09-26)', () => {
     // 실사용 중 "체크인 0건 완료, 이상감지 0건이 있었어요"라는 정상 문장이 빨간 배너로 뜨는
@@ -270,8 +283,8 @@ describe('SummaryBanner — isUrgent가 5단계 등급의 하위 두 단계를 �
   });
 
   test('이제 사라진 "운영 문제 N건"/"신경 쓸 부분이" 문구는 없다', () => {
-    assert.ok(!src.includes('운영 문제'));
-    assert.ok(!src.includes('신경 쓸 부분이'));
+    assert.ok(!src.includes('운영 문제') && !banner.includes('운영 문제'));
+    assert.ok(!src.includes('신경 쓸 부분이') && !banner.includes('신경 쓸 부분이'));
   });
 });
 
@@ -281,13 +294,15 @@ describe('SummaryBanner — isUrgent가 5단계 등급의 하위 두 단계를 �
 //    "이상이 생겼을 때 자동화가 해결한 비율"은 별도 지표 "자동화 개선율"(아직 계산 없음).
 // ══════════════════════════════════════════════════════════════════════════
 describe('DEC-02·RF-09 — 안심지수는 표와 요약이 한 함수로 계산한다', () => {
-  const twoOk = { checkOuts: 10, postCheckoutEnergyWaste: 0, postCheckoutSecurityBreach: 0 };
+  // RF-26: 성공률 대상 두 개(게스트 맞이 준비·청소시간 준수)만 있는 기간. 예전 픽스처는 퇴실 후 절전·보안
+  // 두 지표로 만들었는데, 둘 다 판정 기록이 없어 측정 제외가 됐다.
+  const twoOk = { preStayOptimized: 10, preStayAttempts: 10, cleaningFinished: 10, cleaningOnTime: 10, cleaningCreated: 0, cleaningAssigned: 0 };
 
   test('측정 가능한 지표만 평균하고, 요약 등급과 같은 점수 구간이다', () => {
     const { score, measurable } = computeSafetyIndex(EXAMPLE_STATS);
     assert.deepEqual(measurable, computeMeasurableMetrics(EXAMPLE_STATS));
-    assert.match(summarizeOperationalMetrics('last_week', EXAMPLE_STATS), /보통이에요/);
-    assert.ok(score >= 75 && score < 90, `보통이에요 구간(75~89) — 실제 ${score}`);
+    assert.match(summarizeOperationalMetrics('last_week', EXAMPLE_STATS), /양호해요/);
+    assert.ok(score >= 90, `양호해요 구간(90~) — 실제 ${score}`);
     assert.ok(Number.isInteger(score), '표에 정수 %로 보인다(반올림)');
   });
 
@@ -300,16 +315,18 @@ describe('DEC-02·RF-09 — 안심지수는 표와 요약이 한 함수로 계�
   });
 
   test('측정 가능한 지표가 없으면 점수 없음(null)', () => {
-    assert.deepEqual(computeSafetyIndex({ checkIns: 3 }), { score: null, measurable: [], noTarget: 7, noData: 0 });
-    assert.deepEqual(computeSafetyIndex(null), { score: null, measurable: [], noTarget: 0, noData: 0 });
+    // RF-26: 빠진 이유를 셋으로 센다 — 4개는 측정 제외, 대상 0인 2개는 대상 없음, 청소 배정 값이 없는(undefined) 1개는 데이터 없음
+    assert.deepEqual(computeSafetyIndex({ checkIns: 3 }), { score: null, measurable: [], excluded: 4, noTarget: 2, noData: 1 });
+    assert.deepEqual(computeSafetyIndex(null), { score: null, measurable: [], excluded: 0, noTarget: 0, noData: 0 });
   });
 
   test('표 아래 설명: 뺀 이유를 나눠 적는다 — 데이터를 못 불러온 지표를 "대상 없음"으로 적지 않는다', () => {
-    assert.equal(describeSafetyIndexBasis(computeSafetyIndex(EXAMPLE_STATS)), '측정가능 7개 지표 평균');
-    assert.equal(describeSafetyIndexBasis(computeSafetyIndex(twoOk)), '측정가능 2개 지표 평균 · 5개는 이 기간 대상 없음');
+    assert.equal(describeSafetyIndexBasis(computeSafetyIndex(EXAMPLE_STATS)), '측정가능 3개 지표 평균 · 4개는 판정 기록이 없어 측정 제외');
+    assert.equal(describeSafetyIndexBasis(computeSafetyIndex(twoOk)), '측정가능 2개 지표 평균 · 4개는 판정 기록이 없어 측정 제외 · 1개는 이 기간 대상 없음');
     assert.equal(describeSafetyIndexBasis(computeSafetyIndex({ ...EXAMPLE_STATS, cleaningAssigned: null })),
-      '측정가능 6개 지표 평균 · 1개는 데이터를 못 불러와 제외');
-    assert.equal(describeSafetyIndexBasis(computeSafetyIndex({ checkIns: 3 })), '측정가능 지표 없음');
+      '측정가능 2개 지표 평균 · 4개는 판정 기록이 없어 측정 제외 · 1개는 데이터를 못 불러와 제외');
+    assert.equal(describeSafetyIndexBasis(computeSafetyIndex({ checkIns: 3 })),
+      '측정가능 지표 없음 · 4개는 판정 기록이 없어 측정 제외 · 2개는 이 기간 대상 없음 · 1개는 데이터를 못 불러와 제외');
   });
 
   test('표(EventMatrixPanel)는 자체 평균·설명을 만들지 않고 도메인 함수를 쓴다', () => {

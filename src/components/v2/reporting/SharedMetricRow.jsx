@@ -19,12 +19,15 @@ export default function SharedMetricRow({
   denominator,
   isCount  = false,
   noData   = false,
+  rateExcluded = false,
+  dataUnavailable = false,
+  observedFailCount = null,
   isLast   = false,
   isMobile = false,
   onDrilldown,
 }) {
-  const { countText, ratioText, ratioColor, ratioBg, failCount } =
-    computeMetricRowDisplay({ numerator, denominator, isCount, noData });
+  const { countText, ratioText, ratioColor, ratioBg, failCount, compactText } =
+    computeMetricRowDisplay({ numerator, denominator, isCount, noData, rateExcluded, dataUnavailable, observedFailCount });
 
   // 배지 = 실패가 하나라도 있으면 표시 (사용자 지시: "11/12건인데 왜 실패건이 없냐, 숫자가
   // 비잖아" — 잘된 건 조용히 두되, 완벽하지 않은 건 전부 눈에 띄어야 한다는 뜻으로 되돌림).
@@ -41,14 +44,24 @@ export default function SharedMetricRow({
       <div style={{ gridColumn: 2, fontSize: isMobile ? 10 : 11, color: '#64748b', fontFamily: "'DM Mono', monospace", textAlign: 'right' }}>
         {countText}
       </div>
-      <div style={{ gridColumn: 3, justifySelf: 'center' }}>
-        <span style={{
-          fontSize: isMobile ? 11 : 12, fontWeight: 700, color: ratioColor, background: ratioBg,
-          fontFamily: "'DM Mono', monospace",
-          borderRadius: 5, padding: isMobile ? '1px 4px' : '2px 6px', whiteSpace: 'nowrap',
-        }}>
-          {ratioText}
-        </span>
+      <div style={{ gridColumn: 3, justifySelf: 'center', minWidth: 0 }}>
+        {compactText ? (
+          // RF-26 "측정 제외"·"데이터 없음" — 성공률 칸(모바일 34px)에 들어가도록 작게, 필요하면 두 줄로 접는다
+          <span style={{
+            display: 'block', textAlign: 'center', lineHeight: 1.15, wordBreak: 'keep-all',
+            fontSize: isMobile ? 9 : 10, fontWeight: 700, color: ratioColor,
+          }}>
+            {ratioText}
+          </span>
+        ) : (
+          <span style={{
+            fontSize: isMobile ? 11 : 12, fontWeight: 700, color: ratioColor, background: ratioBg,
+            fontFamily: "'DM Mono', monospace",
+            borderRadius: 5, padding: isMobile ? '1px 4px' : '2px 6px', whiteSpace: 'nowrap',
+          }}>
+            {ratioText}
+          </span>
+        )}
       </div>
       <div style={{ gridColumn: 4 }}>
         {showBadge && (

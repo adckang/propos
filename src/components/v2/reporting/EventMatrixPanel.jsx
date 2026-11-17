@@ -2,7 +2,7 @@ import { useState } from 'react';
 import DrilldownSheet from './DrilldownSheet';
 import SharedMetricRow, { ROW_GRID_TEMPLATE, ROW_GRID_TEMPLATE_MOBILE } from './SharedMetricRow';
 import { pctColor } from '../../../domain/metricRowDomain.js';
-import { computeOperationalMetrics, computeSafetyIndex, describeSafetyIndexBasis } from '../../../domain/operationalMetricsDomain.js';
+import { computeOperationalMetrics, computeSafetyIndex, describeSafetyIndexBasis, RATE_ELIGIBILITY } from '../../../domain/operationalMetricsDomain.js';
 
 /**
  * Template-P — 7개 운영 지표 (건수 / 성공률)
@@ -73,7 +73,7 @@ export default function EventMatrixPanel({ stats, period, isMobile = false, onSe
         borderRadius: 10, padding: isMobile ? '0 8px' : '0 14px',
       }}>
         {METRICS.map((m, i) => {
-          const { key: metricKey, ...rowProps } = m;
+          const { key: metricKey, rateEligibility, observedFailCount, ...rowProps } = m;
           const drilldownMetric = DRILLDOWN_METRIC[metricKey];
           return (
             <MetricRow
@@ -81,6 +81,10 @@ export default function EventMatrixPanel({ stats, period, isMobile = false, onSe
               {...rowProps}
               isLast={i === METRICS.length - 1}
               isMobile={isMobile}
+              // RF-26: 판정 기록이 없는 지표는 성공률만 "측정 제외", 실제 감지 실패 배지는 그대로
+              rateExcluded={rateEligibility === RATE_ELIGIBILITY.EXCLUDED}
+              dataUnavailable={rateEligibility === RATE_ELIGIBILITY.NO_DATA}
+              observedFailCount={observedFailCount}
               onDrilldown={drilldownMetric ? () => setDrilldown({ metricKey: drilldownMetric, label: m.label }) : undefined}
             />
           );

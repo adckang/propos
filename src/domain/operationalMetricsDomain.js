@@ -9,9 +9,54 @@
 import { describePeriod } from './periodDomain.js';
 
 /**
- * stats(countPeriodEvents + injectCleaningMetrics 결과) → 7개 지표 원자료(라벨+분자+분모).
+ * 성공률을 계산해도 되는지 (RF-26, 사용자 승인 2026-11-17).
+ * eligible = 성공률 대상 / excluded = 정책상 측정 제외(판정 기록 없음) /
+ * no_target = 이 기간 대상 없음(분모 0) / no_data = 대상은 있을 수 있는데 값을 못 불러옴.
+ */
+export const RATE_ELIGIBILITY = Object.freeze({
+  ELIGIBLE: 'eligible',
+  EXCLUDED: 'excluded',
+  NO_TARGET: 'no_target',
+  NO_DATA: 'no_data',
+});
+
+/**
+ * 판정 기록(성공·실패·측정 불가)이 없어 안심지수 점수·성공률·전월(전주) 대비에서 빼는 지표 — 이 목록 한 곳.
+ * "대상 수 − 실패 기록 수"로 성공을 거꾸로 세는데, 실패 이벤트를 만드는 곳이 DEMO 데이터뿐이라 실패를 놓치면
+ * 그만큼 성공으로 센다. 실제로 감지된 실패(observedFailCount)는 배지·"실패 N건"·반복·쏠림·연속 패턴에 그대로 쓴다.
+ * 명시적인 판정 기록이 생기면 여기서 빼면 된다. 계약: docs/report-architecture.md#safety-index-exclusions
+ */
+export const RATE_EXCLUDED_METRIC_KEYS = Object.freeze([
+  'post_checkout_energy',
+  'post_checkout_security',
+  'vacant_energy',
+  'post_cleaning_security',
+]);
+const RATE_EXCLUDED = new Set(RATE_EXCLUDED_METRIC_KEYS);
+
+function rateEligibilityOf(row) {
+  if (RATE_EXCLUDED.has(row.key)) return RATE_ELIGIBILITY.EXCLUDED;
+  if (row.denominator == null) return RATE_ELIGIBILITY.NO_DATA;
+  if (row.denominator <= 0) return RATE_ELIGIBILITY.NO_TARGET;
+  if (row.numerator == null) return RATE_ELIGIBILITY.NO_DATA;
+  return RATE_ELIGIBILITY.ELIGIBLE;
+}
+
+// 실제로 감지된 실패 건수. 실패 이벤트를 직접 세는 지표(4개)는 그 이벤트 수 그대로 — 상세 실패 목록도
+// 이벤트를 하나씩 세므로 배지와 같은 수다(예전엔 퇴실 수로 잘려 퇴실이 0이면 실패가 사라졌다).
+function observedFailCountOf(row, eligibility, detectedFailures) {
+  if (detectedFailures != null) return detectedFailures;
+  if (eligibility === RATE_ELIGIBILITY.NO_DATA) return null;
+  if (eligibility === RATE_ELIGIBILITY.NO_TARGET) return 0;
+  return Math.max(0, row.denominator - row.numerator);
+}
+
+/**
+ * stats(countPeriodEvents + injectCleaningMetrics 결과) → 7개 지표 원자료(라벨+분자+분모)와
+ * 성공률 계산 가능 여부(rateEligibility)·실제 감지 실패(observedFailCount).
  * @param {object} stats
- * @returns {{ key: string, label: string, numerator: number|null, denominator: number|null }[]}
+ * @returns {{ key: string, label: string, numerator: number|null, denominator: number|null,
+ *   rateEligibility: string, observedFailCount: number|null }[]}
  */
 export function computeOperationalMetrics(stats) {
   if (!stats) return [];
@@ -29,31 +74,52 @@ export function computeOperationalMetrics(stats) {
   const vacantEnergyOk         = Math.max(0, cleaningFinished - (stats.vacantEnergyWaste ?? 0));
   const postCleaningSecurityOk = Math.max(0, cleaningFinished - (stats.postCleaningSecurityBreach ?? 0));
 
-  return [
+  const rows = [
     { key: 'pre_stay_optimization',  label: '게스트 맞이 준비', numerator: stats.preStayOptimized ?? 0, denominator: stats.preStayAttempts ?? 0 },
-    { key: 'post_checkout_energy',   label: '퇴실 후 절전',     numerator: postCheckoutEnergyOk,        denominator: checkOuts },
-    { key: 'post_checkout_security', label: '퇴실 후 보안',     numerator: postCheckoutSecurityOk,      denominator: checkOuts },
-    { key: 'vacant_energy',          label: '빈방 절전 유지',   numerator: vacantEnergyOk,              denominator: cleaningFinished },
-    { key: 'post_cleaning_security', label: '빈방 보안 유지',   numerator: postCleaningSecurityOk,      denominator: cleaningFinished },
+    { key: 'post_checkout_energy',   label: '퇴실 후 절전',     numerator: postCheckoutEnergyOk,        denominator: checkOuts,        detectedFailures: stats.postCheckoutEnergyWaste ?? 0 },
+    { key: 'post_checkout_security', label: '퇴실 후 보안',     numerator: postCheckoutSecurityOk,      denominator: checkOuts,        detectedFailures: stats.postCheckoutSecurityBreach ?? 0 },
+    { key: 'vacant_energy',          label: '빈방 절전 유지',   numerator: vacantEnergyOk,              denominator: cleaningFinished, detectedFailures: stats.vacantEnergyWaste ?? 0 },
+    { key: 'post_cleaning_security', label: '빈방 보안 유지',   numerator: postCleaningSecurityOk,      denominator: cleaningFinished, detectedFailures: stats.postCleaningSecurityBreach ?? 0 },
     { key: 'cleaning_time',          label: '청소시간 준수',    numerator: stats.cleaningOnTime ?? 0,   denominator: cleaningFinished },
-    // cleaning_jobs 집계값 그대로 — 조회 실패(null)면 "해당 없음", 체크아웃 수로 대체하지 않는다
+    // cleaning_jobs 집계값 그대로 — 조회 실패(null)면 "데이터 없음", 체크아웃 수로 대체하지 않는다
     { key: 'cleaning_assign',        label: '청소 담당자 배정', numerator: stats.cleaningAssigned,      denominator: stats.cleaningCreated },
   ];
+  return rows.map(({ detectedFailures, ...row }) => {
+    const rateEligibility = rateEligibilityOf(row);
+    return { ...row, rateEligibility, observedFailCount: observedFailCountOf(row, rateEligibility, detectedFailures) };
+  });
 }
 
 /**
- * 측정 가능한(분모>0, 분자 있음) 지표만 pct·failCount를 붙여 반환. 안심지수·요약 문장 둘 다 이걸 쓴다.
+ * 성공률을 계산할 수 있는 지표(rateEligibility = eligible)만 pct·failCount를 붙여 반환.
+ * 안심지수 점수·요약 등급·전월(전주) 대비가 이걸 쓴다. 측정 제외 지표(4개)는 여기 없다 — 실제 실패는 computeObservedFailures.
  * @param {object} stats
- * @returns {{ key, label, numerator, denominator, pct, failCount }[]}
+ * @returns {{ key, label, numerator, denominator, rateEligibility, observedFailCount, pct, failCount }[]}
  */
 export function computeMeasurableMetrics(stats) {
-  return computeOperationalMetrics(stats)
-    .filter(m => (m.denominator ?? 0) > 0 && m.numerator != null)
+  return measurableOf(computeOperationalMetrics(stats));
+}
+
+function measurableOf(rows) {
+  return rows
+    .filter(m => m.rateEligibility === RATE_ELIGIBILITY.ELIGIBLE)
     .map(m => ({
       ...m,
       pct: Math.round((m.numerator / m.denominator) * 100),
-      failCount: Math.max(0, m.denominator - m.numerator),
+      failCount: m.observedFailCount,
     }));
+}
+
+/**
+ * 실제로 감지된 실패가 있는(값을 아는) 모든 지표 — 측정 제외 지표도 포함, 데이터 없음만 뺀다.
+ * 요약의 "(실패 N건)"과 반복·쏠림·연속 패턴이 이걸 쓴다.
+ * @param {object} stats
+ * @returns {{ key, label, failCount }[]}
+ */
+export function computeObservedFailures(stats) {
+  return computeOperationalMetrics(stats)
+    .filter(m => m.observedFailCount != null)
+    .map(m => ({ key: m.key, label: m.label, failCount: m.observedFailCount }));
 }
 
 /**
@@ -61,29 +127,36 @@ export function computeMeasurableMetrics(stats) {
  * 분모가 0이거나 분자가 없는(청소 데이터 조회 실패 등) 지표는 뺀다. 측정 가능한 지표가 없으면 score=null.
  * 표 하단 "안심지수"와 요약의 5단계 등급이 이 함수 하나를 쓴다(RF-09) — 한쪽만 바뀌어 서로 다른 숫자를 말하지 않게.
  * "이상이 생겼을 때 자동화가 해결한 비율"은 안심지수가 아니라 별도 지표 "자동화 개선율"이다(아직 계산하지 않음).
- * 뺀 지표는 이유별로 센다 — noTarget: 이 기간 대상이 없음(분모 0), noData: 대상은 있는데 데이터를 못 불러옴(분자 없음).
+ * 뺀 지표는 이유별로 센다(RF-26) — excluded: 판정 기록이 없어 정책상 측정 제외, noTarget: 이 기간 대상 없음(분모 0),
+ * noData: 값을 못 불러옴.
  * @param {object} stats
- * @returns {{ score: number|null, measurable: ReturnType<typeof computeMeasurableMetrics>, noTarget: number, noData: number }}
+ * @returns {{ score: number|null, measurable: ReturnType<typeof computeMeasurableMetrics>, excluded: number, noTarget: number, noData: number }}
  */
 export function computeSafetyIndex(stats) {
   const all = computeOperationalMetrics(stats);
-  const measurable = computeMeasurableMetrics(stats);
+  const measurable = measurableOf(all);
   const score = measurable.length > 0
     ? Math.round(measurable.reduce((sum, m) => sum + (m.numerator / m.denominator) * 100, 0) / measurable.length)
     : null;
-  const noTarget = all.filter(m => !((m.denominator ?? 0) > 0)).length;
-  return { score, measurable, noTarget, noData: all.length - measurable.length - noTarget };
+  const count = (eligibility) => all.filter(m => m.rateEligibility === eligibility).length;
+  return {
+    score,
+    measurable,
+    excluded: count(RATE_ELIGIBILITY.EXCLUDED),
+    noTarget: count(RATE_ELIGIBILITY.NO_TARGET),
+    noData: count(RATE_ELIGIBILITY.NO_DATA),
+  };
 }
 
 /**
- * 표 하단 안심지수 아래의 설명 한 줄. 데이터를 못 불러와 뺀 지표를 "대상 없음"으로 적지 않는다 —
- * 운영자가 "할 일이 없었다"로 오해하지 않게.
+ * 표 하단 안심지수 아래의 설명 한 줄. 빠진 이유(측정 제외·대상 없음·데이터 없음)를 나눠 적는다 —
+ * 데이터를 못 불러온 지표를 "대상 없음"으로 적으면 운영자가 "할 일이 없었다"로 오해한다.
  * @param {ReturnType<typeof computeSafetyIndex>} safety
  * @returns {string}
  */
-export function describeSafetyIndexBasis({ measurable, noTarget, noData }) {
-  if (!measurable.length) return '측정가능 지표 없음';
-  const parts = [`측정가능 ${measurable.length}개 지표 평균`];
+export function describeSafetyIndexBasis({ measurable, excluded = 0, noTarget, noData }) {
+  const parts = [measurable.length ? `측정가능 ${measurable.length}개 지표 평균` : '측정가능 지표 없음'];
+  if (excluded > 0) parts.push(`${excluded}개는 판정 기록이 없어 측정 제외`);
   if (noTarget > 0) parts.push(`${noTarget}개는 이 기간 대상 없음`);
   if (noData > 0) parts.push(`${noData}개는 데이터를 못 불러와 제외`);
   return parts.join(' · ');
@@ -118,9 +191,16 @@ export function summarizeOperationalMetrics(period, stats) {
   if (!desc || (desc.tense !== 'past' && desc.tense !== 'active')) return null;
 
   const { score: avgScore, measurable } = computeSafetyIndex(stats);
-  if (measurable.length === 0) return null;
+  // 실패 합계는 실제로 감지된 실패 전부(측정 제외 지표 포함) — 등급 점수와 따로 센다(RF-26)
+  const totalFails  = computeObservedFailures(stats).reduce((sum, m) => sum + m.failCount, 0);
 
-  const totalFails  = measurable.reduce((sum, m) => sum + m.failCount, 0);
+  if (measurable.length === 0) {
+    // 계산 가능한 지표가 0개면 점수·등급이 없다. 실제 실패가 있으면 숨기지 않고 말한다(RF-26, 사용자 결정 2026-11-17) —
+    // 기존 문장으로 넘기면 "이상 없었어요"라고 해 실패를 가린다. 진행 중 기간은 "있어요", 지난 기간은 "있었어요".
+    // 이 문장은 빨간 경고 배너로 보인다(reportSummaryDomain.isUrgentSummary). 실패도 없으면 null(기존 문장으로 대체).
+    if (totalFails > 0) return `${desc.label} 실패 ${totalFails}건이 ${desc.tense === 'active' ? '있어요' : '있었어요'}.`;
+    return null;
+  }
 
   return `${desc.label} ${tierLabel(avgScore, totalFails)} (실패 ${totalFails}건)`;
 }
