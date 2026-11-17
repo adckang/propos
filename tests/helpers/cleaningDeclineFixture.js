@@ -6,11 +6,11 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const root = new URL('../../', import.meta.url).pathname;
-export async function cleaningDeclineFixture({ responses = [], advance, slack, profile = 'hybrid', calendar } = {}) {
+export async function cleaningDeclineFixture({ responses = [], advance, slack, notify, profile = 'hybrid', calendar } = {}) {
   const key = '__declineFixture_' + randomUUID().replaceAll('-', '');
   const pending = [...responses];
   const queries = [], advances = [], slackCalls = [], blocked = [], errors = [], unexpectedQueries = [];
-  const tokenCalls = [], calendarRequests = [], completionCalls = [], kvCalls = [];
+  const tokenCalls = [], calendarRequests = [], completionCalls = [], kvCalls = [], notifyCalls = [];
   const previousFetch = globalThis.fetch;
   const env = { PROPOS_DATA_PROFILE: profile, PROPOS_AUTH_MODE: 'enforce',
     PROPOS_ADMIN_PASSWORD: 'fixture-admin-password', PROPOS_SESSION_SECRET: 'fixture-session-secret-not-a-real-key',
@@ -29,6 +29,7 @@ export async function cleaningDeclineFixture({ responses = [], advance, slack, p
     async slack(...args) { slackCalls.push(args); return slack ? slack(...args) : true; },
     async googleToken(...args) { tokenCalls.push(args); return calendar.getToken ? calendar.getToken(...args) : 'fixture-google-token'; },
     async complete(...args) { completionCalls.push(args); return calendar.complete?.(...args); },
+    async notify(...args) { notifyCalls.push(args); return notify(...args); },
     kv: new Proxy({}, { get: (_target, name) => async (...args) => {
       if (calendar?.kv?.[name]) {
         kvCalls.push({ method: name, args });
@@ -42,8 +43,12 @@ export async function cleaningDeclineFixture({ responses = [], advance, slack, p
   globalThis.fetch = async (url, options = {}) => {
     let target;
     try { target = new URL(url); } catch { return fail('HTTP'); }
+    const method = options.method ?? 'GET';
+    const allowedPath = method === 'DELETE'
+      ? /^\/calendar\/v3\/calendars\/.+\/events\/[^/]+$/.test(target.pathname)
+      : /^\/calendar\/v3\/calendars\/.+\/events$/.test(target.pathname);
     if (!calendar?.fetch || target.protocol !== 'https:' || target.hostname !== 'www.googleapis.com'
-      || !/^\/calendar\/v3\/calendars\/.+\/events$/.test(target.pathname) || (options.method ?? 'GET') !== 'GET') return fail('HTTP');
+      || !allowedPath || !(calendar.methods ?? ['GET']).includes(method)) return fail('HTTP');
     calendarRequests.push({ url: String(url), options });
     return calendar.fetch(url, options);
   };
@@ -62,6 +67,7 @@ export async function cleaningDeclineFixture({ responses = [], advance, slack, p
       ${calendar ? `export const sendCompletionSmsToRest=(...args)=>globalThis.${key}.complete(...args);` : ''}`,
     ...(calendar && { '../../server/cleaning/_calendar.js': `export * from ${JSON.stringify(pathToFileURL(resolve(root, 'server/cleaning/_calendar.js')).href)};
       export const getGoogleToken=(...args)=>globalThis.${key}.googleToken(...args);` }),
+    ...(notify && { '../../server/cleaning/_notify.js': `export const notify=(...args)=>globalThis.${key}.notify(...args);` }),
     'firebase-admin/app': `export const getApps=()=>[{}]; export const cert=()=>globalThis.${key}.fail('FCM'); export const initializeApp=()=>globalThis.${key}.fail('FCM');`,
     'firebase-admin/messaging': `export const getMessaging=()=>globalThis.${key}.fail('FCM');`,
   };
@@ -77,16 +83,27 @@ export async function cleaningDeclineFixture({ responses = [], advance, slack, p
       } }],
     });
     const { default: handler } = await import('data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text + `\n// ${key}`).toString('base64'));
-    async function invoke({ method = 'GET', url = '/api/cleaning/d?token=ABC123&format=api', query, headers = {} } = {}) {
+    async function invoke({ method = 'GET', url = '/api/cleaning/d?token=ABC123&format=api', query, headers = {}, body, rawBody } = {}) {
       const parsed = query ?? [...new URLSearchParams(url.split('?')[1] ?? '')].reduce((acc, [k, v]) => {
         acc[k] = k in acc ? [].concat(acc[k], v) : v; return acc;
       }, {});
-      const req = { method, url, query: parsed, headers };
+      const req = { method, url, query: parsed, headers,
+        async *[Symbol.asyncIterator]() {
+          const content = rawBody ?? (body === undefined ? '' : JSON.stringify(body));
+          if (content) yield Buffer.from(content);
+        },
+      };
       const res = { code: null, body: undefined, kind: null, headers: {},
         status(n) { this.code = n; return this; },
         json(value) { this.body = value; this.kind = 'json'; return this; },
         send(value) { this.body = value; this.kind = 'html'; return this; },
-        end() { this.kind = 'empty'; return this; },
+        end(value) {
+          if (this.statusCode !== undefined) this.code = this.statusCode;
+          if (value !== undefined && this.headers['content-type']?.includes('application/json')) {
+            this.body = JSON.parse(value); this.kind = 'json';
+          } else { this.body = value; this.kind = 'empty'; }
+          return this;
+        },
         setHeader(k, v) { this.headers[k.toLowerCase()] = v; },
       };
       const previousError = console.error;
@@ -95,7 +112,7 @@ export async function cleaningDeclineFixture({ responses = [], advance, slack, p
       return res;
     }
     return { invoke, db, queries, advances, slackCalls, blocked, errors, unexpectedQueries,
-      tokenCalls, calendarRequests, completionCalls, kvCalls, kv: io.kv,
+      tokenCalls, calendarRequests, completionCalls, kvCalls, notifyCalls, kv: io.kv,
       get pendingResponses() { return pending.length; }, restore };
   } catch (error) { restore(); throw error; }
 }

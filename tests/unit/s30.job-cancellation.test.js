@@ -1,152 +1,289 @@
 /**
- * 청소 자동화 — 예약 취소 처리 유닛 테스트
- * - CANCELLED 상태 전환 로직
- * - 블로커 재생성 조건
- * - COMPLETED / CANCELLED 상태 취소 불가 검증
+ * ACT-08 단계 ④ — 청소 일정 수동 취소의 실제 API 계약.
+ * API·권한·블로커 생성은 실제 구현, DB·OAuth·발송·HTTP는 가짜 I/O.
+ * 하단의 취소 외 기존 복사 테스트 24개는 ACT-08 단계 ⑥ 후속 대상이다.
  */
-
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 
-// ============================================================
-// CANCELLED 상태 전환 가능 여부 판별
-// ============================================================
+// ACT-08 단계 ④: actual API; scripted rows and external adapters contain no cancellation policy.
+import { cleaningDeclineFixture } from '../helpers/cleaningDeclineFixture.js';
+import { createSessionToken } from '../../server/auth/operatorAuth.js';
+import { passwordFingerprint } from '../../server/auth/operatorAccounts.js';
 
-describe("Job 취소 — 상태 전환 가능 여부", () => {
-  const CANCELLABLE = [
-    "PENDING",
-    "NOTIFYING_VIP_1",
-    "NOTIFYING_VIP_2",
-    "NOTIFYING_VIP_3",
-    "NOTIFYING_BULK",
-    "BULK_REMINDED",
-    "ESCALATED",
-    "ASSIGNED",
-  ];
-  const NOT_CANCELLABLE = ["COMPLETED", "CANCELLED"];
+const CANCEL_JOB = { id: '33333333-3333-4333-8333-333333333333', property_id: 'fixture-cancel-property',
+  status: 'PENDING', data_origin: 'REAL', google_calendar_id: null, google_event_id: null,
+  cleaning_start_at: '2026-11-20T02:00:00.000Z', checkout_hour: 11, cleaning_duration_hours: 2.5 };
+const CANCEL_CALENDAR = 'fixture-calendar@group.calendar.google.com';
+const CANCEL_NOTIF = { cleaner_id: '44444444-4444-4444-8444-444444444444', phone: '01000000000',
+  fcm_token: 'fixture-fcm-token', fcm_status: 'active' };
+const CANCEL_OPERATOR = { active: true, password_hash: 'fixture-password-hash', property_ids: [CANCEL_JOB.property_id] };
+function cancellationCookie(role = 'admin') {
+  return 'propos_session=' + createSessionToken(process.env, Date.now(), role === 'operator'
+    ? { role, sub: 'fixture-operator', ph: passwordFingerprint(CANCEL_OPERATOR.password_hash) } : { role });
+}
+async function actualCancellation(t, { responses = [], google = [], expectedErrors = 0, calendar = {}, notify, ...options } = {}) {
+  const pendingGoogle = [...google], unexpectedGoogle = [];
+  const f = await cleaningDeclineFixture({ ...options, responses, notify: notify ?? (async () => ({ ok: true, channel: 'FCM' })),
+    calendar: { ...calendar, methods: ['POST', 'DELETE'], async fetch(url, request) {
+      if (!pendingGoogle.length) unexpectedGoogle.push({ url, request });
+      assert.ok(pendingGoogle.length, 'unexpected fake Google call');
+      const next = pendingGoogle.shift();
+      if (next instanceof Error) throw next;
+      return typeof next === 'function' ? next(url, request) : next;
+    } },
+  });
+  t.after(() => {
+    try {
+      assert.equal(f.pendingResponses, 0, 'all scripted DB results consumed');
+      assert.deepEqual(f.unexpectedQueries, [], 'no hidden unexpected SQL');
+      assert.equal(pendingGoogle.length, 0, 'all scripted Google responses consumed');
+      assert.deepEqual(unexpectedGoogle, [], 'no hidden unexpected Google calls');
+      assert.equal(f.errors.length, expectedErrors, 'only planned failures logged');
+      assert.deepEqual(f.blocked, [], 'no unmocked external I/O');
+      assert.deepEqual(f.advances, [], 'cancellation does not redispatch');
+      assert.deepEqual(f.slackCalls, [], 'cancellation handler does not call assignment Slack');
+      assert.deepEqual(f.completionCalls, [], 'cancellation does not send assignment completion');
+      assert.deepEqual(f.kvCalls, [], 'OAuth boundary is fake');
+      assert.deepEqual(globalThis.__productionFetchTrap?.calls ?? [], [], 'no production requests');
+    } finally { f.restore(); }
+  });
+  return { ...f, send({ method = 'PATCH', url = `/api/cleaning/jobs?id=${CANCEL_JOB.id}`,
+    body = { status: 'CANCELLED' }, headers = {}, role = 'admin', ...request } = {}) {
+    return f.invoke({ method, url, body, ...request,
+      headers: { cookie: cancellationCookie(role), ...headers } });
+  } };
+}
+function assertCancelReply(res, blocker = null) {
+  assert.equal(res.code, 200); assert.equal(res.kind, 'json');
+  assert.deepEqual(res.body, { ok: true, newBlockerEventId: blocker });
+}
+function assertCancelWrite(f, id = CANCEL_JOB.id) {
+  const write = f.queries.find(q => /UPDATE cleaning_jobs SET status='CANCELLED'/.test(q.sql));
+  assert.ok(write, 'actual CANCELLED update must execute');
+  assert.match(write.sql, /updated_at=NOW\(\) WHERE id=\$1 RETURNING id/);
+  assert.deepEqual(write.params, [id]);
+  const recipients = f.queries.find(q => /SELECT n\.\*, c\.phone/.test(q.sql));
+  assert.ok(recipients); assert.match(recipients.sql, /JOIN cleaners c ON c.id = n.cleaner_id/);
+  assert.match(recipients.sql, /n.job_id = \$1 AND n.response IS NULL/);
+  assert.deepEqual(recipients.params, [id]);
+}
+function assertBlockerPersistence(f, eventId = 'fixture-new-blocker') {
+  const insert = f.queries.find(q => /INSERT INTO property_calendar_blockers/.test(q.sql));
+  assert.ok(insert); assert.match(insert.sql, /ON CONFLICT \(property_id, block_date\) DO UPDATE SET event_id=\$3/);
+  assert.deepEqual(insert.params, [CANCEL_JOB.property_id, '2026-11-20', eventId]);
+  const update = f.queries.find(q => /SET google_blocker_event_id=\$1/.test(q.sql));
+  assert.ok(update); assert.deepEqual(update.params, [eventId, CANCEL_JOB.id]);
+}
+const blockerReply = () => new Response(JSON.stringify({ id: 'fixture-new-blocker' }), { status: 200 });
 
-  function canCancel(status) {
-    return !["COMPLETED", "CANCELLED"].includes(status);
-  }
-
-  for (const status of CANCELLABLE) {
-    test(`${status} → 취소 가능`, () => {
-      assert.ok(canCancel(status), `${status} 상태에서 취소 가능해야 함`);
+describe('actual job cancellation — request and access contract', () => {
+  test('login is required before querying the job', async t => {
+    const f = await actualCancellation(t); const r = await f.send({ headers: { cookie: '' } });
+    assert.equal(r.code, 401); assert.deepEqual(r.body, { error: '로그인이 필요해요', code: 'AUTH_REQUIRED' });
+    assert.deepEqual(f.queries, []); assert.deepEqual(f.notifyCalls, []); assert.deepEqual(f.tokenCalls, []);
+  });
+  for (const method of ['POST', 'PUT', 'DELETE']) test(`${method} with job ID cannot cancel`, async t => {
+    const f = await actualCancellation(t); const r = await f.send({ method });
+    assert.equal(r.code, 404); assert.deepEqual(r.body, { error: 'Not found' });
+    assert.deepEqual(f.queries, []); assert.deepEqual(f.notifyCalls, []); assert.deepEqual(f.tokenCalls, []);
+  });
+  for (const request of [{ url: '/api/cleaning/jobs' }, { body: {} }, { rawBody: '{bad json' }]) {
+    test(`missing cancellation route/body does not write (${JSON.stringify(request)})`, async t => {
+      const f = await actualCancellation(t); const r = await f.send(request);
+      assert.equal(r.code, 404); assert.deepEqual(f.queries, []);
     });
   }
-
-  for (const status of NOT_CANCELLABLE) {
-    test(`${status} → 취소 불가 (409)`, () => {
-      assert.ok(!canCancel(status), `${status} 상태에서 취소 불가여야 함`);
-    });
-  }
-});
-
-// ============================================================
-// 블로커 재생성 조건
-// ============================================================
-
-describe("Job 취소 — 블로커 재생성 조건", () => {
-  function shouldRecreateBlocker(job) {
-    return !!job.google_calendar_id;
-  }
-
-  test("google_calendar_id 있음 → 블로커 재생성 필요", () => {
-    const job = { id: "j1", status: "ASSIGNED", google_calendar_id: "bnb.paju@gmail.com" };
-    assert.ok(shouldRecreateBlocker(job));
+  test('DEMO blocks cancellation before login/DB/delivery/Google', async t => {
+    const f = await actualCancellation(t, { profile: 'demo' }); const r = await f.send();
+    assert.equal(r.code, 403); assert.deepEqual(r.body, { error: 'demo profile is read-only', dataProfile: 'demo' });
+    assert.deepEqual(f.queries, []); assert.deepEqual(f.notifyCalls, []); assert.deepEqual(f.tokenCalls, []);
   });
-
-  test("google_calendar_id 없음 → 블로커 재생성 불필요", () => {
-    const job = { id: "j2", status: "PENDING", google_calendar_id: null };
-    assert.ok(!shouldRecreateBlocker(job));
+  test('missing job returns 404 without update or external work', async t => {
+    const f = await actualCancellation(t, { responses: [[]] }); const r = await f.send();
+    assert.equal(r.code, 404); assert.deepEqual(r.body, { error: '일정 없음' });
+    assert.deepEqual(f.queries[0].params, [CANCEL_JOB.id]);
+    assert.match(f.queries[0].sql, /LEFT JOIN property_cleaning_config p ON p.property_id = j.property_id/);
   });
-});
-
-// ============================================================
-// 취소 + 블로커 재생성 플로우 시뮬레이션
-// ============================================================
-
-describe("Job 취소 플로우 시뮬레이션", () => {
-  function makeJobStore() {
-    const jobs = new Map();
-    return {
-      add(job) { jobs.set(job.id, { ...job }); },
-      cancel(id) {
-        const job = jobs.get(id);
-        if (!job) return { ok: false, error: "NOT_FOUND" };
-        if (["COMPLETED", "CANCELLED"].includes(job.status)) {
-          return { ok: false, error: `이미 ${job.status}` };
-        }
-        job.status = "CANCELLED";
-        return { ok: true, job };
-      },
-      get(id) { return jobs.get(id) ?? null; },
-    };
-  }
-
-  function makeBlockerStore() {
-    const store = new Map();
-    return {
-      set(propertyId, date, eventId) { store.set(`${propertyId}_${date}`, eventId); },
-      get(propertyId, date) { return store.get(`${propertyId}_${date}`) ?? null; },
-      size() { return store.size; },
-    };
-  }
-
-  test("PENDING 취소 → 성공, 상태 CANCELLED 전환", () => {
-    const jobs = makeJobStore();
-    jobs.add({ id: "j1", status: "PENDING", google_calendar_id: "cal@gmail.com", property_id: "prop-1" });
-    const result = jobs.cancel("j1");
-    assert.ok(result.ok);
-    assert.equal(jobs.get("j1").status, "CANCELLED");
+  test('SIMULATED job is rejected without external cancellation', async t => {
+    const f = await actualCancellation(t, { responses: [[{ ...CANCEL_JOB, data_origin: 'SIMULATED', google_calendar_id: CANCEL_CALENDAR }]] });
+    const r = await f.send(); assert.equal(r.code, 409);
+    assert.deepEqual(r.body, { error: '시뮬레이션 일정은 외부 취소 처리를 하지 않습니다.', data_origin: 'SIMULATED' });
+    assert.deepEqual(f.notifyCalls, []); assert.deepEqual(f.tokenCalls, []);
   });
-
-  test("COMPLETED 취소 시도 → 실패 (409)", () => {
-    const jobs = makeJobStore();
-    jobs.add({ id: "j2", status: "COMPLETED", property_id: "prop-1" });
-    const result = jobs.cancel("j2");
-    assert.ok(!result.ok);
-    assert.ok(result.error.includes("COMPLETED"));
+  for (const [url, id] of [
+    [`/api/cleaning/jobs/${CANCEL_JOB.id}`, CANCEL_JOB.id],
+    [`/api/cleaning/jobs/55555555-5555-4555-8555-555555555555?id=${CANCEL_JOB.id}`, CANCEL_JOB.id],
+  ]) test(`UUID path fallback and query precedence: ${url}`, async t => {
+    const f = await actualCancellation(t, { responses: [[CANCEL_JOB], [{ id }], []] });
+    assertCancelReply(await f.send({ url })); assertCancelWrite(f, id);
   });
-
-  test("이미 CANCELLED된 job 재취소 → 실패", () => {
-    const jobs = makeJobStore();
-    jobs.add({ id: "j3", status: "CANCELLED", property_id: "prop-1" });
-    const result = jobs.cancel("j3");
-    assert.ok(!result.ok);
+  test('operator can cancel an assigned property', async t => {
+    const f = await actualCancellation(t, { responses: [[CANCEL_OPERATOR], [CANCEL_JOB], [{ id: CANCEL_JOB.id }], []] });
+    assertCancelReply(await f.send({ role: 'operator' })); assertCancelWrite(f);
+    assert.deepEqual(f.queries[0].params, ['fixture-operator']);
+    assert.match(f.queries[0].sql, /FROM operators o LEFT JOIN operator_properties/);
   });
-
-  test("존재하지 않는 job 취소 → 실패 (404)", () => {
-    const jobs = makeJobStore();
-    const result = jobs.cancel("j-nonexistent");
-    assert.ok(!result.ok);
-    assert.equal(result.error, "NOT_FOUND");
+  for (const property_ids of [[], ['fixture-other-property']]) test(`operator cannot cancel an out-of-scope property (${property_ids})`, async t => {
+    const f = await actualCancellation(t, { responses: [[{ ...CANCEL_OPERATOR, property_ids }], [CANCEL_JOB]] });
+    const r = await f.send({ role: 'operator' }); assert.equal(r.code, 404); assert.deepEqual(r.body, { error: '일정 없음' });
+    assert.deepEqual(f.notifyCalls, []); assert.deepEqual(f.tokenCalls, []);
   });
-
-  test("ASSIGNED 취소 + 블로커 재생성 → blocker store 업데이트", () => {
-    const jobs = makeJobStore();
-    const blockers = makeBlockerStore();
-    jobs.add({
-      id: "j4",
-      status: "ASSIGNED",
-      property_id: "prop-1",
-      google_calendar_id: "bnb@gmail.com",
-      cleaning_start_at: "2026-11-05T02:00:00.000Z", // KST 11:00
-    });
-
-    const result = jobs.cancel("j4");
-    assert.ok(result.ok);
-
-    // 블로커 재생성 시뮬레이션
-    const date = new Date(result.job.cleaning_start_at).toISOString().slice(0, 10);
-    const newEventId = "blocker-evt-new-abc";
-    blockers.set(result.job.property_id, date, newEventId);
-
-    assert.equal(blockers.get("prop-1", "2026-11-05"), "blocker-evt-new-abc");
-    assert.equal(blockers.size(), 1);
+  test('inactive operator is rejected before job lookup', async t => {
+    const f = await actualCancellation(t, { responses: [[{ ...CANCEL_OPERATOR, active: false }]] });
+    const r = await f.send({ role: 'operator' }); assert.equal(r.code, 401); assert.equal(r.body.code, 'AUTH_REQUIRED');
+    assert.equal(f.queries.length, 1);
   });
 });
 
+describe('actual job cancellation — state and retry results', () => {
+  for (const status of ['PENDING', 'NOTIFYING_VIP_1', 'NOTIFYING_VIP_2', 'NOTIFYING_VIP_3',
+    'NOTIFYING_BULK', 'BULK_REMINDED', 'ESCALATED', 'ASSIGNED']) {
+    test(`${status} persists CANCELLED, queries unanswered recipients, and returns success`, async t => {
+      const f = await actualCancellation(t, { responses: [[{ ...CANCEL_JOB, status }], [{ id: CANCEL_JOB.id }], []] });
+      assertCancelReply(await f.send()); assertCancelWrite(f);
+      assert.deepEqual(f.notifyCalls, []); assert.deepEqual(f.tokenCalls, []); assert.deepEqual(f.calendarRequests, []);
+    });
+  }
+  for (const status of ['COMPLETED', 'CANCELLED']) test(`${status} returns 409 without writes or external work`, async t => {
+    const f = await actualCancellation(t, { responses: [[{ ...CANCEL_JOB, status }]] }); const r = await f.send();
+    assert.equal(r.code, 409); assert.deepEqual(r.body, { error: `이미 ${status} 상태` });
+    assert.equal(f.queries.length, 1); assert.deepEqual(f.notifyCalls, []); assert.deepEqual(f.tokenCalls, []);
+  });
+  test('zero-row UPDATE returns 409 before notifications and Google', async t => {
+    const f = await actualCancellation(t, { responses: [[CANCEL_JOB], []] }); const r = await f.send();
+    assert.equal(r.code, 409); assert.deepEqual(r.body, { error: '업데이트 실패' });
+    assert.deepEqual(f.notifyCalls, []); assert.deepEqual(f.tokenCalls, []);
+  });
+  test('a sequential retry sees CANCELLED and does not notify or update again', async t => {
+    const f = await actualCancellation(t, { responses: [[CANCEL_JOB], [{ id: CANCEL_JOB.id }], [], [{ ...CANCEL_JOB, status: 'CANCELLED' }]] });
+    assertCancelReply(await f.send()); assert.equal((await f.send()).code, 409);
+    assert.equal(f.queries.filter(q => /UPDATE cleaning_jobs/.test(q.sql)).length, 1);
+    assertCancelWrite(f); assert.deepEqual(f.notifyCalls, []); assert.deepEqual(f.tokenCalls, []);
+  });
+});
+
+describe('actual job cancellation — delivery boundary', () => {
+  for (const config of [{ name: 'Fixture Property' }, null]) test(`notifies each unanswered recipient with ${config ? 'configured name' : 'property ID fallback'}`, async t => {
+    const other = { ...CANCEL_NOTIF, cleaner_id: 'fixture-other-cleaner', fcm_token: null, fcm_status: 'uninstalled' };
+    const f = await actualCancellation(t, { responses: [[CANCEL_JOB], [{ id: CANCEL_JOB.id }], [CANCEL_NOTIF, other], config ? [config] : []] });
+    assertCancelReply(await f.send()); assertCancelWrite(f);
+    assert.deepEqual(f.queries[3].params, [CANCEL_JOB.property_id]);
+    assert.match(f.queries[3].sql, /FROM property_cleaning_config WHERE property_id\s*=\s*\$1/);
+    const name = config?.name ?? CANCEL_JOB.property_id;
+    assert.deepEqual(f.notifyCalls, [CANCEL_NOTIF, other].map(n => [f.db, {
+      id: n.cleaner_id, phone: n.phone, fcm_token: n.fcm_token, fcm_status: n.fcm_status,
+    }, {
+      title: '[PROPOS] 청소 일정 취소', body: `${name} 2026-11-20 청소가 취소됐습니다`, data: {},
+      smsText: `[PROPOS] ${name} 2026-11-20 청소 일정이 취소됐습니다.`,
+    }]));
+    assert.deepEqual(f.tokenCalls, []);
+  });
+  test('one notification rejection is logged and the next recipient is still attempted', async t => {
+    const other = { ...CANCEL_NOTIF, cleaner_id: 'fixture-other-cleaner' };
+    const f = await actualCancellation(t, { responses: [[CANCEL_JOB], [{ id: CANCEL_JOB.id }], [CANCEL_NOTIF, other], [{ name: 'Fixture Property' }]],
+      expectedErrors: 1, notify: async (_db, recipient) => { if (recipient.id === CANCEL_NOTIF.cleaner_id) throw new Error('fixture notification unavailable'); } });
+    assertCancelReply(await f.send()); assert.equal(f.notifyCalls.length, 2);
+    assert.match(f.errors[0][0], /취소 알림 실패/); assert.equal(f.errors[0][1], 'fixture notification unavailable');
+  });
+});
+
+describe('actual job cancellation — real blocker creation with fake Google', () => {
+  test('ASSIGNED deletes the original event, creates a blocking event, and persists both links', async t => {
+    const job = { ...CANCEL_JOB, status: 'ASSIGNED', google_calendar_id: CANCEL_CALENDAR, google_event_id: 'fixture-assigned-event' };
+    const f = await actualCancellation(t, { responses: [[job], [{ id: job.id }], [], [], []],
+      google: [new Response(null, { status: 204 }), blockerReply()] });
+    assertCancelReply(await f.send(), 'fixture-new-blocker'); assertCancelWrite(f); assertBlockerPersistence(f);
+    assert.deepEqual(f.tokenCalls, [[f.kv], [f.kv]]);
+    assert.deepEqual(f.calendarRequests.map(r => r.options.method), ['DELETE', 'POST']);
+    assert.equal(f.calendarRequests[0].url, `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CANCEL_CALENDAR)}/events/fixture-assigned-event`);
+    assert.deepEqual(f.calendarRequests[0].options.headers, { Authorization: 'Bearer fixture-google-token' });
+    const create = f.calendarRequests[1];
+    assert.equal(create.url, `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CANCEL_CALENDAR)}/events`);
+    assert.equal(create.options.headers.Authorization, 'Bearer fixture-google-token');
+    assert.equal(create.options.headers['Content-Type'], 'application/json');
+    const event = JSON.parse(create.options.body);
+    assert.equal(event.summary, '청소 예약 차단');
+    assert.deepEqual(event.start, { dateTime: '2026-11-20T11:00:00+09:00' });
+    assert.deepEqual(event.end, { dateTime: '2026-11-20T13:30:00+09:00' });
+    assert.equal(event.transparency, 'opaque'); assert.equal(event.visibility, 'private');
+    assert.deepEqual(event.extendedProperties.private, { propos: 'blocker', property_id: job.property_id });
+    assert.ok(event.extendedProperties.shared['goo.createdByAvailId']);
+    assert.equal(event.extendedProperties.shared['goo.createdBySet'], 'default_cita');
+  });
+  for (const job of [
+    { ...CANCEL_JOB, google_calendar_id: CANCEL_CALENDAR, google_event_id: 'fixture-old-event' },
+    { ...CANCEL_JOB, status: 'ASSIGNED', google_calendar_id: CANCEL_CALENDAR },
+  ]) test(`does not DELETE without both assigned state and event ID (${job.status}/${job.google_event_id})`, async t => {
+    const f = await actualCancellation(t, { responses: [[job], [{ id: job.id }], [], [], []], google: [blockerReply()] });
+    assertCancelReply(await f.send(), 'fixture-new-blocker'); assertBlockerPersistence(f);
+    assert.deepEqual(f.calendarRequests.map(r => r.options.method), ['POST']); assert.equal(f.tokenCalls.length, 1);
+  });
+  test('UPDATE is accepted before delivery and Google operations', async t => {
+    const order = [];
+    const f = await actualCancellation(t, { responses: [[{ ...CANCEL_JOB, google_calendar_id: CANCEL_CALENDAR }],
+      () => { order.push('cancel-update'); return { rows: [{ id: CANCEL_JOB.id }] }; }, [CANCEL_NOTIF], [{ name: 'Fixture Property' }], [], []],
+      notify: async () => { order.push('notification'); }, google: [() => { order.push('google-create'); return blockerReply(); }] });
+    assertCancelReply(await f.send(), 'fixture-new-blocker');
+    assert.deepEqual(order, ['cancel-update', 'notification', 'google-create']); assertBlockerPersistence(f);
+  });
+  test('DELETE transport failure is logged but blocker recreation still runs', async t => {
+    const f = await actualCancellation(t, { responses: [[{ ...CANCEL_JOB, status: 'ASSIGNED', google_calendar_id: CANCEL_CALENDAR, google_event_id: 'fixture-event' }],
+      [{ id: CANCEL_JOB.id }], [], [], []], google: [new Error('fixture DELETE unavailable'), blockerReply()], expectedErrors: 1 });
+    assertCancelReply(await f.send(), 'fixture-new-blocker'); assertBlockerPersistence(f);
+    assert.match(f.errors[0][0], /캘린더 이벤트 삭제 실패/);
+    assert.equal(f.errors[0][1], 'fixture DELETE unavailable');
+  });
+  test('known limitation: DELETE HTTP failure is currently ignored (no rollback or error receipt)', async t => {
+    const f = await actualCancellation(t, { responses: [[{ ...CANCEL_JOB, status: 'ASSIGNED', google_calendar_id: CANCEL_CALENDAR, google_event_id: 'fixture-event' }],
+      [{ id: CANCEL_JOB.id }], [], [], []], google: [new Response('fixture denied', { status: 403 }), blockerReply()] });
+    assertCancelReply(await f.send(), 'fixture-new-blocker'); assertBlockerPersistence(f);
+    assert.deepEqual(f.calendarRequests.map(r => r.options.method), ['DELETE', 'POST']);
+    assert.deepEqual(f.errors, [], 'current code never checks DELETE response.ok; not evidence of a successful deletion');
+  });
+  test('blocker OAuth failure preserves current success/null response without Google or link writes', async t => {
+    const f = await actualCancellation(t, { responses: [[{ ...CANCEL_JOB, google_calendar_id: CANCEL_CALENDAR }], [{ id: CANCEL_JOB.id }], []],
+      expectedErrors: 1, calendar: { getToken: async () => { throw new Error('fixture OAuth unavailable'); } } });
+    assertCancelReply(await f.send()); assertCancelWrite(f); assert.deepEqual(f.calendarRequests, []);
+    assert.match(f.errors[0][0], /블로커 재생성 실패/);
+  });
+  for (const response of [new Error('fixture POST unavailable'), new Response('fixture rejected', { status: 403 })]) {
+    test(`blocker creation failure preserves current success/null response (${response instanceof Error ? 'transport' : 'HTTP 403'})`, async t => {
+      const f = await actualCancellation(t, { responses: [[{ ...CANCEL_JOB, google_calendar_id: CANCEL_CALENDAR }], [{ id: CANCEL_JOB.id }], []],
+        google: [response], expectedErrors: 1 });
+      assertCancelReply(await f.send()); assertCancelWrite(f); assert.match(f.errors[0][0], /블로커 재생성 실패/);
+      assert.equal(f.queries.length, 3);
+    });
+  }
+  for (const failedWrite of ['blocker-insert', 'job-link']) test(`current partial failure at ${failedWrite} is logged without pretending rollback`, async t => {
+    const responses = [[{ ...CANCEL_JOB, google_calendar_id: CANCEL_CALENDAR }], [{ id: CANCEL_JOB.id }], [],
+      ...(failedWrite === 'job-link' ? [[]] : []), new Error(`fixture ${failedWrite} unavailable`)];
+    const f = await actualCancellation(t, { responses, google: [blockerReply()], expectedErrors: 1 });
+    assertCancelReply(await f.send()); assertCancelWrite(f); assert.match(f.errors[0][0], /블로커 재생성 실패/);
+    assert.equal(f.calendarRequests.length, 1);
+    assert.equal(f.queries.filter(q => /SET google_blocker_event_id/.test(q.sql)).length, failedWrite === 'job-link' ? 1 : 0);
+  });
+});
+
+describe('actual job cancellation — DB failures stop subsequent work', () => {
+  for (const stage of ['job-read', 'cancel-update', 'recipient-read']) test(`500 at ${stage} preserves current API error`, async t => {
+    const responses = stage === 'job-read' ? [] : [[CANCEL_JOB]];
+    if (stage === 'recipient-read') responses.push([{ id: CANCEL_JOB.id }]);
+    responses.push(new Error(`fixture ${stage} unavailable`));
+    const f = await actualCancellation(t, { responses, expectedErrors: 1 }); const r = await f.send();
+    assert.equal(r.code, 500); assert.deepEqual(r.body, { error: `fixture ${stage} unavailable` });
+    assert.deepEqual(f.notifyCalls, []); assert.deepEqual(f.tokenCalls, []); assert.deepEqual(f.calendarRequests, []);
+  });
+  test('property config lookup failure returns 500 after cancellation was already accepted', async t => {
+    const f = await actualCancellation(t, { responses: [[CANCEL_JOB], [{ id: CANCEL_JOB.id }], [CANCEL_NOTIF],
+      new Error('fixture property lookup unavailable')], expectedErrors: 1 });
+    const r = await f.send();
+    assert.equal(r.code, 500); assert.deepEqual(r.body, { error: 'fixture property lookup unavailable' });
+    assertCancelWrite(f); assert.deepEqual(f.notifyCalls, []); assert.deepEqual(f.tokenCalls, []);
+  });
+});
+
+// Legacy copied checks outside cancellation; kept for ACT-08 step 6, not implementation evidence.
 // ============================================================
 // 취소 후 상태 머신 불변식 검증
 // ============================================================
@@ -316,10 +453,11 @@ describe("followup 크론 — BULK 리마인드 타이밍 (1시간)", () => {
   });
 
   test("정확히 1시간 → 리마인드 발송 기준 초과 안함 (경계값)", () => {
-    const sentAt = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 정확히 1시간
+    const nowMs = Date.now();
+    const sentAt = new Date(nowMs - 60 * 60 * 1000).toISOString(); // 정확히 1시간
     // DB: INTERVAL '1 hour' → sent_at < NOW() - 1h (미만)
     // 정확히 1h는 경계라서 DB 쿼리에서는 미발송에 가까움
-    assert.ok(!shouldSendRemind(sentAt)); // <= 1h는 아직 미발송
+    assert.ok(!shouldSendRemind(sentAt, nowMs)); // <= 1h는 아직 미발송
   });
 
   test("이미 reminded_at 있는 notif → 조건 쿼리에서 제외", () => {
