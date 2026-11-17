@@ -2024,4 +2024,8 @@ Codex는 별도 작업 폴더에서 커밋했고 사용자 폴더는 의도적�
 
 ### ACT-08 단계 ⑤ 배포 기록 · 2026-11-17
 
-로컬 검증 완료. 이번 단계 3파일만 별도 Git 작업 폴더에서 기존 pre-commit 훅을 정상 실행해 커밋·푸시하고 CI·Production READY를 확인한 뒤 이 기록을 갱신한다. 아직 운영 반영 완료를 뜻하지 않는다.
+테스트 교체 단위 **`52b76eb47ce8483415c53cc59c181c25518857d4`**를 main에 푸시했다. 이 SHA의 [GitHub validate](https://github.com/adckang/propos/actions/runs/44072902510/job/134003360980)는 **completed / success**, Vercel Production SHA도 일치하며 배포 `dpl_4p2LePmqFAnbPP4TJvB7z41m3hL5`는 **READY**다. 배포 확인은 GitHub/Vercel 메타데이터만 조회했다.
+
+별도 Git 작업 폴더에서 기존 `pre-commit → sync:dist` 훅을 정상 실행했다. 커밋은 s25·기존 delivery 도우미·이 문서 **3파일뿐**이며 운영 코드·추적 dist 변경은 0이다. 커밋 폴더에서도 전체 **3,231개 통과**와 `verify:dist`·`verify:scenarios`·`verify:deploy`·diff 검사를 마쳤다. 최종 리뷰에서 VIP의 저장 token과 SDK 전송 token 일치·접수 ID 보관도 확인했고 메모리 변형은 **21/21 검출**했다.
+
+이 관찰 근거만 문서 후속 커밋으로 반영하고 그 커밋의 CI·READY도 확인한다. 원래 폴더의 branch/index는 검증한 최종 커밋으로 전진시키되 사용자 문서·설정 23개와 현재 `.DS_Store`를 보존하고 스테이징하지 않는다. 운영 업무 API·FCM·SMS·Slack·Google·DB·Pi 실제 요청은 **0건**이다. RF-31·RF-32는 미수정, RF-27 Pi 예약 확인은 22:00 KST 이전이라 운영 확인 대기다. **단계 ⑤ 완료, 다음은 ⑥-1 s34 실제 구현 대조(미착수)**다. ACT-08 전체 완료를 뜻하지 않는다.
