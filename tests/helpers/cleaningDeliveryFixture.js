@@ -10,9 +10,21 @@ const modules = new Map();
 export async function actualCleaningModule(name) {
   if (!modules.has(name)) modules.set(name, (async () => {
     const stubs = {
-      'firebase-admin/app': 'export const getApps=()=>[{}]; export const cert=()=>({}); export const initializeApp=()=>({});',
-      'firebase-admin/messaging': 'export const getMessaging=()=>({send:(m)=>globalThis.__cleaningDeliveryIO.push(m)});',
+      'firebase-admin/app': `const io=()=>globalThis.__cleaningDeliveryIO?.firebase;
+        export const getApps=()=>io()?.getApps ? io().getApps() : [{}];
+        export const cert=(value)=>io()?.cert ? io().cert(value) : {};
+        export const initializeApp=(value)=>io()?.initializeApp ? io().initializeApp(value) : {};`,
+      'firebase-admin/messaging': `export const getMessaging=(app)=>globalThis.__cleaningDeliveryIO?.firebase?.getMessaging
+        ? globalThis.__cleaningDeliveryIO.firebase.getMessaging(app)
+        : {send:(m)=>globalThis.__cleaningDeliveryIO.push(m)};`,
       './_slack.js': 'export const postSlack=(...a)=>globalThis.__cleaningDeliveryIO.slack(...a);',
+      ...(name === 'api/cron/[...slug].js' ? {
+        pg: `export class Pool { constructor(){
+          const io=globalThis.__cleaningDeliveryIO;
+          return io.db ?? io.block('DB');
+        }} export default {Pool};`,
+        '@vercel/kv': `export const kv=new Proxy({}, {get:()=>()=>globalThis.__cleaningDeliveryIO.block('KV')});`,
+      } : {}),
     };
     const result = await build({ entryPoints: [resolve(root, name)], bundle: true, write: false,
       platform: 'node', format: 'esm', logLevel: 'silent', plugins: [{ name: 'fixture-io', setup(b) {
@@ -25,21 +37,24 @@ export async function actualCleaningModule(name) {
   return modules.get(name);
 }
 
-export function installDeliveryIO({ sms, push } = {}) {
+export function installDeliveryIO({ sms, push, firebase, db } = {}) {
   const previous = { fetch: globalThis.fetch, io: globalThis.__cleaningDeliveryIO,
     id: process.env.PROPOS_SMS_GW_ID, pwd: process.env.PROPOS_SMS_GW_PWD };
   const calls = { sms: [], push: [], slack: [] };
+  const blocked = [];
+  const block = kind => { blocked.push(kind); throw new Error(`Unexpected external request blocked: ${kind}`); };
   process.env.PROPOS_SMS_GW_ID = 'fixture'; process.env.PROPOS_SMS_GW_PWD = 'fixture';
   globalThis.fetch = async (url, options) => {
-    if (String(url) !== 'https://api.sms-gate.app/3rdparty/v1/message') throw new Error('Unexpected external request blocked');
+    if (String(url) !== 'https://api.sms-gate.app/3rdparty/v1/message') return block('HTTP');
     calls.sms.push({ body: JSON.parse(options.body), signal: options.signal });
     return sms ? sms(calls.sms.length, options) : { ok: true, status: 200, json: async () => ({ id: 'fixture-provider-id' }) };
   };
   globalThis.__cleaningDeliveryIO = {
+    firebase, db, block,
     push: async message => { calls.push.push(message); return push ? push(message) : 'projects/fixture/messages/message-id'; },
     slack: async (...args) => { calls.slack.push(args); },
   };
-  return { calls, restore() {
+  return { calls, blocked, restore() {
     globalThis.fetch = previous.fetch; globalThis.__cleaningDeliveryIO = previous.io;
     for (const [key, value] of [['PROPOS_SMS_GW_ID', previous.id], ['PROPOS_SMS_GW_PWD', previous.pwd]]) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
