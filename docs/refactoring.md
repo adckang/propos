@@ -1861,4 +1861,6 @@ Codex는 별도 작업 폴더에서 커밋했고 사용자 폴더는 의도적�
 
 ### ACT-08 단계 ② 배포 기록 · 2026-11-17
 
-단계 ② 시험·전용 도우미·이 문서만 명시적으로 커밋·푸시한다. 운영 핸들러·`dist`는 변경하지 않는다. 집중·전체 시험·리뷰 후 GitHub CI와 Vercel Production SHA/READY를 메타데이터로 확인한다. 운영 업무 주소·Pi 요청은 하지 않으며 단계 ③은 미착수다.
+단계 ② 시험·전용 도우미·이 문서만 `8c59090`으로 명시적으로 커밋·푸시했다. 운영 핸들러·`dist` 변경은 0이다. 집중 143개·전체 3,152개·변형 12/12·검사·빌드·리뷰 통과 후 GitHub CI `validate` **success**, Vercel `propos-project-v2` Production의 **동일 SHA·READY**를 확인했다. 배포 ID는 `dpl_HKxrteBKf79aU9V1TyM1gK6TYJYb`다. [CI 근거](https://github.com/adckang/propos/actions/runs/44043200461/job/133902487566)
+
+이 확인 기록만 문서 후속 커밋으로 반영한다. 운영 업무 API·DB·Slack·Pi 직접 요청은 0건이다. 반복 token 입력의 500은 RF-31로 기록만 했으며 운영 코드는 수정하지 않았다. **단계 ② 완료, 다음은 단계 ③ 캘린더 웹훅 실제 핸들러 테스트(미착수)**다.
