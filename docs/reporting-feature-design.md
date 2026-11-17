@@ -47,7 +47,7 @@ PROPOS 레포트가 보여줘야 하는 것: **PMS가 절대 알 수 없는 것*
 - **자동화 개선율**은 그 옆 보조 지표다. 계산할 수 없는 동안은 **`자동화 개선율 — (측정 중 0/5)`** 로 보인다 — 지금(2026-11-17)은 [측정 범위가 0 / 5](report-architecture.md#automation-rate-scope)라 늘 이 형식이다.
 - 계산할 수 있게 되면 "진행 중 N건"과 "측정 중 N / 5"를 함께 보인다. 숫자가 든 형식은 아래 각 레포트에 **향후 예시**로 따로 적는다.
 - 기간이 끝나기 전에 내는 보고(진행 중 스냅샷)는 "22시 현재"처럼 기준 시각을 붙여, 기간 전체 결과로 보이지 않게 한다 — 판정 규칙은 [report-architecture 보고 종류](report-architecture.md#automation-rate-report-kinds).
-- "이번 주 자동화로 절약한 시간"은 부가 지표.
+- "자동화로 절약한 시간"(보고 기간 기준 — 주간 결산이면 지난주)은 부가 지표.
 
 #### 이상(異常) 집계 기준 — 분모 정의
 
@@ -592,11 +592,11 @@ const displayName = property.name || property.id;
 
 ---
 
-### 11-3. 주간 안심 결산 (실행 시각 결정 대기 · 정기 작업 미구현)
+### 11-3. 주간 안심 결산 (월요일 00:00 KST 이후 · 지난주 완료 기간 보고 · 정기 작업 미구현)
 
-> 예전 설계는 "매주 일요일 22:00 KST — Cron: `api/cron/weekly-report`"였다. 일요일 22시에는 이번 주가 끝나지 않았고 `last_week`는 그 전 주라, 실행 시각과 기간을 다시 정해야 한다 — [report-architecture 8절](report-architecture.md#slack-report-mapping). 아래 예시의 기간 표기(9/28~10/4)는 형식 예시다.
+> 2026-11-17 사용자 결정: 월요일 00:00 KST 이후에 실행해 지난주 [직전 월요일 00:00, 이번 월요일 00:00) KST를 완료 기간 보고로 낸다(예전 설계 "매주 일요일 22:00"은 쓰지 않는다) — [report-architecture 8절](report-architecture.md#slack-report-mapping). 아래 예시의 기간 표기(9/28~10/4, 월~일)는 형식 예시다.
 
-**목적**: "이번 주 PROPOS가 얼마나 많은 현장 방문을 대체했는가"를 보여주는 레포트.
+**목적**: "지난주 PROPOS가 얼마나 많은 현장 방문을 대체했는가"를 보여주는 레포트.
 매출/예약률 없음. 현장 운영 품질만.
 
 ```
@@ -608,7 +608,7 @@ const displayName = property.name || property.id;
 체크인/아웃 14건 무인 처리  |  체크아웃 제시간: 85% (6/7건)
 체크인 전 청소 완료율: 100%
 
-다음 주: 체크인 6건 / 청소 배정 5/5 ✅
+이번 주 예정: 체크인 6건 / 청소 배정 5/5 ✅
 → 전체 내역 보기: https://proposonline.com/weekly/2026-w40
 ```
 
@@ -616,9 +616,9 @@ const displayName = property.name || property.id;
 
 ```
 자동화 개선율: 94%  (이상 17건 중 자동 16건 · 수동 1건 · 진행 중 0건 · 측정 중 N/5)
-⏱ 이번 주 절약 예상: 약 4시간 (건당 15분 추산 · 실제와 차이 있을 수 있어요)
+⏱ 지난주 절약 추정: 약 4시간 (건당 15분 추산 · 실제와 차이 있을 수 있어요)
 
-이번 주 자동 처리된 주요 사례
+지난주 자동 처리된 주요 사례
   ▸ 화요일: 폭우 + 애월 스튜디오 습도 89% → 제습 자동 실행, 정상화 완료
   ▸ 목요일: 홍대 원룸 A 게스트 불만 + 온도 32도 → 냉방 가동, 약 15분 내 복귀
   ▸ 주말: 이태원 테라스 공실 냉방 3시간 → 자동 차단했어요
@@ -639,7 +639,7 @@ const displayName = property.name || property.id;
 | 체크인 전 청소 완료율 | `cleaning_jobs.finished_at` vs iCal `checkin_at` |
 | 체크아웃 준수율 | `check_out_detected` 시각 vs iCal `checkout_at` |
 | 통합 감지 내역 | events 테이블 (`integration_sources` 필드) |
-| 다음 주 청소 배정 | `cleaning_jobs` + iCal join |
+| 이번 주 예정 청소 배정 | `cleaning_jobs` + iCal join |
 | 날씨 정보 | 외부 날씨 API |
 
 ---

@@ -1,6 +1,6 @@
 # 리팩토링
 
-> 작성 기준 2026-11-17 · 기준 초안 v0.61 · **RF-21·RF-24·RF-23·RF-22 완료 / DEC-02 안심지수 정의 확정·RF-04·RF-09 반영 / RF-25 자동화 개선율 측정 범위 0/5·이력 계약 보완 대기 / RF-26 네 지표 측정 제외 결정(코드 반영 대기)** · 배포 단위·근거는 [운영 기록](#rollout-20261114), 다음 작업은 DEC-04
+> 작성 기준 2026-11-17 · 기준 초안 v0.65 · **RF-21·RF-24·RF-23·RF-22 완료 / DEC-02 안심지수 정의 확정·RF-04·RF-09 반영 / RF-25 자동화 개선율 측정 범위 0/5·주간 결산(월 00:00 KST 이후)·빈방 이벤트 이름 결정, 상태·중복 방지 초안 검토 대기 / RF-26 사용자 승인 · 구현 대기 / DEC-04 Pi→서버→DB 현재 운영 검증 대기** · 배포 단위·근거는 [운영 기록](#rollout-20261114), 다음 실행 ID는 RF-26
 >
 > 목적: 요구사항·사용자 시나리오·시스템 책임·데이터 계약을 먼저 정리하고, 이를 근거로 코드를 점진적으로 개선한다.
 >
@@ -69,7 +69,7 @@ Mermaid 도식에 같은 색상을 적용했다. 색을 표시하지 않는 Mark
 - **실장치 기초 시험 완료:** 사용자 빈 숙소 확인·욕실 한 채널 제어 승인으로 18:36 KST `거실욕실 2구 switch` 1번의 켜기·동일 명령 재전송·끄기를 수행했다. HA REST/변경 보고 일치·원래 꺼짐 복구·다른 6채널과 기존 설정 보존·Pi 정상 확인. ACT-05의 자동 준비/센서·안전 정지 전체 검증은 별도다. [시험 기록](pre-stay-field-review.md#bathroom-switch-test-20261109)
 - **최신 조사 결과:** 발송 실패 후 응답 대기 전환, 결과 저장 실패/동시 호출의 중복 발송, 동시 취소 덮어쓰기 등을 실제 함수로 재현했다. 연결된 DB 알림 77개 중 channel NULL 75개는 실패로 단정하거나 재발송하지 않는다. 기존 notifs를 활용한 최소 저장·선점·접수 결과·복구 계약을 정리했다. [ACT-10 결과](cleaning-notification-reliability-audit.md#act10-scope)
 - **확인된 결함 수정:** [ACT-11 결과](cleaning-notification-reliability-audit.md#act11-implementation)에 F01~F07의 최초 VIP 요청 전후 비교·실제 구현 회귀·리뷰·남은 한계를 기록했다. 접수 후 상태 투영 실패는 재발송 없이 복구하고, 결과 미확인은 보관·보류한다. 기존 BULK/리마인드/완료·취소 알림 전체를 새 기록으로 이관한 것은 아니다.
-- **현재 상태 / 다음 ID는 하나 · 2026-11-14** — RF-14·RF-13·RF-05.1·RF-05.3을 분리해 운영 READY·CI success까지 확인했다. RF-05.2는 실제 READ ONLY 집계·정본·저장 경로 대조를 완료했다. seed의 연결 고정 문제는 RF-05.3에서 최소 수정·장애 회귀를 마쳤다. RF-05.4는 사용자 선택("실제 데이터 검사만 강화")에 따라 실제 숙소 배정 완료의 담당자 누락 검사만 보완했다 — 가상 담당자 추가안은 D-032와 충돌해 채택하지 않았다. [결과](#rf054-result) **RF-21**(집 Pi 워처의 외부 무인증 노출)은 2026-11-16 Pi에 반영해 외부 직접 요청이 401이 됐다. [RF-21](#rf21-result) 관찰 중 **RF-24**(중복 Vercel 프로젝트 `propos`가 로그인 없이 운영 DB·HA에 연결된 채 공개)를 발견했다 — 사용자 결정("a. 삭제해")으로 같은 날 그 프로젝트를 삭제했다. RF-23(테스트가 운영 이벤트 주소로 요청을 보냄)은 테스트만 바꿔 2026-11-17 마쳤다 — `npm test`가 모든 테스트 파일에 운영 주소 차단 장치를 건다. [RF-23](#rf23-result) RF-22(수동 배정 담당자 필수)는 사용자 위임으로 서버 차단(A)을 골라 마쳤다. [RF-22](#rf22-result) DEC-02는 사용자가 정의를 확정했고(안심지수 = 최종 성공한 비율, 자동 해결 비율은 "자동화 개선율"로 따로) RF-04·RF-09로 화면·문서를 맞췄다. [DEC-02](#dec02-result) **다음 실행 ID는 DEC-04**(운영 시나리오 범위), 그 뒤 ACT-08 → RF-25(자동화 개선율 — 데이터 설계 필요) 순이다. [RF-24](#rf24-result) [RF-23](#rf23-result) [관계 감사·저장 결과](#rf05-assignment-relations), [단위별 배포](#rollout-20261114)
+- **현재 상태 / 다음 ID는 하나 · 2026-11-14** — RF-14·RF-13·RF-05.1·RF-05.3을 분리해 운영 READY·CI success까지 확인했다. RF-05.2는 실제 READ ONLY 집계·정본·저장 경로 대조를 완료했다. seed의 연결 고정 문제는 RF-05.3에서 최소 수정·장애 회귀를 마쳤다. RF-05.4는 사용자 선택("실제 데이터 검사만 강화")에 따라 실제 숙소 배정 완료의 담당자 누락 검사만 보완했다 — 가상 담당자 추가안은 D-032와 충돌해 채택하지 않았다. [결과](#rf054-result) **RF-21**(집 Pi 워처의 외부 무인증 노출)은 2026-11-16 Pi에 반영해 외부 직접 요청이 401이 됐다. [RF-21](#rf21-result) 관찰 중 **RF-24**(중복 Vercel 프로젝트 `propos`가 로그인 없이 운영 DB·HA에 연결된 채 공개)를 발견했다 — 사용자 결정("a. 삭제해")으로 같은 날 그 프로젝트를 삭제했다. RF-23(테스트가 운영 이벤트 주소로 요청을 보냄)은 테스트만 바꿔 2026-11-17 마쳤다 — `npm test`가 모든 테스트 파일에 운영 주소 차단 장치를 건다. [RF-23](#rf23-result) RF-22(수동 배정 담당자 필수)는 사용자 위임으로 서버 차단(A)을 골라 마쳤다. [RF-22](#rf22-result) DEC-02는 사용자가 정의를 확정했고(안심지수 = 최종 성공한 비율, 자동 해결 비율은 "자동화 개선율"로 따로) RF-04·RF-09로 화면·문서를 맞췄다. [DEC-02](#dec02-result) **다음 실행 ID는 RF-26**(안심지수 점수·비율에서 판정 기록 없는 4개 지표 제외 — 사용자 승인 2026-11-17), 그 뒤 DEC-04의 Pi→서버→DB 현재 운영 검증 → ACT-08 순이다. RF-25(자동화 개선율)는 상태·중복 방지 초안 검토 대기다. [RF-24](#rf24-result) [RF-23](#rf23-result) [관계 감사·저장 결과](#rf05-assignment-relations), [단위별 배포](#rollout-20261114)
 - **토큰 API·테스트폰 확인 완료 (2026-11-09~10):** 앱 1.0→1.0.1(계정·서명 유지)과 토큰 API 반영 이력에 이어 11월 10일 20:55 KST 별도 시험 1회에서 Firebase 접수·실수신·앱 열기를 확인했다. 1차 접수 미확인 발송을 자동 재시도한 것이 아니다. 이후 최초 요청용 DB·서버 코드는 ACT-12에서 별도로 반영했다. [실기 결과](cleaning-notification-reliability-audit.md#act11-phone-receipt)
 - **이번 코드 보완·운영 반영 완료:** [ACT-15](#act-15)의 미래 청소 표시·cursor를 다음 입실에서 함께 끊어 다음 예약이 빠지지 않도록 했다. 실제 DB 일정·청소 담당자·입실 준비 제어는 바꾸지 않았다. 코드·회귀 후 `1aed54a`로 푸시·운영 반영했다. [검증](#act15-timeline)
 - **현장 확인 대기:** 앱에서 적외선 장면의 대상 장치·설치 방·켜기/끄기 분리 여부, 기존 Slack 워크스페이스·채널 이름을 확인한다. 실제 실행·비밀값 전달은 필요 없다. 인증키 교체·기존 코드 운영 재배포·Git 제외는 승인·반영 완료다.
@@ -141,12 +141,12 @@ Mermaid 도식에 같은 색상을 적용했다. 색을 표시하지 않는 Mark
 | <a id="act-05"></a>**ACT-05** 실제 준비·안전 정지·기록 검증 | 🟡 기초 시험 일부 완료·본 검증 선행 대기 · 2026-11-09 | 개발자 / 사용자 시험 범위 승인 | 욕실 1채널 명령·HA 상태 피드백·복구 통과. [근거](pre-stay-field-review.md#bathroom-switch-test-20261109). 자동 준비·안전 정지·기록 연결의 검증 사례·알림·복구 절차는 별도 제시 | ACT-02·03·06·07 완료와 해당 시험 승인 후 목표 도달·생략·조기 입실·취소·중요 센서/장치 오류 정지·알림, Pi→DB→화면·보고서 대조. 기초 스위치 시험으로 전체 완료 처리하지 않음 |
 | [DEC-02](#dec-02) / [RF-04](#rf-04) 안심지수의 의미 대조 | 🟢 정의 확정·반영 · 2026-11-17 | 사용자 결정 / 개발자 | 안심지수 = 최종적으로 성공한 비율(운영 지표 성공률 평균), 자동 해결 비율은 "자동화 개선율"로 따로. 설계 문서 2곳 정정. [결과](#dec02-result) | 화면·요약·문서가 같은 정의 — 확인 완료. 자동화 개선율 계산은 RF-25 |
 | [DEC-03](#dec-03) 배정 완료의 필수 관계 대조 | 🟢 RF-05.2 대조 완료 / RF-05.4 실제 배정만 담당자 필수 검사(사용자 선택) | 개발자 / 사용자 선택 | Google 정상 배정은 담당자 FK·실제 이벤트 ID, 가상 배정은 D-032대로 가상 일정 번호만(담당자 없음, 2026-11-14 사용자 선택). 수동 PATCH의 담당자 비움은 RF-22(2026-11-17)에서 차단 | 외부 Google 키로 담당자 FK를 대체하지 않으며 REAL 레거시 행을 임의 수정하지 않음 |
-| [DEC-04](#dec-04) 현재 운영 시나리오 범위 대조 | ⚪ 개발자 도달성 조사 | 개발자 | 기존 S01~S05의 운영 진입·외부 연동·저장·화면을 사례별로 추적 | 현재 제공·향후·레거시 기능을 근거와 함께 분류하고 필요한 후속 범위 제시 |
+| [DEC-04](#dec-04) 현재 운영 시나리오 범위 대조 | 🟡 Pi→서버→DB 현재 운영 검증 대기 · 2026-11-17 | 개발자 / 사용자 결정 | S01~S05의 등록 경로·실제 운영 경로·저장 결과를 읽기 전용으로 추적. 등록 문서가 실제 v1 라우팅이 아닌 상위 복사본을 검증하는 문제 발견. [결과](#dec04-result) | S01~S03·퇴실 감지의 현재 운영 검증(운영 DB에 2026-08-06 이후 실제 기록 없음) → 분류 확정 → 레지스트리·검사 스크립트 보완(코드 변경, 승인 필요) |
 | [RF-05](#rf-05) 생성·검수기의 담당자 관계 공백 | 🟢 RF-05.1 운영 반영·RF-05.2 감사 완료·RF-05.3 운영 반영·RF-05.4 실제 배정 담당자 검사 · 2026-11-14 | 개발자 / 사용자 선택 | 생성·seed의 담당자 관계 공백과 실제 SIMULATED 99건을 확인. seed 연결 고정·장애 회귀 보완. RF-05.4는 사용자 선택으로 실제 숙소의 배정 완료 담당자 누락 검사만 추가(가상 담당자 추가안 미채택). [근거](#rf05-assignment-relations) [결과](#rf054-result) | 같은 검수 기준·관계·반복 저장과 REAL 보존·외부 효과 차단을 실제 구현으로 검증. 운영 데이터 보정은 별도 작업 |
 | [RF-08](#rf-08) 시나리오 등록·운영 연결 정합성 | 🟡 선행 대기 | 개발자 | DEC-04 조사 결과로 레지스트리·실제 앱·테스트 추적표 대조 | 운영 범위 합의 뒤 누락·레거시·의도된 구분의 근거와 수정 제안 확보 |
 | [RF-09](#rf-09) 안심지수 중복 계산 개선 | 🟢 완료 · 2026-11-17 | 개발자(Claude) | 표·요약이 `computeSafetyIndex` 하나를 쓴다. 분자 없는 지표를 표만 0%로 넣던 차이·늘 "0개 지표 연동 후 포함"이던 문구 정정. [결과](#dec02-result) | 요약/상세 일치·DEMO 화면 확인 완료 |
-| <a id="rf-25"></a>**RF-25** 자동화 개선율(이상이 생겼을 때 관리자·운영자 개입 없이 처리된 비율) | 🟡 측정 범위·이력 계약 보완 대기 · 2026-11-17 | 개발자 / 사용자 승인 | 정의(사용자 1·2차): 이상 기준 정본 5가지, 측정 범위 0 / 5(옛 두 항목은 기준이 다른 과거 설계 후보), 자동 = 관리자·운영자 개입 없음(이력 전체로 판정), 진행 중은 분모에만, 주 지표 안심지수·자동화 개선율 보조("—"). 계약 정본 [report-architecture 6-1-1](report-architecture.md#automation-rate), 결정 기록 [결과](#rf25-contract) | 남은 결정·계약 3개(주간 결산 실행 시각, 빈방 이벤트 이름, 중복·재발·멱등성) → 스키마·마이그레이션·과거 데이터 처리안 승인 → 기록 시작 → 계산. 안심지수와 섞지 않음 |
-| <a id="rf-26"></a>**RF-26** 실패 기록이 없는 안심지수 지표 | 🟡 측정 제외 결정·코드 반영 대기 · 2026-11-17 | 사용자 지시 / 개발자 | RF-25 리뷰 중 발견. 퇴실 후 절전·퇴실 후 보안·빈방 절전 유지·빈방 보안 유지는 "대상 수 − 실패 기록 수"로 계산하는데 실패 이벤트를 만드는 코드는 DEMO 데이터뿐이다(운영 DB 읽기 전용 2026-11-17: 실제 숙소 이벤트 입실 1·퇴실 1, 실패 0). 사용자 지시: 성공·실패·측정 불가를 명시적으로 판정한 기록이 생기기 전까지 네 지표를 안심지수 측정에서 뺀다 — 실패 이벤트만 추가하는 방식은 쓰지 않는다. 규칙은 [report-architecture 6-1](report-architecture.md#safety-index-exclusions) | 코드 반영은 별도 작업(승인 후). 지금 화면은 아직 네 지표를 넣어 계산한다 |
+| <a id="rf-25"></a>**RF-25** 자동화 개선율(이상이 생겼을 때 관리자·운영자 개입 없이 처리된 비율) | 🟡 측정 범위·이력 계약 보완 대기 · 2026-11-17 | 개발자 / 사용자 승인 | 정의(사용자 1·2차): 이상 기준 정본 5가지, 측정 범위 0 / 5(옛 두 항목은 기준이 다른 과거 설계 후보), 자동 = 관리자·운영자 개입 없음(이력 전체로 판정), 진행 중은 분모에만, 주 지표 안심지수·자동화 개선율 보조("—"). 계약 정본 [report-architecture 6-1-1](report-architecture.md#automation-rate), 결정 기록 [결과](#rf25-contract) | 주간 결산 실행 시각 (가)·빈방 이벤트 기존 이름 재사용 결정(2026-11-17). 남은 계약: 상태·`incident_key`·`source_event_key` 초안을 정본에 적음(검토 대기) → 스키마·마이그레이션·과거 데이터 처리안 승인 → 기록 시작 → 계산. 안심지수와 섞지 않음 |
+| <a id="rf-26"></a>**RF-26** 실패 기록이 없는 안심지수 지표 | 🟡 사용자 승인 · 구현 대기 · 2026-11-17 | 사용자 승인 / 개발자 | RF-25 리뷰 중 발견. 퇴실 후 절전·퇴실 후 보안·빈방 절전 유지·빈방 보안 유지는 "대상 수 − 실패 기록 수"로 계산하는데 실패 이벤트를 만드는 코드는 DEMO 데이터뿐이다(운영 DB 읽기 전용, 2026-11-17 13:05 KST, `events` 전체 기간, 파주201: 실제 숙소 이벤트 2건뿐 — 2026-08-06 입실·퇴실, 실패 0). 사용자 지시: 명시 판정 기록이 생기기 전까지 **점수·비율에서만** 빼고, 실제 감지된 실패(배지·"실패 N건")와 반복·쏠림·연속 패턴은 유지한다 — `rateEligibility`와 `observedFailCount`를 나누고 `reportingService` 데이터 경로까지 바꾸는 변경안은 [report-architecture 6-1](report-architecture.md#safety-index-exclusions) | 변경안 승인(사용자, 2026-11-17) → 다음 작업으로 구현·테스트·리뷰·푸시. 지금 화면은 아직 네 지표를 넣어 계산한다 |
 | [RF-10](#rf-10) 기존 보고서 TODO 2개 검토 | 🟢 이번 기준·코드·회귀·운영 반영 완료 · 2026-11-10 | 사용자 지난 모든 기간 동일 안내 선택 / 개발자 | DEMO 수치 오류 4개·승인 노쇼 기준의 4개 실패를 각각 먼저 재현·해결. TODO 2개 일반 회귀 전환, 전체 2,811개 통과·TODO 0·UTC 관련 134개 통과. `f4903be`·`2381a38` READY·CI 성공. [근거](#rf10-review) | 집계·실패 건수·기본 HYBRID·선택 범위 유지. 요약·운영 화면·데이터 전체의 모든 잠재적 중복까지 해결한 것으로 확대하지 않음 |
 | [RF-11](#rf-11) REAL/SIMULATED·권한 필터 감사 | 🟢 1차 읽기 전용 감사 / 사용자 감사만 선택 · 2026-11-13 | 개발자 / 사용자 “2번”, 가상 숙소는 Pi·IoT·실제 캘린더·실제 알림 없음 | 기본 HYBRID·운영자 숙소 교집합·REAL 외부 동작·기계 인증 경로를 표로 대조. 격리 SQL에서 가상 이벤트의 알림 함수 호출 가능성을 확인했으나 **이벤트 처리 코드 미수정**. [결과](#rf11-audit) | 실제 운영에 가상 Pi가 있거나 알림이 발송됐다는 판정이 아님. 실제 Vercel 설정·모든 권한/출처 조합·별도 공개 앱 등록의 신원 검증 전체는 이번 범위 밖 |
 | [RF-12](#rf-12) 현재 DB 참조·무결성 검수 | 🟢 읽기 전용 검수 완료 · 2026-11-12 | 개발자(Claude) / 사용자 DB 읽기 허락 | 운영 DB `BEGIN READ ONLY`: 테이블 9·FK 10개 모두 검증(미검증 제약 0), 기존 검수기 오류 0·경고 15(D-032 레거시), 작업↔예약 날짜 불일치·같은 날 중복·취소된 예약에 묶인 작업 0. 결함 1건 → [RF-17](#rf-17) 수정, 결정 2건 → [RF-18](#rf-18)·[DEC-06](#dec-06). ERD `.uml` 재생성. [결과](#rf12-result) | 쿼리 범위·마스킹·한계 기록 완료. KV·Pi·Google 캘린더 쪽 대조와 이벤트 내용 정합성은 범위 밖 |
@@ -163,7 +163,7 @@ Mermaid 도식에 같은 색상을 적용했다. 색을 표시하지 않는 Mark
 | <a id="rf-20"></a>**RF-20** 매일 Airbnb 예약 가져오기 | 🟢 코드·시나리오 검증·리뷰 2회 · 2026-11-12 | 사용자 결정("1번 좋다. 추가·삭제·수정을 다 대응 가능한지 심도있게 검토") / 개발자(Claude) | 아침 8시(다른 일보다 먼저)·밤 10시(요청 작업 직전)에 예약을 가져온다. 예전엔 대시보드가 열려 있을 때·"예약 확정" 메일·수동으로만 돌아 화면을 안 열면 취소·날짜 변경이 반영되지 않았다. 예약 가져오기를 화면 API에서 공용 모듈로 옮기고(내용 그대로), 숙소 하나의 오류가 다른 숙소를 멈추지 않게 했다. 추가·변경·취소 대응 검토는 [결과](#rf20-result) | 실제 코드로 추가·변경·취소 시나리오 8개(연습용 저장소), 전체 2,920개·격리 SQL·시나리오 161개·verify:all 통과, 변형 검출. `c4c6221` 운영 Ready(청소 API 정상 로드). **운영 확인(2026-11-13, 읽기 전용):** 아침 정기 작업 시간대 08:26 KST에 새 코드로 예약을 가져옴(마지막 확인 시각·기준 시각 일치), 이상 0 |
 | <a id="act-08"></a>**ACT-08** 문서 기준·테스트 계약 교차 감사 | ⚪ 대기 | 개발자 | QA-01·06·07 기준으로 분야별 정본, DEMO/운영 API 계약, 실제 구현을 검증하는 테스트 대조 | 문서별 기준 관계·미결 정책·테스트 공백을 추적표에 기록하고 수정 제안. 전체 감사의 남은 범위를 명시 |
 
-현장 작업은 위의 **1~5번 표**를 따른다. RF-14·RF-13은 단계별 운영 반영·CI 확인 완료, RF-11은 사용자 선택에 따라 감사만 기록했다. RF-05는 RF-05.4(실제 배정 담당자 검사, 사용자 선택)로 마쳤다. 현장 1~5번이 사용자 확인 대기라 RF-21(워처 노출)을 먼저 반영했고(2026-11-16 완료), RF-24(중복 Vercel 프로젝트)는 사용자 결정으로 삭제했고(2026-11-16), RF-23·RF-22·DEC-02를 마쳤다(2026-11-17). RF-25는 측정 범위(0 / 5)·이력 계약 보완을 기다린다(스키마·마이그레이션·과거 데이터 처리안은 그 뒤 승인). RF-26은 네 지표를 측정에서 빼기로 했고 코드 반영을 기다린다. 통합 문서 갱신(TR-05·MD-R05·MD-R20·허브 링크)은 Codex 문서 작업으로 따로 한다. 다음 실행 ID는 **DEC-04**, 그 뒤 ACT-08 순이다. RF-16·DEC-06·RF-18 등 완료 항목을 대기로 되돌리지 않는다. 로그인 후 실제 HTTP·업무 종단 검증은 별도 한계이며 SMS 미설정은 선행 조건이 아니다.
+현장 작업은 위의 **1~5번 표**를 따른다. RF-14·RF-13은 단계별 운영 반영·CI 확인 완료, RF-11은 사용자 선택에 따라 감사만 기록했다. RF-05는 RF-05.4(실제 배정 담당자 검사, 사용자 선택)로 마쳤다. 현장 1~5번이 사용자 확인 대기라 RF-21(워처 노출)을 먼저 반영했고(2026-11-16 완료), RF-24(중복 Vercel 프로젝트)는 사용자 결정으로 삭제했고(2026-11-16), RF-23·RF-22·DEC-02를 마쳤다(2026-11-17). RF-25는 주간 결산 실행 시각·빈방 이벤트 이름을 정했고(2026-11-17), 상태·중복 방지 초안의 검토를 기다린다(스키마·마이그레이션·과거 데이터 처리안은 그 뒤 승인). RF-26은 사용자가 변경안과 구현을 승인했다(2026-11-17). DEC-04는 조사를 마쳤고 Pi→서버→DB 현재 운영 검증을 기다린다([결과](#dec04-result)). 통합 문서 갱신(TR-05·MD-R05·MD-R20·허브 링크)은 Codex 문서 작업으로 따로 한다. 다음 실행 ID는 **RF-26**(구현), 그 뒤 DEC-04의 Pi→서버→DB 현재 운영 검증(읽기 전용 먼저) → ACT-08 순이다. 한 번에 한 ID씩 조사 → 변경 범위 확정 → 구현 → 테스트·리뷰 → 문서 상태 갱신 → 커밋·푸시·운영 확인까지 끝낸 뒤 다음 ID로 넘어간다. RF-16·DEC-06·RF-18 등 완료 항목을 대기로 되돌리지 않는다. 로그인 후 실제 HTTP·업무 종단 검증은 별도 한계이며 SMS 미설정은 선행 조건이 아니다.
 
 <a id="act15-timeline"></a>
 
@@ -444,9 +444,9 @@ CLEANING_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:PORT/propos_delivery_
 
 | 사용자 시나리오·계층 | 확인한 현재 계약 | 근거 |
 | --- | --- | --- |
-| 빈 숙소에서 ‘정비 시작’, 이후 ‘정비 완료’ 선택 | 화면은 공통 운영 API로 요청하고 지정 Pi가 직렬 처리한다. Pi가 상태 전이·이벤트 전송을 담당한다 | [VacantCard](../src/components/v2/PropertyDetailView.jsx#L247) → [RoomStateApp](../src/components/v2/RoomStateApp.jsx#L626) → [중계 API](../api/monitoring/[...slug].js#L39) → [수동 Pi 처리](../server/occupancyWatcher.js#L341), [s101](../tests/unit/s101.manual-watcher-events.test.js) |
+| 빈 숙소에서 ‘정비 시작’, 이후 ‘정비 완료’ 선택 | 화면은 공통 운영 API로 요청하고 지정 Pi가 직렬 처리한다. Pi가 상태 전이·이벤트 전송을 담당한다 | [VacantCard](../src/components/v2/PropertyDetailView.jsx#L248) → [RoomStateApp](../src/components/v2/RoomStateApp.jsx#L626) → [중계 API](../api/monitoring/[...slug].js#L39) → [수동 Pi 처리](../server/occupancyWatcher.js#L750), [s101](../tests/unit/s101.manual-watcher-events.test.js) |
 | Pi가 실제 정비 시작·완료를 반영 | 공통 전이 함수로 각각 `VACANT/MAINTENANCE`, `VACANT/CLEANING_FINISHED`가 된다. 기존 영속 전송 큐를 거쳐 `/api/events/write`에 발생 시각·출처를 저장한다 | [공통 전이](../src/domain/room-state/roomStateDomain.js#L22), [전송 큐](../server/occupancyWatcher.js#L416), [수신 API](../api/events/[...slug].js#L91), [INSERT](../src/infrastructure/eventRepository.js#L21) |
-| 캘린더·모션으로 정비 필요·시작·완료를 자동 감지 | 문서의 자동 감지·운영자 확인 시나리오는 설계 단계다. 조사한 감지기·워처에서 이 자동 발행 경로는 확인되지 않았다 | [상태 정본 3A](room-state-machine.md#L76), `occupancyMonitor`·`sensorEventGenerator`·`suspicionTracker`·`occupancyWatcher` 검색 |
+| 캘린더·모션으로 정비 필요·시작·완료를 자동 감지 | 문서의 자동 감지·운영자 확인 시나리오는 설계 단계다. 조사한 감지기·워처에서 이 자동 발행 경로는 확인되지 않았다 | [상태 정본 3A](room-state-machine.md#L77), `occupancyMonitor`·`sensorEventGenerator`·`suspicionTracker`·`occupancyWatcher` 검색 |
 | 구형 `POST /api/events`로 정비 이벤트 수신 | 저장 후 상태를 종결하고 `skipped`로 응답한다. `UNIMPLEMENTED_EVENT_TYPES`는 이 입구의 후처리 분기에서 사용한다 | [등록표](../src/config/eventTypes.js#L43), [구형 처리기](../src/application/eventService.js#L20) |
 | 지금·오늘 보고서 조회 | 현재 조회 목록은 정비 시작·완료를 포함하지 않는다. 두 이벤트의 Pi·DB 반영을 확인한 뒤 조회해도 상태 복원에서 누락된다 | [조회 목록](../src/domain/roomStateFromEventsDomain.js#L12), [실제 SQL](../src/infrastructure/eventRepository.js#L78), [보고서 진입점](../src/application/reportingService.js#L180) |
 | 지난 기간의 정비 건수 조회 | 현재 `countPeriodEvents`에 정비 전용 카운터가 없다. 문서의 GLOBAL 집계도 예약 항목이다. 정비 집계의 신규 요구사항은 별도 기준 수립 대상이다 | [기간 집계](../src/domain/reportingDomain.js#L86), [집계 분류표](report-architecture.md#L140) |
@@ -488,7 +488,7 @@ CLEANING_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:PORT/propos_delivery_
 | [eventRepository](../src/infrastructure/eventRepository.js#L79) | 최신 주요 이벤트의 발생 시각·서버 기록 시각으로 기준을 정하고, 후속 이벤트도 두 시각을 비교해 조회. 같은 발생 시각의 뒤쪽 준비 이벤트가 누락되는 사례까지 검증 |
 | [단위 s48](../tests/unit/s48.current-state-from-events.test.js#L47) | 첫 정비 시작·완료·준비 후속 전이 3개 추가. 목록 검사는 기존 4종의 존재와 승인한 정비 2종을 명시하고 세부 이벤트와의 중복을 검증 |
 | [SQL s119](../tests/integration/s119.maintenance-state-sql.test.js) | 실제 스키마·`insertEvent`·현재 보고서·월간 보고서를 호출하는 10개 시나리오와 상위 테스트. 정비·첫 기록·완료·월 경계·준비 실패·지연 도착·같은 발생 시각·중복·HYBRID·숙소 선택 검증 |
-| [상태 정본](room-state-machine.md#L76)·[보고서 구조](report-architecture.md#L121)·[보고서 설계](reporting-feature-design.md#L315) | 수동 Pi·전이 함수·현재 상태 복원·자동 감지·구형 입구 후처리의 구현 범위를 구체화 |
+| [상태 정본](room-state-machine.md#L77)·[보고서 구조](report-architecture.md#L121)·[보고서 설계](reporting-feature-design.md#L315) | 수동 Pi·전이 함수·현재 상태 복원·자동 감지·구형 입구 후처리의 구현 범위를 구체화 |
 
 단위 테스트 4개와 SQL 시나리오 9개의 실패를 제품 코드 수정 전에 확인했다. 수정 후 같은 기대값이 통과했고 월간 공유 경로의 정상 사례 1개를 추가했다. s48의 ‘4종·총 14종’ 구조 검사는 승인한 주요 이벤트 확장을 반영해 구체적인 이벤트 목록·중복 검사로 바꿨다. 기존 상태별 기대값은 유지했다.
 
@@ -596,7 +596,7 @@ CLEANING_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:PORT/propos_delivery_
 | 실제 DB의 SIMULATED 배정 | `ASSIGNED` 99건 전부 담당자 NULL, `sim:` Google ID 99건. FK 검증 완료 상태와 별개로 **필수 담당자 관계가 빠진 상태**다. NULL은 FK 위반으로 잡히지 않는다 |
 | 담당자·FK | 담당자 총 5명(활성 3·비활성 2), 청소 작업의 숙소·예약·담당자 FK 3개 모두 검증 완료. 사용자 연락처·이름은 기록하지 않음 |
 | [검수기](../src/data/dataSimulator.js#L217) | 입력에 있는 담당자 참조의 존재는 검사하지만, `ASSIGNED/COMPLETED`에서 담당자·Google ID가 **둘 다 없을 때만** 경고한다. 가상 Google ID가 담당자 누락을 가린다 |
-| [생성기](../src/data/dataSimulator.js#L334) | 담당자 목록은 빈 배열, 배정에는 가상 Google ID만 생성. 고정 입력 2숙소/8예약으로 배정 5건·담당자 0건인데 `strictOk=true` 재현 |
+| [생성기](../src/data/dataSimulator.js#L342) | 담당자 목록은 빈 배열, 배정에는 가상 Google ID만 생성. 고정 입력 2숙소/8예약으로 배정 5건·담당자 0건인데 `strictOk=true` 재현 |
 | [seed](../scripts/seed-simulated-data.mjs#L107) | 담당자 테이블을 저장하지 않고 작업의 `assigned_cleaner_id`도 INSERT/UPDATE하지 않는다. 생성기만 바꿔서는 DB 관계가 복구되지 않는다 |
 | [Google 공통 배정](../server/cleaning/_calendarAssign.js#L34) | 실제 담당자 매칭 실패는 배정하지 않고 경고한다. 매칭되면 담당자 FK와 실제 이벤트 ID를 함께 저장한다 |
 | [수동 배정 PATCH](../api/cleaning/%5B...slug%5D.js#L1315) | REAL 대상에서 담당자·Google ID 둘 다 NULL도 허용한다. 현재 DB 21건은 정상이나 이 입구의 필수값 검증은 후속 회귀 대상이다. 이번 감사에서 동작을 바꾸지 않음 |
@@ -761,12 +761,13 @@ CLEANING_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:PORT/propos_delivery_
 - 1차: 이상 기준은 기능 설계에 있던 5가지를 정본으로 하고 측정할 수 있는 것부터 단계적으로 넣는다 / 자동 = 관리자·운영자 개입 없이 처리 / 기간 끝에 진행 중인 이상은 분모에만 / 주 지표는 안심지수, 자동화 개선율은 보조.
 - 2차(Codex 검토 반영, 1차를 고침): 옛 두 항목은 정본의 초기 측정 범위가 아니라 기준이 다른 과거 설계 후보이고, 지금 Pi 기록은 대응시키지 않으며 측정 범위는 0 / 5 / 이상 본체와 상태·개입 이력(append-only)을 나눈다 / 시각을 나눈다(4차에서 결과 시각 `period_start_at`·`period_end_at`·`data_cutoff_at`·`calculated_at`과 레코드 시각 `occurred_at`·`recorded_at`으로 정리) / 문서 소유를 나눈다(계산·계약 = report-architecture, 표시 = 기능 설계, 결정·상태 = 이 문서) / 폐기한 SQL·옛 분모는 폐기 이력만 남긴다.
 
-**결정 3의 적용 (3차, Codex 검토 반영):** 보고를 두 종류로 나눴다 — 기간이 끝난 뒤 내는 **완료 기간 보고**는 `period_end_at`의 상태로, 기간이 끝나기 전에 내는 **진행 중 스냅샷**은 `data_cutoff_at`의 상태로 판정하고 "22시 현재"처럼 기준 시각을 붙인다([6-1-1 보고 종류](report-architecture.md#automation-rate-report-kinds)). 지금 있는 밤 10시 저녁 결산은 끝나지 않은 "오늘"을 계산하므로 진행 중 스냅샷이다. 결정 3은 아래 1번(주간 결산 실행 시각)이 정해져야 확정된다.
+**결정 3의 적용 (3차, Codex 검토 반영):** 보고를 두 종류로 나눴다 — 기간이 끝난 뒤 내는 **완료 기간 보고**는 `period_end_at`의 상태로, 기간이 끝나기 전에 내는 **진행 중 스냅샷**은 `data_cutoff_at`의 상태로 판정하고 "22시 현재"처럼 기준 시각을 붙인다([6-1-1 보고 종류](report-architecture.md#automation-rate-report-kinds)). 지금 있는 밤 10시 저녁 결산은 끝나지 않은 "오늘"을 계산하므로 진행 중 스냅샷이다. 주간 결산이 (가)로 정해져(아래 1번) 결정 3이 확정됐다 — 주간·월간 결산은 완료 기간 보고로 `period_end_at`에서 판정한다.
 
-**남은 결정·계약 (스키마 전에 정한다):**
-1. **주간 결산 실행 시각(사용자 결정):** 예전 설계 "일요일 22시 + `last_week`"는 맞지 않는다 — 일요일 22시엔 이번 주가 끝나지 않았고 `last_week`는 그 전 주(월~일)다. (가) 월요일 0시 이후 실행해 `last_week` 완료 기간 보고 / (나) 일요일 22시 유지하고 `this_week` "22시 현재" 스냅샷. 주간·월간 결산은 아직 정기 작업이 없다([8절](report-architecture.md#slack-report-mapping)).
-2. **빈방 에너지 낭비 이벤트 이름(사용자 결정):** 코드에 있는 `vacant_energy_waste_detected`(이름·읽는 코드만, 만드는 코드 없음)를 쓸지 새 이벤트를 만들지. 옛 `vacancy_energy_alert` 설계는 폐기 표시했다([7절](report-architecture.md#vacant-energy-design)).
-3. **이상 중복 판정 규칙(계약 보완):** 유형별 중복 방지 키, 재발·재개 기준(같은 숙소에서 반복 감지된 것을 같은 이상으로 묶을지 새 이상으로 셀지), 같은 이상을 동시에 만들려 할 때의 멱등성. `anomaly_id`와 추가만 하는 이력만으로는 정해지지 않는다.
+**결정 (2026-11-17, 사용자):**
+1. **주간 결산 실행 시각 = (가):** 월요일 00:00 KST 이후에 실행해 `last_week` = [직전 월요일 00:00, 이번 월요일 00:00) KST를 완료 기간 보고로 낸다. 일요일 22시 스냅샷안은 쓰지 않는다. 정기 작업은 아직 없다([8절](report-architecture.md#slack-report-mapping)).
+2. **빈방 에너지 낭비 이벤트 = 기존 `vacant_energy_waste_detected` 재사용.** 같은 뜻의 새 이벤트(동의어)는 만들지 않는다. 옛 `vacancy_energy_alert` 설계는 폐기([7절](report-architecture.md#vacant-energy-design)). 감지기는 아직 없다.
+
+**남은 계약 — 초안을 정본에 적었다(사용자 검토 대기):** [상태와 중복 방지](report-architecture.md#automation-rate-lifecycle). 사용자 지시(2026-11-17)대로 해결된 이상은 다시 열지 않고(안정화 시간 안에는 미해결 유지, 해결 확정 뒤 재발은 새 이상으로 연결), 미해결 종료 상태를 두고, `incident_key`(같은 사건)와 `source_event_key`(같은 감지 신호)를 나누고, 청소 미배정은 외부 예약 번호 대신 내부 청소 의무 식별자를 쓴다. 안정화 시간은 미확정 정책값이다. 아직 정할 것: 안정화 시간 값, 내부 청소 의무 식별자·내부 숙박 식별자를 어디서 발급할지(스키마). DB·코드는 바꾸지 않았다.
 
 **관련 발견 (코드는 바꾸지 않음):**
 - 지금 화면의 "이상"(체류 중 이상 상태 — 리스트 긴급 표시·요약의 "이상감지 N건", [`OCCUPIED_ISSUE_SUB_STATUSES`](../src/domain/reportingDomain.js#L22))은 지금 상태를 보여 주는 표시 기준이고 자동화 개선율의 분모와 다르다. 그 코드 주석이 폐기한 옛 6-1 문구("공실 에너지낭비는 별도 카운터")를 근거로 든다 — 자동화 개선율을 구현할 때 함께 정리한다.
@@ -775,6 +776,30 @@ CLEANING_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:PORT/propos_delivery_
 **문서 정리 기록:** 1차(`3ef0531`)에서 두 설계 문서의 "안심지수" 32곳을 문맥별로 나눠 옛 뜻 16곳을 자동화 개선율로 바꿨다. 2차에서 이상 기준 표·계산·데이터 계약을 report-architecture 6-1-1로 옮기고, 기능 설계에는 표시 규칙과 링크만 남겼다.
 
 **다음(별도):** 통합 문서(`documentation_traceability.md`의 TR-05, `refactoring_mdfile.md`의 MD-R05·MD-R20, `design_overview.md` 허브 링크)는 Codex 문서 작업으로 따로 갱신한다 — 이번에는 손대지 않았다.
+
+<a id="dec04-result"></a>
+
+### DEC-04 · 운영 시나리오 S01~S05의 실제 범위 · 2026-11-17 (Claude, 읽기 전용 조사)
+
+**등록 문서의 문제 (확인함):** [`docs/scenarios.yaml`](scenarios.yaml)의 `component`와 이를 검사하는 `npm run verify:scenarios`([`scripts/verify-scenarios-sync.mjs`](../scripts/verify-scenarios-sync.mjs#L162))는 상위 복사본 `src/components/D1AutomationPanel.jsx`·`S02~S05…Panel.jsx`를 본다. 실제 앱([`App.jsx`](../src/components/App.jsx#L11))이 불러오는 것은 `src/components/v1/` 안의 같은 이름 파일이고, 상위 복사본은 어디에서도 불러오지 않는다. 지금은 두 벌이 import 경로만 다르고 내용이 같지만, 실제로 쓰는 v1 파일이 바뀌어도 검사는 통과한다.
+
+**진입 경로:** 다섯 시나리오의 시작 함수(`runD1Automation`·`handleDoorUnlocked`·`pollAll`·`handleCheckout`·`runMonthlySettlement`)는 v1 화면에서만 불린다 — 기본 화면(Room State) → "← 홈" → 랜딩 → "커맨드 센터 열기" → 커맨드 센터의 시나리오 열기. 서버·Pi·정기 작업은 이 함수들을 부르지 않는다. v1 화면은 목업 또는 브라우저 저장값으로 돌고, D-1 화면의 "실제 HA 모드"도 HA 알림 생성과 집 TV 조명·플러그 켜기만 한다(PIN 발급·게스트 메시지 아님).
+
+**운영 DB 수치 (읽기 전용, 2026-11-17 13:05 KST 조회, 실제 숙소 = 파주201 1곳):**
+- `events`(전체 기간, `data_origin='REAL'`): 2건 — `check_in_detected` 1건(2026-08-06 19:00 KST), `check_out_detected` 1건(2026-08-06 23:00 KST). 그 뒤 실제 이벤트 0건, 이상·실패 이벤트 0건.
+- `cleaning_jobs`(전체 기간, 실제 숙소): 36건 — 배정 완료 21 · 배정 실패 6 · 요청 전 9, 마지막 변경 2026-11-12. 청소 요청 알림 67건(2026-08-27 ~ 2026-11-15). 실제 예약 24건, 마지막 갱신 2026-11-17.
+
+구현 상태(코드 경로가 있는가)와 현재 운영 검증 상태(운영 DB에서 지금 동작한다는 근거가 있는가)를 나눈다. S01~S03은 운영 검증 전이라 분류를 확정하지 않는다.
+
+| 시나리오 | 구현 상태 | 현재 운영 검증 상태 (위 운영 DB 수치 기준) | 없는 것 |
+| --- | --- | --- | --- |
+| S01 체크인 전날 | Pi 워처의 입실 전 준비(`PreStayOptimizationController`, DEC-01) 코드 있음. v1 데모 화면 있음 | **미검증** — 준비 관련 실제 이벤트 0건, 현장 연결 확인 대기(DEC-01) | PIN 발급, 웰컴 메시지, 매일 18:00 정기 작업 |
+| S02 체크인 당일 | Pi의 입실 감지 → `/api/events/write` 경로 있음. v1 데모 화면 있음 | **미검증** — 실제 입실 기록은 2026-08-06 1건, 그 뒤 0건 | 입실 장면 실행, 게스트 채팅 |
+| S03 체류 중 | Pi의 이상 감지(연기·소음·온습도·문 열림·에너지) → 저장·Slack 경로 있음. v1 데모 화면 있음 | **미검증** — 실제 이상 기록 0건 | AI 답장(초안 함수만) |
+| S04 퇴실·청소 | 청소 자동화(예약 가져오기 → 청소 요청 알림 → 구글 캘린더 배정 → Slack) 있음. Pi 퇴실 감지 경로 있음. v1 데모 화면 있음 | **청소 자동화: 검증됨** — 일정 36건·알림 67건(2026-08-27 ~ 2026-11-15)·예약 갱신 2026-11-17. **퇴실 감지: 미검증** — 2026-08-06 1건, 그 뒤 0건 | PIN 만료, 저장되는 체크리스트(v2 화면의 체크는 저장되지 않음) |
+| S05 수익 정산 | **운영 구현: 없음**(서버·DB·정기 작업 어디에도 정산 없음) · **데모 구현: 있음**(v1 정산 화면 + `settlementService.runMonthlySettlement`, 목업 플랫폼 데이터, 커맨드 센터에서 진입) | 해당 없음(운영 구현 없음) | 실제 플랫폼 수익 연동 |
+
+**정해 주셔야 할 것:** ① 운영 검증 — S01~S03과 S04 퇴실 감지는 운영 DB에 2026-08-06 이후 실제 기록이 없다. Pi가 감지한 이벤트가 지금 운영 DB까지 오는지 먼저 확인해야 "부분 운영"인지 "구현만 있음"인지 정할 수 있다(Pi 확인이 필요하면 사용자 로그인 필요) ② 그 뒤 분류 확정 ③ 레지스트리 보완 — `component`를 실제로 불러오는 v1 파일로 바꾸거나 쓰지 않는 상위 복사본을 정리하고, 시나리오마다 운영 경로와 상태(현재 운영·부분 운영·향후, 데모 구현 여부)를 적고, 검사 스크립트를 맞춘다(코드 변경, 승인 필요). v1 화면 자체를 둘지는 D-013에서 미결이다.
 
 <a id="rf22-result"></a>
 
@@ -1016,7 +1041,7 @@ flowchart TB
 - **기대 결과:** 감지한 문제, 자동 대응한 내용, 해소 여부가 해당 숙소 기록으로 이어진다. 예약 시각에 따른 예측과 센서로 확인한 사실을 구분한다.
 - **시스템의 역할:** 감지·의심/확인·상태 전이·기록·레포트의 책임을 각각 추적한다.
 - **확인 상태:** 🟡 현재 WebSocket 워처와 문서의 폴링/시나리오 서비스 관계를 더 확인해야 한다. 안심지수는 운영 지표 성공률 평균으로 확정했고([DEC-02](#dec02-result)), 이상 자동 해결 비율은 자동화 개선율로 나눴다 — 정본 기준 감지기가 없어 측정 범위는 0 / 5다([RF-25](#rf-25)).
-- **연결 데이터·근거:** [DATA-05 이벤트](#data-05), [이벤트 감지 설계](event-detection-design.md#L21), [RF-04](#rf-04), [DEC-02](#dec-02), [RF-25](#rf-25).
+- **연결 데이터·근거:** [DATA-05 이벤트](#data-05), [이벤트 감지 설계](event-detection-design.md#L22), [RF-04](#rf-04), [DEC-02](#dec-02), [RF-25](#rf-25).
 
 <a id="sc-06"></a>
 
@@ -1045,7 +1070,7 @@ flowchart TB
 - **기대 결과:** SIMULATED도 REAL과 같은 테이블·키·필수 관계·추적성을 가진다. 배정 완료 데이터라면 화면에서 담당자를 찾을 수 있어야 한다. 실제 알림·외부 배정을 실행하지 않는다.
 - **시스템의 역할:** 생성·검수·저장 계약을 대조하고, 검수 통과가 보장하는 범위를 명확히 한다. DEMO fixture와 DB에 저장하는 SIMULATED를 구분한다.
 - **확인 상태:** 🔴 현재 검수기는 담당자 관계가 불충분한 배정 데이터를 놓칠 수 있다. 🟡 필수 조건을 [DEC-03](#dec-03)에서 정한 뒤 검수기·생성기를 개선한다.
-- **연결 데이터·근거:** [RF-05](#rf-05), [검수 조건](../src/data/dataSimulator.js#L217), [생성 구조](../src/data/dataSimulator.js#L334).
+- **연결 데이터·근거:** [RF-05](#rf-05), [검수 조건](../src/data/dataSimulator.js#L217), [생성 구조](../src/data/dataSimulator.js#L342).
 
 <a id="sc-09"></a>
 
@@ -1092,9 +1117,9 @@ flowchart TB
 - [room-state-machine.md:1](room-state-machine.md#L1), [106](room-state-machine.md#L106), [164](room-state-machine.md#L164): 상태 정본, 준비 시작·완료 의미.
 - [data-architecture-and-simulator.md:3](data-architecture-and-simulator.md#L3), [관계 모델](data-architecture-and-simulator.md#L52): 출처·정본 저장소·관계·레거시 보존.
 - [data-storage-design.md:36](data-storage-design.md#L36), [130](data-storage-design.md#L130): 이벤트 스키마와 저장 파이프라인.
-- [report-architecture.md:7](report-architecture.md#L7), [758](report-architecture.md#L758), [822](report-architecture.md#L822): 집계·범위·실패 목록 계약.
+- [report-architecture.md:7](report-architecture.md#L7), [826](report-architecture.md#L826), [890](report-architecture.md#L890): 집계·범위·실패 목록 계약.
 - [reporting-feature-design.md:8](reporting-feature-design.md#L8), [366](reporting-feature-design.md#L366): 화면/집계 문서의 역할 및 테스트 전략.
-- 참조 문서: [이벤트 감지](event-detection-design.md#L21), [청소 자동화](cleaning-automation-design.md), [문구 기준](content-guide.md), [현재 작업 이력](current-task.md#L3), [이전 인수인계](handoff-to-codex.md#L1).
+- 참조 문서: [이벤트 감지](event-detection-design.md#L22), [청소 자동화](cleaning-automation-design.md), [문구 기준](content-guide.md), [현재 작업 이력](current-task.md#L3), [이전 인수인계](handoff-to-codex.md#L1).
 
 아직 확정되지 않은 범위: S01~S05의 현재 운영 적용 범위, 자동화 성공의 관측 근거(자동화 개선율의 정의는 [RF-25](#rf25-contract)에서 확정했지만 이를 남기는 기록은 아직 없다). 안심지수의 정의는 [DEC-02](#dec02-result)에서 확정했다(2026-11-17). 과거 작업·인수인계는 이력 근거이며 현재 동작의 정본으로 자동 승격하지 않는다.
 
@@ -1167,10 +1192,10 @@ flowchart TB
 
 - 로컬과 운영은 같은 혼합 데이터 서비스를 사용한다. `HYBRID`가 기본이며 파주201만 REAL이다. SIMULATED도 같은 테이블·키·관계·추적 계약을 따른다. DEMO는 명시적 fixture 프로필이다. [설정 근거](../src/config/dataProfile.js#L19)
 - 저장소는 Postgres의 숙소·예약·작업·이벤트가 정본이다. Pi의 숙소 메타데이터와 브라우저 캐시는 예약·청소 정본을 대체하지 않는다.
-- 현재 `property_id`는 이름 기반 식별 계약이다. 이름을 정리하거나 UUID로 바꾸는 작업은 단순 중복 제거로 실행하지 않는다. [기존 식별 계약](report-architecture.md#L843)
+- 현재 `property_id`는 이름 기반 식별 계약이다. 이름을 정리하거나 UUID로 바꾸는 작업은 단순 중복 제거로 실행하지 않는다. [기존 식별 계약](report-architecture.md#L911)
 - 예약은 Airbnb iCal 원본, 배정 담당자·확정 청소 시각은 Google 예약 원본을 근거로 DB에 반영한다. 퇴실 11시와 청소 12~15시를 구분한다. 기존 담당자·시간 복구는 과거 완료 이력이며 재적용하지 않는다. [기존 복구 이력](current-task.md#L3)
 - 조회의 숙소 선택 범위와 출처 필터는 서로 다른 조건이다. `null` 전체·`[]` 선택 없음·목록 지정이라는 계약에 인증된 숙소 범위를 함께 적용한다.
-- HYBRID 조회와 REAL만 외부 발송하는 정책은 양립할 수 있다. SIMULATED의 저장 구조를 다르게 만들거나 외부 실제 알림을 보내야 한다는 뜻이 아니다. [발송 차단](../api/cleaning/%5B...slug%5D.js#L422), [Cron REAL 범위](../api/cron/%5B...slug%5D.js#L143)
+- HYBRID 조회와 REAL만 외부 발송하는 정책은 양립할 수 있다. SIMULATED의 저장 구조를 다르게 만들거나 외부 실제 알림을 보내야 한다는 뜻이 아니다. [발송 차단](../api/cleaning/%5B...slug%5D.js#L434), [Cron REAL 범위](../api/cron/%5B...slug%5D.js#L141)
 
 ### 저장소와 관계
 
@@ -1226,7 +1251,7 @@ S01~S05는 기존 레지스트리 ID다. 아래 연결은 확인된 부분까지
 | [SC-02](#sc-02) · 실제 예약 입력·갱신 | `property_cleaning_config` → `property_reservations` → `cleaning_jobs` | [iCal 동기화:733](../api/cleaning/%5B...slug%5D.js#L733), [수동 진입:922](../api/cleaning/%5B...slug%5D.js#L922) | `RoomStateApp` 동기화 → 리스트·상세 | `s84`, `s87`, `s88`. 반복 실행·오류 시 기존 관계 보존을 확인할 대상 |
 | [SC-06](#sc-06) · 배정·청소 시각 반영 | Google 이벤트 → 작업의 담당자 FK·시작·종료; 퇴실 키 유지 | [Webhook:610](../api/cleaning/%5B...slug%5D.js#L610), [Scan:1240](../api/cleaning/%5B...slug%5D.js#L1240), 공통 Calendar 도메인 | 리스트·상세 타임라인 | `s85`, `s88`, `s89`, `s90`. 과거 복구 결과와 현재 운영 상태는 구분 |
 | [SC-04](#sc-04) · 이벤트 수집 | Pi → `events`; 출처·중복 키 | [두 수신 경로:66](../api/events/%5B...slug%5D.js#L66), [저장소:21](../src/infrastructure/eventRepository.js#L21) | 현재 상태·이벤트 기록·레포트 | `s18`, `s24`, [s93](../tests/unit/s93.event-provenance.test.js#L78). 출처 보존 회귀·운영 코드 반영 확인. 실제 장치 이벤트 전송은 ACT-05·06 |
-| [SC-03](#sc-03) · 준비 성공·실패 레포트 | 구형 A안: 기간 내 준비 ↔ 완료/다음 준비/입실. 신규 `sensor-v1`: 같은 숙소·제어 회차 ↔ 센서 완료/실패/취소 | [공통 회차:89](../src/domain/metricDrilldownDomain.js#L89), [집계:131](../src/application/reportingService.js#L131), [구형 기간 밖 조회:154](../src/infrastructure/eventRepository.js#L154), [센서 회차 조회:174](../src/infrastructure/eventRepository.js#L174) | KPI·실패 상세·월간 문제·패턴 | [s94](../tests/unit/s94.pre-stay-consistency.test.js#L28), [s95](../tests/integration/s95.pre-stay-context.test.js#L20), [s98](../tests/unit/s98.sensor-preparation-report.test.js). 두 버전의 로컬 일치 검증 완료, 실제 Pi 경로는 미검증 |
+| [SC-03](#sc-03) · 준비 성공·실패 레포트 | 구형 A안: 기간 내 준비 ↔ 완료/다음 준비/입실. 신규 `sensor-v1`: 같은 숙소·제어 회차 ↔ 센서 완료/실패/취소 | [공통 회차:89](../src/domain/metricDrilldownDomain.js#L89), [집계:131](../src/application/reportingService.js#L131), [구형 기간 밖 조회:156](../src/infrastructure/eventRepository.js#L156), [센서 회차 조회:176](../src/infrastructure/eventRepository.js#L176) | KPI·실패 상세·월간 문제·패턴 | [s94](../tests/unit/s94.pre-stay-consistency.test.js#L28), [s95](../tests/integration/s95.pre-stay-context.test.js#L20), [s98](../tests/unit/s98.sensor-preparation-report.test.js). 두 버전의 로컬 일치 검증 완료, 실제 Pi 경로는 미검증 |
 | [SC-08](#sc-08) · SIMULATED 데이터 검수·생성 | 같은 숙소·예약·작업·이벤트 구조 | [검수기:97](../src/data/dataSimulator.js#L97), [생성기:331](../src/data/dataSimulator.js#L331), CLI·seed 어댑터 | 일반 HYBRID 화면; DEMO는 별도 fixture | `s71`, `s72`. 배정 담당자·추적의 검수 공백은 [RF-05](#rf-05) 참조 |
 
 추적표 보완이 필요한 이유: 레지스트리는 최상위 `src/components/S0X`를 가리키지만 루트는 S01~S05에 v1 패널을 선택하고 기본 진입은 `RoomStateApp`이다. [App:79](../src/components/App.jsx#L79), [115](../src/components/App.jsx#L115), [169](../src/components/App.jsx#L169). 파일 이름이 비슷하다고 현재 운영과 같은 실행 경로라고 인정하지 않는다. `verify:scenarios`의 등록/연결 검증과 실제 운영 도달성 검증을 분리한다. [검증 스크립트:72](../scripts/verify-scenarios-sync.mjs#L72)
@@ -1241,21 +1266,21 @@ S01~S05는 기존 레지스트리 ID다. 아래 연결은 확인된 부분까지
 | --- | --- | --- | --- |
 | <a id="rf-01"></a>**RF-01** / 높음<br/>[SC-04](#sc-04) | 입력된 출처가 검증/전달/INSERT에서 빠져 추적이 끊겼음 | [검증기:27](../src/domain/eventValidation.js#L27), [API:88](../api/events/%5B...slug%5D.js#L88), [저장소:21](../src/infrastructure/eventRepository.js#L21), s93 | 수정 전 재현→수정 후 회귀 통과·운영 코드 반영을 [ACT-04](#act-04)에 기록. 과거 DB 행 복구는 미실행 |
 | <a id="rf-02"></a>**RF-02** / 높음<br/>[SC-03](#sc-03) · [SC-07](#sc-07) | 준비 2회·완료 1회인 같은 숙소에서 KPI 실패 1건/상세 0건. 다른 숙소의 완료가 전체 KPI 실패를 상쇄하기도 했음 | [공통 회차:89](../src/domain/metricDrilldownDomain.js#L89), [레포트 연결:131](../src/application/reportingService.js#L131), s94·s95 | A안 승인·수정·회귀·운영 코드 반영 근거 확보. 주·월 경계의 패턴 보정은 준비 지표에 한정. 실제 장치→보고서 대조는 [ACT-05](#act-05) |
-| <a id="rf-03"></a>**RF-03** / 중간<br/>[SC-03](#sc-03) | 문서의 이전 ‘시간 순서 무관’ 설명이 승인 A안과 달랐음 | [report-architecture:828](report-architecture.md#L828), [센서 회차 명세](pre-stay-optimization.md#prep-04) | 🟢 **정본 갱신** · 구형 A안과 신규 센서 회차의 연결·집계 차이를 명시. 과거 데이터를 소급 재분류하지 않음 |
+| <a id="rf-03"></a>**RF-03** / 중간<br/>[SC-03](#sc-03) | 문서의 이전 ‘시간 순서 무관’ 설명이 승인 A안과 달랐음 | [report-architecture:896](report-architecture.md#L896), [센서 회차 명세](pre-stay-optimization.md#prep-04) | 🟢 **정본 갱신** · 구형 A안과 신규 센서 회차의 연결·집계 차이를 명시. 과거 데이터를 소급 재분류하지 않음 |
 | <a id="rf-04"></a>**RF-04** / 중간<br/>[SC-05](#sc-05) · [SC-07](#sc-07) | ‘안심지수’ 문서는 자동 해결 비율, 현재 결과 요약·표는 운영 지표 평균을 사용. 지표의 목적·분모가 확정되지 않은 상태에서 계산만 합치면 의미가 달라짐 | [보고서 설계 0-2](reporting-feature-design.md#safety-index-display), [아키텍처 6-1](report-architecture.md#safety-index), [계산:68](../src/domain/operationalMetricsDomain.js#L68), [표:38](../src/components/v2/reporting/EventMatrixPanel.jsx#L38) | 🟢 **정의 확정** · 2026-11-17 [DEC-02](#dec02-result)(사용자): 안심지수 = 운영 지표 평균, 자동 해결 비율은 별도 지표 "자동화 개선율"([RF-25](#rf25-contract)) |
-| <a id="rf-05"></a>**RF-05** / 높음<br/>[SC-06](#sc-06) · [SC-08](#sc-08) | 초기 감사의 빈 담당자 목록 참조 검사 공백은 RF-05.1에서 수정했다. RF-05.2에서 생성기의 빈 담당자 목록·가상 Google ID와 seed 관계 공백을 실제 DB 집계까지 확인했다. RF-05.3은 연결 고정 수정, RF-05.4는 실제 숙소 배정의 담당자 검사다(사용자 선택) | [검수](../src/data/dataSimulator.js#L217), [생성](../src/data/dataSimulator.js#L334), [담당자 FK](../data/schema-cleaning.sql#L74), [이번 검증](#rf05-reference-validation) | 🟢 참조 존재 검사 보완·회귀 완료 / RF-05.2 감사 완료·SIMULATED 배정 99건 담당자 NULL 확인 — D-032대로 유지. RF-05.4로 실제 배정만 담당자 필수 경고 추가 |
+| <a id="rf-05"></a>**RF-05** / 높음<br/>[SC-06](#sc-06) · [SC-08](#sc-08) | 초기 감사의 빈 담당자 목록 참조 검사 공백은 RF-05.1에서 수정했다. RF-05.2에서 생성기의 빈 담당자 목록·가상 Google ID와 seed 관계 공백을 실제 DB 집계까지 확인했다. RF-05.3은 연결 고정 수정, RF-05.4는 실제 숙소 배정의 담당자 검사다(사용자 선택) | [검수](../src/data/dataSimulator.js#L217), [생성](../src/data/dataSimulator.js#L342), [담당자 FK](../data/schema-cleaning.sql#L74), [이번 검증](#rf05-reference-validation) | 🟢 참조 존재 검사 보완·회귀 완료 / RF-05.2 감사 완료·SIMULATED 배정 99건 담당자 NULL 확인 — D-032대로 유지. RF-05.4로 실제 배정만 담당자 필수 경고 추가 |
 | <a id="rf-06"></a>**RF-06** / 승인 코드 반영·현재 경로 감사 완료<br/>[SC-04](#sc-04) | 입력 검증·전송·호환성·인증은 기존 반영 완료. 최신 대조에서 현재 Pi는 `/write`, 구형 일반 주소는 404다. RF-06.4의 최종 UPDATE 실패는 구형 입구의 조건부 유지보수 기록으로 보존 | [최신 경로·격리 SQL 대조](event-ingestion-audit.md#rf-06-current-path-review), [반영 기록](event-ingestion-audit.md#rf-06-rollout), [API](../api/events/%5B...slug%5D.js#L65) | 🟢 현재 서비스 경로 감사 완료. 구형 입구 사용·재도입 시 별도 처리 단계·접수 기록과 함께 검토 |
 | <a id="rf-07"></a>**RF-07** / 높음<br/>[SC-03](#sc-03) | 워처와 브라우저 예측이 시간만으로 완료 상태를 만들던 문제. 실제 HA에서는 다른 숙소 장치·지역 날씨와 끊긴 센서도 확인됨 | [센서 명세](pre-stay-optimization.md), [컨트롤러](../src/application/preStayOptimizationController.js), [워처](../server/occupancyWatcher.js#L594), s96~s99 | 센서 목표 유지·영역 검증·정지·알림·생략의 구현·모의 검증·Pi/운영 코드 반영 근거 확보. 실제 연결·가동은 [ACT-02](#act-02)·[ACT-03](#act-03)·[ACT-05](#act-05)·[ACT-06](#act-06)·[ACT-07](#act-07) |
 | <a id="rf-08"></a>**RF-08** / 중간<br/>[SC-02](#sc-02) · [SC-09](#sc-09) | 시나리오 등록·화면 버전·현재 기본 앱 경로가 다름. 등록 검증 통과만으로 S01~S05의 운영 완결성을 인정할 수 없음 | [SEC-07](#sec-07)의 App/registry 연결 및 [실제 서비스 테스트:20](../tests/functional/s01.functional.test.js#L20) | 🟡 **운영 연결 확인 필요** · 연결 차이 확인, 전 시나리오 운영 도달성은 추가 감사 필요. 레거시 파일 삭제 승인 근거가 아님 |
 | <a id="rf-09"></a>**RF-09** / 낮음<br/>[SC-07](#sc-07) | 운영 지표 평균 계산이 요약과 표에 각각 존재. 현재 공식은 같지만 나중에 한쪽만 바뀔 위험 | [계산:68](../src/domain/operationalMetricsDomain.js#L68), [표:38](../src/components/v2/reporting/EventMatrixPanel.jsx#L38) | 🟢 **완료** · 2026-11-17 `e6b214a` — 표·요약이 `computeSafetyIndex` 하나를 쓴다([결과](#dec02-result)) |
-| <a id="rf-10"></a>**RF-10** / 중간<br/>[SC-07](#sc-07) | 지난달 노쇼 안내와 DEMO/운영 요약 일치가 아직 TODO. 전체 명령이 성공해도 두 기대 검증은 해결되지 않은 상태 | [계약 테스트:261](../tests/unit/s92.report-contract.test.js#L261), [274](../tests/unit/s92.report-contract.test.js#L274) | 🔴 **기존 TODO 미해결** · 직전 테스트에서도 확인된 기존 잔여 사항. 새 실패와 구분, 1차 개선에서 수정하지 않음 |
+| <a id="rf-10"></a>**RF-10** / 중간<br/>[SC-07](#sc-07) | (당시) 지난달 노쇼 안내와 DEMO/운영 요약 일치가 TODO였다. 전체 명령이 성공해도 두 기대 검증은 해결되지 않은 상태였다 | [계약 테스트:262](../tests/unit/s92.report-contract.test.js#L262), [275](../tests/unit/s92.report-contract.test.js#L275) | 🟢 **해소** · 2026-11-10 `2381a38` — 사용자 결정(지난 모든 기간에 같은 노쇼 안내)으로 TODO 2개를 일반 회귀로 바꿨다. 상태는 [작업 현황](#sec-02)의 RF-10 행 |
 | <a id="rf-15"></a>**RF-15** / 높음<br/>[SC-04](#sc-04) | 현재 운영과 일치하던 Pi 인증값이 공개 저장소의 과거 main 이력에 있었음. 유효성만으로 재사용을 권한 초기 안내 정정 | [이력 근거와 교체 결과](pre-stay-field-review.md#credential-rotation-result) | 🟢 현재 운영키 교체·Git 보호 완료. 운영 도메인 이전키 거절·새키 저장 전 검사 통과 확인. 과거 Git 이력 삭제와 전체 API 보안 감사는 수행한 것으로 표시하지 않음 |
 
 ### 이전 분석을 다시 해석한 사항
 
 - ‘이벤트 출처 누락’과 ‘준비 목록 불일치’는 발견 상태로만 남겨두면 부정확하다. 회귀 검증·운영 코드 반영 근거를 확보했으며, 과거 DB 행 복구와 실제 장치→보고서 검증은 이와 별개다. 현재 상태는 [SEC-02](#sec-02)를 따른다.
 - 과거 ‘더미 데이터 5개 테스트 실패’는 [과거 작업 기록](current-task.md#L36)이다. 직전 전체 결과의 현재 일반 실패는 0이며 기존 TODO 2개가 남았다. 과거 실패 개수를 현재 상태로 복사하지 않는다.
-- ‘청소 API 전체 무인증’이라는 [인수인계의 과거 주장](handoff-to-codex.md#L44)은 현재 코드의 결함으로 그대로 이월할 수 없다. 현재는 [requireScope 진입:1411](../api/cleaning/%5B...slug%5D.js#L1411)이 있다. 이것만으로 모든 공개 경로·운영 인증 설정이 안전하다고 단정하지도 않는다.
+- ‘청소 API 전체 무인증’이라는 [인수인계의 과거 주장](handoff-to-codex.md#L44)은 현재 코드의 결함으로 그대로 이월할 수 없다. 현재는 [requireScope 진입:1268](../api/cleaning/%5B...slug%5D.js#L1268)이 있다. 이것만으로 모든 공개 경로·운영 인증 설정이 안전하다고 단정하지도 않는다.
 - Google 청소 시각·담당자 복구와 11~12시 대기/12~15시 진행은 과거 적용·검증 이력이 있다. 이 작업을 ‘남은 리팩토링’으로 다시 실행하지 않는다. 현재 배포·실데이터 상태를 확인해야 한다면 읽기부터 시작한다.
 - `source_ref` 값이 일부 생성 데이터에서 예약 UID와 같아도 전역 예약 키 계약이 되는 것은 아니다. 수신 UUID·원본 참조·레거시 참조를 구분한다.
 
@@ -1313,7 +1338,7 @@ DEC-01은 사용자가 기준 구체화와 구현을 승인했다. DEC-02는 202
 | <a id="dec-01"></a>**DEC-01** · 기준 확정·실제 연결 대기 | [SC-03](#sc-03): 입실 전 사전 검사 후 필요한 IoT 제어 → 모든 지정 방의 실제 온습도 목표·5분 유지 확인. 준비 전 입실은 생략, 진행 중 입실은 계속. 중요 오류는 환경 장치 정지·운영자 실시간 알림. 예약 취소는 제외 | [명세·현재 구현·검증](pre-stay-optimization.md). 로컬 구현 뒤 실제 HA를 읽기 전용 확인했으며, 파주201 영역의 제어 장치 연결·센서 복구·날씨 위치·알림 수신 확인이 남아 있음 |
 | <a id="dec-02"></a>**DEC-02** · 🟢 확정 2026-11-17 | [SC-05](#sc-05)·[SC-07](#sc-07): ‘안심지수’로 이상 자동 해결률과 운영 성공률 평균 중 무엇을 보고 싶은가? 둘 다 필요하다면 명칭·위치·분모를 어떻게 구분하는가? | 사용자 확정: 안심지수 = 운영 지표 성공률 평균, 이상 자동 해결 비율 = 별도 지표 자동화 개선율. [결과](#dec02-result). RF-09 공통 함수 완료, 후속 [RF-25](#rf-25)·[RF-26](#rf-26) |
 | <a id="dec-03"></a>**DEC-03** · RF-05.2 대조 완료 / RF-05.4 실제 배정 검사(사용자 선택) | [SC-06](#sc-06)·[SC-08](#sc-08)의 배정 상태·담당자 FK·Google/수동 배정 원본 근거를 기존 사용자 요구·코드와 대조 | RF-05.2의 실제 DB·검수기·생성·seed 대조 완료. 담당자 FK와 원본 추적의 구분은 [감사 결과](#rf05-assignment-relations), RF-05.4는 [결과](#rf054-result) |
-| <a id="dec-04"></a>**DEC-04** · 우선 4 | 기존 S01~S05 중 현재 운영에 포함된 기능과 향후 기능은 무엇인가? [SC-02](#sc-02)부터 [SC-09](#sc-09)까지 해당 기능의 역할을 대조한다. | [SEC-07](#sec-07)의 시나리오마다 실제 진입·외부 어댑터·저장 결과·화면을 한 건씩 추적. 레지스트리 보완안부터 제시 |
+| <a id="dec-04"></a>**DEC-04** · 🟡 Pi→서버→DB 현재 운영 검증 대기 ([결과](#dec04-result)) | 기존 S01~S05 중 현재 운영에 포함된 기능과 향후 기능은 무엇인가? [SC-02](#sc-02)부터 [SC-09](#sc-09)까지 해당 기능의 역할을 대조한다. | [SEC-07](#sec-07)의 시나리오마다 실제 진입·외부 어댑터·저장 결과·화면을 한 건씩 추적. 레지스트리 보완안부터 제시 |
 
 ### 반복 사이클
 
@@ -1487,6 +1512,10 @@ ACT-01·ACT-04의 코드 반영을 다시 대기 작업으로 열지 않는다. 
 | 2026-11-17 | v0.59 (Claude) · RF-25 2차 사용자 지시(Codex 검토) 반영: 옛 두 항목은 과거 설계 후보·측정 범위 0/5, 이상 본체·이력(append-only) 분리, 시각 4개, 문서 소유 분리(계약 = report-architecture 6-1-1, 표시 = 기능 설계 0-2, 결정·상태 = 이 문서), 폐기 SQL·옛 분모는 폐기 이력만. RF-26 네 지표 측정 제외 결정 | 남아 있던 DEC-02 미결 문구 정리(SC-05·SC-07·업무 결정표·현재 위치). `3ef0531` Production SHA 일치·CI success. DB·코드·통합 루트 문서 변경 없음 |
 | 2026-11-17 | v0.60 (Claude) · RF-25 3차(Codex 검토 반영): 완료 기간 보고(`period_end_at`)와 진행 중 스냅샷(`data_cutoff_at`, "22시 현재") 구분, 옛 `vacancy_energy_alert` 설계 폐기·이름 결정 대기, 현재 템플릿을 "자동화 개선율 — (측정 중 0/5)"로 통일하고 숫자는 향후 예시로 분리, 중복·재발·멱등성을 남은 계약으로 기록 | 주간 결산 실행 시각과 빈방 이벤트 이름은 사용자 결정 대기. 리뷰 10건 반영(이벤트별 Auto/Manual 열 폐기, RF-09 상태, 줄 번호 링크 재정렬 등). DB·코드·통합 루트 문서 변경 없음 |
 | 2026-11-17 | v0.61 (Claude) · RF-25 4차(Codex 검토 반영): 시각을 결과 시각(`period_start_at`·`period_end_at`·`data_cutoff_at`·`calculated_at`)과 레코드 시각(`occurred_at`/`effective_at`·`recorded_at`)으로 나눔, 지금/향후 레포트 예시를 별도 블록으로 분리(수동 개입·절약 시간·자동 처리 사례는 향후 블록), 폐기된 빈방 이벤트 상세표를 짧은 폐기 기록으로 축소 | DB·코드·통합 루트 문서 변경 없음 |
+| 2026-11-17 | v0.62 (Claude) · 사용자 결정: 주간 결산 = 월요일 00:00 KST 이후 지난주 완료 기간 보고, 빈방 에너지 낭비 = 기존 `vacant_energy_waste_detected` 재사용(동의어 없음). RF-25 중복·재발·멱등성은 유형별 초안 검토 대기, RF-26은 코드 변경안 승인 대기 | `7e62648` Production SHA 일치·CI success. DB·코드·통합 루트 문서 변경 없음 |
+| 2026-11-17 | v0.63 (Claude) · 주간 범위 [직전 월요일 00:00, 이번 월요일 00:00) KST로 통일. RF-25 상태·중복 방지 초안(해결된 이상 재개 안 함·안정화 대기·미해결 종료·`incident_key`/`source_event_key`·내부 청소 의무 식별자) 정본 반영. RF-26 `rateEligibility`/`observedFailCount` 분리와 `reportingService` 데이터 경로 변경안. DEC-04 조사 결과(등록 문서가 상위 복사본을 검증, S04 청소 자동화만 현재 운영, S05 운영·데모 구분, DB 수치에 날짜·숙소·범위) | 운영 DB 읽기 전용 조회 2회. DB·코드·통합 루트 문서 변경 없음 |
+| 2026-11-17 | v0.64 (Claude) · RF-26 변경안 사용자 승인(구현은 다음 작업). RF-25 `source_event_key` 유일 범위(`anomaly_id`·`history_type`·`source_event_key`)와 관리자 요청·내부 타이머의 재실행 가능한 키. DEC-04 표를 구현 상태와 현재 운영 검증 상태로 나눔(S01~S03 분류 확정 보류). 빈 줄을 가리키던 줄 번호 링크 14개(+같은 줄의 밀린 링크 2개)를 지금 근거로 바로잡고, RF-10 행의 낡은 "TODO 미해결" 상태를 해소로 정정 | DB·코드·통합 루트 문서 변경 없음 |
+| 2026-11-17 | v0.65 (Claude) · RF-26 사용자 승인(변경안·구현) · 구현 대기, 다음 실행 ID RF-26으로 통일. DEC-04는 Pi→서버→DB 현재 운영 검증 대기 | DB·코드·통합 루트 문서 변경 없음 |
 
 <a id="sec-13"></a>
 
