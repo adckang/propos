@@ -37,38 +37,21 @@ PROPOS 레포트가 보여줘야 하는 것: **PMS가 절대 알 수 없는 것*
 - 심야 소음이 감지됐고, 자동 경고가 발송됐는지
 - 에너지가 공실인데 낭비되고 있지 않은지
 
+<a id="safety-index-display"></a>
+
 ### 0-2. North Star Metric — "주간 안심 지수"
 
-> **2026-11-17 정의 확정(DEC-02, 사용자):** 안심지수 = **최종적으로 성공한 비율** = 측정 가능한 운영 지표 7개 성공률의 평균(화면 표 하단·요약 등급, `computeSafetyIndex`). 아래의 "자동 해결된 이상 ÷ 감지된 이상"은 안심지수가 아니라 **자동화 개선율**(자동화가 개선한 비율)이다 — 둘 다 쓰되 이름을 나눈다. 아래 본문은 자동화 개선율의 원래 설계로 읽는다.
->
-> **2026-11-17 RF-25 결정(사용자):** 대표 지표(North Star)와 주간 Slack 결산의 주 지표는 **안심지수**다. 자동화 개선율은 데이터가 쌓인 뒤 보조 지표로 함께 보이고, 계산할 수 없는 동안은 "—"로 표시한다. 자동 = **관리자·운영자 개입 없이 처리됨**(사람이 전혀 관여하지 않았다는 뜻이 아니다 — 담당자 예약을 캘린더 알림이 처리하면 자동, 관리자가 "캘린더 다시 확인"을 누르면 수동). 지금은 이상 건마다 해결 여부를 남기는 기록이 없어 계산하지 않는다 — 데이터 계약은 [refactoring RF-25](refactoring.md#rf25-contract).
+정의·계산·데이터 계약은 [report-architecture 6-1](report-architecture.md#safety-index)(안심지수)과 [6-1-1](report-architecture.md#automation-rate)(자동화 개선율)이 정본이다. 결정 기록은 [DEC-02](refactoring.md#dec02-result)·[RF-25](refactoring.md#rf-25). 이 절은 화면·Slack에 어떻게 보이는지만 정한다.
 
-```
-자동화 개선율(구 표기: 안심 지수) = 자동 해결된 이상 건수 / 전체 감지된 이상 건수 × 100%
-```
-
-- **100%**: 이상이 있었지만 관리자·운영자 개입 없이 전부 처리됨
-- **0%**: 모든 이상에 직접 개입해야 했음
-- **목표**: 90% 이상 유지, 수동 개입은 주당 0~1회
-- **진행 중인 이상**: 기간이 끝날 때 아직 해결되지 않은 이상은 분모에 넣고 분자에는 넣지 않는다. 진행 중 건수를 따로 표시한다. 예약 취소처럼 대상 자체가 사라진 것만 분모에서 뺀다.
-
-레포트 첫 줄에는 안심지수가 나온다(RF-25 결정). 자동화 개선율은 그 옆 보조 지표다. "이번 주 자동화로 절약한 시간"은 부가 지표.
+- 레포트 첫 줄에는 **안심지수**가 나온다. 대표 지표이자 주간 Slack 결산의 주 지표다.
+- **자동화 개선율**은 그 옆 보조 지표다. 계산할 수 없는 동안은 **`자동화 개선율 — (측정 중 0/5)`** 로 보인다 — 지금(2026-11-17)은 [측정 범위가 0 / 5](report-architecture.md#automation-rate-scope)라 늘 이 형식이다.
+- 계산할 수 있게 되면 "진행 중 N건"과 "측정 중 N / 5"를 함께 보인다. 숫자가 든 형식은 아래 각 레포트에 **향후 예시**로 따로 적는다.
+- 기간이 끝나기 전에 내는 보고(진행 중 스냅샷)는 "22시 현재"처럼 기준 시각을 붙여, 기간 전체 결과로 보이지 않게 한다 — 판정 규칙은 [report-architecture 보고 종류](report-architecture.md#automation-rate-report-kinds).
+- "이번 주 자동화로 절약한 시간"은 부가 지표.
 
 #### 이상(異常) 집계 기준 — 분모 정의
 
-분모인 "전체 감지된 이상 건수"의 기준. 기준 없이는 지표가 무의미하다.
-
-> **2026-11-17 RF-25 결정(사용자): 이 표가 이상 기준의 정본이다.** 한 번에 다 만들지 않고 지금 측정할 수 있는 항목부터 단계적으로 넣는다. [아키텍처 6-1](report-architecture.md#L450)의 두 항목(체류 중 불만·체류 중 에너지 낭비)은 별도 정의가 아니라 이 표의 초기 측정 범위다. 레포트에는 "측정 중 유형 N / 전체 5"를 함께 표시한다. ⚠️ 지금 Pi 기록은 이 표와 판정 기준·대상이 다르다(소음은 10분 누적 점수, 에너지 낭비는 빈방이 아니라 체류 중 3분 기준 등) — 어떤 기록을 어느 항목으로 볼지는 [RF-25의 확인 필요](refactoring.md#rf25-contract)에서 정한다.
-
-| 이상으로 집계 (분모 포함) | 노이즈 — 제외 |
-|---|---|
-| 소음 임계값 초과 3분 이상 지속 | 3분 이내 자동 복귀 센서 스파이크 |
-| 에너지 낭비 30분 이상 (공실 중 가동 확인) | 정상 체크인/아웃 프로세스 |
-| 게스트 불만 키워드 + 센서 이상 동시 확인 | 단독 키워드 감지 (센서 정상인 경우) |
-| 청소 미배정 (체크인 12시간 이내) | 24시간 이상 여유 있는 미배정 |
-| IoT 기기 오프라인 30분 이상 | 정기 재시작/펌웨어 업데이트 |
-
-> **기준 변경 시 이 테이블을 먼저 수정할 것.** 기준이 바뀌면 과거 지표와 비교 불가.
+정본 5가지 기준·노이즈 제외·측정 범위는 [report-architecture 6-1-1](report-architecture.md#automation-rate)로 옮겼다(2026-11-17, 문서 소유 정리). 이 문서에 다시 적지 않는다.
 
 ### 0-3. 예외 기반 레포트 (Exception-Based Reporting)
 
@@ -173,7 +156,7 @@ Detail View (한눈에 = 하루)
 
 | 네비게이션 위치 | Tense | 펼쳐지는 레포트 | KPI Tiles 역할 |
 |---|---|---|---|
-| 지난주 / 전날 / -1h | PAST | 결과만 (Template-P) | 이벤트 카운트 + 자동화 개선율(보조, 계산 전 —). 주 지표 안심지수는 Template-P 표 하단 |
+| 지난주 / 전날 / -1h | PAST | 결과만 (Template-P) | 이벤트 카운트 + 자동화 개선율 — (측정 중 0/5, 보조). 주 지표 안심지수는 Template-P 표 하단 |
 | 이번주 / 오늘 | ACTIVE | 완료 so far + 예정 remaining (Template-A) | **실시간 상태 카운트** |
 | 다음주 / 내일 / +1h | FUTURE | 계획만 (Template-F) | 예정 카운트 |
 | 지금 (DetailView 시 모드) | NOW | Template-C (State Snapshot + IoT 전체) | 도어락·온도·전력 실시간 |
@@ -212,7 +195,7 @@ ISSUE_AND_ENERGY > ISSUE_COMPLAINT > ENERGY_WASTE > GOOD_CONDITION
 | 체크아웃 | events 테이블 `check_out_detected` (완료) + iCal (예정) |
 | 체크인 | events 테이블 `check_in_detected` (완료) + iCal (예정) |
 | 예약률 | iCal 예약 일수 / 전체 일수 |
-| 이상감지 | events 테이블 `complaint_*` + `energy_waste_*` 건수 |
+| 이상감지 | events 테이블 `complaint_*` + `energy_waste_*` 건수 (상태 표시용 — 자동화 개선율의 분모가 아니다) |
 
 ### 3-3. 지난주 / 지난달 (결과)
 
@@ -220,7 +203,7 @@ ISSUE_AND_ENERGY > ISSUE_COMPLAINT > ENERGY_WASTE > GOOD_CONDITION
 |------|------------|
 | 총 체크인 | events 테이블 (해당 기간) |
 | 총 체크아웃 | events 테이블 (해당 기간) |
-| 이상감지 | events 테이블 complaint + energy_waste 합산 |
+| 이상감지 | events 테이블 complaint + energy_waste 합산 (상태 표시용 — 자동화 개선율의 분모가 아니다) |
 | 에너지 낭비 | events 테이블 `energy_waste_detected` 건수 |
 
 현재는 보존 기간 제한 없이 events 에서 직접 계산한다. (90일 압축 보관은 미구현 — monthly_summaries 는 2026-10-15 폐기, data-storage-design.md §3-2)
@@ -609,7 +592,9 @@ const displayName = property.name || property.id;
 
 ---
 
-### 11-3. 주간 안심 결산 (매주 일요일 22:00 KST — Cron: `api/cron/weekly-report`)
+### 11-3. 주간 안심 결산 (실행 시각 결정 대기 · 정기 작업 미구현)
+
+> 예전 설계는 "매주 일요일 22:00 KST — Cron: `api/cron/weekly-report`"였다. 일요일 22시에는 이번 주가 끝나지 않았고 `last_week`는 그 전 주라, 실행 시각과 기간을 다시 정해야 한다 — [report-architecture 8절](report-architecture.md#slack-report-mapping). 아래 예시의 기간 표기(9/28~10/4)는 형식 예시다.
 
 **목적**: "이번 주 PROPOS가 얼마나 많은 현장 방문을 대체했는가"를 보여주는 레포트.
 매출/예약률 없음. 현장 운영 품질만.
@@ -617,12 +602,21 @@ const displayName = property.name || property.id;
 ```
 📊 PROPOS 주간 결산 (9/28~10/4)
 
-🔐 안심 지수: 92%  (운영 지표 7개 평균)
-자동화 개선율: 94%  (이상 17건 중 자동 16건 · 수동 1건 · 진행 중 0건 · 측정 중 유형 N/5)
-⏱ 이번 주 절약 예상: 약 4시간 (건당 15분 추산 · 실제와 차이 있을 수 있어요)
+🔐 안심 지수: 92%  (측정 가능한 운영 지표 평균)
+자동화 개선율: —  (측정 중 0/5)
 
 체크인/아웃 14건 무인 처리  |  체크아웃 제시간: 85% (6/7건)
 체크인 전 청소 완료율: 100%
+
+다음 주: 체크인 6건 / 청소 배정 5/5 ✅
+→ 전체 내역 보기: https://proposonline.com/weekly/2026-w40
+```
+
+측정 범위가 생긴 뒤 추가되는 줄 (향후 예시 — 지금 블록에는 넣지 않는다):
+
+```
+자동화 개선율: 94%  (이상 17건 중 자동 16건 · 수동 1건 · 진행 중 0건 · 측정 중 N/5)
+⏱ 이번 주 절약 예상: 약 4시간 (건당 15분 추산 · 실제와 차이 있을 수 있어요)
 
 이번 주 자동 처리된 주요 사례
   ▸ 화요일: 폭우 + 애월 스튜디오 습도 89% → 제습 자동 실행, 정상화 완료
@@ -631,9 +625,6 @@ const displayName = property.name || property.id;
 
 수동 개입: 1건  (이태원 테라스 청소팀 연락 불가 → 직접 대체 배정)
   원인: 연락처 업데이트 안 됨 → 수정 완료
-
-다음 주: 체크인 6건 / 청소 배정 5/5 ✅
-→ 전체 내역 보기: https://proposonline.com/weekly/2026-w40
 ```
 
 > **절약 추정 시간은 계산 기준을 항상 명시한다.** (예: 건당 15분 기준)
@@ -643,8 +634,8 @@ const displayName = property.name || property.id;
 **데이터 소스:**
 | 항목 | 소스 |
 |------|------|
-| 안심 지수 | 운영 지표 7개 성공률 평균 (`computeSafetyIndex`, DEC-02) |
-| 자동화 개선율 | 이상 1건마다의 발생·해결 기록 (RF-25 데이터 계약 — 아직 없음, 계산 전 —) |
+| 안심 지수 | 측정 가능한 운영 지표 성공률 평균 ([report-architecture 6-1](report-architecture.md#safety-index)) |
+| 자동화 개선율 | 이상 본체·이력 기록 ([report-architecture 6-1-1](report-architecture.md#automation-rate) — 아직 없음, 계산 전 —) |
 | 체크인 전 청소 완료율 | `cleaning_jobs.finished_at` vs iCal `checkin_at` |
 | 체크아웃 준수율 | `check_out_detected` 시각 vs iCal `checkout_at` |
 | 통합 감지 내역 | events 테이블 (`integration_sources` 필드) |
@@ -653,7 +644,7 @@ const displayName = property.name || property.id;
 
 ---
 
-### 11-4. 월간 현장 보고서 (매월 1일 08:00 KST — Cron: `api/cron/monthly-report`)
+### 11-4. 월간 현장 보고서 (매월 1일 08:00 KST — Cron: `api/cron/monthly-report` · 정기 작업 미구현)
 
 **목적**: 숙소별 현장 품질 추세와 구조적 문제 파악. 다음 달 준비 상태 확인.
 
@@ -663,12 +654,14 @@ Slack 발송 내용:
 ```
 📈 PROPOS 9월 현장 보고서
 
-안심 지수 89% (8월 87% → +2%p)  |  자동화 개선율 91% · 수동 개입 13건
+안심 지수 89% (8월 87% → +2%p)  |  자동화 개선율 — (측정 중 0/5)
 확인 필요: 이태원 테라스 청소팀 교체 권장 · 부산 해운대뷰 도어락 배터리
 → 전체 보고서 보기: https://proposonline.com/monthly/2026-09
 ```
 
-웹 대시보드 상세 내용 (Slack에 포함하지 않음):
+> 자동화 개선율 자리는 지금 형식이다. 측정 범위가 생긴 뒤 형식(향후 예시): `자동화 개선율 91% · 수동 개입 13건`.
+
+웹 대시보드 상세 내용 (Slack에 포함하지 않음) — **아래 숫자는 모두 향후 예시**다:
 
 ```
 현장 운영 품질 지표
@@ -703,7 +696,9 @@ Slack 발송 내용:
   기기 점검: 부산 해운대뷰 도어락 배터리 교체 필요해요
 ```
 
-**숙소 건강 지수 등급 기준:**
+> 지금(2026-11-17)은 측정 범위가 0 / 5라 위 블록의 자동화 개선율·숙소별 등급 자리는 `— (측정 중 0/5)`로 나간다.
+
+**숙소 건강 지수 등급 기준:** (표시 구간. 자동화 개선율 값의 계산은 [report-architecture 6-1-1](report-architecture.md#automation-rate))
 
 | 등급 | 자동화 개선율 | 판단 기준 |
 |------|----------|-----------|
@@ -728,7 +723,7 @@ Slack 발송 내용:
 | 날씨 폭우 + 당일 체크인 | 게스트에게 날씨 안내 발송 예약 | Phase 1 |
 | 게스트 불만 키워드 + 온도/습도 센서 이상 동시 확인 | 냉난방 자동 조정 + 약 30분 후 재확인 | Phase 1 |
 | 체크아웃 미감지 + 체크인 3시간 이내 | 청소팀 긴급 알림 + 게스트 지연 사전 안내 | Phase 1 |
-| VACANT 상태 + 전력 소비 30분 이상 | 소등·소냉 자동 처리 | Phase 1 |
+| VACANT 상태 + 전력 소비 30분 이상 | 소등·소냉 자동 처리 | Phase 1 · 미구현(2026-11-17 확인: 빈방 에너지 낭비를 감지하는 코드 없음) |
 | 날씨 폭우/폭설 + 실내 습도 급등 | 자동 제습 실행 | Phase 1 |
 | 게스트 불만 + 체류 7일 이상 | 관리자 즉시 알림 + 우선 대응 플래그 | Phase 2 |
 | 청소 진행 시간 + 체크인까지 남은 시간 | 지연 가능성 계산 → 게스트 사전 안내 | Phase 2 |
@@ -745,8 +740,7 @@ Slack 발송 내용:
 **게스트 메시지 키워드 감지 — 오탐 방지**
 - "춥다" 단독 키워드 매칭은 "안 춥다", "춥지 않아요"에서 오탐 발생
 - 반드시 **센서 이상과 동시 확인**된 경우에만 자동 대응으로 연결
-- "동시"의 시간 윈도우: **게스트 메시지 발생 전후 60분 이내** 센서 이상 확인된 경우
-- 키워드 단독 감지(센서 정상)는 자동화 개선율 분모(이상 건수)에 포함하지 않는다
+- "동시"의 기준과 이상으로 셀지 여부는 [report-architecture 6-1-1의 정본 기준](report-architecture.md#automation-rate)을 따른다
 
 **체크아웃 제시간 판정 기준**
 - `checkout_at` + **30분** 이내에 `check_out_detected` 이벤트 발생 → 제시간
@@ -762,6 +756,8 @@ Slack 발송 내용:
 
 미배정 레포트에는 `PENDING_URGENT`와 `ASSIGNMENT_ERROR`만 포함. `PENDING_SCHEDULED`는 정상으로 분류.
 
+<a id="integration-db-fields"></a>
+
 ### 통합 감지 이벤트 DB 필드 (`events` 테이블 확장)
 
 ```sql
@@ -773,19 +769,11 @@ ALTER TABLE events ADD COLUMN IF NOT EXISTS
   auto_actions JSONB DEFAULT NULL;
   -- 예: ["hvac_set_22c", "guest_message_sent"]
   -- TEXT 아닌 JSONB: 복수 조치 저장 가능
-
-ALTER TABLE events ADD COLUMN IF NOT EXISTS
-  resolution_type TEXT DEFAULT NULL;
-  -- 'auto' | 'manual' | 'pending'
-
-ALTER TABLE events ADD COLUMN IF NOT EXISTS
-  resolution_seconds INTEGER DEFAULT NULL;
-  -- 감지 ~ 해결까지 소요 초 단위 (분 단위는 너무 거침)
 ```
 
-이 필드들이 채워져야 자동화 개선율 계산과 통합 감지 레포트 생성 가능.
+이 필드들이 채워져야 통합 감지 레포트 생성 가능.
 
-> **2026-11-17 RF-25:** 위 `resolution_type`·`resolution_seconds` 칸 추가안은 자동화 개선율에 쓰지 않는다 — 이벤트 한 줄에 해결 방식만 적으면 발생과 해결을 같은 사건으로 잇지 못하고, 청소 미배정처럼 `events`에 남지 않는 이상도 있다. [RF-25 데이터 계약](refactoring.md#rf25-contract)(`anomaly_id`·판정 기준 버전·해결 경로·개입 주체·계산 기준 시각)이 대신한다. 구체 스키마는 승인 후 정한다.
+> **폐기 이력 (2026-11-17, RF-25):** 이 자리에 있던 `resolution_type`·`resolution_seconds` 칸 추가안은 폐기했다. 자동화 개선율의 데이터 계약은 [report-architecture 6-1-1](report-architecture.md#automation-rate)이 정본이다.
 
 ---
 

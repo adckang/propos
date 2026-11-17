@@ -118,7 +118,7 @@ Room State
 
 ### 3-2. 이벤트 분류표
 
-Resolution 열은 ANOMALY 그룹에만 적용. LIFECYCLE/OPERATIONS는 발생 사실(fact)이므로 resolution 개념 없음.
+LIFECYCLE/OPERATIONS는 발생 사실(fact)이므로 resolution 개념 없음. ANOMALY의 해결 여부는 이벤트별 열이 아니라 이상 1건 단위로 [6-1-1](#automation-rate)에서 판정한다(이벤트마다 Auto/Manual/Pending을 붙이던 Resolution 열은 2026-11-17 폐기).
 
 | 그룹 | 이벤트 | 상태 전환 (From → To) | Count | Resolution |
 |------|--------|----------------------|-------|------------|
@@ -129,14 +129,14 @@ Resolution 열은 ANOMALY 그룹에만 적용. LIFECYCLE/OPERATIONS는 발생 �
 | **OPERATIONS** | `optimization_finished` | OPTIMIZING → OPTIMIZED | O | X |
 | | `cleaning_started` | CLEANING_PENDING → IN_PROGRESS | O | X |
 | | `cleaning_finished` | IN_PROGRESS → VACANT/CLEANING_FINISHED | O | X |
-| **ANOMALY** | `energy_waste_detected` | → ENERGY_WASTE / ISSUE_AND_ENERGY | O | O (Auto/Manual/Pending) |
-| | `energy_waste_resolved` | → GOOD_CONDITION / ISSUE_COMPLAINT | O | O |
-| | `complaint_detected` | → ISSUE_COMPLAINT / ISSUE_AND_ENERGY | O | O (severity별 분리) |
-| | `complaint_resolved` | → GOOD_CONDITION / ENERGY_WASTE | O | O |
+| **ANOMALY** | `energy_waste_detected` | → ENERGY_WASTE / ISSUE_AND_ENERGY | O | → 6-1-1 |
+| | `energy_waste_resolved` | → GOOD_CONDITION / ISSUE_COMPLAINT | O | → 6-1-1 |
+| | `complaint_detected` | → ISSUE_COMPLAINT / ISSUE_AND_ENERGY | O (severity별 분리) | → 6-1-1 |
+| | `complaint_resolved` | → GOOD_CONDITION / ENERGY_WASTE | O | → 6-1-1 |
 | **SOFT** | `checkout_confirmation_needed` | 없음 | O | acknowledged Y/N |
 | | `early_checkin_suspected` | 없음 | O | acknowledged Y/N |
 | | `no_show_suspected` | 없음 | O | acknowledged Y/N |
-| **OPERATIONAL ALERT** | `vacancy_energy_alert` | 없음 (State Machine 외부) | O | O (별도 섹션) |
+| **OPERATIONAL ALERT** | 빈방 에너지 낭비 (이벤트 이름 결정 대기 — [7절](#vacant-energy-design)) | 없음 (State Machine 외부) | O | → 6-1-1 |
 | **GLOBAL** | `maintenance_required` | VACANT/MAINTENANCE | 전용 집계 예약 | 예약 |
 | | `maintenance_started` | VACANT/MAINTENANCE | 전용 집계 예약 | X |
 | | `maintenance_finished` | VACANT/CLEANING_FINISHED | 전용 집계 예약 | X |
@@ -205,7 +205,7 @@ Resolution 열은 ANOMALY 그룹에만 적용. LIFECYCLE/OPERATIONS는 발생 �
 
 #### 형식
 
-LIFECYCLE/OPERATIONS는 Count 단일 열. ANOMALY만 Resolution 열 추가.
+모든 그룹은 Count 열만 둔다. 자동/수동은 맨 아래 자동화 개선율 줄에서만([6-1-1](#automation-rate), 이상 1건 단위).
 
 ```
 이벤트 결과 — {기간 레이블} (Postgres events)
@@ -224,19 +224,19 @@ LIFECYCLE/OPERATIONS는 Count 단일 열. ANOMALY만 Resolution 열 추가.
 │              │ cleaning_finished           │   N   │
 └──────────────┴─────────────────────────────┴───────┘
 
-[ANOMALY — Resolution 포함]
-┌──────────────┬──────────────────────────┬───────┬──────┬────────┬─────────┐
-│ 그룹         │ Event                    │ Total │ Auto │ Manual │ Pending │
-├──────────────┼──────────────────────────┼───────┼──────┼────────┼─────────┤
-│ 에너지낭비   │ energy_waste_detected    │   N   │   N  │    N   │    N    │
-│ (OCCUPIED)   │ energy_waste_resolved    │   N   │   N  │    -   │    -    │
-├──────────────┼──────────────────────────┼───────┼──────┼────────┼─────────┤
-│ 민원         │ complaint_detected       │   N   │      │        │         │
-│              │   CRITICAL               │   N   │   N  │    N   │    N    │
-│              │   HIGH                   │   N   │   N  │    N   │    N    │
-│              │   WARN                   │   N   │   N  │    N   │    N    │
-│              │ complaint_resolved       │   N   │   N  │    N   │    -    │
-└──────────────┴──────────────────────────┴───────┴──────┴────────┴─────────┘
+[ANOMALY — 이벤트 건수 (상태 표시용, 자동화 개선율의 분모 아님)]
+┌──────────────┬──────────────────────────┬───────┐
+│ 그룹         │ Event                    │ Total │
+├──────────────┼──────────────────────────┼───────┤
+│ 에너지낭비   │ energy_waste_detected    │   N   │
+│ (OCCUPIED)   │ energy_waste_resolved    │   N   │
+├──────────────┼──────────────────────────┼───────┤
+│ 민원         │ complaint_detected       │   N   │
+│              │   CRITICAL               │   N   │
+│              │   HIGH                   │   N   │
+│              │   WARN                   │   N   │
+│              │ complaint_resolved       │   N   │
+└──────────────┴──────────────────────────┴───────┘
 
 [SOFT — Acknowledged 포함]
 ┌──────────────┬──────────────────────────┬───────┬──────────────┐
@@ -248,15 +248,22 @@ LIFECYCLE/OPERATIONS는 Count 단일 열. ANOMALY만 Resolution 열 추가.
 └──────────────┴──────────────────────────┴───────┴──────────────┘
 
 [운영 알림 — VACANT 에너지낭비 (State Machine 외부)]
-┌──────────────┬──────────────────────────┬───────┬──────┬────────┐
-│              │ Event                    │ Count │ Auto │ Manual │
-├──────────────┼──────────────────────────┼───────┼──────┼────────┤
-│ 운영 알림    │ vacancy_energy_alert     │   N   │   N  │    N   │
-└──────────────┴──────────────────────────┴───────┴──────┴────────┘
+┌──────────────┬──────────────────────────┬───────┐
+│              │ Event                    │ Count │
+├──────────────┼──────────────────────────┼───────┤
+│ 운영 알림    │ 빈방 에너지 낭비 (§7)    │   N   │
+└──────────────┴──────────────────────────┴───────┘
 
 ─────────────────────────────────────────
-안심지수: N%   (운영 지표 7개 평균)
-자동화 개선율: N%   (이상 N건 — Auto N / Manual N / Pending N, 측정 중 유형 N/5, 계산 전 —)
+안심지수: N%   (측정 가능한 운영 지표 평균)
+자동화 개선율: —    (측정 중 0/5)
+수동개입: —        (측정 중 0/5)
+```
+
+측정 범위가 생긴 뒤 형식 (향후 예시 — 계산은 [6-1-1](#automation-rate)):
+
+```
+자동화 개선율: N%   (자동 N / 수동 N / 진행 중 N · 측정 중 N / 5)
 수동개입: N건
 ```
 
@@ -267,10 +274,10 @@ LIFECYCLE/OPERATIONS는 Count 단일 열. ANOMALY만 Resolution 열 추가.
 ```
 지난 1시간 이벤트 — {HH:mm} ~ {HH:mm}
   14:03  check_out_detected     홍대 원룸 A
-  14:07  cleaning_started       홍대 원룸 A      (auto)
-  14:31  energy_waste_detected  이태원 테라스    (WARN — auto 처리 중)
-  14:52  energy_waste_resolved  이태원 테라스    (auto 21분 소요)
-이벤트 4건  |  이상 1건 → 자동 해결
+  14:07  cleaning_started       홍대 원룸 A
+  14:31  energy_waste_detected  이태원 테라스    (WARN)
+  14:52  energy_waste_resolved  이태원 테라스
+이벤트 4건  |  자동화 개선율 — (측정 중 0/5)
 ```
 
 ---
@@ -304,7 +311,7 @@ Template-A는 **[완료]** + **[예정]** 두 섹션으로만 구성한다.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [완료] 오늘 {HH:mm}까지 처리된 이벤트 (Postgres)
   체크아웃 N건  |  체크인 N건  |  청소완료 N건
-  이상감지 N건 → 자동 N / 수동 N / 미해결 N
+  이상감지 N건 (상태 표시용 — 자동화 개선율의 분모 아님)
 
 [예정] 오늘 남은 일정 (iCal + cleaning_jobs)
   {HH:mm}  {숙소명}  체크인 예정   청소 ✅ / ⚠ 미배정
@@ -321,8 +328,8 @@ Template-A는 **[완료]** + **[예정]** 두 섹션으로만 구성한다.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [완료] 이번 주 {요일}까지 처리된 이벤트 (Postgres)
   체크아웃 N건  |  체크인 N건  |  청소완료 N건
-  이상감지 N건 → 자동 N / 수동 N / 미해결 N
-  현재까지 안심지수: N%  ·  자동화 개선율: N% (계산 전 —)
+  이상감지 N건 (상태 표시용 — 자동화 개선율의 분모 아님)
+  현재까지 안심지수: N%  ·  자동화 개선율: — (측정 중 0/5)
 
 [예정] 이번 주 남은 일정 (iCal + cleaning_jobs)
   {요일} {HH:mm}  {숙소명}  체크인/아웃   청소 ✅/⚠
@@ -447,36 +454,143 @@ iCal 마지막 동기화: N분 전 ✅ / ⚠ N시간 전 (오래된 경우 강�
 
 모든 템플릿에 부가되는 분석 레이어.
 
+<a id="safety-index"></a>
+
 ### 6-1. 안심지수 (North Star Metric)
 
-> **2026-11-17 정의 확정(DEC-02, 사용자):** 안심지수 = **최종적으로 성공한 비율** = 측정 가능한 운영 지표 7개(게스트 맞이 준비·퇴실 후 절전/보안·빈방 절전/보안 유지·청소시간 준수·청소 담당자 배정) 성공률의 평균, 반올림 정수 %. 분모가 0이거나 분자가 없는 지표는 뺀다. 표 하단과 요약 등급이 같은 함수(`src/domain/operationalMetricsDomain.js`의 `computeSafetyIndex`)를 쓴다. 아래 `auto_resolved / total_anomalies`는 안심지수가 아니라 **자동화 개선율**의 설계이며 아직 계산하지 않는다(이상 건마다 자동 해결 여부를 남기는 데이터가 없음, [refactoring RF-25](refactoring.md#rf-25)).
->
-> **2026-11-17 RF-25 결정(사용자):** 대표 지표와 주간 결산의 주 지표는 안심지수, 자동화 개선율은 보조 지표(계산 전 "—"). 이상 기준의 정본은 [기능 설계 0-2의 5가지](reporting-feature-design.md#L57)이고, 아래 "분모 정의"의 두 항목은 별도 정의가 아니라 **정본의 초기 측정 범위**다(정본과 판정 기준·대상이 달라 어느 항목으로 볼지는 확인 필요). 그래서 아래의 빈방 에너지 낭비 제외와 `resolution_type` 분자 정의는 더 이상 쓰지 않는다 — 데이터 계약은 [RF-25](refactoring.md#rf25-contract).
+> **정의 (DEC-02, 2026-11-17 사용자 확정):** 안심지수 = **최종적으로 성공한 비율** = 측정 가능한 운영 지표 성공률의 평균, 반올림 정수 %. 분모가 0이거나 분자가 없는 지표는 뺀다. 표 하단과 요약 등급이 같은 함수(`src/domain/operationalMetricsDomain.js`의 `computeSafetyIndex`)를 쓴다. 대표 지표이자 주간 결산의 주 지표다. 결정 기록은 [DEC-02](refactoring.md#dec02-result), 화면·Slack 표시는 [기능 설계 0-2](reporting-feature-design.md#safety-index-display).
+
+<a id="safety-index-exclusions"></a>
+
+#### 측정에서 빼는 지표 (RF-26, 2026-11-17 사용자 지시)
+
+성공·실패·측정 불가를 **명시적으로 판정한 기록**이 생기기 전까지 아래 4개 지표는 안심지수 측정에서 뺀다. 실패 이벤트만 추가하는 방식으로 해결하지 않는다 — "대상 수 − 실패 기록 수"는 실패를 놓치면 그만큼 성공으로 세기 때문이다.
+
+| 지표 | 지금 계산 | 빼는 이유 |
+| --- | --- | --- |
+| 퇴실 후 절전 | 퇴실 수 − `post_checkout_energy_waste_detected` 수 | 실패 이벤트를 만드는 코드가 DEMO 데이터뿐 |
+| 퇴실 후 보안 | 퇴실 수 − `post_checkout_security_breach_detected` 수 | 〃 |
+| 빈방 절전 유지 | 청소 완료 수 − `vacant_energy_waste_detected` 수 | 〃 |
+| 빈방 보안 유지 | 청소 완료 수 − `post_cleaning_security_breach_detected` 수 | 〃 |
+
+- 근거: [계산](../src/domain/operationalMetricsDomain.js#L27), 실패 이벤트 생성은 [DEMO](../src/application/demoReportingService.js#L40)에만 있다. 운영 DB(읽기 전용, 2026-11-17)의 실제 숙소 이벤트는 입실 1·퇴실 1건이고 실패 이벤트는 0건이다.
+- ⚠️ **지금 코드는 아직 네 지표를 넣어 계산한다.** 이 제외는 코드에 반영하기 전이다(별도 작업, [RF-26](refactoring.md#rf-26)).
+
+<a id="automation-rate"></a>
+
+### 6-1-1. 자동화 개선율 (보조 지표) — 계산·데이터 계약 정본
+
+이상이 생겼을 때 관리자·운영자 개입 없이 처리된 비율. 결정과 작업 상태는 [RF-25](refactoring.md#rf-25), 화면·Slack 표시는 [기능 설계 0-2](reporting-feature-design.md#safety-index-display)가 맡는다. 이 절이 계산과 데이터 계약의 정본이다.
+
+#### 계산
 
 ```
-자동화 개선율(구 표기: 안심지수) = auto_resolved / total_anomalies × 100 (%)
-
-분모 정의 (total_anomalies) — 원래 두 항목. RF-25 이후 정본 5가지의 초기 측정 범위 후보:
-  complaint_detected   — OCCUPIED 내에서 발생. severity 무관 전수 포함.
-                         (RF-25: 이 중 소음만 정본 항목과 겹치고 기준이 다르다. 연기·온습도·문 열림은
-                          정본에 맞는 칸이 없다 — 어느 기록을 셀지는 RF-25 확인 필요 1)
-  energy_waste_detected — OCCUPIED 내에서 발생 (State Machine 기준).
-                         (RF-25: 정본은 빈방 30분 기준, 이 기록은 체류 중 3분 기준 — 확인 필요 1)
-  진행 중 이상          — 기간이 끝날 때 아직 해결되지 않은 이상도 포함 (분자에는 미포함, 건수 따로 표시).
-
-분모 제외:
-  (RF-25로 폐기) vacancy_energy_alert — 정본은 빈방 에너지 낭비 30분 이상을 이상으로 센다.
-                         (코드의 이벤트 이름은 vacant_energy_waste_detected — 보내는 코드 없음)
-  SOFT 이벤트           — no_show_suspected 등은 이상 감지 분모에 미포함.
-                         단 정본 5가지에 해당하면 SOFT 여부와 관계없이 센다(빈방 에너지 낭비 등).
-  대상 사라짐           — 예약 취소처럼 대상 자체가 사라진 이상.
-
-분자 정의 (auto_resolved) — RF-25 이후:
-  (폐기) resolution_type = 'auto'인 이상 이벤트 건수.
-  해결됐고, 관리자·운영자 개입 없이 처리된 이상 건수.
-
-목표: 90% 이상 유지.
+자동화 개선율 = 자동 해결 / (기간 안에 발생한 이상 − 대상 사라짐) × 100 (%)
 ```
+
+- **판정 시점:** 보고 종류에 따라 다르다(아래 "보고 종류"). 판정 시점에 진행 중이면 분모에만 넣고 분자에는 넣지 않는다. 진행 중 건수는 따로 보인다.
+- **자동 해결:** 해결됐고, 발생부터 해결까지의 이력에 **관리자·운영자 개입 기록이 하나도 없는** 이상. 관리자가 개입한 뒤 시스템이 해결해도 수동이다. "사람이 전혀 관여하지 않음"이라는 뜻은 아니다 — 담당자가 예약 링크로 칸을 잡고 캘린더 알림이 관리자 손 없이 배정하면 자동, 관리자가 "캘린더 다시 확인"을 눌러 배정되면 수동이다.
+- **대상 사라짐:** 예약 취소처럼 대상 자체가 없어진 이상만 분모에서 뺀다.
+- 계산할 수 없으면 "—". 목표 90% 이상, 수동 개입 주당 0~1회.
+
+#### 이상 기준 (정본 5가지)
+
+| 이상으로 집계 (분모 포함) | 노이즈 — 제외 |
+|---|---|
+| 소음 임계값 초과 3분 이상 지속 | 3분 이내 자동 복귀 센서 스파이크 |
+| 에너지 낭비 30분 이상 (공실 중 가동 확인) | 정상 체크인/아웃 프로세스 |
+| 게스트 불만 키워드 + 센서 이상 동시 확인 (게스트 메시지 전후 60분 이내) | 단독 키워드 감지 (센서 정상인 경우) |
+| 청소 미배정 (체크인 12시간 이내) | 24시간 이상 여유 있는 미배정 |
+| IoT 기기 오프라인 30분 이상 | 정기 재시작/펌웨어 업데이트 |
+
+- 정본 5가지에 해당하면 `is_soft` 여부와 관계없이 센다. `no_show_suspected` 같은 SOFT 이벤트는 정본 항목이 아니므로 세지 않는다.
+- 기준을 바꾸면 `policy_version`을 올린다. 과거 건은 당시 기준 그대로 남는다(기준이 바뀌면 과거 지표와 비교할 수 없다).
+
+<a id="automation-rate-scope"></a>
+
+#### 측정 범위: 0 / 5 (2026-11-17)
+
+정본 기준을 충족하는 감지기가 아직 없다. 비슷한 기록이 있어도 기준이 다르므로 정본 항목에 대응시키지 않는다. 정본 기준을 충족하는 감지기가 생길 때마다 하나씩 측정 범위에 넣는다. 레포트에는 "측정 중 N / 5"를 함께 보인다.
+
+| 정본 항목 | 정본 기준 감지기 | 지금 있는 비슷한 기록 (대응하지 않음) |
+| --- | --- | --- |
+| 소음 3분 이상 지속 | 없음 | Pi 불만 기록(소음) — 10분 누적 점수 8점 이상([`_noise`](../src/application/occupancyMonitor.js#L237)) |
+| 빈방 에너지 낭비 30분 이상 | 없음 | Pi 에너지 낭비 기록 — 체류 중(부재·고전력) 3분 기준([`_energyWaste`](../src/application/occupancyMonitor.js#L304), [기준값](../src/config/monitoringThresholds.js#L29)). 빈방용 이름 `vacant_energy_waste_detected`는 만드는 코드가 없다(이름 결정 대기, [7절](#vacant-energy-design)) |
+| 게스트 불만 키워드 + 센서 이상 | 없음 | 게스트 메시지 키워드는 답장 초안용([`messageDomain`](../src/domain/messageDomain.js#L129))으로만 쓰인다 |
+| 체크인 12시간 이내 청소 미배정 | 없음 | 청소 일정의 현재 상태만 — 상태가 덮어써져 이력이 없고, 캘린더 알림·"캘린더 다시 확인"·관리자 직접 배정을 구분하는 기록이 없다([배정 함수](../server/cleaning/_calendarAssign.js#L5)) |
+| 기기 오프라인 30분 이상 | 없음 | 없음 |
+
+Pi 불만 기록 중 연기·실내 온습도·문 열림은 정본 5가지 어디에도 해당하지 않는다.
+
+#### 데이터 계약 — 이상 본체와 이력을 나눈다
+
+**이상 본체** — 이상 1건에 1개. 한 번 쓰면 바꾸지 않는다.
+
+| 항목 | 뜻 |
+| --- | --- |
+| `anomaly_id` | 이상 1건의 번호. 본체와 모든 이력을 같은 사건으로 잇는다 |
+| 숙소 · 원본 연결 | 어느 숙소의 어떤 원본 기록(이벤트·청소 일정)에서 생겼는지 |
+| 이상 유형 | 정본 5가지 중 하나 |
+| `policy_version` / `effective_from` | 판정에 쓴 기준의 버전 / 그 기준을 적용하기 시작한 시각 |
+| `occurred_at` | 발생 시각 — 기준을 넘은 시각 |
+| `recorded_at` | 저장한 시각 |
+
+**이력** — 추가만 한다(append-only). 고치거나 지우지 않는다.
+
+| 기록 종류 | 남기는 것 |
+| --- | --- |
+| 상태 변경 | 진행 중 → 해결 / 대상 사라짐 |
+| 개입 | 관리자·운영자가 한 행동(예: "캘린더 다시 확인", 직접 배정, 원격 제어)과 개입 주체 |
+| 해결 | 해결 경로(무엇으로 풀렸는지)와 해결 주체(시스템 / 관리자 / 운영자 / 담당자 / 게스트) |
+| 정정 | 잘못 남긴 기록은 지우지 않고, 어느 기록을 정정하는지 가리키는 정정 기록을 덧붙인다 |
+
+이력 기록마다 `occurred_at`(그 일이 일어난 시각 — 정정 기록은 고친 내용이 적용되는 시각 `effective_at`)과 `recorded_at`(저장한 시각)을 남긴다.
+
+자동/수동은 해결 기록 하나가 아니라 **발생부터 해결까지의 이력 전체**로 판정한다 — 개입 기록이 하나라도 있으면 수동이다.
+
+#### 시각 — 결과 시각과 레코드 시각
+
+**결과 시각** — 계산 결과 1건마다 하나씩 남긴다.
+
+| 이름 | 뜻 |
+| --- | --- |
+| `period_start_at` | 집계 기간의 시작 |
+| `period_end_at` | 집계 기간의 끝 |
+| `data_cutoff_at` | 계산에 쓸 기록의 마감. `recorded_at`이 이 시각 이하인 기록만 쓴다 |
+| `calculated_at` | 계산을 실행한 시각 |
+
+**레코드 시각** — 이상 본체와 이력 기록마다 따로 있다(결과 시각이 아니다).
+
+| 이름 | 뜻 |
+| --- | --- |
+| `occurred_at` (정정은 `effective_at`) | 그 일이 일어난 시각 |
+| `recorded_at` | 그 기록을 저장한 시각 |
+
+- 집계 대상: 본체의 `period_start_at ≤ occurred_at < period_end_at`인 이상.
+- 상태 판정: 그 이상의 이력 중 `recorded_at ≤ data_cutoff_at`이고 `occurred_at`(정정은 `effective_at`)이 판정 시점 이하인 기록으로 판정 시점의 마지막 상태를 정한다. 판정 시점은 아래 보고 종류를 따른다.
+- 결과에 결과 시각 4개를 함께 남겨, 같은 `period_start_at`·`period_end_at`·`data_cutoff_at`으로 다시 계산하면 언제 계산해도 같은 결과가 나오게 한다.
+
+<a id="automation-rate-report-kinds"></a>
+
+#### 보고 종류 — 완료 기간 보고와 진행 중 스냅샷
+
+| 보고 종류 | 언제 | 판정 시점 | 표시 |
+| --- | --- | --- | --- |
+| 완료 기간 보고 | 기간이 끝난 뒤 실행(`data_cutoff_at` ≥ `period_end_at`) | `period_end_at`의 상태 | 기간 이름 그대로(예: "지난주 11/9~11/15") |
+| 진행 중 스냅샷 | 기간이 끝나기 전 실행(`data_cutoff_at` < `period_end_at`) | `data_cutoff_at`의 상태 | "22시 현재"처럼 기준 시각을 붙인다. 기간 전체 결과로 보이지 않게 한다 |
+
+- 예(완료 기간 보고): 일요일 23시에 생겨 월요일 1시에 해결된 이상은 월요일 0시 이후에 계산하는 지난주(월~일) 보고에서 "진행 중"이다 — 기간 끝(일요일 24시)에는 해결되지 않았기 때문.
+- 예(진행 중 스냅샷): 같은 이상은 일요일 22시 스냅샷에는 아직 없다(23시에 생김).
+- 주는 월요일 0시에 시작한다([`periodDomain`](../src/domain/periodDomain.js#L109)). 지금 있는 정기 작업은 아침 8시·밤 10시 두 개뿐이고, 밤 10시 결산은 끝나지 않은 "오늘"을 계산하므로 진행 중 스냅샷이다. 주간·월간 결산은 정기 작업이 없다(아래 [8절](#slack-report-mapping)).
+
+중복 감지·재발·동시 생성의 규칙은 아직 없다 — 스키마 전에 정할 [RF-25의 남은 계약](refactoring.md#rf25-contract)이다.
+
+#### 폐기 이력 (2026-11-17) — 지금 설계가 아니다
+
+- **옛 분모:** 체류 중 `complaint_detected`(전수) + `energy_waste_detected`, 빈방 에너지 낭비(`vacancy_energy_alert`)와 SOFT 이벤트 제외. 정본 5가지와 기준이 다른 **과거 설계 후보**이며 정본의 부분집합이 아니다.
+- **옛 분자:** `events.resolution_type = 'auto'`인 이상 이벤트 수. 발생과 해결을 같은 사건으로 잇지 못하고 개입 이력을 남기지 못해 폐기했다.
+- **옛 칸 추가안:** `events`에 `resolution_type`·`resolution_seconds`를 더하는 SQL([기능 설계의 통합 감지 DB 필드](reporting-feature-design.md#integration-db-fields)). 위 데이터 계약으로 대체했다.
+- **옛 이름:** 이 비율을 "안심지수"라고 부르던 표기. 지금 이름은 자동화 개선율이다.
 
 ### 6-2. 이상 강조 규칙
 
@@ -496,42 +610,15 @@ A-Layer 요약 문장은 `reporting-feature-design.md` 섹션 4의 `generateSumm
 
 ---
 
-## 7. VACANT 에너지낭비 — vacancy_energy_alert 설계
+<a id="vacant-energy-design"></a>
 
-### 배경
+## 7. VACANT 에너지낭비 — 이벤트 이름 결정 대기
 
-`room-state-machine.md`에서 `energy_waste_detected`는 OCCUPIED 내부 전환에만 정의됨.
-VACANT 상태의 에너지낭비는 State Machine 이벤트로 처리할 수 없음 (수정 금지 파일).
-
-### 설계 결정
-
-VACANT 에너지낭비는 State Machine 밖에서 **독립 운영 알림**으로 처리한다.
-
-| 항목 | 결정값 |
-|------|--------|
-| 이벤트 타입 | `vacancy_energy_alert` |
-| is_soft | `true` (상태 변경 없음) |
-| 감지 조건 | mainStatus = VACANT이면서 전력소비 임계값 초과 30분+ 지속 |
-| 감지 주체 | SensorEventGenerator (State Machine EventGuard를 거치지 않음) |
-| 저장 | events 테이블 (is_soft=true, UNIMPLEMENTED_EVENT_TYPES에서 제외) |
-| 자동화 개선율 분모 | ~~미포함 (별도 카운터)~~ → RF-25 정본(빈방 에너지 낭비 30분 이상)에서는 **포함**(위 `is_soft`와 관계없이). 코드에는 `vacancy_energy_alert`라는 이벤트가 없고 실제 이름은 `vacant_energy_waste_detected`이며, 이것을 보내는 코드는 아직 없다(이름·읽는 코드만 있음) |
-| 자동 처리 | HA를 통해 소등/소냉 자동 실행 → 관리자·운영자 개입 없는 해결(자동, [RF-25 계약](refactoring.md#rf25-contract)) |
-| 레포트 위치 | Template-P의 [운영 알림] 섹션 |
-| Slack 알림 | 발생 즉시 발송 (일반 이상과 동일 채널) |
-
-### eventTypes.js 추가 필요
-
-```js
-// 기존 SOFT_EVENT_TYPES에 추가
-export const SOFT_EVENT_TYPES = new Set([
-  'checkout_confirmation_needed',
-  'early_checkin_suspected',
-  'no_show_suspected',
-  'vacancy_energy_alert',   // ← 추가
-]);
-```
+> **폐기 기록 (2026-11-17):** 옛 `vacancy_energy_alert` 설계(상태 전환 밖의 독립 운영 알림, SOFT 이벤트로 추가)는 폐기했다 — 코드에 그 이름이 없다. 코드에 있는 빈방 이벤트 이름은 `vacant_energy_waste_detected`이고, 이름과 읽는 코드만 있을 뿐 만드는 코드는 없다. **기존 이름을 쓸지 새 이벤트를 만들지는 결정 대기**다([RF-25](refactoring.md#rf25-contract)). 빈방 에너지 낭비의 이상 기준·측정 범위는 [6-1-1](#automation-rate-scope)을 따른다. 옛 설계 내용은 Git 이력(`3ef0531` 이전 판의 이 절)에 있다.
 
 ---
+
+<a id="slack-report-mapping"></a>
 
 ## 8. Slack 레포트 ↔ 템플릿 매핑
 
@@ -541,9 +628,11 @@ Slack 레포트의 텍스트 포맷은 `reporting-feature-design.md` 섹션 11�
 | Slack 레포트 | Cron | 사용 템플릿 | 기간 | Scope |
 |-------------|------|------------|------|-------|
 | 아침 브리핑 | daily-plan (KST 08:00) | Template-A(today) [완료+현재+예정] + Template-F(tomorrow) | today + tomorrow | All |
-| 저녁 결산 | daily-result (KST 22:00) | Template-P(today 전체) + Template-F(tomorrow) | today + tomorrow | All |
-| 주간 결산 | weekly (일 KST 22:00) | Template-P(last_week) + A-Layer(주 지표 안심지수 + 보조 자동화 개선율) | last_week | All |
-| 월간 보고서 | monthly (1일 KST 08:00) | Template-P(last_month) + 숙소별 A-Layer | last_month | Per-property 분해 |
+| 저녁 결산 | daily-result (KST 22:00) | Template-P(today, **22시 현재 스냅샷** — 오늘은 아직 끝나지 않았다) + Template-F(tomorrow) | today + tomorrow | All |
+| 주간 결산 | ⚠️ **실행 시각 결정 대기** · 정기 작업 없음(미구현) | Template-P + A-Layer(주 지표 안심지수 + 보조 자동화 개선율) | 아래 참고 | All |
+| 월간 보고서 | monthly (1일 KST 08:00) · 정기 작업 없음(미구현) | Template-P(last_month, 완료 기간 보고) + 숙소별 A-Layer | last_month | Per-property 분해 |
+
+> **주간 결산의 실행 시각 — 결정 대기 (2026-11-17):** 예전 설계는 "일요일 22시 실행 + `last_week`"였다. 그런데 `last_week`는 직전 월~일이라, 일요일 22시에 돌리면 이미 7일 전에 끝난 주를 보고하게 되고, 이번 주(월~일)는 아직 2시간이 남아 있다. 둘 중 하나로 정해야 한다 — (가) 월요일 0시 이후(예: 월요일 아침 8시 작업)에 실행해 `last_week`를 **완료 기간 보고**로 낸다, (나) 일요일 22시를 유지하고 `this_week`의 **"22시 현재" 진행 중 스냅샷**으로 낸다. 판정 시점 규칙은 [6-1-1 보고 종류](#automation-rate-report-kinds). 결정은 [RF-25](refactoring.md#rf25-contract)에서 관리한다.
 
 ### 매핑 규칙
 
@@ -580,12 +669,12 @@ Slack 레포트의 텍스트 포맷은 `reporting-feature-design.md` 섹션 11�
 | ~~2~~ | ~~`api/stats.js` VALID_PERIODS에 today/yesterday/tomorrow 추가~~ | ✅ 완료 (C-1) | ~~즉시~~ |
 | 3 | `countCurrentStats` anomalyCount에 ENERGY_WASTE 포함 여부 통일 | 보류 (H-2 rollback — 기존 테스트 명세 유지) | Phase 3 |
 | ~~4~~ | ~~`roomStateMockData.js`에서 CHECKIN_INQUIRY 제거~~ | ✅ 완료 (H-1) | ~~Phase 2~~ |
-| ~~5~~ | ~~`vacancy_energy_alert` eventTypes.js 추가~~ | ✅ 완료 | ~~Phase 2~~ |
+| 5 | 빈방 에너지 낭비 이벤트 이름·감지기 결정 및 구현 | 미결 · 이벤트 이름 결정 대기([7절](#vacant-energy-design)). 2026-11-17 확인: 감지기가 없다(코드의 빈방 이벤트 이름 `vacant_energy_waste_detected`는 이름·읽는 코드만 있음). 이 항목의 예전 "✅ 완료" 표시는 사실과 달랐다 | Phase 2 |
 | ~~6~~ | ~~Template-A 컴포넌트 신규 작성~~ | ✅ 완료 (`ActiveHybridPanel.jsx`) | ~~Phase 3~~ |
 | ~~7~~ | ~~KPI Tiles 기간별 변형 구현 (섹션 11 기준)~~ | ✅ 완료 (ACTIVE/PAST/FUTURE 4타일) | ~~Phase 3~~ |
 | 8 | Single-Property Template-A 타임라인 컴포넌트 | 설계 완료, 미구현 | Phase 3 |
 | 9 | SOFT 이벤트 countPeriodEvents 집계 | ✅ 완료 (noShowSuspected 등 3개 필드) | ~~Phase 2~~ |
-| 10 | 이상 발생·해결 기록([RF-25 계약](refactoring.md#rf25-contract)) → 자동화 개선율 계산 | 미구현 (현재 "—" 표시) · 스키마 승인 대기 | Phase 3 |
+| 10 | 이상 발생·해결 기록([6-1-1 계약](#automation-rate)) → 자동화 개선율 계산 | 미구현 (현재 "—" 표시) · 측정 범위·이력 계약 보완 대기 | Phase 3 |
 | 11 | EventMatrixPanel: SOFT 이벤트 섹션 | ✅ 완료 | ~~Phase 2~~ |
 | 12 | iCal 연동 후 Template-F 날짜별 테이블, Template-A [예정] 섹션 | 미구현 (placeholder) | Phase 3 |
 
@@ -604,7 +693,7 @@ Slack 레포트의 텍스트 포맷은 `reporting-feature-design.md` 섹션 11�
 
 | 네비게이션 | Tense | KPI Tiles 역할 | 펼쳐지는 Template 섹션 |
 |---|---|---|---|
-| 지난주 | PAST | 지난주 이벤트 카운트 (체크인N / 이상N / 자동화 개선율N%, 계산 전 —) | Template-P: [결과] only |
+| 지난주 | PAST | 지난주 이벤트 카운트 (체크인N / 이상N / 자동화 개선율 — (측정 중 0/5)) | Template-P: [결과] only |
 | 이번주 | ACTIVE | **실시간 상태 카운트** (체류중N / 입실전N / 청소중N / 공실N) | Template-A: [완료 so far] + [예정 remaining] |
 | 다음주 | FUTURE | 다음주 예정 카운트 (체크인N / 체크아웃N / 청소배정N) | Template-F: [계획] only |
 
@@ -649,11 +738,11 @@ All-Properties (ListView) KPI Tile 4개 기준:
 
 | 기간 위치 | Tile 1 | Tile 2 | Tile 3 | Tile 4 |
 |---|---|---|---|---|
-| PAST (지난주/전날) | 체크인 N건 | 이상감지 N건 | 자동해결 N건 | 자동화 개선율 N% (계산 전 —) |
+| PAST (지난주/전날) | 체크인 N건 | 이상감지 N건 | 자동해결 — | 자동화 개선율 — (측정 중 0/5) |
 | ACTIVE (이번주/오늘) | 체류중 N | 입실전 N | 청소중 N | 공실 N |
 | FUTURE (다음주/내일) | 체크인 예정 N | 체크아웃 예정 N | 청소배정 N/N | - |
 
-> **RF-25(2026-11-17):** PAST 타일 2~4(이상감지·자동해결·자동화 개선율)는 보조 지표 묶음이다. 주 지표 안심지수는 같은 기간의 Template-P 표 하단에 나온다(`EventMatrixPanel`). 타일 부품(`KpiTiles.jsx`)은 지금 어느 화면에도 연결돼 있지 않다 — 다시 연결할 때도 안심지수를 빼지 않는다.
+> **RF-25(2026-11-17):** PAST 타일 2 "이상감지"는 체류 중 불만·에너지 낭비 이벤트 건수(상태 표시용)이며 자동화 개선율의 분모가 아니다. 타일 3·4(자동해결·자동화 개선율)는 [6-1-1](#automation-rate) 기준이고 지금은 "—"다. 주 지표 안심지수는 같은 기간의 Template-P 표 하단에 나온다(`EventMatrixPanel`). 타일 부품(`KpiTiles.jsx`)은 지금 어느 화면에도 연결돼 있지 않다 — 다시 연결할 때도 안심지수를 빼지 않는다.
 
 Single-Property (DetailView) KPI Tile 기준:
 
@@ -832,6 +921,8 @@ EventMatrixPanel과 FutureMatrixPanel이 공유하는 3-컬럼 행 포맷:
 
 > **역산 패턴 (지표 #2~#5):** 위반 건수를 분모에서 빼서 달성 건수로 환산.
 > `max(0, 분모 - 위반건수)` — 음수 방지.
+>
+> ⚠️ **RF-26(2026-11-17 사용자 지시):** 이 역산은 실패를 놓치면 그만큼 성공으로 센다. #2~#5는 성공·실패·측정 불가를 명시적으로 판정한 기록이 생기기 전까지 안심지수 측정에서 뺀다([6-1](#safety-index-exclusions)). 실패 이벤트만 추가하는 방식으로 해결하지 않는다. 지금 코드는 아직 넣어 계산한다.
 
 **드릴다운:** `DrilldownSheet` → `GET /api/stats/drilldown?period=&metric=` (섹션 12 참조)
 
