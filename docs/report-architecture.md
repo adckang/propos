@@ -51,7 +51,7 @@
 | `E` | Event Matrix | 이벤트 타입별 카운트 + resolution (PAST 전용) |
 | `H` | Hybrid | 완료 이벤트 + 현재 상태 + 남은 예정 (ACTIVE 전용) |
 | `F` | Schedule | 예정 일정 목록 (FUTURE 전용) |
-| `A` | Analysis | 안심지수, 이상 강조, 요약 문장 (모든 셀에 부가) |
+| `A` | Analysis | 안심지수(보조: 자동화 개선율, 계산 전 —), 이상 강조, 요약 문장 (모든 셀에 부가) |
 
 ---
 
@@ -255,7 +255,8 @@ LIFECYCLE/OPERATIONS는 Count 단일 열. ANOMALY만 Resolution 열 추가.
 └──────────────┴──────────────────────────┴───────┴──────┴────────┘
 
 ─────────────────────────────────────────
-안심지수: N%   (이상 N건 — Auto N / Manual N / Pending N)
+안심지수: N%   (운영 지표 7개 평균)
+자동화 개선율: N%   (이상 N건 — Auto N / Manual N / Pending N, 측정 중 유형 N/5, 계산 전 —)
 수동개입: N건
 ```
 
@@ -321,7 +322,7 @@ Template-A는 **[완료]** + **[예정]** 두 섹션으로만 구성한다.
 [완료] 이번 주 {요일}까지 처리된 이벤트 (Postgres)
   체크아웃 N건  |  체크인 N건  |  청소완료 N건
   이상감지 N건 → 자동 N / 수동 N / 미해결 N
-  현재까지 안심지수: N%
+  현재까지 안심지수: N%  ·  자동화 개선율: N% (계산 전 —)
 
 [예정] 이번 주 남은 일정 (iCal + cleaning_jobs)
   {요일} {HH:mm}  {숙소명}  체크인/아웃   청소 ✅/⚠
@@ -436,7 +437,7 @@ iCal 마지막 동기화: N분 전 ✅ / ⚠ N시간 전 (오래된 경우 강�
 ### 요약의 노쇼 안내 기준 · 2026-11-10 사용자 확정
 
 - **지난 모든 기간**(지난 1시간·어제·며칠 전·지난주·몇 주 전·지난달)에서 `noShowSuspected > 0`이면 기존 문구 `노쇼 의심 N건 확인이 필요해요.`를 요약 뒤에 한 번 표시한다. 0건이거나 NOW·ACTIVE·FUTURE이면 표시하지 않는다. All/Single-Property와 명시적 DEMO에 같은 기준을 적용한다.
-- 이 결정은 표시 범위만 바꾼다. 기존 집계·확인 상태 포함 기준·실패 건수·안심지수 분모를 바꾸거나 SOFT 이벤트를 실제 실패로 재분류하지 않는다.
+- 이 결정은 표시 범위만 바꾼다. 기존 집계·확인 상태 포함 기준·실패 건수·안심지수·자동화 개선율 분모를 바꾸거나 SOFT 이벤트를 실제 실패로 재분류하지 않는다.
 - 공통 표시 함수는 `src/domain/reportSummaryDomain.js`의 `appendPastNoShowNotice`다. 운영과 DEMO가 같은 함수를 호출하며 DB·외부 I/O 의존성은 없다.
 - 명시적 DEMO의 예정 요약도 같은 응답의 `stats.checkIns`를 그대로 사용한다. 숙소 선택 범위와 기간별 기존 문장 형식은 유지하며, 요약용 입실 건수를 독립 계산하지 않는다. 기본 HYBRID·REAL/SIMULATED 필터·fixture 저장 방식은 변경하지 않는다.
 
@@ -449,20 +450,30 @@ iCal 마지막 동기화: N분 전 ✅ / ⚠ N시간 전 (오래된 경우 강�
 ### 6-1. 안심지수 (North Star Metric)
 
 > **2026-11-17 정의 확정(DEC-02, 사용자):** 안심지수 = **최종적으로 성공한 비율** = 측정 가능한 운영 지표 7개(게스트 맞이 준비·퇴실 후 절전/보안·빈방 절전/보안 유지·청소시간 준수·청소 담당자 배정) 성공률의 평균, 반올림 정수 %. 분모가 0이거나 분자가 없는 지표는 뺀다. 표 하단과 요약 등급이 같은 함수(`src/domain/operationalMetricsDomain.js`의 `computeSafetyIndex`)를 쓴다. 아래 `auto_resolved / total_anomalies`는 안심지수가 아니라 **자동화 개선율**의 설계이며 아직 계산하지 않는다(이상 건마다 자동 해결 여부를 남기는 데이터가 없음, [refactoring RF-25](refactoring.md#rf-25)).
+>
+> **2026-11-17 RF-25 결정(사용자):** 대표 지표와 주간 결산의 주 지표는 안심지수, 자동화 개선율은 보조 지표(계산 전 "—"). 이상 기준의 정본은 [기능 설계 0-2의 5가지](reporting-feature-design.md#L57)이고, 아래 "분모 정의"의 두 항목은 별도 정의가 아니라 **정본의 초기 측정 범위**다(정본과 판정 기준·대상이 달라 어느 항목으로 볼지는 확인 필요). 그래서 아래의 빈방 에너지 낭비 제외와 `resolution_type` 분자 정의는 더 이상 쓰지 않는다 — 데이터 계약은 [RF-25](refactoring.md#rf25-contract).
 
 ```
 자동화 개선율(구 표기: 안심지수) = auto_resolved / total_anomalies × 100 (%)
 
-분모 정의 (total_anomalies):
+분모 정의 (total_anomalies) — 원래 두 항목. RF-25 이후 정본 5가지의 초기 측정 범위 후보:
   complaint_detected   — OCCUPIED 내에서 발생. severity 무관 전수 포함.
+                         (RF-25: 이 중 소음만 정본 항목과 겹치고 기준이 다르다. 연기·온습도·문 열림은
+                          정본에 맞는 칸이 없다 — 어느 기록을 셀지는 RF-25 확인 필요 1)
   energy_waste_detected — OCCUPIED 내에서 발생 (State Machine 기준).
+                         (RF-25: 정본은 빈방 30분 기준, 이 기록은 체류 중 3분 기준 — 확인 필요 1)
+  진행 중 이상          — 기간이 끝날 때 아직 해결되지 않은 이상도 포함 (분자에는 미포함, 건수 따로 표시).
 
 분모 제외:
-  vacancy_energy_alert  — VACANT 에너지낭비는 별도 운영 알림 카운터로 분리.
+  (RF-25로 폐기) vacancy_energy_alert — 정본은 빈방 에너지 낭비 30분 이상을 이상으로 센다.
+                         (코드의 이벤트 이름은 vacant_energy_waste_detected — 보내는 코드 없음)
   SOFT 이벤트           — no_show_suspected 등은 이상 감지 분모에 미포함.
+                         단 정본 5가지에 해당하면 SOFT 여부와 관계없이 센다(빈방 에너지 낭비 등).
+  대상 사라짐           — 예약 취소처럼 대상 자체가 사라진 이상.
 
-분자 정의 (auto_resolved):
-  resolution_type = 'auto'인 이상 이벤트 건수.
+분자 정의 (auto_resolved) — RF-25 이후:
+  (폐기) resolution_type = 'auto'인 이상 이벤트 건수.
+  해결됐고, 관리자·운영자 개입 없이 처리된 이상 건수.
 
 목표: 90% 이상 유지.
 ```
@@ -472,7 +483,7 @@ iCal 마지막 동기화: N분 전 ✅ / ⚠ N시간 전 (오래된 경우 강�
 | 조건 | 강조 방식 |
 |------|-----------|
 | ISSUE_AND_ENERGY 상태 숙소 존재 | State Matrix 해당 행 배경 `#fef2f2`, `❌` |
-| Pending anomaly > 0 | 안심지수 수치 빨강, 해당 이벤트 행 `⚠` |
+| Pending anomaly(진행 중 이상) > 0 | 자동화 개선율 옆 진행 중 건수 빨강, 해당 이벤트 행 `⚠` |
 | 안심지수 < 70% | 안심지수 전체 구간 빨강 강조 |
 | CLEANING_PENDING 건수 > 0 (체크인 12h 이내) | Template-F 해당 행 `⚠ 미배정` |
 | no_show_suspected 미확인 | Template-C 하단 Soft 섹션 `⚠ N건 미확인` |
@@ -503,8 +514,8 @@ VACANT 에너지낭비는 State Machine 밖에서 **독립 운영 알림**으로
 | 감지 조건 | mainStatus = VACANT이면서 전력소비 임계값 초과 30분+ 지속 |
 | 감지 주체 | SensorEventGenerator (State Machine EventGuard를 거치지 않음) |
 | 저장 | events 테이블 (is_soft=true, UNIMPLEMENTED_EVENT_TYPES에서 제외) |
-| 안심지수 분모 | **미포함** (별도 카운터) |
-| 자동 처리 | HA를 통해 소등/소냉 자동 실행 → `resolution_type = 'auto'` |
+| 자동화 개선율 분모 | ~~미포함 (별도 카운터)~~ → RF-25 정본(빈방 에너지 낭비 30분 이상)에서는 **포함**(위 `is_soft`와 관계없이). 코드에는 `vacancy_energy_alert`라는 이벤트가 없고 실제 이름은 `vacant_energy_waste_detected`이며, 이것을 보내는 코드는 아직 없다(이름·읽는 코드만 있음) |
+| 자동 처리 | HA를 통해 소등/소냉 자동 실행 → 관리자·운영자 개입 없는 해결(자동, [RF-25 계약](refactoring.md#rf25-contract)) |
 | 레포트 위치 | Template-P의 [운영 알림] 섹션 |
 | Slack 알림 | 발생 즉시 발송 (일반 이상과 동일 채널) |
 
@@ -531,7 +542,7 @@ Slack 레포트의 텍스트 포맷은 `reporting-feature-design.md` 섹션 11�
 |-------------|------|------------|------|-------|
 | 아침 브리핑 | daily-plan (KST 08:00) | Template-A(today) [완료+현재+예정] + Template-F(tomorrow) | today + tomorrow | All |
 | 저녁 결산 | daily-result (KST 22:00) | Template-P(today 전체) + Template-F(tomorrow) | today + tomorrow | All |
-| 주간 결산 | weekly (일 KST 22:00) | Template-P(last_week) + A-Layer(안심지수 전체) | last_week | All |
+| 주간 결산 | weekly (일 KST 22:00) | Template-P(last_week) + A-Layer(주 지표 안심지수 + 보조 자동화 개선율) | last_week | All |
 | 월간 보고서 | monthly (1일 KST 08:00) | Template-P(last_month) + 숙소별 A-Layer | last_month | Per-property 분해 |
 
 ### 매핑 규칙
@@ -574,7 +585,7 @@ Slack 레포트의 텍스트 포맷은 `reporting-feature-design.md` 섹션 11�
 | ~~7~~ | ~~KPI Tiles 기간별 변형 구현 (섹션 11 기준)~~ | ✅ 완료 (ACTIVE/PAST/FUTURE 4타일) | ~~Phase 3~~ |
 | 8 | Single-Property Template-A 타임라인 컴포넌트 | 설계 완료, 미구현 | Phase 3 |
 | 9 | SOFT 이벤트 countPeriodEvents 집계 | ✅ 완료 (noShowSuspected 등 3개 필드) | ~~Phase 2~~ |
-| 10 | resolution(Auto/Manual/Pending) 데이터 연동 → 안심지수 계산 완성 | 미구현 (현재 "—" 표시) | Phase 3 |
+| 10 | 이상 발생·해결 기록([RF-25 계약](refactoring.md#rf25-contract)) → 자동화 개선율 계산 | 미구현 (현재 "—" 표시) · 스키마 승인 대기 | Phase 3 |
 | 11 | EventMatrixPanel: SOFT 이벤트 섹션 | ✅ 완료 | ~~Phase 2~~ |
 | 12 | iCal 연동 후 Template-F 날짜별 테이블, Template-A [예정] 섹션 | 미구현 (placeholder) | Phase 3 |
 
@@ -593,7 +604,7 @@ Slack 레포트의 텍스트 포맷은 `reporting-feature-design.md` 섹션 11�
 
 | 네비게이션 | Tense | KPI Tiles 역할 | 펼쳐지는 Template 섹션 |
 |---|---|---|---|
-| 지난주 | PAST | 지난주 이벤트 카운트 (체크인N / 이상N / 안심지수N%) | Template-P: [결과] only |
+| 지난주 | PAST | 지난주 이벤트 카운트 (체크인N / 이상N / 자동화 개선율N%, 계산 전 —) | Template-P: [결과] only |
 | 이번주 | ACTIVE | **실시간 상태 카운트** (체류중N / 입실전N / 청소중N / 공실N) | Template-A: [완료 so far] + [예정 remaining] |
 | 다음주 | FUTURE | 다음주 예정 카운트 (체크인N / 체크아웃N / 청소배정N) | Template-F: [계획] only |
 
@@ -638,9 +649,11 @@ All-Properties (ListView) KPI Tile 4개 기준:
 
 | 기간 위치 | Tile 1 | Tile 2 | Tile 3 | Tile 4 |
 |---|---|---|---|---|
-| PAST (지난주/전날) | 체크인 N건 | 이상감지 N건 | 자동해결 N건 | 안심지수 N% |
+| PAST (지난주/전날) | 체크인 N건 | 이상감지 N건 | 자동해결 N건 | 자동화 개선율 N% (계산 전 —) |
 | ACTIVE (이번주/오늘) | 체류중 N | 입실전 N | 청소중 N | 공실 N |
 | FUTURE (다음주/내일) | 체크인 예정 N | 체크아웃 예정 N | 청소배정 N/N | - |
+
+> **RF-25(2026-11-17):** PAST 타일 2~4(이상감지·자동해결·자동화 개선율)는 보조 지표 묶음이다. 주 지표 안심지수는 같은 기간의 Template-P 표 하단에 나온다(`EventMatrixPanel`). 타일 부품(`KpiTiles.jsx`)은 지금 어느 화면에도 연결돼 있지 않다 — 다시 연결할 때도 안심지수를 빼지 않는다.
 
 Single-Property (DetailView) KPI Tile 기준:
 
