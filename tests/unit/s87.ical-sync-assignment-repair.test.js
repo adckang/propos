@@ -6,6 +6,7 @@ import path from "node:path";
 import { parse } from "@babel/parser";
 import { attendeeEmailsForCleaner, matchCleanerAttendee, calendarCleaningTimes } from "../../src/domain/calendarAssignmentDomain.js";
 import { toKstDateKey } from "../../server/cleaning/_dispatch.js";
+import { toMonitoringReservation } from "../../src/domain/monitoringReservationDomain.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const source = readFileSync(path.join(ROOT, "api/cleaning/[...slug].js"), "utf8");
@@ -147,6 +148,7 @@ describe("동기화 화면 — HTTP 성공과 담당자 복구 성공 구분", (
       setLiveProperty: value => liveUpdates.push(value),
       setLastSynced: () => { successTimestamps++; },
       postMonitoringConfig: value => monitoringConfigs.push(value),
+      toMonitoringReservation, // 순수 도메인 함수는 실제 구현(RF-27 — 서버 정기 작업과 같은 예약 모양)
       Toast: { show: (...args) => toasts.push(args) },
     });
     await sync({ id: "fixture-property", name: "검증숙소", icalConfigured: true });

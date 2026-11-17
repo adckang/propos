@@ -45,6 +45,7 @@ Pi의 `/api/properties`와 `data/properties-config.json`은 Home Assistant 워�
 - 운영 Vercel의 `/api/properties`는 Pi 워처 메타데이터 프록시다.
 - 로컬 Vite도 같은 `api/properties.js` 핸들러를 사용하므로 라우팅 의미가 다르지 않다.
 - 운영·로컬의 실제 예약 조회는 항상 Postgres `/api/cleaning/*`를 사용한다.
+- Pi 워처 설정(`data/monitoring-config.json`)에는 입·퇴실 판단용 "지금 예약" 하나만 복사돼 있다(정본은 Postgres). 대시보드(열 때·15분마다)와 서버 정기 작업(08:00·22:00 KST iCal 동기화 직후, RF-27)이 같은 규칙(`src/domain/monitoringReservationDomain.js`)으로 골라 보낸다. 서버는 빈 예약을 보내지 않고 예약 하나만 보낸다.
 - Pi가 연결되지 않아도 DB의 파주201 예약과 청소 배정은 화면에 표시되어야 하며, Pi 메타데이터가 없을 때는 HA 제어/센서 기능만 제한된다.
 
 환경별 `POSTGRES_URL`이 같은 DB를 가리키면 로컬·운영은 동일한 행을 본다. `.env.local`과 Vercel 환경변수는 저장소에 커밋하지 않는다.

@@ -18,6 +18,7 @@ import {
 } from "../../server/cleaning/_dispatch.js";
 import { notify } from "../../server/cleaning/_notify.js";
 import { syncAllPropertiesIcal } from "../../server/cleaning/_icalSync.js";
+import { pushCurrentReservationsToWatchers } from "../../server/watcherReservationSync.js";
 import { isCheckoutCancelled, reservationUidOf } from "../../server/cleaning/_reservationSync.js";
 import { parseVEvents, airbnbEventsToReservations } from "../../src/domain/room-state/icalParser.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
@@ -34,6 +35,13 @@ import { getStatsForPeriod } from "../../src/application/reportingService.js";
 import { countPeriodEvents } from "../../src/domain/reportingDomain.js";
 import { queryEvents } from "../../src/infrastructure/eventRepository.js";
 import { reportTokenFailure, markRenewed, checkStaleness, isRenewalDue } from "../../server/cleaning/_tokenHealth.js";
+
+// RF-27 결과를 로그에 남긴다 — 워처 주소는 남기지 않고 숙소·결과·HTTP 상태만
+function logWatcherReservationPush(label, results) {
+  for (const r of results ?? []) {
+    console.log(`[${label}] watcher-reservation: ${r.propertyId ?? "-"} ${r.result}${r.httpStatus ? ` (HTTP ${r.httpStatus})` : ""}`);
+  }
+}
 
 const WATCH_STALE_MS = 6 * 24 * 60 * 60 * 1000; // 7일 만료 전 1일 여유를 두고 경고
 
@@ -482,6 +490,14 @@ export default async function handler(req, res) {
       try { await syncAllPropertiesIcal(db, { kv }); ran.push("ical-sync"); }
       catch (e) { console.error("[morning] ical-sync 실패:", e.message); }
 
+      // RF-27: 가져온 최신 예약을 Pi 워처에 보낸다 — 대시보드를 열지 않아도 Pi 예약이 낡지 않게. 실패해도 나머지는 그대로 돈다
+      try {
+        const pushed = await pushCurrentReservationsToWatchers(db);
+        logWatcherReservationPush("morning", pushed);
+        if (pushed.some(r => r.sent)) ran.push("watcher-reservation"); // 실제로 보낸 워처가 있을 때만 "했음"으로 적는다
+      }
+      catch (e) { console.error("[morning] watcher-reservation 실패:", e.message); }
+
       try { await handleDailyPlan(db, nullRes); ran.push("daily-plan"); }
       catch (e) { console.error("[morning] daily-plan 실패:", e.message); }
 
@@ -592,6 +608,9 @@ export default async function handler(req, res) {
       // RF-20: 밤 요청 작업 전에도 예약을 가져온다 — 취소는 "두 번 연속 안 보여야" 확정이라 하루 두 번 돌아야 반나절~하루 안에 반영된다
       try { await syncAllPropertiesIcal(db, { kv }); }
       catch (e) { console.error("[evening] ical-sync 실패:", e.message); }
+      // RF-27: 밤에도 가져온 예약을 Pi 워처에 보낸다(실패해도 결산은 그대로)
+      try { logWatcherReservationPush("evening", await pushCurrentReservationsToWatchers(db)); }
+      catch (e) { console.error("[evening] watcher-reservation 실패:", e.message); }
       await handleCleaningFollowup(db, nullRes);
       return await handleDailyResult(db, res);
     }

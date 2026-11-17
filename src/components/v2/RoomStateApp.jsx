@@ -14,6 +14,7 @@ import Toast from '../../utils/toast';
 import { canonicalPropertyId, planPropertyIdentity, validatePropertyName } from '../../domain/propertyIdentityDomain';
 import { DATA_PROFILE, normalizeDataProfile } from '../../config/dataProfile.js';
 import { measuredPreparationState } from '../../domain/preStayOptimizationDomain.js';
+import { toMonitoringReservation, usableReservations } from '../../domain/monitoringReservationDomain.js';
 
 const APP_DATA_PROFILE = normalizeDataProfile(import.meta.env.VITE_PROPOS_DATA_PROFILE, DATA_PROFILE.HYBRID);
 const USE_DEMO_DATA = APP_DATA_PROFILE === DATA_PROFILE.DEMO;
@@ -106,20 +107,19 @@ function cloudRowToConfig(row) {
 }
 
 function cloudRowToLiveProperty(row) {
-  const reservations = (Array.isArray(row?.reservations) ? row.reservations : [])
-    .filter(item => item.status !== 'CANCELLED')
+  // 취소 예약·날짜가 잘못된 행은 서버 정기 작업과 같은 기준으로 뺀다(RF-27, monitoringReservationDomain)
+  const reservations = usableReservations(Array.isArray(row?.reservations) ? row.reservations : [])
     .map(item => ({
       uid: item.uid,
       guestName: item.guestName || '',
       platform: item.platform || 'Airbnb',
-      checkIn: new Date(item.checkIn),
-      checkOut: new Date(item.checkOut),
+      checkIn: item.checkIn,
+      checkOut: item.checkOut,
       ...(item.cleanerName ? { cleanerName: item.cleanerName } : {}),
       ...(item.cleaningStatus ? { cleaningStatus: item.cleaningStatus } : {}),
       ...(item.cleaningAt ? { cleaningAt: new Date(item.cleaningAt) } : {}),
       ...(item.cleaningEnd ? { cleaningEnd: new Date(item.cleaningEnd) } : {}),
-    }))
-    .filter(item => Number.isFinite(item.checkIn.getTime()) && Number.isFinite(item.checkOut.getTime()));
+    }));
   const cleaningSlots = reservations
     .filter(item => item.cleaningAt && item.cleaningEnd)
     .map(item => ({
@@ -521,7 +521,7 @@ export default function RoomStateApp({ onBack }) {
       postMonitoringConfig({
         areaName: cfg.name,
         district: cfg.district,
-        reservation: currentRes ? { uid: currentRes.uid ?? null, checkIn: currentRes.checkIn?.toISOString?.() ?? null, checkOut: currentRes.checkOut?.toISOString?.() ?? null } : null,
+        reservation: toMonitoringReservation(currentRes), // 서버 정기 작업과 같은 모양(RF-27)
       }, cfg.watcherId ?? null);
       if (syncResult.assignmentRepair?.error) {
         throw new Error(`청소 담당자 동기화 실패: ${syncResult.assignmentRepair.error}`);

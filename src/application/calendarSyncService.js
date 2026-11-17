@@ -12,6 +12,7 @@ import {
   gcalEventsToCleaningSlots,
 } from '../domain/room-state/icalParser.js';
 import { buildReservationHistorySegments } from '../domain/reservationHistoryDomain.js';
+import { splitReservationsAt } from '../domain/monitoringReservationDomain.js';
 
 const PROXIES = [
   url => `/api/ical?url=${encodeURIComponent(url)}`,
@@ -124,8 +125,8 @@ export function buildLiveProperty(template, reservations, cleaningSlots = []) {
   const { mainStatus, subStatus } = timeline.at(-1);
   const currentState = { mainStatus, subStatus };
 
-  const activeRes = reservations.find(r => r.checkIn <= now && r.checkOut > now);
-  const futureRes = reservations.filter(r => r.checkIn > now).sort((a, b) => a.checkIn - b.checkIn);
+  // "지금 예약" 규칙은 서버 정기 작업(RF-27)과 같은 함수 — 진행 중 예약, 없으면 가장 가까운 다음 예약
+  const { active: activeRes, future: futureRes } = splitReservationsAt(reservations, now);
 
   // 모든 미래 예약에 청소 슬롯 정보 매핑
   const enrichedFutureRes = futureRes.map((r, i) => {
