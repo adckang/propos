@@ -10,13 +10,18 @@ export const PENDING_KEY = '@propos/fcm_token_pending';
 export const WORKER_ID = '11111111-1111-4111-8111-111111111111';
 export const response = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
 
-export async function workerFcmFixture({ stored = 'fixture-old', token = 'fixture-new', storage, answer, db, storageFailure } = {}) {
+export async function workerFcmFixture({ stored = 'fixture-old', token = 'fixture-new', storage, answer, db, storageFailure, slack } = {}) {
   const saved = { fetch: globalThis.fetch, profile: process.env.PROPOS_DATA_PROFILE };
   const key = '__workerFcmFixture_' + randomUUID().replaceAll('-', '');
   const values = storage ?? new Map(stored ? [[TOKEN_KEY, stored]] : []);
-  const listeners = new Set(), calls = [], writes = [];
+  const listeners = new Set(), calls = [], writes = [], slackCalls = [];
   const io = {
     db, permission: 1, token,
+    async postSlack(...args) {
+      slackCalls.push(args);
+      if (slack) return slack(...args);
+      throw new Error('Unexpected Slack request blocked');
+    },
     storage: {
       async getItem(k) { return values.get(k) ?? null; },
       async setItem(k, v) { storageFailure?.('set', k, v); writes.push({ key: k, value: v }); values.set(k, v); },
@@ -34,7 +39,7 @@ export async function workerFcmFixture({ stored = 'fixture-old', token = 'fixtur
     '@react-native-firebase/messaging': `const m=()=>globalThis[${JSON.stringify(key)}].sdk; m.AuthorizationStatus={AUTHORIZED:1,PROVISIONAL:2}; export default m;`,
     '@react-native-async-storage/async-storage': `export default globalThis[${JSON.stringify(key)}].storage;`,
     pg: `export class Pool { constructor(){return globalThis[${JSON.stringify(key)}].db;} }`,
-    '../../server/cleaning/_dispatch.js': 'export const postSlack=async()=>{throw new Error("Unexpected Slack request blocked");};',
+    '../../server/cleaning/_dispatch.js': `export const postSlack=(...a)=>globalThis[${JSON.stringify(key)}].postSlack(...a);`,
   };
   async function load(relative) {
     const bundle = await build({ entryPoints: [resolve(root, relative)], bundle: true, write: false, platform: 'node', format: 'esm',
@@ -45,9 +50,11 @@ export async function workerFcmFixture({ stored = 'fixture-old', token = 'fixtur
     return import('data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text + `\n// ${randomUUID()}`).toString('base64'));
   }
   let server;
-  async function invoke(method, body, headers = {}, { rawBody } = {}) {
+  async function invoke(method, body, headers = {}, {
+    rawBody, resource = 'token', query = { slug: resource }, url = `/api/workers/${resource}`,
+  } = {}) {
     server ??= (await load('api/workers/[...slug].js')).default;
-    const req = { method, query: { slug: 'token' }, url: '/api/workers/token', headers,
+    const req = { method, query, url, headers,
       async *[Symbol.asyncIterator]() {
         if (rawBody !== undefined) yield Buffer.from(rawBody);
         else if (body) yield Buffer.from(JSON.stringify(body));
@@ -68,7 +75,7 @@ export async function workerFcmFixture({ stored = 'fixture-old', token = 'fixtur
     }
     return response(200, call.method === 'GET' ? { ok: true, worker_id: WORKER_ID } : { ok: true });
   };
-  return { values, calls, writes, io, invoke, loadApi: () => load('worker-app/src/services/api.ts'),
+  return { values, calls, writes, slackCalls, io, invoke, loadApi: () => load('worker-app/src/services/api.ts'),
     loadClient: () => load('worker-app/src/services/fcm.ts'),
     async emitToken(value) { io.token = value; return Promise.all([...listeners].map(fn => fn(value))); },
     restore() {
