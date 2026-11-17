@@ -1915,4 +1915,8 @@ Codex는 별도 작업 폴더에서 커밋했고 사용자 폴더는 의도적�
 
 ### ACT-08 단계 ③ 배포 기록 · 2026-11-17
 
-단계 ③ 테스트·선택 확장한 기존 도우미·이 문서만 명시적으로 커밋·푸시한다. 운영 핸들러·`dist`는 변경하지 않는다. 로컬 검증·리뷰 후 GitHub CI와 Vercel Production SHA/READY를 메타데이터로 확인한다. 운영 업무 주소·Pi 요청은 하지 않으며 단계 ④는 미착수다.
+단계 ③ 테스트·선택 확장한 기존 도우미·이 문서만 `e6c17b0`으로 명시적으로 커밋·푸시했다. 별도 Git 작업 폴더에서 기존 pre-commit 훅을 정상 실행했고, 커밋은 허용된 세 파일뿐이다. 운영 핸들러·`dist` 변경은 0이다.
+
+집중 149개·전체 3,170개·격리 SQL 7개·변형 15/15·검사·빌드·리뷰 통과 후 GitHub CI `validate` **success**, Vercel `propos-project-v2` Production의 **동일 SHA·READY**를 확인했다. 배포 ID는 `dpl_J7JkidU24yutaoD8KVQdeUpRYvva`다. [CI 근거](https://github.com/adckang/propos/actions/runs/44051143694/job/133928971374)
+
+이 확인 기록만 문서 후속 커밋으로 반영한다. 원래 작업 폴더는 검증·푸시한 커밋으로 branch/index만 맞추고 사용자 파일·현재 메타파일 내용은 보존한다. 운영 업무 API·Google·DB·Slack·Pi 실제 요청은 0건이다. RF-31은 별도 수정 미착수, RF-27은 22:00 KST 이전으로 운영 확인 대기다. **단계 ③ 완료, 다음은 단계 ④ 예약 취소 실제 핸들러 테스트(미착수)**다.
