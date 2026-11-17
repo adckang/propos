@@ -786,7 +786,7 @@ CLEANING_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:PORT/propos_delivery_
 - [보고서 기능 설계 470행](reporting-feature-design.md#L470): `GET /api/events/history` 구현이 미완료(☐)로 남아 있다 — 구현돼 있다(위 QA-06).
 
 **수정 제안 (단계 ①·②·③ 및 ④ 취소 경로를 사용자 진행 지시로 완료, 나머지는 미실행):**
-1. 복사 테스트를 실제 코드 시험으로 바꾼다 — 사용자 영향 순서: ① 담당자 앱 `register`·`heartbeat`·`profile`(s33, 기존 `workerFcmFixture`가 실제 핸들러를 묶어 실행하는 방식 재사용) ② 거절 링크(s13 → `api/cleaning` 자원 `d`) ③ 캘린더 웹훅 배정(s14) ④ 예약 취소(s30) ⑤ 푸시 발송(s25) ⑥ 나머지(s22·s27·s31·s34·s35, 통합 s32·s36). 바꾼 뒤 옛 복사 테스트는 지운다 — 없는 파일의 복사본(s13·s34)은 바꿀 대상이 없으면 삭제만.
+1. 복사 테스트를 실제 코드 시험으로 바꾼다 — 사용자 영향 순서: ① 담당자 앱 `register`·`heartbeat`·`profile`(s33, 기존 `workerFcmFixture`가 실제 핸들러를 묶어 실행하는 방식 재사용) ② 거절 링크(s13 → `api/cleaning` 자원 `d`) ③ 캘린더 웹훅 배정(s14) ④ 예약 취소(s30) ⑤ 푸시 발송(s25) ⑥ 나머지(s30의 취소 외 복사 24개·s22·s27·s31·s34·s35, 통합 s32·s36). 바꾼 뒤 옛 복사 테스트는 지운다 — 없는 파일의 복사본(s13·s34)은 바꿀 대상이 없으면 삭제만.
 2. 이벤트 조회의 기간을 `periodDomain`으로 맞추거나, 부르는 곳이 없으니 그대로 두고 "미사용"으로 적는다 — 사용자 결정.
 3. 설계 문서 2곳 정정(09:00 → 08:00, ☐ → ☑).
 
@@ -1973,4 +1973,8 @@ Codex는 별도 작업 폴더에서 커밋했고 사용자 폴더는 의도적�
 
 ### ACT-08 단계 ④ 배포 기록 · 2026-11-17
 
-로컬 검증 완료. 이번 단계 3파일만 별도 Git 작업 폴더에서 기존 pre-commit 훅을 정상 실행해 커밋·푸시하고 CI·Production READY를 확인한 뒤 이 기록을 갱신한다. 아직 이 문장만으로 운영 반영 완료를 뜻하지 않는다.
+테스트 교체 단위 **`93988814b996533f4ca520d9bb07341fb66aba93`**를 main에 푸시했다. 이 SHA의 [GitHub validate](https://github.com/adckang/propos/actions/runs/44066546740/job/133981566991)는 **completed / success**, Vercel Production SHA도 일치하며 배포 `dpl_6DHYYdmwk5AbutHUhN1UxaZPvYjc`는 **READY**다. 확인은 GitHub/Vercel 메타데이터 조회만 사용했다.
+
+별도 Git 작업 폴더에서 기존 `pre-commit → sync:dist` 훅을 정상 실행했다. 커밋은 테스트·기존 도우미·이 문서 **3파일뿐**이며 운영 코드·추적 `dist` 변경 0이다. 커밋 폴더에서도 전체 3,199개 통과·`verify:dist` 통과를 확인했다. 원래 작업 폴더의 사용자 문서·설정 23개는 해시 일치를 확인했고 `.DS_Store`는 쓰거나 복구·스테이징하지 않는다.
+
+이 완료 근거만 문서 후속 커밋으로 반영하고 그 커밋도 CI·READY를 확인한다. 원래 폴더의 branch/index는 검증한 최종 커밋으로 전진시키며 사용자 작업 파일을 덮어쓰지 않는다. 운영 업무 API·Google·DB·Slack·Pi 직접 요청은 **0건**이다. RF-32는 재현·제안만, 운영 수정 미착수이며 RF-31도 그대로다. RF-27은 22:00 KST 이전으로 운영 확인 대기를 유지한다. **다음은 ACT-08 단계 ⑤ 푸시 발송 실제 구현 테스트(미착수)**이며, s30의 취소 외 복사 24개는 단계 ⑥ 후속이다.
