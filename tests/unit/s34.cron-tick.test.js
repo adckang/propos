@@ -1,147 +1,190 @@
-/**
- * cron/tick.js — 매시간 KST 분기 로직 유닛 테스트
- */
+import { after, before, describe, test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { actualCronModule, cronResponse, installCronIO } from '../helpers/cronHandlerFixture.js';
 
-import { describe, test } from "node:test";
-import assert from "node:assert/strict";
+let handler;
+before(async () => { ({ default: handler } = await actualCronModule()); });
+after(() => { delete globalThis.__cronHandlerIO; });
 
-const KST_OFFSET = 9 * 3600 * 1000;
-
-function resolveTasks(utcHour, dayOfMonth) {
-  const kstHour = (utcHour + 9) % 24;
-  const tasks = [];
-  if (kstHour === 8)                tasks.push("daily-plan");
-  if (kstHour === 8)                tasks.push("worker-health-check");
-  if (kstHour === 8 && dayOfMonth === 15) tasks.push("monthly-cleaning");
-  if (kstHour === 22)               tasks.push("daily-result");
-  return tasks;
+async function runCron(t, path, options = {}) {
+  const fixture = installCronIO(options);
+  t.after(() => fixture.restore());
+  const res = cronResponse();
+  await handler({
+    method: options.method ?? 'GET',
+    url: path,
+    query: options.query ?? {},
+    headers: options.headers ?? { authorization: 'Bearer fixture-cron-secret' },
+  }, res);
+  return { fixture, res };
 }
 
-// ============================================================
-// KST 시각 → 실행 작업 매핑
-// ============================================================
-describe("cron tick — KST 시각별 작업 선택", () => {
-  test("UTC 23:00 = KST 08:00 → daily-plan + worker-health-check (동시 실행)", () => {
-    assert.deepEqual(resolveTasks(23, 1), ["daily-plan", "worker-health-check"]);
+describe('actual cron handler — routing and guards', () => {
+  test('rejects non-GET before constructing the database pool', async t => {
+    const { fixture, res } = await runCron(t, '/api/cron/morning', { method: 'POST' });
+    assert.equal(res.code, 405);
+    assert.equal(res.ended, true);
+    assert.deepEqual(fixture.calls, []);
   });
 
-  test("UTC 23:00 = KST 08:00 + 15일 → daily-plan + worker-health-check + monthly-cleaning", () => {
-    assert.deepEqual(resolveTasks(23, 15), ["daily-plan", "worker-health-check", "monthly-cleaning"]);
+  test('rejects the DEMO profile before cron work or database access', async t => {
+    const { fixture, res } = await runCron(t, '/api/cron/morning', { profile: 'demo' });
+    assert.equal(res.code, 403);
+    assert.deepEqual(res.body, { error: 'demo profile is read-only', dataProfile: 'demo' });
+    assert.deepEqual(fixture.calls, []);
   });
 
-  test("UTC 13:00 = KST 22:00 → daily-result", () => {
-    assert.deepEqual(resolveTasks(13, 1), ["daily-result"]);
+  test('requires the configured bearer secret', async t => {
+    const { fixture, res } = await runCron(t, '/api/cron/morning', { headers: { authorization: 'Bearer wrong' } });
+    assert.equal(res.code, 401);
+    assert.equal(res.ended, true);
+    assert.deepEqual(fixture.calls, []);
   });
 
-  test("UTC 10:00 = KST 19:00 → 아무 작업 없음", () => {
-    assert.deepEqual(resolveTasks(10, 1), []);
+  test('allows GET when CRON_SECRET is absent', async t => {
+    const fixture = installCronIO();
+    t.after(() => fixture.restore());
+    delete process.env.CRON_SECRET;
+    const res = cronResponse();
+    await handler({ method: 'GET', url: '/api/cron/unknown', query: {}, headers: {} }, res);
+    assert.equal(res.code, 404);
+    assert.deepEqual(res.body, { error: 'Not found' });
+    assert.deepEqual(fixture.names(), ['db.pool', 'db.end']);
   });
 
-  test("크론 호출 시각은 2개 (KST 08:00, KST 22:00)", () => {
-    const cronKstHours = [8, 22];
-    assert.equal(cronKstHours.length, 2);
-  });
-});
-
-// ============================================================
-// fakeRes — mock 응답 객체 동작
-// ============================================================
-describe("fakeRes — mock 응답 객체", () => {
-  function fakeRes() {
-    const r = { _code: 200, _body: null };
-    r.status = (c) => { r._code = c; return r; };
-    r.json   = (b) => { r._body = b; return r; };
-    r.end    = ()  => r;
-    return r;
-  }
-
-  test("status().json() 체이닝 → _code, _body 저장", () => {
-    const fr = fakeRes();
-    fr.status(200).json({ ok: true });
-    assert.equal(fr._code, 200);
-    assert.deepEqual(fr._body, { ok: true });
+  test('uses a string query slug before the URL action', async t => {
+    const { res } = await runCron(t, '/api/cron/unknown', { query: { slug: 'evening' } });
+    assert.equal(res.code, 200);
+    assert.equal(res.body.ok, true);
+    assert.ok('stats' in res.body);
   });
 
-  test("json() 직접 호출 → _body 저장", () => {
-    const fr = fakeRes();
-    fr.json({ result: "done" });
-    assert.deepEqual(fr._body, { result: "done" });
+  test('uses the first array query slug like a Vercel catch-all route', async t => {
+    const { res } = await runCron(t, '/api/cron/unknown', { query: { slug: ['morning', 'ignored'] } });
+    assert.equal(res.code, 200);
+    assert.ok(Array.isArray(res.body.ran));
   });
 
-  test("end() 호출 가능", () => {
-    const fr = fakeRes();
-    assert.doesNotThrow(() => fr.end());
-  });
-
-  test("초기 _code=200, _body=null", () => {
-    const fr = fakeRes();
-    assert.equal(fr._code, 200);
-    assert.equal(fr._body, null);
+  test('falls back to the URL action and returns 404 for an unknown action', async t => {
+    const { fixture, res } = await runCron(t, '/api/cron/not-real');
+    assert.equal(res.code, 404);
+    assert.deepEqual(res.body, { error: 'Not found' });
+    assert.deepEqual(fixture.names(), ['db.pool', 'db.end']);
   });
 });
 
-// ============================================================
-// CRON_SECRET 인증 로직
-// ============================================================
-describe("cron tick — CRON_SECRET 인증", () => {
-  function checkAuth(envSecret, authHeader) {
-    if (!envSecret) return true; // 미설정 시 허용
-    return authHeader === `Bearer ${envSecret}`;
-  }
-
-  test("CRON_SECRET 미설정 → 모든 요청 허용", () => {
-    assert.ok(checkAuth(undefined, ""));
-    assert.ok(checkAuth("", "anything"));
+describe('actual cron handler — morning branch', () => {
+  test('runs the current non-monthly morning pipeline and reports only completed work', async t => {
+    const realNow = Date.now;
+    Date.now = () => Date.parse('2026-11-16T23:00:00.000Z'); // KST 11/17 08:00
+    t.after(() => { Date.now = realNow; });
+    const { fixture, res } = await runCron(t, '/api/cron/morning');
+    assert.equal(res.code, 200);
+    assert.deepEqual(res.body, {
+      ok: true,
+      ran: ['ical-sync', 'watcher-reservation', 'daily-plan', 'worker-health-check', 'cleaning-followup'],
+    });
+    assert.equal(fixture.names().filter(name => name === 'checkStaleness').length, 2);
+    assert.ok(!fixture.names().includes('getNextMonthDates'));
+    assert.equal(fixture.names().at(-1), 'db.end');
   });
 
-  test("CRON_SECRET 설정 + 올바른 헤더 → 허용", () => {
-    assert.ok(checkAuth("my-secret", "Bearer my-secret"));
+  test('runs monthly cleaning on the KST 15th before cleaning follow-up', async t => {
+    const realNow = Date.now;
+    Date.now = () => Date.parse('2026-11-14T23:00:00.000Z'); // KST 11/15 08:00
+    t.after(() => { Date.now = realNow; });
+    const { fixture, res } = await runCron(t, '/api/cron/morning');
+    assert.deepEqual(res.body.ran, [
+      'ical-sync', 'watcher-reservation', 'daily-plan', 'worker-health-check', 'monthly-cleaning', 'cleaning-followup',
+    ]);
+    const names = fixture.names();
+    assert.ok(names.indexOf('getNextMonthDates') < names.indexOf('recoverInitialDeliveries'));
   });
 
-  test("CRON_SECRET 설정 + 틀린 헤더 → 거부", () => {
-    assert.ok(!checkAuth("my-secret", "Bearer wrong"));
-    assert.ok(!checkAuth("my-secret", ""));
+  test('does not claim watcher delivery when no watcher was sent', async t => {
+    const { res } = await runCron(t, '/api/cron/morning', {
+      watcherResults: [{ propertyId: 'fixture', result: 'skipped', sent: false }],
+    });
+    assert.ok(!res.body.ran.includes('watcher-reservation'));
+    assert.ok(res.body.ran.includes('ical-sync'));
   });
 
-  test("Bearer 접두사 없는 토큰 → 거부", () => {
-    assert.ok(!checkAuth("my-secret", "my-secret"));
+  test('isolates reservation sync and watcher failures from later morning work', async t => {
+    const behavior = {
+      syncAllPropertiesIcal: new Error('fixture sync failure'),
+      pushCurrentReservationsToWatchers: new Error('fixture watcher failure'),
+    };
+    const { fixture, res } = await runCron(t, '/api/cron/morning', { behavior });
+    assert.equal(res.code, 200);
+    assert.deepEqual(res.body.ran, ['daily-plan', 'worker-health-check', 'cleaning-followup']);
+    assert.equal(fixture.names().filter(name => name === 'checkStaleness').length, 2);
+  });
+
+  test('isolates daily-plan and cleaning-followup failures and still checks Watch staleness', async t => {
+    const behavior = {
+      getStatsForPeriod: new Error('fixture stats failure'),
+      recoverInitialDeliveries: new Error('fixture followup failure'),
+    };
+    const { fixture, res } = await runCron(t, '/api/cron/morning', { behavior });
+    assert.equal(res.code, 200);
+    assert.deepEqual(res.body.ran, ['ical-sync', 'watcher-reservation', 'worker-health-check']);
+    assert.equal(fixture.names().filter(name => name === 'checkStaleness').length, 2);
   });
 });
 
-// ============================================================
-// vercel.json 크론 구조 검증
-// ============================================================
-describe("vercel.json — cron 2개 (Hobby 플랜 일 2회 한도)", () => {
-  test("아침 크론: UTC 23:00 (KST 08:00) 하루 1회", () => {
-    const schedule = "0 23 * * *";
-    const parts = schedule.split(" ");
-    assert.equal(parts[0], "0");    // 분: 정각
-    assert.equal(parts[1], "23");   // 시: UTC 23
-    assert.equal(parts[2], "*");    // 일
+describe('actual cron handler — evening branch', () => {
+  test('syncs reservations, pushes watchers, follows up, then returns the actual daily result response', async t => {
+    const { fixture, res } = await runCron(t, '/api/cron/evening');
+    assert.equal(res.code, 200);
+    assert.deepEqual(res.body, {
+      ok: true,
+      date: new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10),
+      stats: { checkIns: 0, checkOuts: 0, anomalies: 0, energyWaste: 0 },
+    });
+    const names = fixture.names();
+    assert.ok(names.indexOf('syncAllPropertiesIcal') < names.indexOf('pushCurrentReservationsToWatchers'));
+    assert.ok(names.indexOf('recoverInitialDeliveries') < names.indexOf('queryEvents'));
+    assert.equal(names.at(-1), 'db.end');
   });
 
-  test("저녁 크론: UTC 13:00 (KST 22:00) 하루 1회", () => {
-    const schedule = "0 13 * * *";
-    const parts = schedule.split(" ");
-    assert.equal(parts[0], "0");
-    assert.equal(parts[1], "13");   // 시: UTC 13
+  test('continues evening follow-up and result after sync and watcher failures', async t => {
+    const { fixture, res } = await runCron(t, '/api/cron/evening', { behavior: {
+      syncAllPropertiesIcal: new Error('fixture sync failure'),
+      pushCurrentReservationsToWatchers: new Error('fixture watcher failure'),
+    } });
+    assert.equal(res.code, 200);
+    assert.ok(fixture.names().includes('recoverInitialDeliveries'));
+    assert.ok(fixture.names().includes('queryEvents'));
   });
 
-  test("크론 2개 합쳐 하루 2회 호출 (Hobby 한도 이내)", () => {
-    const crons = ["0 23 * * *", "0 13 * * *"];
-    assert.equal(crons.length, 2);
+  test('returns 500 when the non-isolated evening follow-up fails and still closes the pool', async t => {
+    const { fixture, res } = await runCron(t, '/api/cron/evening', { behavior: {
+      recoverInitialDeliveries: new Error('fixture followup failure'),
+    } });
+    assert.equal(res.code, 500);
+    assert.deepEqual(res.body, { error: 'fixture followup failure' });
+    assert.equal(fixture.names().at(-1), 'db.end');
+    assert.ok(!fixture.names().includes('queryEvents'));
+  });
+});
+
+describe('vercel.json — deployed cron entry points', () => {
+  test('declares only the actual morning and evening handler paths', async () => {
+    const config = JSON.parse(await readFile(new URL('../../vercel.json', import.meta.url), 'utf8'));
+    assert.deepEqual(config.crons.map(cron => cron.path), ['/api/cron/morning', '/api/cron/evening']);
   });
 
-  test("일반 날 실제 작업: morning=2건, evening=1건", () => {
-    const morning = resolveTasks(23, 1); // UTC 23 = KST 08
-    const evening = resolveTasks(13, 1); // UTC 13 = KST 22
-    assert.equal(morning.length, 2); // daily-plan + worker-health-check
-    assert.equal(evening.length, 1); // daily-result
+  test('schedules morning at UTC 23:00 and evening at UTC 13:00', async () => {
+    const config = JSON.parse(await readFile(new URL('../../vercel.json', import.meta.url), 'utf8'));
+    assert.deepEqual(config.crons, [
+      { path: '/api/cron/morning', schedule: '0 23 * * *' },
+      { path: '/api/cron/evening', schedule: '0 13 * * *' },
+    ]);
   });
 
-  test("15일 아침: morning=3건 (monthly-cleaning 추가)", () => {
-    const morning = resolveTasks(23, 15);
-    assert.equal(morning.length, 3);
-    assert.ok(morning.includes("monthly-cleaning"));
+  test('contains no obsolete hourly tick endpoint', async () => {
+    const config = JSON.parse(await readFile(new URL('../../vercel.json', import.meta.url), 'utf8'));
+    assert.ok(config.crons.every(cron => !cron.path.includes('tick')));
   });
 });
