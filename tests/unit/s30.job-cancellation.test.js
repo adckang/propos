@@ -1,13 +1,15 @@
 /**
  * ACT-08 단계 ④ — 청소 일정 수동 취소의 실제 API 계약.
  * API·권한·블로커 생성은 실제 구현, DB·OAuth·발송·HTTP는 가짜 I/O.
- * 하단의 취소 외 기존 복사 테스트 24개는 ACT-08 단계 ⑥ 후속 대상이다.
+ * ACT-08 단계 ⑥-2: 취소 외 기존 복사 테스트 24개도 실제 구현 시험으로 교체했다.
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 
 // ACT-08 단계 ④: actual API; scripted rows and external adapters contain no cancellation policy.
 import { cleaningDeclineFixture } from '../helpers/cleaningDeclineFixture.js';
+import { actualCronModule, cronResponse, installCronIO } from '../helpers/cronHandlerFixture.js';
+import { advanceJob } from '../../server/cleaning/_dispatch.js';
 import { createSessionToken } from '../../server/auth/operatorAuth.js';
 import { passwordFingerprint } from '../../server/auth/operatorAccounts.js';
 
@@ -76,6 +78,44 @@ function assertBlockerPersistence(f, eventId = 'fixture-new-blocker') {
   assert.ok(update); assert.deepEqual(update.params, [eventId, CANCEL_JOB.id]);
 }
 const blockerReply = () => new Response(JSON.stringify({ id: 'fixture-new-blocker' }), { status: 200 });
+
+async function actualAdminRoute(t, { responses = [], expectedErrors = 0, notify, ...options } = {}) {
+  const f = await cleaningDeclineFixture({ ...options, responses, notify: notify ?? (async () => ({ ok: true })) });
+  t.after(() => {
+    try {
+      assert.equal(f.pendingResponses, 0, 'all scripted DB results consumed');
+      assert.deepEqual(f.unexpectedQueries, [], 'no hidden unexpected SQL');
+      assert.equal(f.errors.length, expectedErrors, 'only planned failures logged');
+      assert.deepEqual(f.blocked, [], 'no unmocked external I/O');
+      assert.deepEqual(globalThis.__productionFetchTrap?.calls ?? [], [], 'no production requests');
+    } finally { f.restore(); }
+  });
+  return { ...f, send({ method = 'GET', url, body, headers = {}, ...request }) {
+    return f.invoke({ method, url, body, ...request, headers: { cookie: cancellationCookie(), ...headers } });
+  } };
+}
+
+async function actualFollowup(t, { dbQuery, behavior = {} } = {}) {
+  const { default: handler } = await actualCronModule();
+  const fixture = installCronIO({ behavior: { 'db.query': dbQuery, ...behavior } });
+  t.after(() => fixture.restore());
+  const res = cronResponse();
+  await handler({ method: 'GET', url: '/api/cron/cleaning-followup', query: {},
+    headers: { authorization: 'Bearer fixture-cron-secret' } }, res);
+  return { fixture, res };
+}
+
+function followupDb({ bulkNotifs = [], bulkJobs = [], escalationRows = [] } = {}) {
+  return async (sql) => {
+    if (/status = 'PENDING' AND dispatch_after/.test(sql)) return { rows: [] };
+    if (/SELECT DISTINCT j\.property_id, b\.block_date/.test(sql)) return { rows: [] };
+    if (/FROM cleaning_notifs n[\s\S]*n\.reminded_at IS NULL/.test(sql)) return { rows: bulkNotifs };
+    if (/SELECT j\.id, j\.property_id[\s\S]*JOIN LATERAL/.test(sql)) return { rows: bulkJobs };
+    if (/UPDATE cleaning_jobs SET status='ESCALATED'/.test(sql)) return { rows: escalationRows };
+    if (/^\s*UPDATE cleaning_(?:notifs|jobs)/.test(sql)) return { rows: [], rowCount: 1 };
+    throw new Error(`Unexpected followup SQL: ${sql}`);
+  };
+}
 
 describe('actual job cancellation — request and access contract', () => {
   test('login is required before querying the job', async t => {
@@ -283,227 +323,179 @@ describe('actual job cancellation — DB failures stop subsequent work', () => {
   });
 });
 
-// Legacy copied checks outside cancellation; kept for ACT-08 step 6, not implementation evidence.
-// ============================================================
-// 취소 후 상태 머신 불변식 검증
-// ============================================================
-
-describe("CANCELLED 상태 — 상태 머신 불변식", () => {
-  const VALID_STATUSES = [
-    "PENDING", "NOTIFYING_VIP_1", "NOTIFYING_VIP_2", "NOTIFYING_VIP_3",
-    "NOTIFYING_BULK", "BULK_REMINDED", "ESCALATED", "ASSIGNED", "COMPLETED", "CANCELLED"
-  ];
-
-  test("CANCELLED가 유효 상태 목록에 포함됨", () => {
-    assert.ok(VALID_STATUSES.includes("CANCELLED"));
-  });
-
-  test("advanceJob 대상 아님 (CANCELLED → nextStatus 없음)", () => {
-    const nextStatus = {
-      PENDING: "NOTIFYING_VIP_1",
-      NOTIFYING_VIP_1: "NOTIFYING_VIP_2",
-      NOTIFYING_VIP_2: "NOTIFYING_VIP_3",
-      NOTIFYING_VIP_3: "NOTIFYING_BULK",
-    };
-    assert.equal(nextStatus["CANCELLED"], undefined);
-  });
-
-  test("followup 크론 — CANCELLED job은 처리 대상 아님", () => {
-    // followup 크론은 PENDING / NOTIFYING_VIP_* / NOTIFYING_BULK / BULK_REMINDED만 처리
-    const followupStatuses = new Set([
-      "PENDING", "NOTIFYING_VIP_1", "NOTIFYING_VIP_2", "NOTIFYING_VIP_3",
-      "NOTIFYING_BULK", "BULK_REMINDED"
-    ]);
-    assert.ok(!followupStatuses.has("CANCELLED"));
+describe('actual dispatch — cancelled state boundary', () => {
+  test('advanceJob returns without DB or delivery work for CANCELLED', async () => {
+    const calls = [];
+    const db = { query: async (...args) => { calls.push(args); throw new Error('must not query'); } };
+    assert.equal(await advanceJob(db, { id: 'fixture-cancelled', status: 'CANCELLED', data_origin: 'REAL' }), undefined);
+    assert.deepEqual(calls, []);
   });
 });
 
-// ============================================================
-// bootstrap 블로커 — 날짜 목록 생성 검증
-// ============================================================
-
-describe("Bootstrap 블로커 — 날짜 목록 생성", () => {
-  function getMonthDates(yearMonth) {
-    const [y, m] = yearMonth.split("-").map(Number);
-    const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
-    const pad = (n) => String(n).padStart(2, "0");
-    return Array.from({ length: days }, (_, i) => `${yearMonth}-${pad(i + 1)}`);
-  }
-
-  test("2026-09 → 30개 날짜", () => {
-    const dates = getMonthDates("2026-09");
-    assert.equal(dates.length, 30);
-    assert.equal(dates[0], "2026-09-01");
-    assert.equal(dates[29], "2026-09-30");
+describe('actual bootstrap handler — target month dates', () => {
+  const property = { property_id: 'fixture-bootstrap', google_calendar_id: 'fixture-calendar',
+    checkout_hour: 11, cleaning_duration_hours: 2.5, data_origin: 'REAL' };
+  for (const [month, count, last] of [
+    ['2026-09', 30, '2026-09-30'], ['2026-02', 28, '2026-02-28'],
+    ['2024-02', 29, '2024-02-29'], ['2026-12', 31, '2026-12-31'],
+  ]) test(`${month} passes its complete date set to the actual blocker policy`, async t => {
+    const dates = Array.from({ length: count }, (_, index) => `${month}-${String(index + 1).padStart(2, '0')}`);
+    const f = await actualAdminRoute(t, { responses: [[property], dates.map(day => ({ day }))], calendar: {} });
+    const res = await f.send({ method: 'POST', url: '/api/cleaning/bootstrap',
+      body: { property_id: property.property_id, month } });
+    assert.equal(res.code, 200); assert.deepEqual(res.body, { ok: true, created: 0, skipped: count });
+    assert.deepEqual(f.queries[1].params, [property.property_id, dates]);
+    assert.equal(f.queries[1].params[1].at(-1), last);
+    assert.deepEqual(f.calendarRequests, []);
   });
 
-  test("2026-02 → 28개 날짜", () => {
-    assert.equal(getMonthDates("2026-02").length, 28);
-  });
-
-  test("2024-02 → 29개 날짜 (윤년)", () => {
-    assert.equal(getMonthDates("2024-02").length, 29);
-  });
-
-  test("2026-12 → 31개 날짜", () => {
-    assert.equal(getMonthDates("2026-12").length, 31);
-  });
-
-  test("잘못된 YYYY-MM 형식 → 검증 실패 케이스 확인", () => {
-    assert.ok(/^\d{4}-\d{2}$/.test("2026-09"), "유효 형식");
-    assert.ok(!/^\d{4}-\d{2}$/.test("2026-9"), "월 한 자리 → 무효");
-    assert.ok(!/^\d{4}-\d{2}$/.test("26-09"), "연도 두 자리 → 무효");
+  test('an invalid month currently falls back to the current KST month', async t => {
+    const realNow = Date.now;
+    Date.now = () => Date.parse('2026-11-18T03:00:00.000Z');
+    t.after(() => { Date.now = realNow; });
+    const dates = Array.from({ length: 30 }, (_, index) => `2026-11-${String(index + 1).padStart(2, '0')}`);
+    const f = await actualAdminRoute(t, { responses: [[property], dates.map(day => ({ day }))], calendar: {} });
+    const res = await f.send({ method: 'POST', url: '/api/cleaning/bootstrap',
+      body: { property_id: property.property_id, month: '2026-9' } });
+    assert.equal(res.code, 200); assert.deepEqual(f.queries[1].params[1], dates);
   });
 });
 
-// ============================================================
-// Gmail Watch 등록 — 필수 환경변수 검증
-// ============================================================
-
-describe("Gmail Watch 등록 — 설정 검증", () => {
-  test("GOOGLE_PUBSUB_TOPIC 없으면 500 반환 조건", () => {
-    const topicName = process.env.GOOGLE_PUBSUB_TOPIC ?? null;
-    // 테스트 환경에서 env 미설정 → 실제 서버에서 500 반환 경로
-    if (!topicName) {
-      assert.equal(topicName, null);
-    } else {
-      assert.ok(topicName.startsWith("projects/"), "topic 형식: projects/{id}/topics/{name}");
-    }
+describe('actual Gmail Watch handler', () => {
+  test('returns the current 500 response before OAuth when GOOGLE_PUBSUB_TOPIC is absent', async t => {
+    const f = await actualAdminRoute(t, { environment: { GOOGLE_PUBSUB_TOPIC: '' } });
+    const res = await f.send({ method: 'POST', url: '/api/cleaning/gmail-watch', body: {} });
+    assert.equal(res.code, 500);
+    assert.deepEqual(res.body, { error: 'GOOGLE_PUBSUB_TOPIC 환경변수 없음' });
+    assert.deepEqual(f.tokenCalls, []); assert.deepEqual(f.calendarRequests, []);
   });
 
-  test("Watch expiration → 7일 이내 (604800000ms)", () => {
-    // Google Gmail Watch는 최대 7일 유효. 주기적 재등록 필요.
-    const MAX_WATCH_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
-    assert.equal(MAX_WATCH_DURATION_MS, 604_800_000);
-  });
-});
-
-// ============================================================
-// upsertProperty — ical_url 포함 필드 검증
-// ============================================================
-
-describe("upsertProperty — ical_url 처리 로직", () => {
-  function buildUpsertPayload(input) {
-    const { property_id, name, checkout_hour, cleaning_duration_hours,
-            google_calendar_id, google_calendar_booking_url, host_phone, ical_url } = input;
-    if (!property_id || !name) return { error: "property_id, name 필수" };
-    return {
-      property_id, name,
-      checkout_hour: checkout_hour ?? 11,
-      cleaning_duration_hours: cleaning_duration_hours ?? 2.5,
-      google_calendar_id: google_calendar_id ?? null,
-      google_calendar_booking_url: google_calendar_booking_url ?? null,
-      host_phone: host_phone ?? null,
-      ical_url: ical_url ?? null,
-    };
-  }
-
-  test("ical_url 포함 저장 정상", () => {
-    const p = buildUpsertPayload({
-      property_id: "paju201", name: "파주201",
-      ical_url: "https://www.airbnb.com/calendar/ical/abc123.ics",
+  test('posts the real Watch payload and stores a seven-day expiration with one-hour TTL margin', async t => {
+    const realNow = Date.now;
+    const now = Date.parse('2026-11-18T03:00:00.000Z');
+    Date.now = () => now;
+    t.after(() => { Date.now = realNow; });
+    const expiration = String(now + 7 * 24 * 60 * 60 * 1000);
+    const topicName = 'projects/fixture/topics/gmail-watch';
+    const f = await actualAdminRoute(t, { environment: { GOOGLE_PUBSUB_TOPIC: topicName },
+      calendar: { methods: ['POST'], kv: { set: async () => 'OK' },
+        fetch: async () => new Response(JSON.stringify({ historyId: 'fixture-history', expiration }), { status: 200 }) } });
+    const res = await f.send({ method: 'POST', url: '/api/cleaning/gmail-watch', body: {} });
+    assert.equal(res.code, 200);
+    assert.deepEqual(res.body, { ok: true, historyId: 'fixture-history', expiration });
+    assert.equal(f.calendarRequests.length, 1);
+    assert.equal(f.calendarRequests[0].url, 'https://gmail.googleapis.com/gmail/v1/users/me/watch');
+    assert.deepEqual(JSON.parse(f.calendarRequests[0].options.body), {
+      topicName, labelIds: ['INBOX'], labelFilterBehavior: 'INCLUDE',
     });
-    assert.equal(p.ical_url, "https://www.airbnb.com/calendar/ical/abc123.ics");
-  });
-
-  test("ical_url 없으면 null → COALESCE로 기존 값 유지", () => {
-    const p = buildUpsertPayload({ property_id: "paju201", name: "파주201" });
-    assert.equal(p.ical_url, null);
-    // SQL: COALESCE($8, property_cleaning_config.ical_url) → null이면 기존 값 유지
-  });
-
-  test("필수 필드 누락 → error 반환", () => {
-    const p = buildUpsertPayload({ property_id: "paju201" });
-    assert.ok("error" in p);
-  });
-
-  test("기본값: checkout_hour=11, duration=2.5", () => {
-    const p = buildUpsertPayload({ property_id: "paju201", name: "파주201" });
-    assert.equal(p.checkout_hour, 11);
-    assert.equal(p.cleaning_duration_hours, 2.5);
-  });
-
-  test("ical_url은 listProperties 응답에 포함 (서버 전용)", () => {
-    // SELECT * FROM property_cleaning_config → ical_url 컬럼 포함됨
-    // 브라우저로 직접 노출되지만 Admin 전용 화면에서만 사용
-    const responseShape = ["property_id", "name", "checkout_hour", "ical_url", "google_calendar_id"];
-    assert.ok(responseShape.includes("ical_url"));
+    assert.deepEqual(f.kvCalls.map(call => call.args), [
+      ['gmail_watch_expiration', expiration, { ex: 7 * 24 * 60 * 60 + 3600 }],
+      ['token_health:gmail_watch:last_renewed_at', now, { ex: 60 * 24 * 60 * 60 }],
+    ]);
   });
 });
 
-// ============================================================
-// cleaning-followup 크론 — 타이밍 로직 검증
-// ============================================================
+describe('actual property handler — iCal persistence contract', () => {
+  const propertyId = 'fixture-property';
+  const name = 'Fixture Property';
+  const icalUrl = 'https://www.airbnb.com/calendar/ical/fixture.ics';
 
-describe("followup 크론 — BULK 리마인드 타이밍 (1시간)", () => {
-  // SQL: n.sent_at < NOW() - INTERVAL '1 hour'
-  function shouldSendRemind(sentAt, nowMs = Date.now()) {
-    const ONE_HOUR_MS = 60 * 60 * 1000;
-    return nowMs - new Date(sentAt).getTime() > ONE_HOUR_MS;
+  async function saveProperty(t, body) {
+    const saved = { property_id: propertyId, name, ...body };
+    const f = await actualAdminRoute(t, { responses: [[], [], [saved]] });
+    const res = await f.send({ method: 'POST', url: '/api/cleaning/properties',
+      body: { property_id: propertyId, name, ...body } });
+    return { f, res };
   }
 
-  test("1시간 이상 경과 → 리마인드 발송", () => {
-    const sentAt = new Date(Date.now() - 70 * 60 * 1000).toISOString(); // 70분 전
-    assert.ok(shouldSendRemind(sentAt));
+  test('passes ical_url to the actual upsert parameter', async t => {
+    const { f, res } = await saveProperty(t, { ical_url: icalUrl });
+    assert.equal(res.code, 200); assert.equal(f.queries[2].params[7], icalUrl);
   });
 
-  test("1시간 미만 경과 → 리마인드 미발송", () => {
-    const sentAt = new Date(Date.now() - 50 * 60 * 1000).toISOString(); // 50분 전
-    assert.ok(!shouldSendRemind(sentAt));
+  test('omitted ical_url is null and the actual conflict clause preserves the stored value', async t => {
+    const { f } = await saveProperty(t, {});
+    assert.equal(f.queries[2].params[7], null);
+    assert.match(f.queries[2].sql, /ical_url=COALESCE\(\$8,property_cleaning_config\.ical_url\)/);
   });
 
-  test("정확히 1시간 → 리마인드 발송 기준 초과 안함 (경계값)", () => {
-    const nowMs = Date.now();
-    const sentAt = new Date(nowMs - 60 * 60 * 1000).toISOString(); // 정확히 1시간
-    // DB: INTERVAL '1 hour' → sent_at < NOW() - 1h (미만)
-    // 정확히 1h는 경계라서 DB 쿼리에서는 미발송에 가까움
-    assert.ok(!shouldSendRemind(sentAt, nowMs)); // <= 1h는 아직 미발송
+  test('rejects a missing name before querying the database', async t => {
+    const f = await actualAdminRoute(t);
+    const res = await f.send({ method: 'POST', url: '/api/cleaning/properties', body: { property_id: propertyId } });
+    assert.equal(res.code, 400); assert.deepEqual(res.body, { error: 'property_id, name 필수' });
+    assert.deepEqual(f.queries, []);
   });
 
-  test("이미 reminded_at 있는 notif → 조건 쿼리에서 제외", () => {
-    // SQL: n.reminded_at IS NULL 조건으로 중복 발송 방지
-    const notif = { reminded_at: new Date().toISOString() };
-    assert.ok(notif.reminded_at !== null, "reminded_at 있으면 재발송 불필요");
+  test('omitted hours are passed as null instead of copied test defaults', async t => {
+    const { f } = await saveProperty(t, {});
+    assert.equal(f.queries[2].params[2], null);
+    assert.equal(f.queries[2].params[3], null);
+  });
+
+  test('admin property listing returns the actual stored ical_url field', async t => {
+    const row = { property_id: propertyId, name, ical_url: icalUrl, google_calendar_id: 'fixture-calendar' };
+    const f = await actualAdminRoute(t, { responses: [[row]] });
+    const res = await f.send({ url: '/api/cleaning/properties' });
+    assert.equal(res.code, 200); assert.deepEqual(res.body, [row]);
+    assert.match(f.queries[0].sql, /SELECT p\.\*/);
   });
 });
 
-describe("followup 크론 — 에스컬레이션 타이밍 (3시간)", () => {
-  // SQL: first_sent < NOW() - INTERVAL '3 hours'
-  function shouldEscalate(firstSentAt, nowMs = Date.now()) {
-    const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
-    return nowMs - new Date(firstSentAt).getTime() > THREE_HOURS_MS;
-  }
-
-  test("3시간 이상 경과 → 에스컬레이션", () => {
-    const firstSent = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(); // 4시간 전
-    assert.ok(shouldEscalate(firstSent));
+describe('actual cleaning-followup handler — reminder and escalation', () => {
+  test('uses strict one-hour reminder eligibility and excludes answered or already-reminded rows', async t => {
+    const { fixture, res } = await actualFollowup(t, { dbQuery: followupDb() });
+    assert.deepEqual(res.body, { ok: true, advanced: 0, reminded: 0, escalated: 0 });
+    const sql = fixture.calls.find(call => call.name === 'db.query'
+      && /FROM cleaning_notifs n/.test(call.args[0]))?.args[0];
+    assert.match(sql, /n\.reminded_at IS NULL/);
+    assert.match(sql, /n\.response IS NULL/);
+    assert.match(sql, /n\.sent_at < NOW\(\) - INTERVAL '1 hour'/);
   });
 
-  test("2시간 경과 → 에스컬레이션 아직 아님", () => {
-    const firstSent = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-    assert.ok(!shouldEscalate(firstSent));
+  test('sends an eligible reminder and persists both reminder and job state', async t => {
+    const notif = { id: 'fixture-notif', job_id: 'fixture-job', cleaner_id: 'fixture-cleaner',
+      property_id: 'fixture-property', cleaning_start_at: '2026-11-20T02:00:00.000Z',
+      job_checkout_at: '2026-11-20T02:00:00.000Z', job_reservation_uid: 'fixture-reservation',
+      token: 'fixture-token', phone: '01000000000', fcm_token: null, fcm_status: 'uninstalled' };
+    const { fixture, res } = await actualFollowup(t, { dbQuery: followupDb({ bulkNotifs: [notif] }) });
+    assert.deepEqual(res.body, { ok: true, advanced: 0, reminded: 1, escalated: 0 });
+    assert.ok(fixture.names().includes('notify'));
+    const sql = fixture.calls.filter(call => call.name === 'db.query').map(call => call.args[0]);
+    assert.ok(sql.some(text => /UPDATE cleaning_notifs SET reminded_at=NOW\(\)/.test(text)));
+    assert.ok(sql.some(text => /SET status='BULK_REMINDED'/.test(text)));
   });
 
-  test("에스컬레이션 대상 상태: NOTIFYING_BULK, BULK_REMINDED", () => {
-    const escalatableStatuses = new Set(["NOTIFYING_BULK", "BULK_REMINDED"]);
-    assert.ok(escalatableStatuses.has("NOTIFYING_BULK"));
-    assert.ok(escalatableStatuses.has("BULK_REMINDED"));
-    assert.ok(!escalatableStatuses.has("ASSIGNED"));
-    assert.ok(!escalatableStatuses.has("ESCALATED"));
-    assert.ok(!escalatableStatuses.has("CANCELLED"));
+  test('escalates only the actual three-hour BULK candidates and sends the production Slack text', async t => {
+    const job = { id: 'fixture-job', property_id: 'fixture-property',
+      cleaning_start_at: '2026-11-20T02:00:00.000Z', checkout_at: '2026-11-20T02:00:00.000Z',
+      reservation_uid: 'fixture-reservation' };
+    const { fixture, res } = await actualFollowup(t, {
+      dbQuery: followupDb({ bulkJobs: [job], escalationRows: [{ id: job.id }] }),
+    });
+    assert.deepEqual(res.body, { ok: true, advanced: 0, reminded: 0, escalated: 1 });
+    const sql = fixture.calls.filter(call => call.name === 'db.query').map(call => call.args[0]);
+    assert.ok(sql.some(text => /status IN \('NOTIFYING_BULK','BULK_REMINDED'\)[\s\S]*first_sent < NOW\(\) - INTERVAL '3 hours'/.test(text)));
+    assert.ok(sql.some(text => /WHERE id=\$1 AND status IN \('NOTIFYING_BULK','BULK_REMINDED'\)[\s\S]*RETURNING id/.test(text)));
+    const slack = fixture.calls.find(call => call.name === 'postSlack');
+    assert.deepEqual(slack.args, ['[PROPOS] 🚨 fixture-property 2026-11-20 청소 배정 실패. 수동 처리 필요.']);
   });
 
-  test("에스컬레이션 SQL — 조건부 UPDATE로 중복 방지", () => {
-    // UPDATE ... WHERE status IN ('NOTIFYING_BULK','BULK_REMINDED') RETURNING id
-    // rows.length === 0 → 이미 다른 배정/취소 → 스킵
-    const sql = `UPDATE cleaning_jobs SET status='ESCALATED' WHERE id=$1 AND status IN ('NOTIFYING_BULK','BULK_REMINDED') RETURNING id`;
-    assert.ok(sql.includes("RETURNING id"));
-    assert.ok(sql.includes("AND status IN"));
+  test('does not announce escalation when the conditional update loses a race', async t => {
+    const job = { id: 'fixture-job', property_id: 'fixture-property',
+      cleaning_start_at: '2026-11-20T02:00:00.000Z', checkout_at: '2026-11-20T02:00:00.000Z' };
+    const { fixture, res } = await actualFollowup(t, { dbQuery: followupDb({ bulkJobs: [job] }) });
+    assert.equal(res.body.escalated, 0);
+    assert.ok(!fixture.names().includes('postSlack'));
   });
 
-  test("3시간 후 Slack 알림 발송", () => {
-    const msg = `[PROPOS] 🚨 파주201 2026-09-15 청소 배정 실패. 수동 처리 필요.`;
-    assert.ok(msg.includes("수동 처리 필요"));
-    assert.ok(msg.startsWith("[PROPOS]"));
+  test('skips escalation when the reservation cancellation guard fires', async t => {
+    const job = { id: 'fixture-job', property_id: 'fixture-property',
+      cleaning_start_at: '2026-11-20T02:00:00.000Z', checkout_at: '2026-11-20T02:00:00.000Z' };
+    const { fixture, res } = await actualFollowup(t, { dbQuery: followupDb({ bulkJobs: [job] }),
+      behavior: { isCheckoutCancelled: async () => true } });
+    assert.equal(res.body.escalated, 0);
+    assert.ok(!fixture.names().includes('postSlack'));
+    assert.equal(fixture.calls.filter(call => call.name === 'db.query'
+      && /UPDATE cleaning_jobs SET status='ESCALATED'/.test(call.args[0])).length, 0);
   });
 });

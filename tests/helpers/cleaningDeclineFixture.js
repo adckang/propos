@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const root = new URL('../../', import.meta.url).pathname;
-export async function cleaningDeclineFixture({ responses = [], advance, slack, notify, profile = 'hybrid', calendar } = {}) {
+export async function cleaningDeclineFixture({ responses = [], advance, slack, notify, profile = 'hybrid', calendar, environment = {} } = {}) {
   const key = '__declineFixture_' + randomUUID().replaceAll('-', '');
   const pending = [...responses];
   const queries = [], advances = [], slackCalls = [], blocked = [], errors = [], unexpectedQueries = [];
@@ -14,7 +14,7 @@ export async function cleaningDeclineFixture({ responses = [], advance, slack, n
   const previousFetch = globalThis.fetch;
   const env = { PROPOS_DATA_PROFILE: profile, PROPOS_AUTH_MODE: 'enforce',
     PROPOS_ADMIN_PASSWORD: 'fixture-admin-password', PROPOS_SESSION_SECRET: 'fixture-session-secret-not-a-real-key',
-    ...(calendar && { GOOGLE_WEBHOOK_SECRET: calendar.secret ?? 'fixture-webhook-secret' }) };
+    ...(calendar && { GOOGLE_WEBHOOK_SECRET: calendar.secret ?? 'fixture-webhook-secret' }), ...environment };
   const saved = Object.fromEntries(Object.keys(env).map(k => [k, process.env[k]]));
   const fail = (kind) => { blocked.push(kind); throw new Error(`Unexpected external I/O blocked: ${kind}`); };
   const db = { async query(sql, params) {
@@ -28,6 +28,7 @@ export async function cleaningDeclineFixture({ responses = [], advance, slack, n
     async advance(...args) { advances.push(args); return advance?.(...args); },
     async slack(...args) { slackCalls.push(args); return slack ? slack(...args) : true; },
     async googleToken(...args) { tokenCalls.push(args); return calendar.getToken ? calendar.getToken(...args) : 'fixture-google-token'; },
+    async gmailToken(...args) { tokenCalls.push(args); return calendar.getGmailToken ? calendar.getGmailToken(...args) : 'fixture-gmail-token'; },
     async complete(...args) { completionCalls.push(args); return calendar.complete?.(...args); },
     async notify(...args) { notifyCalls.push(args); return notify(...args); },
     kv: new Proxy({}, { get: (_target, name) => async (...args) => {
@@ -44,11 +45,13 @@ export async function cleaningDeclineFixture({ responses = [], advance, slack, n
     let target;
     try { target = new URL(url); } catch { return fail('HTTP'); }
     const method = options.method ?? 'GET';
-    const allowedPath = method === 'DELETE'
+    const allowedCalendarPath = target.hostname === 'www.googleapis.com' && (method === 'DELETE'
       ? /^\/calendar\/v3\/calendars\/.+\/events\/[^/]+$/.test(target.pathname)
-      : /^\/calendar\/v3\/calendars\/.+\/events$/.test(target.pathname);
-    if (!calendar?.fetch || target.protocol !== 'https:' || target.hostname !== 'www.googleapis.com'
-      || !allowedPath || !(calendar.methods ?? ['GET']).includes(method)) return fail('HTTP');
+      : /^\/calendar\/v3\/calendars\/.+\/events$/.test(target.pathname));
+    const allowedGmailPath = target.hostname === 'gmail.googleapis.com'
+      && target.pathname === '/gmail/v1/users/me/watch' && method === 'POST';
+    if (!calendar?.fetch || target.protocol !== 'https:' || (!allowedCalendarPath && !allowedGmailPath)
+      || !(calendar.methods ?? ['GET']).includes(method)) return fail('HTTP');
     calendarRequests.push({ url: String(url), options });
     return calendar.fetch(url, options);
   };
@@ -66,7 +69,8 @@ export async function cleaningDeclineFixture({ responses = [], advance, slack, n
       export const postSlack=(...args)=>globalThis.${key}.slack(...args);
       ${calendar ? `export const sendCompletionSmsToRest=(...args)=>globalThis.${key}.complete(...args);` : ''}`,
     ...(calendar && { '../../server/cleaning/_calendar.js': `export * from ${JSON.stringify(pathToFileURL(resolve(root, 'server/cleaning/_calendar.js')).href)};
-      export const getGoogleToken=(...args)=>globalThis.${key}.googleToken(...args);` }),
+      export const getGoogleToken=(...args)=>globalThis.${key}.googleToken(...args);
+      export const getGmailToken=(...args)=>globalThis.${key}.gmailToken(...args);` }),
     ...(notify && { '../../server/cleaning/_notify.js': `export const notify=(...args)=>globalThis.${key}.notify(...args);` }),
     'firebase-admin/app': `export const getApps=()=>[{}]; export const cert=()=>globalThis.${key}.fail('FCM'); export const initializeApp=()=>globalThis.${key}.fail('FCM');`,
     'firebase-admin/messaging': `export const getMessaging=()=>globalThis.${key}.fail('FCM');`,
