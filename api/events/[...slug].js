@@ -11,6 +11,7 @@ import { Pool } from "pg";
 import { kv } from "@vercel/kv";
 import { randomUUID } from "node:crypto";
 import { getPeriodRange } from "../../src/domain/reportingDomain.js";
+import { periodCapabilities } from "../../src/domain/periodDomain.js";
 import { queryEvents, insertEvent } from "../../src/infrastructure/eventRepository.js";
 import { validateEvent, validateWriteEvent } from "../../src/domain/eventValidation.js";
 import { processEvent } from "../../src/application/eventService.js";
@@ -20,7 +21,6 @@ import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataPro
 import { requireScope } from "../../server/auth/operatorAuth.js";
 import { canAccessProperty, scopeQueryIds } from "../../server/auth/operatorAccounts.js";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const VALID_PERIODS = ["now","this_week","last_week","next_week","this_month","last_month","next_month"];
 
 function sendJson(res, status, body) {
   res.status(status).json(body);
@@ -124,18 +124,13 @@ export default async function handler(req, res) {
     // GET /api/events/history
     if (action === "history") {
       const { period = "this_week", property_id, limit = "50" } = req.query;
-      if (!VALID_PERIODS.includes(period)) return sendJson(res, 400, { error: `invalid period: ${period}` });
-      const limitNum = Math.min(Math.max(parseInt(limit) || 50, 1), 200);
-      let range;
-      if (period === "now") {
-        const today = new Date();
-        range = {
-          from: new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())),
-          to:   new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 23, 59, 59, 999)),
-        };
-      } else {
-        range = getPeriodRange(period);
+      // 기간 허용·범위는 레포트(/api/stats)와 같은 규칙 — 허용은 periodCapabilities 표, 범위는 KST 달력의 getPeriodRange.
+      // "now"는 레포트처럼 오늘(KST) 하루다(예전엔 UTC 하루라 한국 오전 9시 전에는 어제 날짜를 줬다).
+      if (typeof period !== "string" || !periodCapabilities(period).stats) {
+        return sendJson(res, 400, { error: `invalid period: ${period}` });
       }
+      const limitNum = Math.min(Math.max(parseInt(limit) || 50, 1), 200);
+      const range = getPeriodRange(period === "now" ? "today" : period);
       const events = await queryEvents(db, range, scopeQueryIds(scope, property_id ? [property_id] : null));
       return sendJson(res, 200, { events: events.slice(0, limitNum), total: events.length });
     }
