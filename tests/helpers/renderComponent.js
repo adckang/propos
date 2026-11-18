@@ -135,8 +135,9 @@ export function visibleText(html) {
 /**
  * React 훅을 한 번 실행하고 그 반환값을 돌려준다 (서버 렌더링 1회 — useEffect 는 돌지 않는다).
  *   const result = await renderHook('src/hooks/usePropertySelection.js', 'usePropertySelection', [properties]);
+ * viewportWidth를 주면 window가 없는 시험에서 초기 화면 폭만 주입하고 렌더 뒤 제거한다.
  */
-export async function renderHook(hookRel, exportName, args = [], { replace = {} } = {}) {
+export async function renderHook(hookRel, exportName, args = [], { replace = {}, viewportWidth } = {}) {
   const host = `
     import { ${exportName} as hook } from ${JSON.stringify(path.resolve(ROOT, hookRel))};
     export default function HookHost({ args, onResult }) { onResult(hook(...args)); return null; }
@@ -144,10 +145,15 @@ export async function renderHook(hookRel, exportName, args = [], { replace = {} 
   const mod = await bundle(`hook:${hookRel}#${exportName}`, replace, host);
   let result;
   globalThis.__proposRender = { replace: Object.fromEntries(Object.entries(replace).filter(([, spec]) => spec !== PROBE)) };
+  const hadWindow = 'window' in globalThis;
+  if (!hadWindow && viewportWidth != null) {
+    globalThis.window = { innerWidth: viewportWidth, innerHeight: 900, addEventListener() {}, removeEventListener() {} };
+  }
   try {
     renderToStaticMarkup(createElement(mod.default, { args, onResult: value => { result = value; } }));
   } finally {
     delete globalThis.__proposRender;
+    if (!hadWindow && viewportWidth != null) delete globalThis.window;
   }
   return result;
 }
