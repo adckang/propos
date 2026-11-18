@@ -1,53 +1,90 @@
 /**
- * s81 — 디테일뷰 진입 시 청소 배정(cleaningSlots) 새로고침
+ * s81 — 디테일뷰를 열 때마다 청소 배정을 운영 DB에서 다시 읽는다 (2026-10-30 실사용 중 발견)
  *
- * 사용자가 실사용 중 발견(2026-10-30): 관리자가 콘솔로 청소 배정(cleaning_jobs)을 직접
- * 복구한 뒤, 대시보드 캘린더뷰에는 "배정완료"로 바로 반영됐는데 디테일뷰는 여전히
- * "미배정"으로 보였다. "같은 데이터를 보는 거 아니냐"는 질문에 조사한 결과:
- *   - 같은 테이블(cleaning_jobs)을 보는 건 맞다 — 쿼리 로직이 서로 다른 게 아니다.
- *   - 대신 두 화면의 "언제 다시 받아오는지"가 다르다. MonthlyCalendar.jsx는 자기 자신이
- *     마운트될 때마다(대시보드를 열 때마다) /api/cleaning/stats를 새로 받아온다. 반면
- *     PropertyDetailView의 cleaningSlots는 RoomStateApp의 최상위 상태(dbPropertyRows)에서
- *     파생되는데, 이 상태는 앱이 처음 열릴 때 한 번 + 15분 주기로만 갱신된다
- *     (view를 dashboard↔detail로 전환해도 다시 안 받아옴).
- * 고침: view가 'detail'이 될 때마다 refreshDbProperties()를 호출 — MonthlyCalendar와
- * 같은 "열 때마다 새로 받아온다" 원칙으로 맞춤. 15분 주기 자동 동기화(runSync)는 그대로 유지.
+ * 관리자가 청소 배정을 직접 복구한 뒤 대시보드 캘린더는 바로 "배정완료"였는데 디테일뷰는 "미배정"이었다 — 같은 표를 보지만,
+ * 캘린더는 열 때마다 다시 읽고 디테일뷰는 앱을 처음 열 때·15분마다만 읽었다. 고침: 디테일뷰로 들어갈 때마다 다시 읽는다.
  *
- * 레이어: L2 — RoomStateApp.jsx 소스 계약(이펙트 존재·가드·의존성 배열).
+ * ACT-08 ⑦-5: 예전엔 RoomStateApp.jsx의 글자만 검사했다(5개 — 이펙트 모양·의존성 배열 글자 등). 이제 실제 RoomStateApp을
+ * 실행해 디테일뷰로 들어가면 요청이 나가고 디테일뷰가 새 배정을 받는지 본다(tests/helpers/roomStateAppFixture.js).
  */
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
+import { roomStateAppFixture, reply, findElement } from '../helpers/roomStateAppFixture.js';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8');
+const DAY = 86_400_000, HOUR = 3_600_000;
+const at = ms => new Date(Date.now() + ms).toISOString();
+const checkOut = at(5 * DAY);
+const row = (cleaning = {}) => ({ property_id: '파주201', name: '파주201', data_origin: 'REAL', ical_url: 'https://fixture.invalid/real.ics',
+  checkout_hour: 11, cleaning_duration_hours: 2.5,
+  reservations: [{ uid: 'booking-1', checkIn: at(3 * DAY), checkOut, platform: 'Airbnb',
+    cleaningAt: checkOut, cleaningEnd: at(5 * DAY + 3 * HOUR), ...cleaning }] });
+const BEFORE = row({ cleaningStatus: 'PENDING' });
+const AFTER = row({ cleaningStatus: 'ASSIGNED', cleanerName: 'Fixture Cleaner' });
 
-describe('RoomStateApp.jsx — view가 detail이 될 때마다 dbPropertyRows를 새로 받아온다', () => {
-  const src = read('src/components/v2/RoomStateApp.jsx');
+async function openApp(t, { profile = 'hybrid', dbRows }) {
+  let reads = 0;
+  const route = (call) => {
+    if (call.url === '/api/cleaning/properties' && call.method === 'GET') { reads++; return reply(200, dbRows(reads)); }
+    if (call.url === '/api/properties' && call.method === 'GET') return reply(200, []);
+    if (call.url === '/api/cleaning/ical-sync') return reply(200, { created: 0 });
+    if (call.url.startsWith('/api/monitoring/config')) return reply(200, { ok: true });
+    if (call.url.startsWith('/api/monitoring/state')) return reply(503, {});
+    return null;
+  };
+  const f = await roomStateAppFixture({ route, profile });
+  t.after(() => {
+    try { assert.deepEqual(globalThis.__productionFetchTrap?.calls ?? [], [], 'no production requests'); }
+    finally { f.restore(); }
+  });
+  await f.settle();
+  return { f, reads: () => reads };
+}
+const dbReads = f => f.calls.filter(c => c.url === '/api/cleaning/properties' && c.method === 'GET').length;
 
-  test("view === 'detail'일 때 refreshDbProperties()를 호출하는 이펙트가 있다", () => {
-    const m = src.match(/useEffect\(\(\) => \{\s*if \(USE_DEMO_DATA \|\| view !== 'detail'\) return;\s*refreshDbProperties\(\);\s*\}, \[view, refreshDbProperties\]\);/);
-    assert.ok(m, '디테일뷰 진입 시 refreshDbProperties를 호출하는 이펙트를 찾지 못함');
+describe('actual RoomStateApp — the detail view re-reads cleaning assignments every time it opens', () => {
+  test('a cleaning assigned after the app opened shows in the detail view as soon as it is opened', async t => {
+    // 앱을 열 때 1번 + 첫 동기화 뒤 1번 읽음(둘 다 미배정). 그 뒤 관리자가 배정 → 디테일뷰를 열 때 읽으면 배정완료
+    const { f } = await openApp(t, { dbRows: n => (n <= 2 ? [BEFORE] : [AFTER]) });
+    assert.equal(dbReads(f), 2);
+    const monthly = findElement(f.render(), 'MonthlyView');
+    monthly.props.onSelectProperty({ id: '파주201' });
+    const detail = findElement(await f.settle(), 'PropertyDetailView');
+    assert.equal(dbReads(f), 3, 'opening the detail view reads the DB once');
+    assert.deepEqual(detail.props.property.cleaningSlots.map(s => [s.cleaningStatus, s.cleanerName]), [['ASSIGNED', 'Fixture Cleaner']]);
   });
 
-  test('demo 프로필에서는 건너뛴다(USE_DEMO_DATA 가드) — dbPropertyRows는 hybrid/real에서만 의미 있음', () => {
-    const block = src.match(/useEffect\(\(\) => \{\s*if \(USE_DEMO_DATA \|\| view !== 'detail'\) return;[\s\S]*?\}, \[view, refreshDbProperties\]\);/);
-    assert.ok(block);
-    assert.match(block[0], /USE_DEMO_DATA/);
+  test('going back and opening the detail view again reads again; staying on the list does not', async t => {
+    const { f } = await openApp(t, { dbRows: () => [BEFORE] });
+    findElement(f.render(), 'MonthlyView').props.onSelectProperty({ id: '파주201' });
+    findElement(await f.settle(), 'PropertyDetailView').props.onBack(); // → 목록
+    await f.settle();
+    const onList = dbReads(f);
+    await f.settle();
+    assert.equal(dbReads(f), onList, 'no extra reads while the list stays open');
+    findElement(f.render(), 'PropertyListView').props.onSelectProperty({ id: '파주201' });
+    await f.settle();
+    assert.equal(dbReads(f), onList + 1);
   });
 
-  test('의존성 배열이 [view, refreshDbProperties] — view 전환마다 재실행된다', () => {
-    assert.match(src, /\}, \[view, refreshDbProperties\]\);/);
+  test('the 15-minute automatic sync stays: it asks the server to sync and reads the DB again', async t => {
+    const { f } = await openApp(t, { dbRows: () => [BEFORE] });
+    const timer = f.intervals.find(i => i.ms === 15 * 60 * 1000 && !i.cleared);
+    assert.ok(timer, '15-minute sync timer');
+    const before = f.calls.length;
+    timer.fn(); await f.settle();
+    const after = f.calls.slice(before).map(c => `${c.method} ${c.url}`);
+    assert.deepEqual(after.filter(c => !c.includes('/api/monitoring/')), ['POST /api/cleaning/ical-sync', 'GET /api/cleaning/properties']);
   });
 
-  test('기존 15분 주기 동기화(runSync)는 그대로 유지된다(이번 수정이 지우지 않았다)', () => {
-    assert.match(src, /setInterval\(\(\) => runSync\(syncConfig\), 15 \* 60 \* 1000\)/);
-  });
-
-  test('refreshDbProperties는 기존 함수를 재사용한다(새 fetch 로직을 중복 작성하지 않음)', () => {
-    assert.match(src, /const refreshDbProperties = useCallback\(async \(\) => \{\s*const rows = await fetchCloudProperties\(\);/);
+  test('the explicit demo profile never reads the DB, not even when a detail view opens', async t => {
+    const { f } = await openApp(t, { profile: 'demo', dbRows: () => { throw new Error('demo must not read the DB'); } });
+    const monthly = findElement(f.render(), 'MonthlyView');
+    const demo = monthly.props.properties[0];
+    assert.equal(demo.dataOrigin, 'SIMULATED');
+    monthly.props.onSelectProperty({ id: demo.id });
+    const detail = findElement(await f.settle(), 'PropertyDetailView');
+    assert.equal(detail.props.property.id, demo.id);
+    assert.equal(dbReads(f), 0);
   });
 });
