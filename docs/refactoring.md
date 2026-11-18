@@ -2530,3 +2530,9 @@ Codex가 커밋 없이 쌓아 둔 ⑥-1~⑥-6과 이어받아 마친 ⑥-7을 **
 ### RF-31 배포 기록 · 2026-11-18
 
 운영 코드 변경 단위 **`8cffb377bdc5c4259e288f6024225afc9d227e11`**을 main에 푸시했다. 이 SHA의 [GitHub CI](https://github.com/adckang/propos/actions/runs/44326168809)는 **completed / success**다. Vercel은 푸시 7초 뒤 생성된 Production 배포 `dpl_4q289gSrSBo286wS717btuo3fcyN`이 **READY**다(배포 목록·`vercel inspect` 기준 — 이번엔 배포의 커밋 SHA 메타데이터를 따로 조회하지 못했고, 그 사이 다른 배포는 없다). 커밋은 `api/cleaning/[...slug].js`·단위 s13·이 문서 **3파일**이며 `pre-commit → sync:dist` 훅이 정상 실행됐고 추적 dist 변경은 0이다. 거절 링크를 운영 URL로 직접 부르지는 않았다 — 동작은 s13이 실제 핸들러로 확인한다. 운영 DB 쓰기·업무 요청은 **0건**이다.
+
+<a id="act08-step7-2-rollout"></a>
+
+### RF-34 · ACT-08 단계 ⑦-2 배포 기록 · 2026-11-18
+
+운영 코드 변경 단위 **`3a19e02`**를 main에 푸시했다. 이 SHA의 [GitHub CI](https://github.com/adckang/propos/actions/runs/44327783730)는 **completed / success**다(GitHub API 비로그인 조회 한도가 차서 공개 실행 페이지로 확인). Vercel은 푸시 7초 뒤 생성된 Production 배포 `dpl_4oFJozjEq4GJx8hJCpVrHSBA6qzc`가 **READY**다(배포 목록·`vercel inspect` 기준, 그 사이 다른 배포 없음). 커밋은 `api/cleaning/[...slug].js`·단위 s69·새 격리 SQL s69·시험 도구·이 문서 **5파일**이며 `pre-commit → sync:dist` 훅이 정상 실행됐고 추적 dist 변경은 0이다. 숙소 저장 API는 로그인이 필요하고 운영 DB는 원래 제약 이름이 맞아 동작이 바뀌지 않는다 — 동작은 s69 단위·격리 SQL 시험이 실제 핸들러로 확인한다. 운영 DB는 제약 목록 읽기 전용 조회 1회뿐이고 쓰기·업무 요청은 **0건**이다. **RF-31·RF-34·단계 ⑦-2 완료, 다음은 ⑦-3 s71**이다.
