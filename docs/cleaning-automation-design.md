@@ -230,7 +230,7 @@ CREATE TABLE cleaning_notifs (
 
 | 메서드 | 경로 | 역할 |
 |--------|------|------|
-| **GET** | `/api/cron/monthly-cleaning` | 매월 15일 KST 09:00 — 다음 달 블로커 생성 + iCal 폴링 + dispatch_after 스케줄링 |
+| **GET** | `/api/cron/monthly-cleaning` | 매월 15일 KST 08:00 아침 정기 작업(`/api/cron/morning`) 안에서 실행 — 다음 달 블로커 생성 + iCal 폴링 + dispatch_after 스케줄링 |
 | **GET** | `/api/cron/cleaning-followup` | 30분마다 — PENDING 발동 + 리마인드 + 에스컬레이션 |
 | POST | `/api/gmail/webhook` | Gmail Pub/Sub 수신 |
 | POST | `/api/calendar/webhook` | 구글 예약 완료 수신 → 배정 처리 |

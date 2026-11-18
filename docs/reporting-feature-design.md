@@ -467,7 +467,7 @@ v1 파일 (`src/components/v1/*`) 수정 금지 — D-013.
 - [ ] `src/domain/reportingDomain.js` 구현 (기간 계산, 상태 분류)
 - [ ] `src/application/reportingService.js` 구현 (KPI 계산, 요약 문장)
 - [ ] `GET /api/stats` 구현
-- [ ] `GET /api/events/history` 구현
+- [x] `GET /api/events/history` 구현 (기간은 `/api/stats`와 같은 규칙 — 2026-11-18 ACT-08 수정 제안 2)
 - [ ] `GET /api/events/:id` 구현
 - [ ] `api/cron/archive-events.js` 구현
 - [ ] 단위 테스트 s19~s21 완성
