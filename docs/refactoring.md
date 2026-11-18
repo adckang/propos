@@ -2736,3 +2736,9 @@ CI는 GitHub API 비로그인 조회 한도 때문에 공개 실행 페이지로
 ### ACT-08 단계 ⑦-6 배포 기록 · 2026-11-19
 
 `01c07d3`(s60·s66·이 문서, 운영 코드 변경 없음)의 [GitHub CI](https://github.com/adckang/propos/actions/runs/44342458000)는 **completed / success**, Vercel Production 배포 `dpl_592Asmci7ieyCJ9b2vF1io4xG9nq`는 **READY**다(공개 실행 페이지·배포 목록·`vercel inspect` 기준). 추적 dist 변경 0. 운영 DB 쓰기·업무 요청 **0건**.
+
+<a id="act08-qa06-rollout"></a>
+
+### RF-37 · ACT-08 QA-06 배포 기록 · 2026-11-19
+
+`1d46583`(청소 API 데모 분기 한 줄·`vite.config.mjs` 한 줄·s127 단위·s127 격리 SQL·이 문서)의 [GitHub CI](https://github.com/adckang/propos/actions/runs/44343858172)는 **completed / success**, Vercel Production 배포 `dpl_658WkBBMCmAYTKfpYN8UhjXX6ERk`는 **READY**다(공개 실행 페이지·배포 목록·`vercel inspect` 기준). 추적 dist 변경 0. 바뀐 동작은 데모 모드에서 기간 없이 부른 청소 통계의 응답(200 → 400)뿐이며 운영 응답은 그대로다. 운영 DB 쓰기·업무 요청 **0건**. **QA-06 완료, 다음은 QA-01(전체 문서 × 규칙 대조)**이다.
