@@ -101,6 +101,7 @@ export async function cleaningDeclineFixture({ responses = [], advance, slack, n
         status(n) { this.code = n; return this; },
         json(value) { this.body = value; this.kind = 'json'; return this; },
         send(value) { this.body = value; this.kind = 'html'; return this; },
+        redirect(code, location) { this.code = code; this.headers.location = location; this.kind = 'redirect'; return this; },
         end(value) {
           if (this.statusCode !== undefined) this.code = this.statusCode;
           if (value !== undefined && this.headers['content-type']?.includes('application/json')) {
