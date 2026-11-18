@@ -2375,3 +2375,9 @@ Codex가 커밋 없이 쌓아 둔 ⑥-1~⑥-6과 이어받아 마친 ⑥-7을 **
 ### ACT-08 단계 ⑥-9 배포 기록 · 2026-11-18
 
 테스트 교체 단위 **`e169b097d001970e6f3df00e46cea92563c0ee07`**를 main에 푸시했다. 이 SHA의 [GitHub validate](https://github.com/adckang/propos/actions/runs/44294484888/job/134767814766)는 **completed / success**, Vercel Production SHA도 일치하며 배포 `dpl_64UchcZprpWzq5SLd6rBNJtNCcLf`는 **READY**다. 배포 확인은 GitHub/Vercel 메타데이터만 조회했다. 커밋은 새 단위 s36·옛 통합 s36 삭제·`cleaningDeclineFixture.js`·`cleaningDeliveryFixture.js`·이 문서 **5파일**이며 `pre-commit → sync:dist` 훅이 정상 실행됐고 운영 코드·추적 dist 변경은 0이다. 이번에 옮긴 s36 24개가 처음으로 CI에서 실행됐다. Gmail·Google·Slack·SMS·DB·운영 API 실제 요청은 **0건**이다. **단계 ⑥-9 완료 — 복사 테스트 교체(수정 제안 1) 끝. 다음은 수정 제안 2(사용자 결정)·3(승인 대기)**이다. ACT-08 전체 완료를 뜻하지 않는다.
+
+<a id="act08-proposal2-rollout"></a>
+
+### ACT-08 수정 제안 2 배포 기록 · 2026-11-18
+
+운영 코드 변경 단위 **`477efcf518341558412fff880436dad004a1a670`**를 main에 푸시했다. 이 SHA의 [GitHub validate](https://github.com/adckang/propos/actions/runs/44297713413/job/134778984793)는 **completed / success**, Vercel Production SHA도 일치하며 배포 `dpl_7AwAcEsRT8eaV13A7wcMC4MJh4Q8`는 **READY**다. 배포 확인은 GitHub/Vercel 메타데이터만 조회했다. 커밋은 `api/events/[...slug].js`·새 s126·이 문서 **3파일**이며 `pre-commit → sync:dist` 훅이 정상 실행됐고 추적 dist 변경은 0이다(바뀐 코드는 서버 API라 화면 번들과 무관). 운영의 이벤트 조회는 로그인이 필요해 실제 호출로는 확인하지 않았고, 부르는 화면·스크립트도 없다 — 동작은 s126이 실제 핸들러로 확인한다. 운영 업무 API·DB 실제 요청은 **0건**이다. **수정 제안 2 완료, 다음은 수정 제안 3(설계 문서 2곳 정정)**이다.
