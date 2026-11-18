@@ -46,7 +46,7 @@ export function installDeliveryIO({ sms, push, firebase, db } = {}) {
   process.env.PROPOS_SMS_GW_ID = 'fixture'; process.env.PROPOS_SMS_GW_PWD = 'fixture';
   globalThis.fetch = async (url, options) => {
     if (String(url) !== 'https://api.sms-gate.app/3rdparty/v1/message') return block('HTTP');
-    calls.sms.push({ body: JSON.parse(options.body), signal: options.signal });
+    calls.sms.push({ body: JSON.parse(options.body), signal: options.signal, method: options.method, headers: options.headers });
     return sms ? sms(calls.sms.length, options) : { ok: true, status: 200, json: async () => ({ id: 'fixture-provider-id' }) };
   };
   globalThis.__cleaningDeliveryIO = {

@@ -6,10 +6,10 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const root = new URL('../../', import.meta.url).pathname;
-export async function cleaningDeclineFixture({ responses = [], advance, slack, notify, profile = 'hybrid', calendar, environment = {} } = {}) {
+export async function cleaningDeclineFixture({ responses = [], advance, slack, notify, icalSync, profile = 'hybrid', calendar, environment = {} } = {}) {
   const key = '__declineFixture_' + randomUUID().replaceAll('-', '');
   const pending = [...responses];
-  const queries = [], advances = [], slackCalls = [], blocked = [], errors = [], unexpectedQueries = [];
+  const queries = [], advances = [], slackCalls = [], blocked = [], errors = [], unexpectedQueries = [], icalSyncCalls = [];
   const tokenCalls = [], calendarRequests = [], completionCalls = [], kvCalls = [], notifyCalls = [];
   const previousFetch = globalThis.fetch;
   const env = { PROPOS_DATA_PROFILE: profile, PROPOS_AUTH_MODE: 'enforce',
@@ -31,6 +31,7 @@ export async function cleaningDeclineFixture({ responses = [], advance, slack, n
     async gmailToken(...args) { tokenCalls.push(args); return calendar.getGmailToken ? calendar.getGmailToken(...args) : 'fixture-gmail-token'; },
     async complete(...args) { completionCalls.push(args); return calendar.complete?.(...args); },
     async notify(...args) { notifyCalls.push(args); return notify(...args); },
+    async icalSync(...args) { icalSyncCalls.push(args); return icalSync(...args); },
     kv: new Proxy({}, { get: (_target, name) => async (...args) => {
       if (calendar?.kv?.[name]) {
         kvCalls.push({ method: name, args });
@@ -50,7 +51,9 @@ export async function cleaningDeclineFixture({ responses = [], advance, slack, n
       : /^\/calendar\/v3\/calendars\/.+\/events$/.test(target.pathname));
     const allowedGmailPath = target.hostname === 'gmail.googleapis.com'
       && target.pathname === '/gmail/v1/users/me/watch' && method === 'POST';
-    if (!calendar?.fetch || target.protocol !== 'https:' || (!allowedCalendarPath && !allowedGmailPath)
+    const allowedGmailRead = target.hostname === 'gmail.googleapis.com' && method === 'GET'
+      && (target.pathname === '/gmail/v1/users/me/history' || /^\/gmail\/v1\/users\/me\/messages\/[^/]+$/.test(target.pathname));
+    if (!calendar?.fetch || target.protocol !== 'https:' || (!allowedCalendarPath && !allowedGmailPath && !allowedGmailRead)
       || !(calendar.methods ?? ['GET']).includes(method)) return fail('HTTP');
     calendarRequests.push({ url: String(url), options });
     return calendar.fetch(url, options);
@@ -72,6 +75,7 @@ export async function cleaningDeclineFixture({ responses = [], advance, slack, n
       export const getGoogleToken=(...args)=>globalThis.${key}.googleToken(...args);
       export const getGmailToken=(...args)=>globalThis.${key}.gmailToken(...args);` }),
     ...(notify && { '../../server/cleaning/_notify.js': `export const notify=(...args)=>globalThis.${key}.notify(...args);` }),
+    ...(icalSync && { '../../server/cleaning/_icalSync.js': `export const syncAllPropertiesIcal=(...args)=>globalThis.${key}.icalSync(...args);` }),
     'firebase-admin/app': `export const getApps=()=>[{}]; export const cert=()=>globalThis.${key}.fail('FCM'); export const initializeApp=()=>globalThis.${key}.fail('FCM');`,
     'firebase-admin/messaging': `export const getMessaging=()=>globalThis.${key}.fail('FCM');`,
   };
@@ -117,7 +121,7 @@ export async function cleaningDeclineFixture({ responses = [], advance, slack, n
       return res;
     }
     return { invoke, db, queries, advances, slackCalls, blocked, errors, unexpectedQueries,
-      tokenCalls, calendarRequests, completionCalls, kvCalls, notifyCalls, kv: io.kv,
+      tokenCalls, calendarRequests, completionCalls, kvCalls, notifyCalls, icalSyncCalls, kv: io.kv,
       get pendingResponses() { return pending.length; }, restore };
   } catch (error) { restore(); throw error; }
 }
