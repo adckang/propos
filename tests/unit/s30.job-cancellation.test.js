@@ -459,7 +459,16 @@ describe('actual cleaning-followup handler — reminder and escalation', () => {
       token: 'fixture-token', phone: '01000000000', fcm_token: null, fcm_status: 'uninstalled' };
     const { fixture, res } = await actualFollowup(t, { dbQuery: followupDb({ bulkNotifs: [notif] }) });
     assert.deepEqual(res.body, { ok: true, advanced: 0, reminded: 1, escalated: 0 });
-    assert.ok(fixture.names().includes('notify'));
+    const notify = fixture.calls.find(call => call.name === 'notify');
+    assert.deepEqual(notify.args[2], {
+      title: '[PROPOS] 청소 재안내', body: 'fixture-property 청소 일정 아직 미확정입니다',
+      data: {
+        jobId: 'fixture-job', token: 'fixture-token',
+        calendarUrl: 'http://localhost:5173/c/fixture-property', hostPhone: '',
+      },
+      smsText: 'fixture reminder',
+      notifId: 'fixture-notif',
+    });
     const sql = fixture.calls.filter(call => call.name === 'db.query').map(call => call.args[0]);
     assert.ok(sql.some(text => /UPDATE cleaning_notifs SET reminded_at=NOW\(\)/.test(text)));
     assert.ok(sql.some(text => /SET status='BULK_REMINDED'/.test(text)));
