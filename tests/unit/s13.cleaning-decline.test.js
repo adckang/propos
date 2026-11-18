@@ -57,6 +57,19 @@ describe('actual decline handler — request and token', () => {
     assert.match(f.queries[0].sql, /FROM cleaning_notifs n JOIN cleaning_jobs j ON j.id=n.job_id WHERE n.token=\$1/);
     assert.deepEqual(f.queries[0].params, [expectedToken]);
   });
+  // RF-31: 같은 키가 두 번 오면 요청 객체의 값이 배열이 된다 — 잘못된 링크(404)로 DB 전에 막는다(이전엔 500)
+  for (const url of ['/api/cleaning/d?token=ABC123&token=XYZ789&format=api', '/api/cleaning/d?token=ABC123&token=ABC123&format=api',
+    '/api/cleaning/d?id=ABC123&id=XYZ789&format=api']) test(`repeated link value ${url.split('?')[1]} returns the invalid-link 404 before DB`, async t => {
+    const f = await actualDecline(t);
+    expectDeclineJson(await f.invoke({ url }), 404, '유효하지 않은 링크입니다.', false);
+    assert.deepEqual(f.queries, []); assert.deepEqual(f.advances, []); assert.deepEqual(f.slackCalls, []);
+  });
+  test('repeated token on the HTML link gets the actual invalid-link page', async t => {
+    const f = await actualDecline(t);
+    const r = await f.invoke({ url: '/api/cleaning/d?token=ABC123&token=XYZ789' });
+    assert.equal(r.code, 404); assert.equal(r.kind, 'html'); assert.match(r.body, /유효하지 않은 링크/);
+    assert.deepEqual(f.queries, []);
+  });
   for (const query of [{ slug: 'd' }, { slug: 'd', token: '', format: 'api' }]) test('missing/empty token is rejected by the actual router', async t => {
     const f = await actualDecline(t);
     const r = await f.invoke({ query });

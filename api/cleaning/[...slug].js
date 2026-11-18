@@ -477,7 +477,8 @@ async function handleDecline(req, res, token) {
     return res.status(status).send(htmlPage(title, message));
   };
 
-  const t = (token ?? "").toUpperCase();
+  // RF-31: 같은 키가 두 번 오면 값이 배열이 된다 — 문자열이 아니면 잘못된 링크로(이전엔 500)
+  const t = typeof token === "string" ? token.toUpperCase() : "";
   if (!t || !/^[A-Z0-9]{6}$/.test(t)) return respond(404, "링크 오류", "유효하지 않은 링크입니다.");
   const { rows: [notif] } = await db.query(
     `SELECT n.id, n.job_id, n.cleaner_id, n.token, n.response,
