@@ -11,6 +11,7 @@ const stubs = {
     const query=async(scope,sql)=>{
       const op=sql.trim().split(/\\s+/).slice(0,3).join(' ');
       s.calls.push({scope,op});
+      if(/^\s*SELECT/i.test(sql)) s.selects.push({scope,sql});
       if(s.mode==='write-failure' && /INSERT INTO cleaning_jobs/.test(sql)) throw new Error('fixture write failure');
       if(s.mode==='rollback-failure' && (/INSERT INTO cleaning_jobs/.test(sql)||sql==='ROLLBACK')) throw new Error('fixture DB failure');
       if(s.mode==='commit-failure' && sql==='COMMIT') throw new Error('fixture commit failure');
@@ -19,7 +20,7 @@ const stubs = {
     };
     const client={query:(sql)=>query('client',sql),release(error){s.releases.push(Boolean(error));s.order.push('release');}};
     export default {Pool:class {
-      constructor(){s.pools++;}
+      constructor(config){s.pools++;s.poolConfigs.push(config);}
       async query(sql){return query('pool',sql);}
       async connect(){s.connects++; if(s.mode==='connect-failure')throw new Error('fixture connect failure');return client;}
       async end(){s.ends++;s.order.push('end');}
@@ -36,9 +37,9 @@ const compiled = await build({
   }}],
 });
 function run(mode = 'success', apply = true) {
-  const prelude = `globalThis.__seedTest={mode:${JSON.stringify(mode)},calls:[],pools:0,connects:0,releases:[],ends:0,order:[]};
+  const prelude = `globalThis.__seedTest={mode:${JSON.stringify(mode)},calls:[],selects:[],poolConfigs:[],pools:0,connects:0,releases:[],ends:0,order:[]};
     globalThis.fetch=async()=>{throw new Error('External requests blocked');};
-    process.on('exit',()=>console.log('__SEED_TEST__'+JSON.stringify(globalThis.__seedTest)));\n`;
+    process.on('exit',()=>console.log('__SEED_TEST__'+JSON.stringify({...globalThis.__seedTest,tls:process.env.NODE_TLS_REJECT_UNAUTHORIZED??null})));\n`;
   const child = spawnSync(process.execPath,['--input-type=module','-',...(apply?['--apply']:[])],{
     input:prelude+compiled.outputFiles[0].text,encoding:'utf8',timeout:15000,
     env:{POSTGRES_URL:'postgres://fixture.invalid/blocked'},
@@ -85,6 +86,19 @@ describe('SIMULATED seed actual CLI transaction',()=>{
   test('failed rollback discards the connection and still closes the pool',()=>{
     const s=run('rollback-failure');assert.equal(s.exit,1);pinned(s);
     assert.deepEqual(s.releases,[true]);
+  });
+  // ACT-08 ⑦-3: s71의 seed 글자 검사(TLS 끄기 금지·FOR UPDATE)를 실제 실행으로 옮김
+  test('connects with only the configured address and never turns off TLS certificate checks',()=>{
+    const s=run();assert.equal(s.exit,0);
+    assert.deepEqual(s.poolConfigs,[{connectionString:'postgres://fixture.invalid/blocked'}]);
+    assert.equal(s.tls,null,'NODE_TLS_REJECT_UNAUTHORIZED stays unset');
+  });
+  test('the REAL/name-conflict check locks the rows it reads, on the transaction client after BEGIN',()=>{
+    const s=run();assert.equal(s.exit,0);
+    const check=s.selects.find(q=>/FROM property_cleaning_config/.test(q.sql));
+    assert.ok(check,'conflict check query');
+    assert.equal(check.scope,'client');assert.match(check.sql,/FOR UPDATE/);
+    assert.equal(s.calls[0].op,'BEGIN');
   });
   test('dry-run never opens a database connection',()=>{
     const s=run('success',false);assert.equal(s.exit,0);

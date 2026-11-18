@@ -59,6 +59,16 @@ test('SIMULATED seed — actual CLI and isolated SQL transaction', {skip:!enable
         UNION ALL SELECT 'events',count(*)::int FROM events ORDER BY table_name`);
       return rows;
     };
+    await t.test('a REAL property already using the seed name stops the seed before anything is written',async()=>{
+      await db.query(`INSERT INTO property_cleaning_config(property_id,name,data_origin) VALUES('real-same-name','Seed fixture','REAL')`);
+      const before = await snapshot();
+      const result = await actualSeed(db);
+      assert.equal(result.exitCode,1);
+      assert.deepEqual(result.calls.slice(-3),['ROLLBACK','release','end']);
+      assert.ok(!result.calls.some(c=>c.startsWith('INSERT')),'no INSERT after the conflict');
+      assert.deepEqual(await snapshot(),before);
+      await db.query(`DELETE FROM property_cleaning_config WHERE property_id='real-same-name'`);
+    });
     await t.test('failure after property/reservation writes rolls both back',async()=>{
       const before = await snapshot();
       const result = await actualSeed(db,true);
@@ -68,6 +78,7 @@ test('SIMULATED seed — actual CLI and isolated SQL transaction', {skip:!enable
     });
     await t.test('success and repeated apply preserve all keys and existing REAL rows',async()=>{
       const before = await db.query(`SELECT * FROM cleaning_jobs WHERE data_origin='REAL' ORDER BY id`);
+      const notifsBefore = (await db.query(`SELECT count(*)::int AS n FROM cleaning_notifs`)).rows[0].n;
       const first = await actualSeed(db);
       assert.equal(first.exitCode,0);
       assert.deepEqual(first.calls.slice(-3),['COMMIT','release','end']);
@@ -75,6 +86,12 @@ test('SIMULATED seed — actual CLI and isolated SQL transaction', {skip:!enable
       assert.equal(jobs.rows.length,1);
       assert.equal((await db.query(`SELECT count(*)::int AS n FROM property_reservations WHERE property_id='SIM_seed_fixture'`)).rows[0].n,1);
       assert.ok((await db.query(`SELECT count(*)::int AS n FROM events WHERE property_id='SIM_seed_fixture'`)).rows[0].n>=2);
+      // ACT-08 ⑦-3 (옛 s71 글자 검사): seed가 쓴 행은 모두 SIMULATED이고 담당자 알림 기록은 만들지 않는다
+      for (const table of ['property_cleaning_config','property_reservations','cleaning_jobs','events']) {
+        const {rows} = await db.query(`SELECT DISTINCT data_origin FROM ${table} WHERE property_id='SIM_seed_fixture'`);
+        assert.deepEqual(rows.map(r=>r.data_origin),['SIMULATED'],table);
+      }
+      assert.equal((await db.query(`SELECT count(*)::int AS n FROM cleaning_notifs`)).rows[0].n,notifsBefore);
       const counts = await snapshot();
       assert.equal((await actualSeed(db)).exitCode,0);
       assert.deepEqual(await snapshot(),counts);
