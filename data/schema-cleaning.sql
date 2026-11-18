@@ -4,7 +4,9 @@
 -- 숙소별 청소 설정 (google_calendar_id, booking_url 포함)
 CREATE TABLE IF NOT EXISTS property_cleaning_config (
   property_id                TEXT PRIMARY KEY,
-  name                       TEXT NOT NULL UNIQUE,  -- D-016: property_id = name. 같은 이름 중복 등록을 DB 레벨에서 차단
+  name                       TEXT NOT NULL CONSTRAINT property_cleaning_config_name_unique UNIQUE,
+                             -- D-016: property_id = name. 같은 이름 중복 등록을 DB 레벨에서 차단.
+                             -- 제약 이름은 운영 DB(migrate-property-name-unique.sql)와 같게 — 서버가 이 이름으로 409를 낸다(RF-34)
   checkout_hour              INT  NOT NULL DEFAULT 11,
   cleaning_duration_hours    FLOAT NOT NULL DEFAULT 2.5,
   google_calendar_id         TEXT,

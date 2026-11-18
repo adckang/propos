@@ -3,9 +3,10 @@
 // s69 SQL — 숙소 이름 중복 방지(D-031)를 실제 제약·실제 SQL로 확인한다. 실제 청소 API 핸들러를 그대로
 // 실행하고, 그 핸들러가 보내는 SQL만 격리 DB(PGlite 또는 격리 로컬 DB)로 넘긴다. 운영 DB·외부 요청 없음.
 //
-// 설치 경로가 둘이다: ① 스키마 파일로 새로 만든 DB(제약 이름은 Postgres 기본 `..._name_key`)
-// ② 운영 DB처럼 제약 없이 만들어진 뒤 마이그레이션 파일로 붙인 DB(`..._name_unique`, 2026-11-18 운영
-// 읽기 전용 확인). 두 경우 모두 같은 이름의 두 번째 숙소는 409로 거절돼야 한다(RF-34).
+// 설치 경로가 둘이다: ① 스키마 파일로 새로 만든 DB ② 운영 DB처럼 제약 없이 만들어진 뒤 마이그레이션
+// 파일로 붙인 DB. 두 경우 모두 제약 이름은 운영과 같은 `..._name_unique`여야 하고(2026-11-18 운영 읽기 전용
+// 확인), 같은 이름의 두 번째 숙소는 409로 거절돼야 한다(RF-34 — 예전 스키마 파일은 Postgres 기본 이름
+// `..._name_key`를 만들어 새로 만든 DB에서만 500이었다. 그 시절 DB는 서버가 두 이름 모두 받아 처리한다).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -24,7 +25,7 @@ async function database(t, { productionLike = false } = {}) {
   t.after(() => sql.close());
   if (productionLike) {
     // 운영 DB는 이름 제약이 생기기 전에 만들어졌고 2026-09-29에 마이그레이션 파일로 붙였다
-    await sql.pool.query('ALTER TABLE property_cleaning_config DROP CONSTRAINT property_cleaning_config_name_key');
+    await sql.pool.query('ALTER TABLE property_cleaning_config DROP CONSTRAINT property_cleaning_config_name_unique');
     await sql.engine.exec(await migration());
   }
   return sql;
@@ -50,8 +51,7 @@ for (const productionLike of [false, true]) {
 
   test(`SQL (${install}): the database itself refuses a second property with the same name`, { skip: !enabled }, async t => {
     const sql = await database(t, { productionLike });
-    assert.deepEqual(await constraintsOf(sql.pool),
-      [productionLike ? 'property_cleaning_config_name_unique' : 'property_cleaning_config_name_key']);
+    assert.deepEqual(await constraintsOf(sql.pool), ['property_cleaning_config_name_unique'], 'same name as production');
     await assert.rejects(
       sql.pool.query(`INSERT INTO property_cleaning_config(property_id,name) VALUES('copy-property',$1)`, [EXISTING]),
       e => e.code === '23505');
@@ -93,7 +93,7 @@ for (const productionLike of [false, true]) {
 test('SQL: the migration stops without adding anything while duplicate names remain', { skip: !enabled }, async t => {
   const sql = await createCleaningSqlFixture();
   t.after(() => sql.close());
-  await sql.pool.query('ALTER TABLE property_cleaning_config DROP CONSTRAINT property_cleaning_config_name_key');
+  await sql.pool.query('ALTER TABLE property_cleaning_config DROP CONSTRAINT property_cleaning_config_name_unique');
   await sql.pool.query(`INSERT INTO property_cleaning_config(property_id,name) VALUES('copy-property',$1)`, [EXISTING]);
   await assert.rejects(sql.engine.exec(await migration()), e => e.code === '23505');
   assert.deepEqual(await constraintsOf(sql.pool), []);

@@ -52,6 +52,13 @@ function kstDay(days) {
   return new Date(Date.now() + 9 * 3_600_000 + days * DAY).toISOString().slice(0, 10);
 }
 
+/** 오늘+fromDays일부터 이어지는 count일 — 모두 한 달 안(월간 작업은 그 달 퇴실만 만든다). 달을 넘기면 다음 달로 민다 */
+function consecutiveDaysInOneMonth(fromDays, count) {
+  let offset = fromDays;
+  while (kstDay(offset).slice(0, 7) !== kstDay(offset + count - 1).slice(0, 7)) offset++;
+  return Array.from({ length: count }, (_, i) => kstDay(offset + i));
+}
+
 describe('planJobDispatch — 출처와 첫 요청 시각 규칙', () => {
   const now = new Date('2026-10-12T12:18:50.000Z');
 
@@ -273,7 +280,8 @@ describe('월간 배치(매월 15일) — 실제 핸들러 실행 (RF-19, 시나
   }
 
   test('칸은 요청 보내는 날 연다(DEC-07): 15일 작업은 퇴실 날을 포함해 다음 달 모든 날을 막고 칸을 열지 않는다. 이미 요청이 나갔거나 배정된 날만 막지 않는다', async () => {
-    const days = [kstDay(40), kstDay(41), kstDay(42), kstDay(43)];
+    // 나흘이 한 달 안이어야 한다 — 예전엔 오늘+40~43일이라 그 나흘이 달을 넘기는 날(매달 며칠)마다 실패했다
+    const days = consecutiveDaysInOneMonth(40, 4);
     const { blockersMade, blockerDeletes, inserts, res } = await runMonthly({
       google: true, monthDates: days, checkouts: [days[1], days[3]], requestedDays: [days[3]], pendingJobs: [],
     });

@@ -15,6 +15,7 @@
  * RF-34(2026-11-18): 제약 이름이 설치 경로마다 다르다 — 운영 DB는 ALTER로 붙인
  * `property_cleaning_config_name_unique`, 스키마 파일로 새로 만든 DB는 Postgres 기본 이름
  * `property_cleaning_config_name_key`. 서버가 앞의 이름만 알아 뒤의 DB에서는 같은 충돌이 500이었다.
+ * → 서버가 두 이름 모두 받고(그 시절 만든 DB용), 2026-11-19부터 스키마 파일도 운영과 같은 이름을 쓴다.
  */
 
 import { describe, test } from 'node:test';
