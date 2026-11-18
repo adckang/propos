@@ -2288,3 +2288,9 @@ Codex가 커밋 없이 쌓아 둔 ⑥-1~⑥-6과 이어받아 마친 ⑥-7을 **
 커밋마다 기존 `pre-commit → sync:dist` 훅이 정상 실행됐고 운영 코드·추적 dist 변경은 0이다. 7개 커밋 모두 테스트·테스트 도우미·이 문서만 바꿨다. **`/code-review` 실행은 사용자가 중간에 멈췄다.** 그 대신 범위 점검(비밀값·개인정보·로컬 경로·`skip`/`only`·실제 외부 주소 0건, 전화번호는 반복 패턴 가짜 번호만), 커밋별 전체 시험, ⑥-7 변형 18/18로 확인했다. ⑥-1~⑥-6의 변형 검사는 Codex 기록 그대로이며 이번에 다시 돌리지 않았다.
 
 원래 폴더의 main/index는 작업 파일 13개가 최종 커밋과 바이트 일치함을 확인한 뒤 `768ca4e`로 전진시켰다. 사용자 문서·설정(미추적)과 현재 `.DS_Store`는 보존했고 스테이징하지 않았다. 운영 업무 API·FCM·SMS·Slack·Google·DB·Pi 실제 요청은 **0건**이다. RF-31·RF-32는 미수정이다. **단계 ⑥-1~⑥-7 완료, 다음은 통합 s32·s36 복사 대조(미착수)**다. ACT-08 전체 완료를 뜻하지 않는다.
+
+<a id="act08-step6-8-rollout"></a>
+
+### ACT-08 단계 ⑥-8 배포 기록 · 2026-11-18
+
+테스트 교체 단위 **`d444afa8a68daf7e729e3e38134174769c12df37`**를 main에 푸시했다. 이 SHA의 [GitHub validate](https://github.com/adckang/propos/actions/runs/44293294131/job/134763706968)는 **completed / success**, Vercel Production SHA도 일치하며 배포 `dpl_C9GAgjEXZs6aem4oWGqtGWxEfrFP`는 **READY**다. 배포 확인은 GitHub/Vercel 메타데이터만 조회했다. 커밋은 새 단위 s32·옛 통합 s32 삭제·`cleaningDeclineFixture.js`·이 문서 **4파일**이며 `pre-commit → sync:dist` 훅이 정상 실행됐고 운영 코드·추적 dist 변경은 0이다. 이번에 옮긴 s32 19개가 처음으로 CI에서 실행됐다. 운영 업무 API·DB·Google·Slack·FCM·SMS 실제 요청은 **0건**이다. **단계 ⑥-8 완료, 다음은 ⑥-9 s36 복사 대조**다. ACT-08 전체 완료를 뜻하지 않는다.
