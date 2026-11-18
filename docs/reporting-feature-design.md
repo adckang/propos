@@ -446,7 +446,7 @@ v1 파일 (`src/components/v1/*`) 수정 금지 — D-013.
 ---
 
 ## 10. 구현 순서 (Phase 1 → 4)
-
+> **이 장은 최초 설계(2026-08) 시점의 구현 계획이다.** 체크 표시는 현재 구현 상태를 뜻하지 않으며 최신화하지 않았다(2026-11-18 `GET /api/events/history` 한 줄만 갱신). 현재 작업 상태의 정본은 [refactoring.md](refactoring.md)다.
 ### Phase 1 — 기반 (이 단계 완료 후 Phase 2 시작)
 - [ ] `src/config/eventTypes.js` 생성 (섹션 6)
 - [ ] Vercel Postgres 생성 + 프로젝트 연결

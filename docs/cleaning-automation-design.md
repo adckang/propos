@@ -231,7 +231,7 @@ CREATE TABLE cleaning_notifs (
 | 메서드 | 경로 | 역할 |
 |--------|------|------|
 | **GET** | `/api/cron/monthly-cleaning` | 매월 15일 KST 08:00 아침 정기 작업(`/api/cron/morning`) 안에서 실행 — 다음 달 블로커 생성 + iCal 폴링 + dispatch_after 스케줄링 |
-| **GET** | `/api/cron/cleaning-followup` | 30분마다 — PENDING 발동 + 리마인드 + 에스컬레이션 |
+| **GET** | `/api/cron/cleaning-followup` | 독립 일정 없음 — 아침 08:00·저녁 22:00(KST) 정기 작업 안에서, 그리고 관리자가 청소 일정 목록을 열어 두면 1분마다(`runFollowupChecks`) 돈다(등록 일정은 `vercel.json` 2개, Hobby 한도). PENDING 발동 + 리마인드 + 에스컬레이션 |
 | POST | `/api/gmail/webhook` | Gmail Pub/Sub 수신 |
 | POST | `/api/calendar/webhook` | 구글 예약 완료 수신 → 배정 처리 |
 
@@ -701,7 +701,7 @@ Calendar API 블로커 이벤트 생성/삭제, Calendar Webhook 등록, Gmail W
 | Google OAuth 자격증명 Vercel 설정 | HIGH | `GOOGLE_CLIENT_ID` `GOOGLE_CLIENT_SECRET` `GOOGLE_REFRESH_TOKEN` `GOOGLE_PUBSUB_TOPIC` `GOOGLE_WEBHOOK_SECRET` |
 | Gmail Watch 실제 등록 | MEDIUM | `POST /api/gmail/watch` 엔드포인트 구현 완료. 실제 Gmail API 호출 1회 필요 (7일마다 갱신 필요) |
 | CRON_SECRET Vercel 환경변수 설정 | LOW | 외부 크론 호출 차단 |
-| cleaning-followup 크론 주기 | LOW | 현재 `0 2 * * *` (하루 1회). Vercel Pro 업그레이드 시 `*/30 * * * *` 변경 권장 |
+| cleaning-followup 크론 주기 | LOW | 현재 아침·저녁 정기 작업 안에서 하루 2회 + 관리자가 청소 일정 목록을 열어 둔 동안 1분마다(2026-11-18 `vercel.json`·코드 확인). 그래서 VIP 1시간·재안내 1시간·에스컬레이션 3시간은 그 시간이 지난 뒤 다음 실행 때 처리된다. Vercel Pro 업그레이드 시 `*/30 * * * *` 변경 권장 |
 
 ### 완료된 항목 (2026-08-23)
 
