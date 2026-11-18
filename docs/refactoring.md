@@ -2644,3 +2644,9 @@ CI는 GitHub API 비로그인 조회 한도 때문에 공개 실행 페이지로
 ### RF-36 배포 기록 · 2026-11-19
 
 `0bd92aa`(스키마 파일 2개·s71 격리 SQL·s74·이 문서)의 [GitHub CI](https://github.com/adckang/propos/actions/runs/44337691330)는 **completed / success**, Vercel Production 배포 `dpl_EnGCFhyaJxGHG23Vjp8Xkc4wUns5`는 **READY**다(푸시 8초 뒤 생성, 공개 실행 페이지·배포 목록·`vercel inspect` 기준, 그 사이 다른 배포 없음). 추적 dist 변경 0. 스키마 파일은 운영 DB에 이미 표·연결이 있어 운영에서 아무것도 하지 않는다. 운영 DB 쓰기·업무 요청 **0건**.
+
+<a id="act08-step7-4-rollout"></a>
+
+### ACT-08 단계 ⑦-4 배포 기록 · 2026-11-19
+
+`7861ef3`(s73·이 문서, 운영 코드 변경 없음)의 [GitHub CI](https://github.com/adckang/propos/actions/runs/44339691918)는 **completed / success**, Vercel Production 배포 `dpl_GVoMynLf6wdukvACGhj1QwkpaX97`는 **READY**다(푸시 8초 뒤 생성, 공개 실행 페이지·배포 목록·`vercel inspect` 기준). 추적 dist 변경 0. Pi 접속·운영 DB 쓰기·업무 요청 **0건**. **⑦-4 완료, 다음은 ⑦-5 s68·s81**이다.
