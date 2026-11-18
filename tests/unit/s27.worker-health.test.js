@@ -1,246 +1,186 @@
 /**
- * Worker Health cron 로직 유닛 테스트
- * 30일 미접속 → fcm_status=inactive 전환
- * 7일 미접속 → Slack 경고
- * (api/cron/[...slug].js의 handleWorkerHealth 구현 시 이 로직과 일치해야 함)
+ * s27 — Worker 앱 헬스체크 실제 크론 핸들러 테스트
+ *
+ * 예전 테스트는 30일/7일 판정과 Slack 문구를 이 파일에 다시 구현했다. 여기서는
+ * /api/cron/worker-health-check를 실행해 실제 SQL, 실행 순서, 응답, Slack 경계를 검증한다.
  */
 
-import { describe, test } from "node:test";
-import assert from "node:assert/strict";
+import { after, afterEach, before, describe, test } from 'node:test';
+import assert from 'node:assert/strict';
+import { actualCronModule, cronResponse, installCronIO } from '../helpers/cronHandlerFixture.js';
 
-// ============================================================
-// 공통 헬퍼 (cron 구현 시 동일 로직 사용)
-// ============================================================
+let handler;
+before(async () => { ({ default: handler } = await actualCronModule()); });
+after(() => { delete globalThis.__cronHandlerIO; });
+afterEach(() => {
+  assert.deepEqual(globalThis.__productionFetchTrap?.calls ?? [], [], 'no production requests');
+});
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function daysSince(isoStr, nowMs = Date.now()) {
-  if (!isoStr) return Infinity;
-  return (nowMs - new Date(isoStr).getTime()) / DAY_MS;
+function dbSequence(...results) {
+  let index = 0;
+  return async () => {
+    if (index >= results.length) throw new Error(`unexpected worker-health query ${index + 1}`);
+    const result = results[index++];
+    if (result instanceof Error) throw result;
+    return result;
+  };
 }
 
-function needsInactiveTransition(cleaner, nowMs = Date.now()) {
-  if (cleaner.fcm_status !== "active") return false;
-  if (!cleaner.last_seen_at) return false; // 신규 등록, 아직 한 번도 접속 안 함 → 전환 제외
-  return daysSince(cleaner.last_seen_at, nowMs) > 30;
+async function runHealth(t, { deactivated = 0, stale = [], behavior = {} } = {}) {
+  const fixture = installCronIO({
+    behavior: {
+      'db.query': dbSequence(
+        { rows: [], rowCount: deactivated },
+        { rows: stale, rowCount: stale.length },
+      ),
+      ...behavior,
+    },
+  });
+  t.after(() => fixture.restore());
+  const res = cronResponse();
+  await handler({
+    method: 'GET',
+    url: '/api/cron/worker-health-check',
+    query: {},
+    headers: { authorization: 'Bearer fixture-cron-secret' },
+  }, res);
+  return { fixture, res };
 }
 
-// 경고 대상: active 상태인 청소자만 — 앱 미설치(uninstalled)는 이미 알고 있으므로 제외
-function needsWarning(cleaner, nowMs = Date.now()) {
-  if (cleaner.fcm_status !== "active") return false;
-  if (!cleaner.last_seen_at) return false;
-  return daysSince(cleaner.last_seen_at, nowMs) > 7;
-}
+const sqlCalls = fixture => fixture.calls
+  .filter(call => call.name === 'db.query')
+  .map(call => call.args[0].replace(/\s+/g, ' ').trim());
 
-// ============================================================
-// 30일 미접속 → inactive 전환 결정
-// ============================================================
+const slackMessages = fixture => fixture.calls
+  .filter(call => call.name === 'postSlack')
+  .map(call => call.args[0]);
 
-describe("Worker Health — 30일 미접속 inactive 전환 결정", () => {
-  test("fcm_status=active + 31일 미접속 → 전환 필요", () => {
-    const cleaner = {
-      fcm_status: "active",
-      last_seen_at: new Date(Date.now() - 31 * DAY_MS).toISOString(),
-    };
-    assert.ok(needsInactiveTransition(cleaner));
+describe('actual worker-health cron — database contract', () => {
+  test('30일 초과 active를 먼저 inactive로 바꾸고, 남은 active 중 7일 초과를 조회한다', async t => {
+    const { fixture, res } = await runHealth(t);
+    const [deactivateSql, staleSql] = sqlCalls(fixture);
+
+    assert.match(deactivateSql, /^UPDATE cleaners SET fcm_status = 'inactive'/i);
+    assert.match(deactivateSql, /WHERE fcm_status = 'active'/i);
+    assert.match(deactivateSql, /last_seen_at < NOW\(\) - INTERVAL '30 days'/i);
+    assert.doesNotMatch(deactivateSql, /last_seen_at\s*<=/i);
+
+    assert.match(staleSql, /^SELECT name, phone, last_seen_at FROM cleaners/i);
+    assert.match(staleSql, /WHERE fcm_status = 'active'/i);
+    assert.match(staleSql, /last_seen_at < NOW\(\) - INTERVAL '7 days'/i);
+    assert.match(staleSql, /ORDER BY last_seen_at ASC/i);
+    assert.doesNotMatch(staleSql, /last_seen_at\s*<=/i);
+
+    assert.deepEqual(res.body, { ok: true, deactivated: 0, stale: 0 });
+    assert.equal(fixture.names().at(-1), 'db.end');
   });
 
-  test("fcm_status=active + 29일 미접속 → 전환 불필요", () => {
-    const cleaner = {
-      fcm_status: "active",
-      last_seen_at: new Date(Date.now() - 29 * DAY_MS).toISOString(),
-    };
-    assert.ok(!needsInactiveTransition(cleaner));
+  test('30일 전환 뒤 7일 목록을 조회하므로 같은 실행에서 전환된 직원은 경고 목록에서 빠진다', async t => {
+    const { fixture } = await runHealth(t, { deactivated: 1, stale: [
+      { name: '열흘미접속', phone: '010-0000-0001', last_seen_at: '2026-11-08T00:00:00.000Z' },
+    ] });
+    const queries = fixture.calls.filter(call => call.name === 'db.query');
+    assert.ok(queries[0].args[0].includes('UPDATE cleaners'));
+    assert.ok(queries[1].args[0].includes('SELECT name'));
+    assert.equal(slackMessages(fixture).filter(message => message.includes('장기 미접속')).length, 1);
+    assert.equal(slackMessages(fixture).filter(message => message.includes('비활성 전환')).length, 1);
   });
 
-  test("fcm_status=active + 정확히 30일 → 전환 불필요 (초과해야 전환)", () => {
-    const cleaner = {
-      fcm_status: "active",
-      last_seen_at: new Date(Date.now() - 30 * DAY_MS).toISOString(),
-    };
-    assert.ok(!needsInactiveTransition(cleaner));
-  });
-
-  test("fcm_status=uninstalled + 31일 미접속 → 전환 불필요 (이미 비활성 상태)", () => {
-    const cleaner = {
-      fcm_status: "uninstalled",
-      last_seen_at: new Date(Date.now() - 31 * DAY_MS).toISOString(),
-    };
-    assert.ok(!needsInactiveTransition(cleaner));
-  });
-
-  test("fcm_status=inactive + 31일 미접속 → 전환 불필요 (이미 inactive)", () => {
-    const cleaner = {
-      fcm_status: "inactive",
-      last_seen_at: new Date(Date.now() - 31 * DAY_MS).toISOString(),
-    };
-    assert.ok(!needsInactiveTransition(cleaner));
-  });
-
-  test("fcm_status=invalid + 31일 미접속 → 전환 불필요", () => {
-    const cleaner = {
-      fcm_status: "invalid",
-      last_seen_at: new Date(Date.now() - 31 * DAY_MS).toISOString(),
-    };
-    assert.ok(!needsInactiveTransition(cleaner));
-  });
-
-  test("last_seen_at=null → 전환 불필요 (신규 등록 미접속)", () => {
-    const cleaner = { fcm_status: "active", last_seen_at: null };
-    assert.ok(!needsInactiveTransition(cleaner));
+  test('null last_seen_at은 두 SQL의 엄격한 비교에서 제외하고 별도 미기록 문구를 만들지 않는다', async t => {
+    const { fixture, res } = await runHealth(t);
+    const queries = sqlCalls(fixture);
+    assert.equal(queries.length, 2);
+    assert.ok(queries.every(sql => sql.includes('last_seen_at < NOW()')));
+    assert.equal(fixture.names().includes('postSlack'), false);
+    assert.deepEqual(res.body, { ok: true, deactivated: 0, stale: 0 });
   });
 });
 
-// ============================================================
-// 7일 미접속 Slack 경고 결정
-// ============================================================
-
-describe("Worker Health — 7일 미접속 Slack 경고 결정", () => {
-  test("8일 미접속 → 경고 필요", () => {
-    const cleaner = {
-      fcm_status: "active",
-      last_seen_at: new Date(Date.now() - 8 * DAY_MS).toISOString(),
-    };
-    assert.ok(needsWarning(cleaner));
+describe('actual worker-health cron — response and Slack messages', () => {
+  test('대상 없으면 Slack 없이 0건 성공 응답을 반환한다', async t => {
+    const { fixture, res } = await runHealth(t);
+    assert.equal(res.code, 200);
+    assert.deepEqual(res.body, { ok: true, deactivated: 0, stale: 0 });
+    assert.deepEqual(slackMessages(fixture), []);
   });
 
-  test("6일 미접속 → 경고 불필요", () => {
-    const cleaner = {
-      fcm_status: "active",
-      last_seen_at: new Date(Date.now() - 6 * DAY_MS).toISOString(),
-    };
-    assert.ok(!needsWarning(cleaner));
+  test('7일 초과 active 목록은 조회 순서대로 인원·이름·경과 일수를 알린다', async t => {
+    const realNow = Date.now;
+    Date.now = () => Date.parse('2026-11-18T00:00:00.000Z');
+    t.after(() => { Date.now = realNow; });
+    const stale = [
+      { name: '김청소', phone: '010-1111-1111', last_seen_at: '2026-11-08T00:00:00.000Z' },
+      { name: '이청소', phone: '010-2222-2222', last_seen_at: '2026-11-10T12:00:00.000Z' },
+    ];
+    const { fixture, res } = await runHealth(t, { stale });
+
+    assert.deepEqual(res.body, { ok: true, deactivated: 0, stale: 2 });
+    assert.deepEqual(slackMessages(fixture), [
+      '[PROPOS] 🟡 Worker 앱 장기 미접속 (2명)\n  • 김청소 — 10일 미접속\n  • 이청소 — 7일 미접속',
+    ]);
   });
 
-  test("정확히 7일 → 경고 불필요 (초과해야 경고)", () => {
-    const cleaner = {
-      fcm_status: "active",
-      last_seen_at: new Date(Date.now() - 7 * DAY_MS).toISOString(),
-    };
-    assert.ok(!needsWarning(cleaner));
+  test('이름이 없으면 phone을 사용하고 경과 일수는 내림한다', async t => {
+    const realNow = Date.now;
+    Date.now = () => Date.parse('2026-11-18T00:00:00.000Z');
+    t.after(() => { Date.now = realNow; });
+    const { fixture } = await runHealth(t, { stale: [
+      { name: null, phone: '010-3333-3333', last_seen_at: '2026-11-09T01:00:00.000Z' },
+    ] });
+    assert.deepEqual(slackMessages(fixture), [
+      '[PROPOS] 🟡 Worker 앱 장기 미접속 (1명)\n  • 010-3333-3333 — 8일 미접속',
+    ]);
   });
 
-  test("last_seen_at=null → 경고 불필요", () => {
-    const cleaner = { fcm_status: "active", last_seen_at: null };
-    assert.ok(!needsWarning(cleaner));
+  test('30일 초과 전환 건수는 별도 Slack과 응답에 반영한다', async t => {
+    const { fixture, res } = await runHealth(t, { deactivated: 3 });
+    assert.deepEqual(res.body, { ok: true, deactivated: 3, stale: 0 });
+    assert.deepEqual(slackMessages(fixture), [
+      '[PROPOS] 🟠 Worker 앱 비활성 전환 — 3명 (30일 미접속)',
+    ]);
   });
 
-  // 앱 미설치(uninstalled)/inactive/invalid는 이미 인지된 상태 — 경고 제외
-  test("fcm_status=uninstalled + 8일 미접속 → 경고 불필요", () => {
-    const cleaner = {
-      fcm_status: "uninstalled",
-      last_seen_at: new Date(Date.now() - 8 * DAY_MS).toISOString(),
-    };
-    assert.ok(!needsWarning(cleaner));
-  });
-
-  test("fcm_status=inactive + 8일 미접속 → 경고 불필요 (이미 inactive로 관리 중)", () => {
-    const cleaner = {
-      fcm_status: "inactive",
-      last_seen_at: new Date(Date.now() - 8 * DAY_MS).toISOString(),
-    };
-    assert.ok(!needsWarning(cleaner));
+  test('경고 목록과 전환 건수가 모두 있으면 경고를 먼저, 전환을 나중에 알린다', async t => {
+    const realNow = Date.now;
+    Date.now = () => Date.parse('2026-11-18T00:00:00.000Z');
+    t.after(() => { Date.now = realNow; });
+    const { fixture, res } = await runHealth(t, { deactivated: 2, stale: [
+      { name: '이청소', phone: '010-2222-2222', last_seen_at: '2026-11-10T00:00:00.000Z' },
+    ] });
+    assert.deepEqual(res.body, { ok: true, deactivated: 2, stale: 1 });
+    assert.match(slackMessages(fixture)[0], /장기 미접속/);
+    assert.match(slackMessages(fixture)[1], /비활성 전환/);
   });
 });
 
-// ============================================================
-// 배치 처리 시뮬레이션 — 여러 직원 동시 판별
-// ============================================================
-
-describe("Worker Health — 배치 판별 시뮬레이션", () => {
-  const now = Date.now();
-  const cleaners = [
-    { id: "c-1", name: "김청소", fcm_status: "active",      last_seen_at: new Date(now - 32 * DAY_MS).toISOString() }, // 전환 + 경고
-    { id: "c-2", name: "이청소", fcm_status: "active",      last_seen_at: new Date(now - 10 * DAY_MS).toISOString() }, // 경고만
-    { id: "c-3", name: "박청소", fcm_status: "active",      last_seen_at: new Date(now -  5 * DAY_MS).toISOString() }, // 이상 없음
-    { id: "c-4", name: "최청소", fcm_status: "uninstalled", last_seen_at: new Date(now - 35 * DAY_MS).toISOString() }, // 이미 비활성 → 전환 불필요
-  ];
-
-  test("inactive 전환 대상: active + 30일 초과만 (1명)", () => {
-    const toTransition = cleaners.filter((c) => needsInactiveTransition(c, now));
-    assert.equal(toTransition.length, 1);
-    assert.equal(toTransition[0].id, "c-1");
+describe('actual worker-health cron — failure boundary', () => {
+  test('inactive UPDATE 실패는 500이고 조회·Slack 없이 DB를 닫는다', async t => {
+    const { fixture, res } = await runHealth(t, { behavior: {
+      'db.query': dbSequence(new Error('deactivate failed')),
+    } });
+    assert.equal(res.code, 500);
+    assert.deepEqual(res.body, { error: 'deactivate failed' });
+    assert.deepEqual(fixture.names(), ['db.pool', 'db.query', 'db.end']);
   });
 
-  test("Slack 경고 대상: 7일 초과 (2명)", () => {
-    const toWarn = cleaners.filter((c) => needsWarning(c, now));
-    assert.equal(toWarn.length, 2);
-    const ids = toWarn.map((c) => c.id);
-    assert.ok(ids.includes("c-1"));
-    assert.ok(ids.includes("c-2"));
-  });
-});
-
-// ============================================================
-// Slack 경고 메시지 형식
-// ============================================================
-
-describe("Worker Health — Slack 경고 메시지 형식", () => {
-  function buildWarningMessage(workers) {
-    return (
-      `[PROPOS] ⚠️ 장기 미접속 직원 ${workers.length}명\n` +
-      workers
-        .map((w) => `${w.name ?? w.phone}: ${w.last_seen_at?.slice(0, 10) ?? "미기록"}`)
-        .join("\n")
-    );
-  }
-
-  test("미접속 인원 수 포함", () => {
-    const workers = [
-      { name: "김청소", phone: "010-1111-1111", last_seen_at: "2026-07-01T00:00:00Z" },
-      { name: "이청소", phone: "010-2222-2222", last_seen_at: "2026-07-05T00:00:00Z" },
-    ];
-    const msg = buildWarningMessage(workers);
-    assert.ok(msg.includes("2명"));
+  test('7일 목록 조회 실패는 이미 끝난 UPDATE를 되돌리지 않고 500을 반환한다', async t => {
+    const { fixture, res } = await runHealth(t, { behavior: {
+      'db.query': dbSequence({ rows: [], rowCount: 2 }, new Error('stale query failed')),
+    } });
+    assert.equal(res.code, 500);
+    assert.deepEqual(res.body, { error: 'stale query failed' });
+    assert.deepEqual(fixture.names(), ['db.pool', 'db.query', 'db.query', 'db.end']);
   });
 
-  test("이름 + 마지막 접속일 포함", () => {
-    const workers = [
-      { name: "김청소", phone: "010-1111-1111", last_seen_at: "2026-07-01T00:00:00Z" },
-    ];
-    const msg = buildWarningMessage(workers);
-    assert.ok(msg.includes("김청소"));
-    assert.ok(msg.includes("2026-07-01"));
-  });
-
-  test("이름 없으면 phone으로 대체", () => {
-    const workers = [
-      { name: null, phone: "010-3333-3333", last_seen_at: "2026-07-01T00:00:00Z" },
-    ];
-    const msg = buildWarningMessage(workers);
-    assert.ok(msg.includes("010-3333-3333"));
-  });
-
-  test("last_seen_at=null → '미기록' 표시", () => {
-    const workers = [
-      { name: "박청소", phone: "010-4444-4444", last_seen_at: null },
-    ];
-    const msg = buildWarningMessage(workers);
-    assert.ok(msg.includes("미기록"));
-  });
-
-  test("[PROPOS] 헤더 포함", () => {
-    const workers = [
-      { name: "김청소", phone: "010-1111-1111", last_seen_at: "2026-07-01T00:00:00Z" },
-    ];
-    const msg = buildWarningMessage(workers);
-    assert.ok(msg.includes("[PROPOS]"));
-  });
-});
-
-// ============================================================
-// daysSince 헬퍼 유닛 테스트
-// ============================================================
-
-describe("daysSince 헬퍼", () => {
-  test("정확히 31일 전 → 31.0 (대략)", () => {
-    const fixedNow = new Date("2026-09-10T00:00:00Z").getTime();
-    const lastSeen = new Date("2026-08-10T00:00:00Z").toISOString(); // 31일 전
-    const days = daysSince(lastSeen, fixedNow);
-    assert.ok(Math.abs(days - 31) < 0.01, `예상 31, 실제 ${days}`);
-  });
-
-  test("null 입력 → Infinity 반환", () => {
-    assert.equal(daysSince(null), Infinity);
+  test('장기 미접속 Slack 실패는 전환 알림 전 500으로 끝난다', async t => {
+    const { fixture, res } = await runHealth(t, {
+      deactivated: 1,
+      stale: [{ name: '김청소', phone: '010-1111-1111', last_seen_at: '2026-11-01T00:00:00.000Z' }],
+      behavior: { postSlack: new Error('slack failed') },
+    });
+    assert.equal(res.code, 500);
+    assert.deepEqual(res.body, { error: 'slack failed' });
+    assert.equal(fixture.names().filter(name => name === 'postSlack').length, 1);
+    assert.equal(fixture.names().at(-1), 'db.end');
   });
 });
