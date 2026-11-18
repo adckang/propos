@@ -2590,3 +2590,14 @@ Codex가 커밋 없이 쌓아 둔 ⑥-1~⑥-6과 이어받아 마친 ⑥-7을 **
 ### RF-34 · ACT-08 단계 ⑦-2 배포 기록 · 2026-11-18
 
 운영 코드 변경 단위 **`3a19e02`**를 main에 푸시했다. 이 SHA의 [GitHub CI](https://github.com/adckang/propos/actions/runs/44327783730)는 **completed / success**다(GitHub API 비로그인 조회 한도가 차서 공개 실행 페이지로 확인). Vercel은 푸시 7초 뒤 생성된 Production 배포 `dpl_4oFJozjEq4GJx8hJCpVrHSBA6qzc`가 **READY**다(배포 목록·`vercel inspect` 기준, 그 사이 다른 배포 없음). 커밋은 `api/cleaning/[...slug].js`·단위 s69·새 격리 SQL s69·시험 도구·이 문서 **5파일**이며 `pre-commit → sync:dist` 훅이 정상 실행됐고 추적 dist 변경은 0이다. 숙소 저장 API는 로그인이 필요하고 운영 DB는 원래 제약 이름이 맞아 동작이 바뀌지 않는다 — 동작은 s69 단위·격리 SQL 시험이 실제 핸들러로 확인한다. 운영 DB는 제약 목록 읽기 전용 조회 1회뿐이고 쓰기·업무 요청은 **0건**이다. **RF-31·RF-34·단계 ⑦-2 완료, 다음은 ⑦-3 s71**이다.
+
+<a id="act08-step7-3-rollout"></a>
+
+### 스키마 제약 이름·RF-35·ACT-08 단계 ⑦-3 배포 기록 · 2026-11-19
+
+| 커밋 | 내용 | GitHub CI | Vercel Production |
+| --- | --- | --- | --- |
+| `408e970` | 스키마 파일의 숙소 이름 제약 이름을 운영과 같게(RF-34 후속, 사용자 승인) + s114 날짜 의존 시험 수정(RF-35) | [completed / success](https://github.com/adckang/propos/actions/runs/44331415580) | `dpl_Gp5SigFdVEnexpisTBotR1bJD21p` **READY**(푸시 7초 뒤 생성) |
+| `d78b1f7` | ⑦-3 s71·s121 시험 교체, RF-36 기록 | [completed / success](https://github.com/adckang/propos/actions/runs/44333466727) | `dpl_4XGNryLrLVZqyy4XueWosRWtx7hA` **READY**(푸시 8초 뒤 생성) |
+
+CI는 GitHub API 비로그인 조회 한도 때문에 공개 실행 페이지로 확인했고, Vercel은 배포 목록·`vercel inspect` 기준이다(배포의 커밋 SHA 메타데이터는 조회하지 않았고 그 사이 다른 배포는 없다). 두 커밋 모두 `pre-commit → sync:dist` 훅이 정상 실행됐고 추적 dist 변경은 0이다. 바뀐 운영 파일은 스키마 파일(`CREATE TABLE IF NOT EXISTS`라 운영 DB 무변화)과 서버 주석뿐이다. 운영 DB는 제약 목록 읽기 전용 조회만, 쓰기·업무 요청은 **0건**이다. **⑦-3 완료, RF-36 사용자 확인 대기, 다음은 ⑦-4 s73**이다.
