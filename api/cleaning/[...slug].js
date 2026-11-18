@@ -290,7 +290,9 @@ async function upsertProperty(req, res) {
   } catch (err) {
     // 위 SELECT 중복 검사는 check-then-act라 동시 요청이 그 틈을 비집고 들어올 수 있다 —
     // DB의 UNIQUE(name) 제약(마지막 방어선)이 그 경쟁 상태를 막아주면 여기서 받는다.
-    if (err.code === "23505" && err.constraint === "property_cleaning_config_name_unique") {
+    // RF-34: 제약 이름은 설치 경로마다 다르다 — 운영 DB는 마이그레이션이 붙인 `_name_unique`,
+    // 스키마 파일로 새로 만든 DB는 Postgres 기본 이름 `_name_key`. 둘 다 같은 이름 중복이다.
+    if (err.code === "23505" && ["property_cleaning_config_name_unique", "property_cleaning_config_name_key"].includes(err.constraint)) {
       return sendJson(res, 409, { error: `이미 같은 이름의 숙소가 있어요`, code: "NAME_TAKEN" });
     }
     throw err;

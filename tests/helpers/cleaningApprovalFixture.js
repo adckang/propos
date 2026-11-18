@@ -1,5 +1,6 @@
-// Executes the actual WorkerApprovalPanel from CleaningManager.jsx. React's
-// hook/runtime shell, Toast and HTTP are replaced; approval logic is not copied.
+// Executes an actual internal panel from CleaningManager.jsx (default:
+// WorkerApprovalPanel; ACT-08 ⑦-2 also renders PropertyPanel). React's
+// hook/runtime shell, Toast and HTTP are replaced; panel logic is not copied.
 import { build } from 'esbuild';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -17,7 +18,8 @@ export const approvalResponse = (status, body, contentType = 'application/json')
   text: async () => typeof body === 'string' ? body : JSON.stringify(body),
 });
 
-export async function cleaningApprovalFixture({ replies = [] } = {}) {
+export async function cleaningApprovalFixture({ replies = [], panel = 'WorkerApprovalPanel', props = {} } = {}) {
+  if (!/^[A-Za-z_]\w*$/.test(panel)) throw new Error(`Invalid panel name: ${panel}`);
   const key = '__cleaningApprovalFixture_' + randomUUID().replaceAll('-', '');
   const pending = [...replies];
   const calls = [], toasts = [];
@@ -89,14 +91,14 @@ export async function cleaningApprovalFixture({ replies = [] } = {}) {
           ? { path: args.path, namespace: 'approval-io' } : undefined);
         b.onLoad({ filter: /.*/, namespace: 'approval-io' }, args => ({ contents: stubs[args.path], loader: 'js' }));
         b.onLoad({ filter: /CleaningManager\.jsx$/ }, args => ({
-          contents: readFileSync(args.path, 'utf8') + '\nexport { WorkerApprovalPanel as __WorkerApprovalPanel };', loader: 'jsx',
+          contents: readFileSync(args.path, 'utf8') + `\nexport { ${panel} as __Panel };`, loader: 'jsx',
         }));
       } }] });
     const mod = await import('data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text + `\n// ${randomUUID()}`).toString('base64'));
     return {
       calls, toasts, ui,
       get pendingReplies() { return pending.length; },
-      render: () => ui.render(mod.__WorkerApprovalPanel),
+      render: () => ui.render(() => mod.__Panel(props)),
       async flush() {
         await new Promise(resolveNow => setImmediate(resolveNow));
         await new Promise(resolveNow => setImmediate(resolveNow));

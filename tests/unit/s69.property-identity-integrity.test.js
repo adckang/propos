@@ -1,104 +1,155 @@
 /**
- * s69 — 숙소 정보 저장 구조의 "정본 하나 + 나머지는 읽기전용 참조" 무결성 점검 (2026-09-29)
+ * s69 — 숙소 이름 중복 방지와 "이름은 한 화면에서만 바꾼다"(D-031·D-016).
  *
- * 배경: s68에서 고친 "propos.com에 파주201이 안 보임" 버그를 계기로, 사용자가 저장 구조
- * 전체를 마스터/슬레이브 관점(정본은 한 곳, 나머지는 값 수정 없이 참조만 하는지)으로
- * 다시 검토해 달라고 요청. 점검 결과 발견한 3가지 구조적 결함과 그 수정:
+ * 배경(2026-09-29): "파주201"이 서로 다른 property_id 3개로 중복 등록된 사고 뒤
+ *   1. DB에 UNIQUE(name) 제약을 두고, 서버(upsertProperty)가 저장 전 검사(1차)를 빠져나간
+ *      동시 저장 충돌을 그 제약 위반(23505)으로 받아 같은 409 NAME_TAKEN으로 돌려준다(2차).
+ *   2. 청소관리 "숙소" 탭(PropertyPanel)의 이름 칸을 읽기 전용으로 — 이름(=식별자) 변경은
+ *      대시보드 ⚙설정의 이전 절차 한 곳에서만.
+ *   (3. 앱을 열 때 캐시가 정본을 덮어쓰지 않는 것은 s68.)
  *
- *   1. [식별자 무결성] property_cleaning_config.name에 DB 레벨 UNIQUE 제약이 없었다 —
- *      "이름 중복 금지"가 애플리케이션의 check-then-act(저장 전 SELECT)로만 지켜지고
- *      있어 동시 요청 경쟁이나 그 코드를 거치지 않는 실수엔 무방비였다. 실제로 이 결함
- *      때문에(정확히는, 이 제약이 생기기 전 시절 코드가 남긴 잔재로) "파주201"이라는
- *      이름이 서로 다른 3개 property_id로 중복 등록돼 있던 사고가 있었다(별도로 정리 완료).
- *      → DB에 UNIQUE(name) 제약 추가 + 서버가 그 제약 위반(23505)을 친절한 409로 변환.
+ * ACT-08 ⑦-2: 예전엔 소스 파일 글자만 검사했다. 이제 실제 청소 API 핸들러(DB만 가짜)와
+ * 실제 PropertyPanel(React 껍데기·HTTP만 가짜)을 실행한다. 실제 제약·SQL 결과는 격리 DB 시험
+ * tests/integration/s69.property-name-unique-sql.test.js 가 확인한다(PGlite 필요, CI 밖).
  *
- *   2. [하이어라키 위반 — 쓰기 주체 중복] 숙소 이름을 바꿀 수 있는 화면이 두 곳
- *      (대시보드 ⚙설정 / 청소관리 "숙소" 탭)이었는데, 청소관리 쪽은 이름을 바꿔도
- *      D-016 이전(rename) 절차를 전혀 타지 않아 property_id와 name이 서로 어긋날 수
- *      있었다. → 청소관리 화면의 이름 입력을 읽기 전용으로 바꿔, 식별자 변경은
- *      대시보드 설정 한 곳(만)에서만 일어나게 통일.
- *
- *   3. [하이어라키 위반 — 정본을 슬레이브가 덮어씀] 앱을 열 때마다(마운트 시) 이 브라우저의
- *      캐시값(체크아웃시각/청소시간/iCal)을 Postgres에 무조건 다시 써넣고 있었다 —
- *      Postgres가 정본(D-014)인데, 청소관리 화면에서 방금 바꾼 값이 다음 접속 때 이
- *      캐시-재기록 때문에 조용히 되돌아갈 수 있었다. → 이미 이 이름으로 정규 등록돼
- *      있고 옮길 이력도 없으면(previousId 없음) 쓰지 않고, 대신 Postgres 값을 읽어와
- *      캐시 쪽을 갱신한다(정본→슬레이브 한 방향만 허용). 이 항목의 테스트는 s68에 있음
- *      (같은 마운트 효과를 다루므로 파일을 분리하지 않고 이어서 검증).
- *
- * 레이어: L2 — 소스 계약 + 스키마 파일 검증.
+ * RF-34(2026-11-18): 제약 이름이 설치 경로마다 다르다 — 운영 DB는 ALTER로 붙인
+ * `property_cleaning_config_name_unique`, 스키마 파일로 새로 만든 DB는 Postgres 기본 이름
+ * `property_cleaning_config_name_key`. 서버가 앞의 이름만 알아 뒤의 DB에서는 같은 충돌이 500이었다.
  */
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
+import { cleaningDeclineFixture } from '../helpers/cleaningDeclineFixture.js';
+import { cleaningApprovalFixture, approvalResponse } from '../helpers/cleaningApprovalFixture.js';
+import { createSessionToken } from '../../server/auth/operatorAuth.js';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8');
+const PROPERTY = '파주201';
+const SAVED_ROW = { property_id: PROPERTY, name: PROPERTY, checkout_hour: 11, cleaning_duration_hours: 2.5 };
+const uniqueViolation = (constraint) => Object.assign(
+  new Error(`duplicate key value violates unique constraint "${constraint}"`), { code: '23505', constraint });
 
-describe('DB 스키마 — property_cleaning_config.name UNIQUE 제약 (무결성 최후 방어선)', () => {
-  test('schema-cleaning.sql(신규 설치용 정본 스키마)에 UNIQUE가 박혀있다', () => {
-    const schema = read('data/schema-cleaning.sql');
-    const start = schema.indexOf('CREATE TABLE IF NOT EXISTS property_cleaning_config');
-    const end = schema.indexOf(');', start);
-    const block = schema.slice(start, end);
-    assert.match(block, /name\s+TEXT NOT NULL UNIQUE/);
+async function saveProperty(t, responses, { body = { property_id: PROPERTY, name: PROPERTY }, expectedErrors = 0 } = {}) {
+  const f = await cleaningDeclineFixture({ responses });
+  t.after(() => {
+    try {
+      assert.equal(f.pendingResponses, 0, 'all scripted DB results consumed');
+      assert.deepEqual(f.unexpectedQueries, [], 'no hidden unexpected SQL');
+      assert.deepEqual(f.blocked, [], 'no unmocked external I/O');
+      assert.equal(f.errors.length, expectedErrors, 'no unexpected or swallowed handler errors');
+      assert.deepEqual(globalThis.__productionFetchTrap?.calls ?? [], [], 'no production requests');
+    } finally { f.restore(); }
+  });
+  const cookie = 'propos_session=' + createSessionToken(process.env, Date.now(), { role: 'admin' });
+  const res = await f.invoke({ method: 'POST', url: '/api/cleaning/properties', body, headers: { cookie } });
+  return { res, f };
+}
+const isInsert = (q) => /INSERT INTO property_cleaning_config/.test(q.sql);
+
+describe('actual upsertProperty — the same name cannot be registered twice', () => {
+  test('first check: a name another property already uses is refused before anything is written', async t => {
+    const { res, f } = await saveProperty(t, [[], [{ property_id: '다른숙소' }]]);
+    assert.equal(res.code, 409);
+    assert.deepEqual(res.body, { error: '이미 같은 이름의 숙소가 있어요 (다른숙소)', code: 'NAME_TAKEN' });
+    assert.equal(f.queries.length, 2);
+    assert.ok(!f.queries.some(isInsert), 'no INSERT after the duplicate is found');
   });
 
-  test('기존 운영 DB용 ALTER 마이그레이션 스크립트가 존재하고 같은 제약을 추가한다', () => {
-    const mig = read('data/migrate-property-name-unique.sql');
-    assert.match(mig, /ALTER TABLE property_cleaning_config\s*\n\s*ADD CONSTRAINT property_cleaning_config_name_unique UNIQUE \(name\);/);
+  test('the first check looks for the name under any other property id (the property itself is excluded)', async t => {
+    const { f } = await saveProperty(t, [[SAVED_ROW], [], [SAVED_ROW]]);
+    const dup = f.queries[1];
+    assert.match(dup.sql, /FROM property_cleaning_config WHERE name = \$1 AND property_id <> ALL\(\$2::text\[\]\)/);
+    assert.deepEqual(dup.params, [PROPERTY, [PROPERTY]]);
+  });
+
+  for (const constraint of ['property_cleaning_config_name_unique', 'property_cleaning_config_name_key']) {
+    test(`second check: a concurrent save that slips past the first check gets the same 409 from the DB constraint (${constraint})`, async t => {
+      const { res, f } = await saveProperty(t, [[], [], uniqueViolation(constraint)]);
+      assert.equal(res.code, 409);
+      assert.deepEqual(res.body, { error: '이미 같은 이름의 숙소가 있어요', code: 'NAME_TAKEN' });
+      assert.ok(isInsert(f.queries[2]), 'the DB refused the INSERT itself');
+    });
+  }
+
+  for (const [label, error] of [['another unique constraint', uniqueViolation('property_cleaning_config_pkey')],
+    ['a non-unique DB error', Object.assign(new Error('fixture connection reset'), { code: '08006' })]]) {
+    test(`other DB errors are not disguised as a name clash (${label}) — the existing 500 stays`, async t => {
+      const { res } = await saveProperty(t, [[], [], error], { expectedErrors: 1 });
+      assert.equal(res.code, 500);
+      assert.deepEqual(res.body, { error: error.message });
+    });
+  }
+
+  test('a normal save returns the saved row', async t => {
+    const { res, f } = await saveProperty(t, [[SAVED_ROW], [], [SAVED_ROW]]);
+    assert.equal(res.code, 200);
+    assert.deepEqual(res.body, SAVED_ROW);
+    assert.equal(f.queries.length, 3);
+    assert.deepEqual(f.queries[2].params.slice(0, 2), [PROPERTY, PROPERTY]);
   });
 });
 
-describe('api/cleaning/[...slug].js — upsertProperty가 UNIQUE(name) 위반을 친절한 409로 바꾼다', () => {
-  const src = read('api/cleaning/[...slug].js');
-  const start = src.indexOf('async function upsertProperty');
-  const end = src.indexOf('\nasync function runFollowupChecks');
-  const block = src.slice(start, end);
+// ── 청소관리 "숙소" 탭(PropertyPanel) ──────────────────────────────────────────
 
-  test('INSERT를 try/catch로 감싸 23505(unique_violation)를 잡는다', () => {
-    assert.match(block, /let rows;\s*\n\s*try \{/);
-    assert.match(block, /\} catch \(err\) \{/);
-    assert.match(block, /err\.code === "23505" && err\.constraint === "property_cleaning_config_name_unique"/);
+function nodes(node) {
+  if (Array.isArray(node)) return node.flatMap(nodes);
+  if (node == null || typeof node === 'boolean') return [];
+  if (typeof node !== 'object') return [node];
+  return [node, ...nodes(node.props?.children)];
+}
+const text = (node) => nodes(node).filter(v => typeof v === 'string' || typeof v === 'number').join(' ').replace(/\s+/g, ' ').trim();
+
+const LOADED = { ...SAVED_ROW, google_calendar_id: null, google_calendar_booking_url: null, host_phone: null, ical_configured: true };
+
+async function propertyPanel(t, extraReplies = []) {
+  const route = (call) => {
+    if (call.method === 'GET' && call.url === '/api/cleaning/properties') return approvalResponse(200, [LOADED]);
+    if (call.method === 'GET' && call.url === '/api/gmail/watch') return approvalResponse(200, { status: 'unknown' });
+    throw new Error(`unexpected panel request ${call.method} ${call.url}`);
+  };
+  const f = await cleaningApprovalFixture({ panel: 'PropertyPanel', replies: [route, route, ...extraReplies],
+    props: { syncConfig: { id: PROPERTY, name: '예전 캐시 이름', checkOutHour: 11, cleaningDurationHours: 2.5 } } });
+  t.after(() => {
+    try {
+      assert.equal(f.pendingReplies, 0, 'all scripted HTTP replies consumed');
+      assert.deepEqual(globalThis.__productionFetchTrap?.calls ?? [], [], 'no production requests');
+    } finally { f.restore(); }
+  });
+  f.render(); await f.flush();
+  return f;
+}
+
+describe('actual PropertyPanel — the property name cannot be edited here', () => {
+  test('shows the saved name as plain text with the hint to change it in the dashboard settings', async t => {
+    const f = await propertyPanel(t);
+    const tree = f.render();
+    assert.match(text(tree), new RegExp(`숙소 이름 \\(변경은 대시보드 ⚙설정에서\\) ${PROPERTY}`));
+    const inputs = nodes(tree).filter(n => n?.type === 'input');
+    assert.ok(inputs.length >= 5, 'the other settings are still editable inputs');
+    assert.ok(!inputs.some(i => i.props.value === PROPERTY), 'no input carries the name');
   });
 
-  test('그 경우 409 NAME_TAKEN으로 응답하고, 그 외 오류는 그대로 다시 던진다(throw err)', () => {
-    const catchStart = block.indexOf('} catch (err) {');
-    const catchBlock = block.slice(catchStart);
-    assert.match(catchBlock, /sendJson\(res, 409, \{ error: `이미 같은 이름의 숙소가 있어요`, code: "NAME_TAKEN" \}\)/);
-    assert.match(catchBlock, /\n\s*throw err;\s*\n\s*\}/);
-  });
-
-  test('이 방어선은 기존 저장-전 SELECT 중복검사(check-then-act, 경쟁 상태 있음) 다음에 오는 2차 방어다', () => {
-    // 기존 검사가 여전히 남아있어야 함 — 이번 수정은 "대신"이 아니라 "추가" 방어
-    assert.match(block, /SELECT property_id FROM property_cleaning_config WHERE name = \$1 AND property_id <> ALL\(\$2::text\[\]\)/);
-    const selectIdx = block.indexOf('SELECT property_id FROM property_cleaning_config WHERE name');
-    const catchIdx = block.indexOf('err.code === "23505"');
-    assert.ok(selectIdx < catchIdx, 'SELECT 검사가 코드상 INSERT try/catch보다 먼저 나와야 함');
-  });
-});
-
-describe('CleaningManager.jsx — "숙소" 탭(PropertyPanel)은 이름을 더 이상 수정할 수 없다', () => {
-  const src = read('src/components/v2/CleaningManager.jsx');
-  const start = src.indexOf('function PropertyPanel(');
-  const end = src.indexOf('\n// ── ', start + 10);
-  const block = src.slice(start, end);
-
-  test('숙소 이름 입력칸에 onChange/set(\'name\', ...) 핸들러가 없다 (읽기 전용)', () => {
-    assert.ok(!/set\('name',/.test(block), '이름 필드에 편집 핸들러가 남아있으면 안 됨(D-016 위반 재발 경로)');
-    assert.match(block, /숙소 이름[\s\S]{0,120}변경은 대시보드/, '읽기 전용 안내 문구가 있어야 함');
-  });
-
-  test('저장 시 form.name을 그대로 보내되(서버 필수 필드), 화면에서 바뀔 수는 없다', () => {
-    // handleSave가 여전히 ...form(=name 포함)을 보낸다 — name이 서버 필수라 빼면 400.
-    // 다만 위 테스트가 확인하듯 form.name은 useEffect가 불러온 값 그대로만 바뀌고
-    // 사용자가 직접 편집할 방법이 없으므로 no-op으로 안전하다.
-    const saveStart = block.indexOf('async function handleSave');
-    const saveEnd = block.indexOf('\n  async function handleServerSync', saveStart);
-    const saveBlock = block.slice(saveStart, saveEnd);
-    assert.match(saveBlock, /\.\.\.form,/);
+  test('typing into every input and saving still sends the loaded name unchanged', async t => {
+    const saved = [];
+    const afterTyping = (call) => {
+      // 캘린더 ID 칸이 채워지면 화면이 그 캘린더의 구독 상태를 한 번 묻는다(실제 동작)
+      if (call.method === 'GET' && call.url === '/api/cleaning/calendar-watch?calendar_id=typed-value') return approvalResponse(200, { status: 'unknown' });
+      if (call.method === 'POST') { saved.push(call); return approvalResponse(200, LOADED); }
+      throw new Error(`unexpected panel request ${call.method} ${call.url}`);
+    };
+    const f = await propertyPanel(t, [afterTyping, afterTyping]);
+    for (const input of nodes(f.render()).filter(n => n?.type === 'input')) {
+      input.props.onChange({ target: { value: input.props.type === 'number' ? '9' : 'typed-value' } });
+    }
+    const save = nodes(f.render()).find(n => n?.type === 'button' && text(n) === '설정 저장');
+    assert.ok(save, 'save button');
+    await save.props.onClick(); await f.flush();
+    assert.equal(saved.length, 1);
+    assert.equal(saved[0].method, 'POST'); assert.equal(saved[0].url, '/api/cleaning/properties');
+    assert.equal(saved[0].body.property_id, PROPERTY);
+    assert.equal(saved[0].body.name, PROPERTY, 'name is the loaded value (server requires it), never typed');
+    // 다른 칸은 실제로 바뀌었다 — 입력 이벤트가 효과가 있는데도 이름만 그대로라는 뜻
+    assert.equal(saved[0].body.checkout_hour, 9);
+    assert.equal(saved[0].body.host_phone, 'typed-value');
+    assert.deepEqual(f.toasts, [['숙소 청소 설정 저장 완료', 's']]);
   });
 });
