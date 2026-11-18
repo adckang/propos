@@ -25,7 +25,9 @@ CREATE TABLE IF NOT EXISTS property_cleaning_config (
 -- Airbnb/iCal 예약 원본. 실데이터와 시뮬레이션 데이터가 같은 저장 계약을 사용한다.
 CREATE TABLE IF NOT EXISTS property_reservations (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  property_id      TEXT NOT NULL REFERENCES property_cleaning_config(property_id) ON UPDATE CASCADE,
+  -- 외래키 이름은 운영 DB(마이그레이션이 붙인 이름)와 같게(RF-36)
+  property_id      TEXT NOT NULL CONSTRAINT property_reservations_property_fk
+                   REFERENCES property_cleaning_config(property_id) ON UPDATE CASCADE,
   reservation_uid  TEXT NOT NULL,
   guest_name       TEXT,
   platform         TEXT NOT NULL DEFAULT 'Airbnb',
@@ -62,7 +64,9 @@ CREATE TABLE IF NOT EXISTS cleaners (
 -- 청소 일정
 CREATE TABLE IF NOT EXISTS cleaning_jobs (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  property_id         TEXT NOT NULL REFERENCES property_cleaning_config(property_id) ON UPDATE CASCADE,
+  -- 외래키 이름은 운영 DB(마이그레이션이 붙인 이름)와 같게(RF-36)
+  property_id         TEXT NOT NULL CONSTRAINT cleaning_jobs_property_fk
+                        REFERENCES property_cleaning_config(property_id) ON UPDATE CASCADE,
   reservation_uid     TEXT,
   checkout_at         TIMESTAMPTZ NOT NULL,
   cleaning_start_at   TIMESTAMPTZ NOT NULL,
@@ -138,7 +142,9 @@ CREATE TABLE IF NOT EXISTS cleaning_notifs (
 
 -- 캘린더 블로커 이벤트 ID 저장 (월간 배치 → 블로커 삭제 시 사용)
 CREATE TABLE IF NOT EXISTS property_calendar_blockers (
-  property_id TEXT    NOT NULL,
+  -- 등록된 숙소에만(운영 DB와 같은 이름, RF-36)
+  property_id TEXT    NOT NULL CONSTRAINT property_calendar_blockers_property_fk
+              REFERENCES property_cleaning_config(property_id) ON UPDATE CASCADE,
   block_date  DATE    NOT NULL,
   event_id    TEXT    NOT NULL,
   data_origin TEXT    NOT NULL DEFAULT 'REAL'
@@ -172,3 +178,15 @@ CREATE TABLE IF NOT EXISTS operator_properties (
 );
 
 CREATE INDEX IF NOT EXISTS idx_operator_properties_property ON operator_properties(property_id);
+
+-- 이벤트도 등록된 숙소에만(운영 DB와 같은 이름 events_property_fk, RF-36). 이벤트 표는 schema.sql 에 있어
+-- 두 파일 중 어느 쪽을 먼저 적용해도 붙도록 양쪽에 같은 조건부 문장을 둔다 — 둘 다 있고 연결이 아직 없을 때만.
+-- 운영 DB에는 이미 있어 아무것도 하지 않는다.
+DO $$
+BEGIN
+  IF to_regclass('events') IS NOT NULL AND to_regclass('property_cleaning_config') IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'events_property_fk') THEN
+    ALTER TABLE events ADD CONSTRAINT events_property_fk
+      FOREIGN KEY (property_id) REFERENCES property_cleaning_config(property_id) ON UPDATE CASCADE;
+  END IF;
+END $$;

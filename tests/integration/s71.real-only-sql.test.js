@@ -5,7 +5,7 @@
 // 발송·Slack·구글 캘린더·iCal은 기록만 하는 가짜. 운영 DB·외부 요청 없음.
 //
 // DB 규칙 쪽: 모든 표의 출처 칸은 REAL/SIMULATED만, 예약 번호는 숙소마다 하나, 예약·청소 일정은 등록된 숙소에만.
-// (운영 DB의 제약은 2026-11-18 읽기 전용 카탈로그 비교로 확인 — 스키마 파일과 다른 점은 RF-36)
+// 스키마 파일로 만든 이 임시 DB의 제약이 운영 DB(2026-11-19 읽기 전용 카탈로그 비교)와 같은지도 확인한다(RF-36).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -173,14 +173,46 @@ test('SQL: a reservation number is unique per property, and reservations and job
   } finally { await client.query('ROLLBACK').catch(() => {}); client.release(); }
 });
 
-// RF-36: 운영 DB는 청소 칸 차단 기록·이벤트도 등록된 숙소에만 저장되지만(마이그레이션이 붙인 FK), 스키마 파일로 새로 만든 DB에는
-// 그 FK가 없다. 스키마 파일 변경은 사용자 확인 대기 — 그때까지 이 시험은 "할 일"로 남긴다(실패해도 전체 결과를 깨지 않음).
-test('SQL: blockers and events also need a registered property (as in production)', {
-  skip: !enabled, todo: 'RF-36 — schema files lack these production FKs (awaiting confirmation)',
-}, async t => {
+// RF-36(2026-11-19 사용자 승인 "넣어"): 운영 DB의 숙소 연결(FK)을 스키마 파일에도 — 이 임시 DB가 운영과 같게 만들어진다.
+test('SQL: blockers and events also need a registered property (as in production)', { skip: !enabled }, async t => {
   const sql = await database(t);
   const schema = await readFile(new URL('../../data/schema.sql', import.meta.url), 'utf8');
   await sql.engine.exec(schema.slice(schema.indexOf('CREATE TABLE IF NOT EXISTS events')));
   await assert.rejects(sql.pool.query(`INSERT INTO property_calendar_blockers(property_id,block_date,event_id) VALUES('unknown-property','2026-12-10','evt')`), e => e.code === '23503');
   await assert.rejects(sql.pool.query(`INSERT INTO events(property_id,type,device_time,data) VALUES('unknown-property','CHECKOUT_DETECTED','2026-12-10T02:00Z','{}')`), e => e.code === '23503');
+});
+
+// 운영 DB 제약 이름(2026-11-19 BEGIN READ ONLY 카탈로그 조회, 표 6개 — 외래키·유일·검사). 운영을 바꾸면 스키마 파일과 이 목록을 함께 고친다.
+const PRODUCTION_CONSTRAINTS = `cleaning_jobs|cleaning_jobs_assigned_cleaner_id_fkey;cleaning_jobs|cleaning_jobs_data_origin_check;cleaning_jobs|cleaning_jobs_property_fk;cleaning_jobs|cleaning_jobs_property_id_checkout_at_key;cleaning_jobs|cleaning_jobs_reservation_fk;cleaning_jobs|cleaning_jobs_source_check;cleaning_jobs|cleaning_jobs_status_check;cleaning_notifs|cleaning_notifs_channel_check;cleaning_notifs|cleaning_notifs_cleaner_id_fkey;cleaning_notifs|cleaning_notifs_data_origin_check;cleaning_notifs|cleaning_notifs_initial_delivery_check;cleaning_notifs|cleaning_notifs_job_id_cleaner_id_key;cleaning_notifs|cleaning_notifs_job_id_fkey;cleaning_notifs|cleaning_notifs_response_check;cleaning_notifs|cleaning_notifs_token_key;events|events_data_origin_check;events|events_property_fk;events|events_property_id_type_device_time_key;events|events_status_check;property_calendar_blockers|property_calendar_blockers_data_origin_check;property_calendar_blockers|property_calendar_blockers_property_fk;property_cleaning_config|property_cleaning_config_data_origin_check;property_cleaning_config|property_cleaning_config_name_unique;property_reservations|property_reservations_check;property_reservations|property_reservations_data_origin_check;property_reservations|property_reservations_property_fk;property_reservations|property_reservations_property_id_reservation_uid_key;property_reservations|property_reservations_status_check`.split(';');
+const constraintNames = async (pool) => (await pool.query(`SELECT conrelid::regclass::text || '|' || conname AS k FROM pg_constraint
+  WHERE conrelid::regclass::text IN ('property_cleaning_config','property_reservations','cleaning_jobs','cleaning_notifs','property_calendar_blockers','events')
+    AND contype IN ('f','u','c') ORDER BY 1`)).rows.map(r => r.k);
+
+test('SQL: a DB built from the schema files has the same constraints as production', { skip: !enabled }, async t => {
+  const sql = await database(t);
+  const schema = await readFile(new URL('../../data/schema.sql', import.meta.url), 'utf8');
+  await sql.engine.exec(schema.slice(schema.indexOf('CREATE TABLE IF NOT EXISTS events')));
+  assert.deepEqual(await constraintNames(sql.pool), [...PRODUCTION_CONSTRAINTS].sort());
+  // 숙소 연결은 모두 운영처럼 "숙소 이름이 바뀌면 따라간다"(D-032)
+  const { rows } = await sql.pool.query(`SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname LIKE '%\_property\_fk'`);
+  assert.equal(rows.length, 4);
+  for (const r of rows) assert.equal(r.def, 'FOREIGN KEY (property_id) REFERENCES property_cleaning_config(property_id) ON UPDATE CASCADE', r.conname);
+});
+
+test('SQL: the event link is added whichever schema file is applied first', { skip: !process.env.PGLITE_TEST_ROOT }, async () => {
+  const { resolve } = await import('node:path');
+  const { pathToFileURL } = await import('node:url');
+  const { PGlite } = await import(pathToFileURL(resolve(process.env.PGLITE_TEST_ROOT, 'node_modules/@electric-sql/pglite/dist/index.js')));
+  const db = await PGlite.create();
+  try {
+    const events = await readFile(new URL('../../data/schema.sql', import.meta.url), 'utf8');
+    await db.exec(events.slice(events.indexOf('CREATE TABLE IF NOT EXISTS events'))); // 이벤트 표 먼저(숙소 표 없음 → 연결은 아직)
+    await db.exec(await readFile(new URL('../../data/schema-cleaning.sql', import.meta.url), 'utf8'));
+    const { rows } = await db.query(`SELECT 1 FROM pg_constraint WHERE conname='events_property_fk'`);
+    assert.equal(rows.length, 1);
+    // schema.sql 은 운영에도 다시 적용하는 파일(scripts/apply-schema.mjs) — 다시 돌려도 아무것도 바뀌지 않는다
+    // (schema-cleaning.sql 은 예전부터 두 번 적용하면 예약 연결 추가 문장에서 멈춘다 — 새 DB용, RF-36 관찰)
+    await db.exec(events.slice(events.indexOf('CREATE TABLE IF NOT EXISTS events')));
+    assert.equal((await db.query(`SELECT count(*)::int AS n FROM pg_constraint WHERE conname LIKE '%\_property\_fk'`)).rows[0].n, 4);
+  } finally { await db.close(); }
 });
