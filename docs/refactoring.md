@@ -2465,3 +2465,9 @@ Codex가 커밋 없이 쌓아 둔 ⑥-1~⑥-6과 이어받아 마친 ⑥-7을 **
 ### ACT-08 수정 제안 2 배포 기록 · 2026-11-18
 
 운영 코드 변경 단위 **`477efcf518341558412fff880436dad004a1a670`**를 main에 푸시했다. 이 SHA의 [GitHub validate](https://github.com/adckang/propos/actions/runs/44297713413/job/134778984793)는 **completed / success**, Vercel Production SHA도 일치하며 배포 `dpl_7AwAcEsRT8eaV13A7wcMC4MJh4Q8`는 **READY**다. 배포 확인은 GitHub/Vercel 메타데이터만 조회했다. 커밋은 `api/events/[...slug].js`·새 s126·이 문서 **3파일**이며 `pre-commit → sync:dist` 훅이 정상 실행됐고 추적 dist 변경은 0이다(바뀐 코드는 서버 API라 화면 번들과 무관). 운영의 이벤트 조회는 로그인이 필요해 실제 호출로는 확인하지 않았고, 부르는 화면·스크립트도 없다 — 동작은 s126이 실제 핸들러로 확인한다. 운영 업무 API·DB 실제 요청은 **0건**이다. **수정 제안 2 완료, 다음은 수정 제안 3(설계 문서 2곳 정정)**이다.
+
+<a id="act08-step7-1-rollout"></a>
+
+### RF-33 · ACT-08 단계 ⑦-1 배포 기록 · 2026-11-18
+
+가이드 규칙 `b99984e`와 운영 코드 변경 단위 **`b2e851d9e89cbac6b026a3a77a33068081ef946d`**를 main에 함께 푸시했다. 최종 SHA의 [GitHub validate](https://github.com/adckang/propos/actions/runs/44321083351/job/134859894753)는 **completed / success**, Vercel Production SHA도 일치하며 배포 `dpl_38J2ukgFjyHCydurgDQBHupU8aFx`는 **READY**다. 배포 확인은 GitHub/Vercel 메타데이터만 조회했다. 커밋은 `api/cleaning/[...slug].js`·단위 s82·새 격리 SQL s82·이 문서 **4파일**(규칙 커밋은 `CLAUDE.md`·이 문서)이며 추적 dist 변경은 0이다. 숙소 목록 API는 로그인이 필요해 운영 호출로는 확인하지 않았고, 운영 데이터 기준 결과가 바뀌는 예약은 0건이다([RF-33](#rf33-result) 읽기 전용 집계). 운영 DB 쓰기·업무 요청은 **0건**이다. **RF-33·단계 ⑦-1 완료, 다음은 RF-31 → ⑦-2 s69**다.
