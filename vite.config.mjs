@@ -63,7 +63,7 @@ function apiProxyPlugin(dataProfile) {
         const withItems  = csUrl.searchParams.get("items") === "true";
         const rawIds     = csUrl.searchParams.get("property_ids") ?? "";
         const selectedIds = rawIds ? rawIds.split(",").map(s => s.trim()).filter(Boolean) : null;
-        const period = csUrl.searchParams.get("period") ?? "next_week";
+        const period = csUrl.searchParams.get("period") ?? undefined; // 운영과 같이 기간이 없으면 400(QA-06)
         try {
           sendJson(res, 200, getDemoCleaningStats(period, { propertyIds: selectedIds, withItems }));
         } catch (error) {

@@ -1252,7 +1252,7 @@ export default async function handler(req, res) {
     if (resource === "stats" && req.method === "GET") {
       const rawIds = req.query?.property_ids ?? "";
       const propertyIds = rawIds ? rawIds.split(",").map(value => value.trim()).filter(Boolean) : null;
-      const period = req.query?.period ?? "next_week";
+      const period = req.query?.period; // 운영과 같이 기간이 없으면 400(기본값 없음, QA-06)
       const withItems = req.query?.items === "true";
       try {
         return sendJson(res, 200, getDemoCleaningStats(period, { propertyIds, withItems }));
