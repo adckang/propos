@@ -1,35 +1,41 @@
 /**
  * s37 — 외부 서비스 실제 연결 스모크 테스트
  *
- * 환경변수가 설정된 환경에서만 실행됨. 미설정 시 해당 suite는 skip.
- * 모두 읽기 전용 / 비파괴 작업 (실제 SMS 발송, FCM 전송, 캘린더 수정 없음).
+ * RUN_LIVE_CONNECTIVITY=1을 명시하고 필요한 환경변수가 설정된 항목만 실행한다.
+ * DB·Google·SMS·FCM 조회 외에 KV 테스트 키 SET/DEL, Slack 테스트 메시지 전송,
+ * 프로덕션 웹훅 요청도 포함하므로 일반 E2E/전체 검증에는 넣지 않는다.
  *
  * 실행 방법:
- *   로컬:   node --test --env-file .env.local tests/e2e/s37.live-connectivity.test.js
+ *   로컬:   RUN_LIVE_CONNECTIVITY=1 node --test --env-file .env.local tests/e2e/s37.live-connectivity.test.js
  *   Vercel: vercel env pull .env.local && 위와 동일
  *
  * 검증 항목:
  *   IT-S37-01 Postgres 연결 + 스키마 검증
- *   IT-S37-02 Google OAuth 토큰 발급 (Gmail용 refresh token)
- *   IT-S37-03 Google OAuth 토큰 발급 (Calendar용 refresh token)
- *   IT-S37-04 Gmail 사용자 프로필 조회 (읽기 전용)
- *   IT-S37-05 Gmail Watch 현황 조회 (읽기 전용)
- *   IT-S37-06 Upstash KV 읽기/쓰기 연결
- *   IT-S37-07 SMS 게이트웨이 인증 확인 (발송 없음)
- *   IT-S37-08 FCM 초기화 확인 (발송 없음)
- *   IT-S37-09 Slack Webhook 연결 확인
- *   IT-S37-10 Vercel 프로덕션 API 엔드포인트 응답 확인
+ *   IT-S37-02 Google OAuth 토큰 발급 (Gmail용 refresh token) + Gmail 프로필 조회
+ *   IT-S37-03 Google OAuth 토큰 발급 (Calendar용 refresh token) + 캘린더 목록 조회
+ *   IT-S37-04 Gmail history API 조회 (읽기 전용)
+ *   IT-S37-05 Upstash KV 테스트 키 SET/GET/DEL
+ *   IT-S37-06 SMS 게이트웨이 인증 확인 (발송 없음)
+ *   IT-S37-07 FCM 초기화 확인 (발송 없음)
+ *   IT-S37-08 Slack Webhook 테스트 메시지 전송
+ *   IT-S37-09 운영 API 응답 — 청소 API 로그인 단계, 웹훅 비밀값 검사, 잘못된 거절 링크
  */
 
 import { describe, test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
+const RUN_LIVE_CONNECTIVITY = process.env.RUN_LIVE_CONNECTIVITY === "1";
+if (!RUN_LIVE_CONNECTIVITY) {
+  console.log("[skip] RUN_LIVE_CONNECTIVITY=1 미설정 — 외부 연결 시험 전체를 건너뜀");
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 헬퍼
 // ─────────────────────────────────────────────────────────────────────────────
 
 function skipUnless(envVar) {
+  if (!RUN_LIVE_CONNECTIVITY) return true;
   if (!process.env[envVar]) {
     console.log(`[skip] ${envVar} 미설정 — 이 suite 건너뜀`);
     return true;
@@ -38,6 +44,7 @@ function skipUnless(envVar) {
 }
 
 function skipUnlessAll(...envVars) {
+  if (!RUN_LIVE_CONNECTIVITY) return true;
   const missing = envVars.filter((v) => !process.env[v]);
   if (missing.length) {
     console.log(`[skip] 환경변수 미설정 (${missing.join(", ")}) — 이 suite 건너뜀`);
@@ -350,45 +357,61 @@ describe("IT-S37-08 Slack Webhook 연결", async () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("IT-S37-09 Vercel 프로덕션 API 응답", async () => {
+  // 환경변수 없이도 실행될 수 있는 묶음이라 skipUnless 를 거치지 않는다 — 공통 허락 검사를 직접 건다.
+  if (!RUN_LIVE_CONNECTIVITY) return;
   const BASE = "https://www.proposonline.com";
 
-  test("GET /api/cleaning/cleaners — 200 + JSON 배열", async () => {
-    const r = await fetch(`${BASE}/api/cleaning/cleaners`);
-    assert.ok(r.ok, `HTTP ${r.status}`);
-    const data = await r.json();
-    assert.ok(Array.isArray(data), `배열 아님: ${JSON.stringify(data).slice(0, 100)}`);
-    console.log(`[IT-S37-09] cleaners ${data.length}명 조회됨`);
+  // D-033: 청소 API는 로그인 단계(PROPOS_AUTH_MODE)에 따라 답이 다르다. 운영 단계를 가정하지 않고
+  // 서버가 알려주는 /api/auth/me 의 required 로 기대값을 고른다 — enforce 면 로그인 없는 조회는 401.
+  let authRequired;
+  before(async () => {
+    const r = await fetch(`${BASE}/api/auth/me`);
+    assert.equal(r.status, 200, `/api/auth/me 예상 200 아님: HTTP ${r.status}`);
+    const me = await r.json();
+    assert.equal(typeof me.required, "boolean", `required 없음: ${JSON.stringify(me)}`);
+    authRequired = me.required;
+    console.log(`[IT-S37-09] 로그인 단계: ${me.mode} (required=${me.required})`);
   });
 
-  test("GET /api/cleaning/jobs — 200 + JSON 배열", async () => {
-    const r = await fetch(`${BASE}/api/cleaning/jobs`);
-    assert.ok(r.ok, `HTTP ${r.status}`);
-    const data = await r.json();
-    assert.ok(Array.isArray(data));
-    console.log(`[IT-S37-09] jobs ${data.length}건 조회됨`);
-  });
+  for (const resource of ["cleaners", "jobs"]) {
+    test(`GET /api/cleaning/${resource} — 로그인 필수면 401, 아니면 200 + JSON 배열`, async () => {
+      const r = await fetch(`${BASE}/api/cleaning/${resource}`);
+      const data = await r.json();
+      if (authRequired) {
+        assert.equal(r.status, 401, `로그인 없이 열림: HTTP ${r.status}`);
+        assert.equal(data.code, "AUTH_REQUIRED");
+        return;
+      }
+      assert.ok(r.ok, `HTTP ${r.status}`);
+      assert.ok(Array.isArray(data), `배열 아님: ${JSON.stringify(data).slice(0, 100)}`);
+      console.log(`[IT-S37-09] ${resource} ${data.length}건 조회됨`);
+    });
+  }
 
-  test("POST /api/calendar/webhook — sync 이벤트 처리 (200 반환)", async () => {
-    // x-goog-resource-state: sync → 즉시 200 종료 (실제 처리 없음)
+  // RF-38: 운영 웹훅은 비밀값(GOOGLE_WEBHOOK_SECRET)이 맞지 않는 알림을 처리하지 않고 200으로 끝낸다.
+  // 아래 두 요청은 비밀값 검사가 꺼져 있으면 본문 검사에서 400이 나는 모양이라, 200이면 검사가 켜져 있다는 뜻이다.
+  // (어느 쪽이든 Google·DB를 읽거나 쓰지 않는다. 대신 운영 로그에 RF-38 확인용 경고
+  //  "비밀값이 맞지 않는 알림 — 무시"가 웹훅마다 1줄 남는다 — 이 시험이 보낸 것이다.)
+  test("POST /api/calendar/webhook — 비밀값 없는 알림은 처리하지 않고 200", async () => {
     const r = await fetch(`${BASE}/api/calendar/webhook`, {
       method: "POST",
       headers: {
-        "x-goog-resource-state": "sync",
+        "x-goog-resource-state": "exists", // sync 가 아니라 처리 대상 — 비밀값 검사가 없으면 calendarId 없음 400
         "x-goog-channel-id": "smoke-test",
         "x-goog-resource-id": "smoke",
       },
     });
-    assert.equal(r.status, 200, `예상 200 아님: HTTP ${r.status}`);
+    assert.equal(r.status, 200, `비밀값 검사가 꺼져 있을 수 있음: HTTP ${r.status}`);
   });
 
-  test("POST /api/gmail/webhook — data 없는 페이로드 → 200 반환", async () => {
-    // message.data 없으면 조기 200 종료 (실제 Gmail 처리 없음)
+  test("POST /api/gmail/webhook — 비밀값 없는 알림은 본문을 읽지 않고 200", async () => {
     const r = await fetch(`${BASE}/api/gmail/webhook`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: {} }), // data 없음 → early return 200
+      // JSON 으로 보내지 않는다 — 플랫폼이 본문을 먼저 해석해 400을 내는 경우와 섞이지 않게.
+      headers: { "Content-Type": "text/plain" },
+      body: "not-json", // 비밀값 검사가 없으면 핸들러의 JSON 해석 실패 400
     });
-    assert.equal(r.status, 200, `예상 200 아님: HTTP ${r.status}`);
+    assert.equal(r.status, 200, `비밀값 검사가 꺼져 있을 수 있음: HTTP ${r.status}`);
   });
 
   test("GET /api/d/XXXXXX — 잘못된 토큰 → 404 HTML 페이지", async () => {

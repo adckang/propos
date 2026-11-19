@@ -10,11 +10,11 @@
  */
 
 import { test, expect } from '@playwright/test';
-import CFG from '../../src/config/privateConfig.js';
 
-const HA_BASE_URL  = process.env.PROPOS_HA_BASE_URL || CFG?.ha?.baseUrl || '';
-const HA_TOKEN     = process.env.PROPOS_HA_TOKEN    || CFG?.ha?.token   || '';
-const HA_AVAILABLE = !!(HA_BASE_URL && HA_TOKEN);
+const RUN_LIVE_HA  = process.env.RUN_LIVE_HA === '1';
+const HA_BASE_URL  = process.env.PROPOS_HA_BASE_URL || '';
+const HA_TOKEN     = process.env.PROPOS_HA_TOKEN || '';
+const HA_AVAILABLE = RUN_LIVE_HA && !!(HA_BASE_URL && HA_TOKEN);
 const REAL_DATA_PROFILE = process.env.PROPOS_DATA_PROFILE === 'real';
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -179,19 +179,16 @@ test('E2E-004 월간 필터·숙소 복수선택·날짜 상세가 함께 동작
 // E2E-003  (HA 필요) 도어 토글 → 워처 상태 API 갱신 확인
 // ────────────────────────────────────────────────────────────────────────────
 test('E2E-003 HA 도어 토글 → /api/monitoring/state lastEventAt 갱신', async ({ page }) => {
-  test.skip(!HA_AVAILABLE || !REAL_DATA_PROFILE, 'real 프로필 또는 HA 환경변수 미설정');
+  test.skip(!HA_AVAILABLE || !REAL_DATA_PROFILE, 'RUN_LIVE_HA=1, real 프로필, HA 환경변수 필요');
 
   await page.goto('/');
   await expect(page.locator('[data-testid="dashboard-summary"]')).toBeVisible();
 
-  // 원래 config 저장 후 test room으로 교체
+  // ⚠️ real 프로필의 개발 서버는 /api/monitoring/* 를 운영 API로 넘긴다 — 이 시험은 집의 실제 Pi 워처 감시 영역을
+  // 몇 초간 'test room'으로 바꾸고 실제 HA의 input_boolean.propos_test_door 를 켜고 끈다.
+  // 원래 config와 스위치 상태를 저장한 뒤 시험한다. 중간 실패가 나도 finally에서 둘 다 복원한다.
   const origState = await (await page.request.get('/api/monitoring/state')).json();
   const origConfig = origState.config;
-  await page.request.post('/api/monitoring/config', {
-    data: { areaName: 'test room' },
-  });
-  // 엔티티 맵 재구성 대기
-  await page.waitForTimeout(2000);
 
   // HA REST 헬퍼
   const toggle = async (value) => {
@@ -203,36 +200,56 @@ test('E2E-003 HA 도어 토글 → /api/monitoring/state lastEventAt 갱신', as
     });
     return res.ok;
   };
+  const getDoorState = async () => {
+    const res = await fetch(`${HA_BASE_URL}/api/states/input_boolean.propos_test_door`, {
+      headers: { Authorization: `Bearer ${HA_TOKEN}` },
+    });
+    assert.ok(res.ok, `시험 전 도어 상태 조회 성공 (HTTP ${res.status})`);
+    return (await res.json()).state;
+  };
 
-  // false로 리셋 → debounce 완료 대기 → beforeAt 기록 → true로 토글 (state_changed 보장)
-  await toggle(false);
-  await page.waitForTimeout(800);
+  const originalDoorState = await getDoorState();
+  assert.ok(['on', 'off'].includes(originalDoorState), `시험 전 도어 상태 확인 (${originalDoorState})`);
 
-  const beforeState = await (await page.request.get('/api/monitoring/state')).json();
-  const beforeAt = beforeState.lastEventAt ?? 0;
+  // 복원은 둘 다 시도한 뒤에 확인한다 — finally 안에서 바로 던지면 하나가 실패할 때 나머지를 건너뛰고
+  // 시험 본문의 원래 실패 원인도 가려진다.
+  const restoreFailures = [];
+  try {
+    await page.request.post('/api/monitoring/config', { data: { areaName: 'test room' } });
+    await page.waitForTimeout(2000); // 엔티티 맵 재구성 대기
 
-  const toggled = await toggle(true);
-  assert.ok(toggled, 'HA REST 도어 토글 성공');
+    // false로 리셋 → debounce 완료 대기 → beforeAt 기록 → true로 토글 (state_changed 보장)
+    assert.ok(await toggle(false), 'HA REST 도어 초기화 성공');
+    await page.waitForTimeout(800);
 
-  // debounce(500ms) + 처리 여유 → 최대 5초 내에 lastEventAt 갱신 확인
-  let afterState;
-  const deadline = Date.now() + 5000;
-  while (Date.now() < deadline) {
-    await page.waitForTimeout(300);
-    const res = await page.request.get('/api/monitoring/state');
-    afterState = await res.json();
-    if (afterState.lastEventAt > beforeAt) break;
+    const beforeState = await (await page.request.get('/api/monitoring/state')).json();
+    const beforeAt = beforeState.lastEventAt ?? 0;
+
+    assert.ok(await toggle(true), 'HA REST 도어 토글 성공');
+
+    // debounce(500ms) + 처리 여유 → 최대 5초 내에 lastEventAt 갱신 확인
+    let afterState;
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      await page.waitForTimeout(300);
+      const res = await page.request.get('/api/monitoring/state');
+      afterState = await res.json();
+      if (afterState.lastEventAt > beforeAt) break;
+    }
+
+    assert.ok(afterState?.lastEventAt > beforeAt, `워처 lastEventAt 갱신됨 (before: ${beforeAt}, after: ${afterState?.lastEventAt})`);
+    assert.ok(afterState.wsConnected, 'HA WebSocket 연결 유지 중');
+  } finally {
+    const doorRestored = await toggle(originalDoorState === 'on').catch(() => false);
+    if (!doorRestored) restoreFailures.push(`도어 상태(${originalDoorState})`);
+    if (origConfig) {
+      const restored = await page.request.post('/api/monitoring/config', { data: origConfig }).catch(() => null);
+      if (!restored?.ok()) restoreFailures.push(`워처 설정(HTTP ${restored?.status() ?? '요청 실패'})`);
+    }
+    if (restoreFailures.length) console.error(`[E2E-003] 시험 뒤 복원 실패 — 직접 확인 필요: ${restoreFailures.join(', ')}`);
   }
-
-  assert.ok(afterState.lastEventAt > beforeAt, `워처 lastEventAt 갱신됨 (before: ${beforeAt}, after: ${afterState.lastEventAt})`);
-  assert.ok(afterState.wsConnected, 'HA WebSocket 연결 유지 중');
-
-  await toggle(false).catch(() => {});
-
-  // 원래 config 복원
-  if (origConfig?.areaName) {
-    await page.request.post('/api/monitoring/config', { data: origConfig }).catch(() => {});
-  }
+  // 시험 본문이 통과했을 때만 여기 온다 — 복원 실패도 실패로 보고한다.
+  assert.ok(restoreFailures.length === 0, `시험 뒤 원래 상태 복원 실패: ${restoreFailures.join(', ')}`);
 });
 
 // node:test 에서 assert를 import해야 한다면 Playwright test에서는 직접 사용 불가.

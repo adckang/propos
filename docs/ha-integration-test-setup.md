@@ -71,14 +71,17 @@ HA 재시작 후 `binary_sensor.propos_test_door` 등 3개의 엔티티가 생�
 # 통합 테스트 (HA 필요 없는 IT-003/004 포함)
 npm run test:integration
 
-# 통합 테스트 (IT-001/002 포함, HA 필요)
-PROPOS_HA_BASE_URL=http://... PROPOS_HA_TOKEN=... npm run test:integration
+# IT-001/002 (실제 HA — RUN_LIVE_HA=1 없으면 건너뜀. 연결값은 환경변수, 없으면 로컬 propos.config.json)
+RUN_LIVE_HA=1 node --test tests/integration/s30.watcher-ha.test.js
 
-# E2E 테스트 (dev 서버 자동 기동)
+# E2E 테스트 (dev 서버 자동 기동, tests/e2e 의 *.spec.js 만 실행)
 npm run test:e2e
 
-# E2E-003 (HA 필요)
-PROPOS_HA_BASE_URL=http://... PROPOS_HA_TOKEN=... npm run test:e2e
+# E2E-003 (실제 HA + 실제 Pi 워처 설정을 잠깐 바꿨다가 되돌림 — 세 값 모두 명시해야 실행, 로컬 설정 파일은 읽지 않음)
+RUN_LIVE_HA=1 PROPOS_DATA_PROFILE=real PROPOS_HA_BASE_URL=http://... PROPOS_HA_TOKEN=... npm run test:e2e
+
+# 외부 서비스 연결 확인 s37 (운영 DB·Google·KV·Slack 테스트 메시지·운영 API — 허락 없으면 전부 건너뜀)
+RUN_LIVE_CONNECTIVITY=1 node --test --env-file .env.local tests/e2e/s37.live-connectivity.test.js
 ```
 
 ---
