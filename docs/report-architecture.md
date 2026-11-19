@@ -113,7 +113,7 @@ Room State
 ```
 
 **주의:**
-- `CHECKIN_INQUIRY`는 room-state-machine.md에 없는 Sub-State. Mock data에만 존재. 레포트 집계에서 제외.
+- `CHECKIN_INQUIRY`는 room-state-machine.md에 없는 Sub-State였다 — 가짜 데이터에서도 제거됐다(아래 표 H-1, 2026-11-19 코드에 없음 확인).
 - State Matrix (Template-C)는 위 10개 상태만 집계 대상으로 삼는다.
 
 ### 3-2. 이벤트 분류표

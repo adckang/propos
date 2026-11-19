@@ -360,6 +360,8 @@ npm install zod @vercel/postgres @vercel/kv @vercel/blob
 
 ## 13. 구현 체크리스트
 
+> **이 장은 최초 설계(2026-08) 시점의 구현 계획이다.** 체크 표시는 현재 상태가 아니다. 2026-11-19 확인: 이벤트 종류 정의(`src/config/eventTypes.js`)·Postgres·KV·Slack 웹훅·이벤트 수신(`POST /api/events`, zod 검증)·Pi 워처의 보존 대기열·이벤트 목록 조회(`GET /api/events/history`)·단위 시험은 구현돼 있다. Blob·월별 압축(`archive-events`)·일별 집계(`/api/events/report/daily`)·`@vercel/postgres`·`@vercel/blob`은 쓰지 않는다(미구현 또는 다른 구조로 대체).
+
 - [ ] `src/config/eventTypes.js` 생성
 - [ ] Vercel Postgres 생성 및 프로젝트 연결
 - [x] Postgres 스키마 적용 (events) — monthly_summaries 는 폐기

@@ -44,8 +44,7 @@
   - 직원이 시간 선택 → 예약 완료
   - Google Calendar Webhook → PROPOS 감지 → status: ASSIGNED
 - **거절 흐름**: `GET /api/cleaning/d?token=TOKEN` 호출
-  - 현재 엔드포인트는 HTML 페이지 반환 (브라우저 링크 기반 설계)
-  - Worker App 구현 시 JSON 응답용 엔드포인트 추가 필요 (예: `?format=api` 파라미터 또는 `POST /api/workers/decline`)
+  - 브라우저 링크로 열면 HTML 페이지, 앱은 `?format=api`를 붙여 JSON(`{ ok, message }`)을 받는다(구현됨, s13 시험)
 
 ### 3-3. 협의 필요
 - "협의 필요" 버튼 탭
@@ -105,6 +104,7 @@ Worker App 오픈
 | POST | `/api/workers/heartbeat` | 앱 실행마다 `last_seen_at` 갱신 |
 | POST | `/api/workers/token` | FCM 토큰 갱신 시 업데이트 |
 | GET | `/api/workers/token` | 기존 토큰을 Authorization 헤더로 확인해 담당자 ID만 반환. 캐시 금지. 앱 갱신 복구용이며 운영 반영 완료 |
+| GET·PATCH | `/api/workers/profile` | 앱의 FCM 토큰으로 내 정보 조회(GET `?fcm_token=`)·이름·이메일·전화 수정(PATCH) |
 
 **2026-11-09 승인 수정·11월 10일 지정폰 수신 확인:** 토큰 갱신 전 `GET /api/workers/token`에 `Authorization: Bearer <기존 토큰>`을 보내 담당자 ID를 확인한다. 앱은 그 ID와 기존/새 토큰을 먼저 보관하고 POST에 선택 항목 `worker_id`를 추가한다. 서버 저장 확인 후 로컬 토큰을 확정하며, 응답 유실 시 같은 담당자의 같은 저장인지 재확인한다. 기존 두 토큰만 보내는 POST와 정상 `{ok:true}` 응답은 유지한다. 토큰 API·앱 1.0.1은 반영됐고 지정폰 1대에서 FCM 접수·OS 알림·탭 후 앱 표시를 확인했다. 실제 기기 토큰 강제 회전·장애 주입까지 검증한 것은 아니다. [구현·회귀·한계](cleaning-notification-reliability-audit.md#act11-fcm-recovery), [실기 결과](cleaning-notification-reliability-audit.md#act11-phone-receipt)
 
@@ -136,8 +136,8 @@ Worker App 오픈
 
 | 교체 대상 | 위치 | 비고 |
 |-----------|------|------|
-| `advanceJob()` 내 VIP/BULK 발송 | `api/cleaning/_dispatch.js` | 요청 알림 발송 |
-| `sendCompletionSmsToRest()` | `api/cleaning/_dispatch.js` | 배정 완료 시 나머지 직원 통보 |
+| `advanceJob()` 내 VIP/BULK 발송 | `server/cleaning/_dispatch.js` | 요청 알림 발송 |
+| `sendCompletionSmsToRest()` | `server/cleaning/_dispatch.js` | 배정 완료 시 나머지 직원 통보 |
 
 ```javascript
 // 현재
@@ -263,7 +263,7 @@ WHERE fcm_status = 'active'
 
 - [ ] iOS 지원 여부 (Android 우선, 이후 검토)
 - [ ] Play Store 배포 vs 직접 APK 배포
-- [ ] 거절 API — 앱용 JSON 응답: 현재 `GET /api/cleaning/d`는 HTML 반환. `?format=api` 파라미터 추가 또는 `POST /api/workers/decline` 신규 엔드포인트 선택 필요
+- [x] 거절 API — 앱용 JSON 응답: `GET /api/cleaning/d?token=…&format=api`로 구현됨(별도 `POST /api/workers/decline`은 만들지 않음)
 - [ ] 직원 자가 등록 시 보안 — 현재 phone만 있으면 등록 가능. 호스트 사전 초대 링크 방식 고려
 - [ ] FCM 미전달 시 재발송 정책 (FCM은 전달 보장 안 함 — 최대 4주 보관 후 폐기)
 - [ ] Firebase Auth Phone 무료 한도 확인 (직원 수 규모에 따라 Blaze 플랜 필요 가능)
@@ -279,6 +279,6 @@ WHERE fcm_status = 'active'
 5. FCM 토큰 발급 + `/api/workers/register` 연동
 6. 수락(Calendar WebView) / 거절 / 협의 필요 버튼 구현
 7. Heartbeat 구현 (`/api/workers/heartbeat`)
-8. `sendSms()` → `sendPush()` 교체 — `advanceJob()` + `sendCompletionSmsToRest()` 동시 교체 (`api/cleaning/_dispatch.js`)
+8. `sendSms()` → `sendPush()` 교체 — `advanceJob()` + `sendCompletionSmsToRest()` 동시 교체 (`server/cleaning/_dispatch.js`)
 9. 크론 헬스체크 추가 (`api/cron/[...slug].js`)
 10. 테스트 — 실제 푸시 수신, 수락/거절 상태 전환, 앱 삭제 감지

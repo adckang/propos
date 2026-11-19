@@ -410,7 +410,7 @@ async function processEvent(event, { insertEvent, updateEventStatus }) { ... }
 | GET | `/api/stats` | 기간별 KPI 수치 조회 |
 | GET | `/api/events/history` | 히스토리 목록 조회 |
 | GET | `/api/events/:id` | 단일 이벤트 상세 (Slack 링크 목적지) |
-| POST | `/api/cron/archive-events` | 월별 압축 (Vercel Cron 호출) |
+| ~~POST~~ | ~~`/api/cron/archive-events`~~ | ~~월별 압축~~ — **만들지 않음**(2026-11-19 확인: 파일 없음, 압축 보관 표 `monthly_summaries`는 D-032에서 폐기) |
 
 ### GET /api/stats 파라미터
 

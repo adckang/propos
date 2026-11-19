@@ -142,4 +142,4 @@ node scripts/data-simulator.mjs check-db --strict
 
 seed는 `pool.connect()`로 얻은 한 연결에서 사전 충돌 검사와 전체 upsert를 실행한다. 실패 시 같은 연결에서 롤백하고, 롤백 실패 연결은 폐기한다. dry-run은 DB 연결을 열지 않는다. 실제 CLI를 호출하는 단위·격리 SQL s121에서 중간 실패 복구·반복 저장·REAL 보존을 검증한다.
 
-[RF-05.2 감사](refactoring.md#rf05-assignment-relations)에서 SIMULATED 배정의 담당자 목록·FK 저장 공백과 가상 Google ID가 이를 가리는 검수 공백을 확인했다. 현재 기본 검수 PASS는 이 필수 관계까지 검증됐다는 뜻이 아니다. 생성·검수·seed의 동시 보완은 RF-05.4의 다음 작업이며, 이번 연결 수정으로 기존 운영 데이터를 바꾸지 않았다.
+[RF-05.2 감사](refactoring.md#rf05-assignment-relations)에서 SIMULATED 배정의 담당자 목록·FK 저장 공백과 가상 Google ID가 이를 가리는 검수 공백을 확인했다. 현재 기본 검수 PASS는 이 필수 관계까지 검증됐다는 뜻이 아니다. 생성·검수·seed의 동시 보완은 RF-05.4에서 다루기로 했고, RF-05.4는 2026-11-14 사용자 선택("실제 데이터 검사만 강화")으로 실제 숙소 배정의 담당자 검사만 보완하고 끝냈다(가상 담당자 추가안은 버림). 이번 연결 수정으로 기존 운영 데이터를 바꾸지 않았다.
