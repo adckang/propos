@@ -1,8 +1,12 @@
 // RF-21(2026-11-14): 집 Pi 워처가 로그인 없이 외부에서 열려 있었다. 서버(Vercel)는 워처를 부를 때 기존 공유키를 붙이고,
-// 워처는 키가 맞는 요청만 처리한다(기록 모드 관찰 → 2026-11-16 기본값 차단). 실제 확인 함수와 워처 서버 소스의 순서를 검증한다.
+// 워처는 키가 맞는 요청만 처리한다(기록 모드 관찰 → 2026-11-16 기본값 차단). 실제 확인 함수와 실제 워처 서버를 검증한다.
+import '../helpers/isolateDataDir.js'; // 반드시 먼저(s50) — 워처 서버를 묶을 때 감시 프로그램·숙소 저장소는 가짜로 바꾸지만 이름이 나온다
+
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { build } from 'esbuild';
+import { randomUUID } from 'node:crypto';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createUnauthenticatedLogger, decideWatcherRequest, hasWatcherSecret, watcherAuthMode, watcherAuthStartupMessage, WATCHER_SECRET_HEADER } from '../../server/watcherAuth.js';
 import { watcherRequestHeaders } from '../../server/auth/watcherScope.js';
 
@@ -100,36 +104,151 @@ describe('서버가 워처를 부를 때 붙이는 헤더', () => {
   });
 });
 
-describe('워처 서버 소스 계약', () => {
-  const src = readFileSync(new URL('../../scripts/occupancy-watcher-standalone.mjs', import.meta.url), 'utf8');
-  const handler = src.slice(src.indexOf('http.createServer('), src.indexOf('server.listen('));
+// 실제 Pi 워처 서버(scripts/occupancy-watcher-standalone.mjs)를 묶어 띄운다 — 키 확인(watcherAuth)은 실제 코드,
+// 그 뒤의 기능(감시 프로그램·숙소 파일·이벤트 처리·집 HA)은 불렸는지만 기록하는 가짜, HTTP 소켓은 처리 함수만 받는다.
+// 예전엔 이 서버 소스의 글자 순서만 검사했다(ACT-08 후보). 서버마다 기록의 "10분에 한 번" 상태가 따로 있도록 매번 새로 묶는다.
+const WATCHER_ENTRY = fileURLToPath(new URL('../../scripts/occupancy-watcher-standalone.mjs', import.meta.url));
+const ROUTES = [
+  ['POST', '/api/monitoring/event', 'handleMonitoringEventRequest'],
+  ['GET', '/api/monitoring/state', 'getMonitoringState'],
+  ['POST', '/api/monitoring/config', 'setMonitoringConfig'],
+  ['PUT', '/api/monitoring/state', 'setRoomState', { roomState: { mainStatus: 'VACANT' } }],
+  ['GET', '/api/properties', 'loadProperties'],
+  ['PUT', '/api/properties', 'saveProperties', []],
+  ['GET', '/api/camera/snapshot?path=/local/snapshots/fixture.jpg', 'getHaBaseUrl'],
+];
 
-  test('모든 경로보다 먼저 요청을 확인하고, 거절이면 401 로 끝낸다', () => {
-    const check = handler.indexOf('decideWatcherRequest(req.headers)');
-    assert.ok(check > 0, '요청 확인이 있다');
-    const firstRoute = handler.indexOf('url.pathname ===');
-    assert.ok(firstRoute > check, '첫 경로(청소·정비 요청 포함)보다 앞');
-    const gate = handler.slice(check, firstRoute);
-    assert.match(gate, /if \(access === 'reject'\) \{ sendJson\(res, 401, \{ error: 'Unauthorized' \}\); return; \}/);
-    const logCall = gate.indexOf("if (access !== 'allow') logUnauthenticated(req.method, url.pathname, { rejected: access === 'reject' });");
-    assert.ok(logCall >= 0 && logCall < gate.indexOf("if (access === 'reject')"), '거절하기 전에 기록한다(처리·거절 모두)');
-    assert.match(src, /import \{[^}]*\bdecideWatcherRequest\b[^}]*\} from '\.\.\/server\/watcherAuth\.js';/);
+async function startActualWatcherServer(env) {
+  const key = '__watcherAuthServer_' + randomUUID().replaceAll('-', '');
+  const io = { handler: null, calls: [], fetches: [], logs: [], warns: [] };
+  const saved = { fetch: globalThis.fetch, log: console.log, warn: console.warn,
+    env: Object.fromEntries(['PROPOS_PI_SECRET', 'PROPOS_WATCHER_AUTH_MODE'].map(name => [name, process.env[name]])) };
+  const setEnv = values => { for (const [name, value] of Object.entries(values)) { if (value == null) delete process.env[name]; else process.env[name] = value; } };
+  globalThis[key] = io;
+  globalThis.fetch = async url => { io.fetches.push(String(url)); throw new Error('watcher fixture: network blocked'); };
+  console.log = (...args) => io.logs.push(args.join(' '));
+  console.warn = (...args) => io.warns.push(args.join(' '));
+  setEnv(env);
+  const g = `globalThis[${JSON.stringify(key)}]`;
+  const rec = name => `(...args) => { ${g}.calls.push(${JSON.stringify(name)}); }`;
+  const stubs = {
+    'node:http': `export default { createServer(fn) { ${g}.handler = fn; return { listen(_port, cb) { cb?.(); }, close() {} }; } };`,
+    '../server/occupancyWatcher.js': `export const startWatcher = ${rec('startWatcher')}; export const stopWatcher = () => {};
+      export const shutdownPreparation = async () => {};
+      export const getMonitoringState = () => { ${g}.calls.push('getMonitoringState'); return {}; };
+      export const setMonitoringConfig = ${rec('setMonitoringConfig')}; export const setRoomState = ${rec('setRoomState')};`,
+    '../server/propertiesStore.js': `export const loadProperties = () => { ${g}.calls.push('loadProperties'); return []; };
+      export const saveProperties = ${rec('saveProperties')};`,
+    '../server/haProxy.js': `export const getHaBaseUrl = () => { ${g}.calls.push('getHaBaseUrl'); throw new Error('no HA in fixture'); };
+      export const getHaToken = () => { ${g}.calls.push('getHaToken'); throw new Error('no HA in fixture'); };`,
+    '../server/monitoringEventHandler.js': `export async function handleMonitoringEventRequest(_req, res) {
+      ${g}.calls.push('handleMonitoringEventRequest'); res.writeHead(200); res.end('{}'); }`,
+  };
+  try {
+    const bundle = await build({
+      entryPoints: [WATCHER_ENTRY], bundle: true, write: false, platform: 'node', format: 'esm', logLevel: 'silent',
+      define: { 'import.meta.url': JSON.stringify(pathToFileURL(WATCHER_ENTRY).href) },
+      plugins: [{ name: 'watcher-auth-io', setup(b) {
+        b.onResolve({ filter: /.*/ }, args => Object.hasOwn(stubs, args.path) ? { path: args.path, namespace: 'watcher-io' } : undefined);
+        b.onLoad({ filter: /.*/, namespace: 'watcher-io' }, args => ({ contents: stubs[args.path], loader: 'js' }));
+      } }],
+    });
+    await import('data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text + `\n// ${key}`).toString('base64'));
+  } finally { console.log = saved.log; }
+
+  async function request(method, url, headers = {}, body) {
+    const content = body === undefined ? '' : JSON.stringify(body);
+    const req = { method, url, headers, async *[Symbol.asyncIterator]() { if (content) yield Buffer.from(content); } };
+    const res = { status: 0, body: '', writeHead(status) { this.status = status; }, end(chunk = '') { this.body = String(chunk); } };
+    await io.handler(req, res);
+    return res;
+  }
+  return {
+    io, request, setEnv,
+    stop() {
+      globalThis.fetch = saved.fetch; console.warn = saved.warn;
+      setEnv(saved.env);
+      delete globalThis[key];
+    },
+  };
+}
+
+describe('실제 워처 서버 — 키 확인', () => {
+  test('키가 없거나 틀리면 모든 경로가 401 이고, 그 뒤의 기능(감시·숙소 파일·이벤트·집 HA)에 하나도 닿지 않는다', async t => {
+    const w = await startActualWatcherServer({ PROPOS_PI_SECRET: KEY, PROPOS_WATCHER_AUTH_MODE: null });
+    t.after(() => w.stop());
+    for (const [method, url, , body] of ROUTES) {
+      for (const headers of [{}, withKey('wrong'), withKey(KEY.slice(1))]) {
+        const res = await w.request(method, url, headers, body);
+        assert.equal(res.status, 401, `${method} ${url}`);
+        assert.deepEqual(JSON.parse(res.body), { error: 'Unauthorized' });
+      }
+    }
+    assert.deepEqual(w.io.calls, ['startWatcher'], '시작 외에는 아무 기능도 불리지 않았다');
+    assert.deepEqual(w.io.fetches, []);
   });
 
-  test('키가 없거나 틀린 요청은 줄인 기록으로 남기고, 시작할 때마다 모드를 남긴다(기록 모드를 잊고 두거나 키가 안 읽혔으면 보이게)', () => {
-    assert.doesNotMatch(handler, /console\.warn\(`\[watcher-auth\]/, '요청마다 바로 쓰는 기록이 남아 있으면 안 된다');
-    const listen = src.slice(src.indexOf('server.listen('));
-    assert.match(listen, /console\.log\(watcherAuthStartupMessage\(\)\);/);
-    for (const route of ['/api/monitoring/event', '/api/monitoring/state', '/api/monitoring/config', '/api/properties', '/api/camera/snapshot']) {
-      assert.ok(src.includes(`url.pathname === '${route}'`), route);
-      assert.match(src.slice(0, src.indexOf('http.createServer(')), new RegExp(`'${route.replaceAll('/', '\\/')}'`), `기록의 아는 경로 목록에 ${route}`);
+  test('(대조) 맞는 키는 같은 경로들이 실제 기능까지 간다 — 위 401 이 "무엇이든 실패"가 아님', async t => {
+    const w = await startActualWatcherServer({ PROPOS_PI_SECRET: KEY, PROPOS_WATCHER_AUTH_MODE: null });
+    t.after(() => w.stop());
+    for (const [method, url, reached, body] of ROUTES) {
+      w.io.calls.length = 0;
+      const res = await w.request(method, url, withKey(), body);
+      assert.notEqual(res.status, 401, `${method} ${url}`);
+      assert.ok(w.io.calls.includes(reached), `${method} ${url} → ${reached}`);
+    }
+    assert.equal((await w.request('GET', '/api/unknown', withKey())).status, 404);
+  });
+
+  test('확인을 건너뛰는 입구가 없다 — OPTIONS 만 키 없이 빈 응답, 다른 방식·모르는 경로도 키 없으면 401', async t => {
+    const w = await startActualWatcherServer({ PROPOS_PI_SECRET: KEY, PROPOS_WATCHER_AUTH_MODE: null });
+    t.after(() => w.stop());
+    assert.equal((await w.request('OPTIONS', '/api/monitoring/config')).status, 204);
+    const paths = [...new Set(ROUTES.map(([, url]) => url)), '/', '/api/unknown', '/api/monitoring/state/', '/API/properties'];
+    for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD']) {
+      for (const url of paths) assert.equal((await w.request(method, url)).status, 401, `${method} ${url}`);
+    }
+    assert.deepEqual(w.io.calls, ['startWatcher']);
+  });
+
+  test('Pi 에 키가 없으면 키를 보내도 전부 401 (설정 실수로 열리지 않게)', async t => {
+    const w = await startActualWatcherServer({ PROPOS_PI_SECRET: null, PROPOS_WATCHER_AUTH_MODE: null });
+    t.after(() => w.stop());
+    for (const [method, url, , body] of ROUTES) assert.equal((await w.request(method, url, withKey(), body)).status, 401, `${method} ${url}`);
+    assert.deepEqual(w.io.calls, ['startWatcher']);
+  });
+});
+
+describe('실제 워처 서버 — 기록', () => {
+  test('시작할 때마다 모드를 남긴다 — 차단·기록, 차단인데 키가 없으면 경고', async t => {
+    for (const [env, expected] of [
+      [{ PROPOS_PI_SECRET: KEY, PROPOS_WATCHER_AUTH_MODE: null }, '[watcher-auth] 모드: 차단(키 없는 요청 401)'],
+      [{ PROPOS_PI_SECRET: KEY, PROPOS_WATCHER_AUTH_MODE: 'log' }, '[watcher-auth] 모드: 기록(키 없는 요청도 처리하고 기록)'],
+      [{ PROPOS_PI_SECRET: null, PROPOS_WATCHER_AUTH_MODE: null }, '[watcher-auth] 모드: 차단 — 경고: 공유키(PROPOS_PI_SECRET)가 없어 서버 요청까지 모두 401 로 거절합니다'],
+    ]) {
+      const w = await startActualWatcherServer(env);
+      try { assert.ok(w.io.logs.includes(expected), `${JSON.stringify(env)}: ${w.io.logs.join(' / ')}`); } finally { w.stop(); }
     }
   });
 
-  test('경로 확인을 건너뛰는 별도 입구가 없다(OPTIONS 만 앞에서 빈 응답)', () => {
-    const beforeCheck = handler.slice(0, handler.indexOf('decideWatcherRequest(req.headers)'));
-    assert.equal((beforeCheck.match(/sendJson\(res, /g) ?? []).length, 1);
-    assert.match(beforeCheck, /if \(req\.method === 'OPTIONS'\) \{ sendJson\(res, 204, \{\}\); return; \}/);
-    assert.doesNotMatch(beforeCheck, /handleMonitoringEventRequest|getMonitoringState|loadProperties|saveProperties|setMonitoringConfig|setRoomState|getHaToken/);
+  test('거절한 요청은 경로별로 10분에 한 번만, "→ 401 거절"과 함께 남긴다 — 모르는 경로는 하나로 묶는다', async t => {
+    const w = await startActualWatcherServer({ PROPOS_PI_SECRET: KEY, PROPOS_WATCHER_AUTH_MODE: null });
+    t.after(() => w.stop());
+    for (let i = 0; i < 3; i++) {
+      for (const [method, url] of ROUTES) await w.request(method, url);
+      await w.request('GET', '/scanner-probe-' + i);
+    }
+    const expected = ROUTES.map(([method, url]) => `[watcher-auth] 키가 없거나 틀린 요청 ${method} ${url.split('?')[0]} → 401 거절`);
+    expected.push('[watcher-auth] 키가 없거나 틀린 요청 GET (기타 경로) → 401 거절');
+    assert.deepEqual([...w.io.warns].sort(), expected.sort());
+  });
+
+  test('기록 모드는 키 없는 요청도 처리하되(→ 401 표시 없이) 남긴다', async t => {
+    const w = await startActualWatcherServer({ PROPOS_PI_SECRET: KEY, PROPOS_WATCHER_AUTH_MODE: 'log' });
+    t.after(() => w.stop());
+    const res = await w.request('GET', '/api/monitoring/state');
+    assert.equal(res.status, 200);
+    assert.ok(w.io.calls.includes('getMonitoringState'));
+    assert.deepEqual(w.io.warns, ['[watcher-auth] 키가 없거나 틀린 요청 GET /api/monitoring/state']);
   });
 });
