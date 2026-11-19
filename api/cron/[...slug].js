@@ -35,7 +35,7 @@ import {
 import { getStatsForPeriod } from "../../src/application/reportingService.js";
 import { countPeriodEvents } from "../../src/domain/reportingDomain.js";
 import { queryEvents } from "../../src/infrastructure/eventRepository.js";
-import { reportTokenFailure, markRenewed, checkStaleness, isRenewalDue } from "../../server/cleaning/_tokenHealth.js";
+import { reportTokenFailure, reportTokenSuccess, markRenewed, checkStaleness, isRenewalDue } from "../../server/cleaning/_tokenHealth.js";
 
 // RF-27 결과를 로그에 남긴다 — 워처 주소는 남기지 않고 숙소·결과·HTTP 상태만
 function logWatcherReservationPush(label, results) {
@@ -541,6 +541,7 @@ export default async function handler(req, res) {
             await rememberGmailStart(kv, w.historyId).catch(() => {});
             // 갱신 자체(API 응답 ok)는 성공했으므로, 이후 메시지 포맷팅이 실패해도 markRenewed는 지킨다.
             await markRenewed(kv, "gmail_watch");
+            await reportTokenSuccess(kv, "gmail_watch", "Gmail Watch 갱신");
             const expLabel = w.expiration ? new Date(Number(w.expiration)).toISOString().slice(0, 10) : "알 수 없음";
             await postSlack(`[PROPOS] 📬 Gmail Watch 자동 갱신 완료 (만료: ${expLabel})`);
             ran.push("gmail-watch-renewed");
@@ -588,6 +589,9 @@ export default async function handler(req, res) {
             // 여기선 "갱신 메커니즘(토큰·API) 자체가 살아있었는지"만 추적하고, 캘린더별 성공률은
             // 바로 아래 Slack 메시지(비율 표시)로 이미 드러난다.
             await markRenewed(kv, "calendar_watch");
+            if (calWatchCount > 0) {
+              await reportTokenSuccess(kv, "calendar_watch", "Calendar Watch 갱신");
+            }
             await postSlack(`[PROPOS] 📅 Calendar Watch 자동 갱신 완료 (${calWatchCount}/${calProps.length}개 캘린더)`);
             ran.push("calendar-watch-renewed");
           }

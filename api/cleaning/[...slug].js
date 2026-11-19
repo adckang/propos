@@ -30,7 +30,7 @@ import { syncAllPropertiesIcal } from "../../server/cleaning/_icalSync.js";
 import { assignFromCalendarEvents } from "../../server/cleaning/_calendarAssign.js";
 import { isCheckoutCancelled, postAssignmentSlack } from "../../server/cleaning/_reservationSync.js";
 import { handleGmailNotification, isHistoryId, rememberGmailStart } from "../../server/cleaning/_gmailHistory.js";
-import { markRenewed } from "../../server/cleaning/_tokenHealth.js";
+import { markRenewed, reportTokenSuccess } from "../../server/cleaning/_tokenHealth.js";
 import { periodToRemainingRange } from "../../src/domain/periodDomain.js";
 import { validatePropertyName } from "../../src/domain/propertyIdentityDomain.js";
 import { renamePropertyId, PropertyRenameError } from "../../src/infrastructure/propertyRenameRepository.js";
@@ -1111,6 +1111,7 @@ async function registerCalendarWatch(req, res) {
   // 수동 재등록도 "성공 갱신"으로 기록 — 안 하면 자동 갱신(isRenewalDue)이 몇 주 끊겨 있던 동안의
   // staleness 경고(checkStaleness)가 이 수동 복구 이후에도 다음 날까지 계속 오탐으로 남는다.
   await markRenewed(kv, "calendar_watch");
+  await reportTokenSuccess(kv, "calendar_watch", "Calendar Watch 갱신");
   return sendJson(res, 200, { ok: true, channelId: result.id, expiration: result.expiration, webhookUrl });
 }
 
@@ -1234,6 +1235,7 @@ async function registerGmailWatch(req, res) {
   await rememberGmailStart(kv, result.historyId).catch(() => {});
   // 수동 재등록도 "성공 갱신"으로 기록 — registerCalendarWatch와 같은 이유.
   await markRenewed(kv, "gmail_watch");
+  await reportTokenSuccess(kv, "gmail_watch", "Gmail Watch 갱신");
   return sendJson(res, 200, { ok: true, historyId: result.historyId, expiration: result.expiration });
 }
 

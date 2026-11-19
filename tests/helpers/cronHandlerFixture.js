@@ -41,6 +41,7 @@ export async function actualCronModule() {
       '../../server/cleaning/_tokenHealth.js': `
         const call = (name, args) => globalThis.__cronHandlerIO.invoke(name, args);
         export const reportTokenFailure = (...args) => call('reportTokenFailure', args);
+        export const reportTokenSuccess = (...args) => call('reportTokenSuccess', args);
         export const markRenewed = (...args) => call('markRenewed', args);
         export const checkStaleness = (...args) => call('checkStaleness', args);
         export const isRenewalDue = (...args) => call('isRenewalDue', args);`,
@@ -106,6 +107,7 @@ export function installCronIO({ behavior = {}, profile = 'hybrid', silent = true
     toKstDateKey: value => new Date(value).toISOString().slice(0, 10),
     reservationUidOf: () => 'fixture-reservation',
     reportTokenFailure: async () => {},
+    reportTokenSuccess: async () => {},
     markRenewed: async () => {},
     saveCalendarWatchExpiration: async () => {},
     'kv.get': async () => null,

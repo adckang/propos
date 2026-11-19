@@ -378,7 +378,7 @@ describe('actual Gmail Watch handler', () => {
     const expiration = String(now + 7 * 24 * 60 * 60 * 1000);
     const topicName = 'projects/fixture/topics/gmail-watch';
     const f = await actualAdminRoute(t, { environment: { GOOGLE_PUBSUB_TOPIC: topicName },
-      calendar: { methods: ['POST'], kv: { set: async () => 'OK' },
+      calendar: { methods: ['POST'], kv: { get: async () => null, set: async () => 'OK' },
         fetch: async () => new Response(JSON.stringify({ historyId: 'fixture-history', expiration }), { status: 200 }) } });
     const res = await f.send({ method: 'POST', url: '/api/cleaning/gmail-watch', body: {} });
     assert.equal(res.code, 200);
@@ -391,6 +391,23 @@ describe('actual Gmail Watch handler', () => {
     assert.deepEqual(f.kvCalls.map(call => call.args), [
       ['gmail_watch_expiration', expiration, { ex: 7 * 24 * 60 * 60 + 3600 }],
       ['token_health:gmail_watch:last_renewed_at', now, { ex: 60 * 24 * 60 * 60 }],
+      ['token_health:gmail_watch:failing_since'],
+    ]);
+  });
+
+  test('a successful manual registration clears the previous Gmail Watch failure state', async t => {
+    const deleted = [];
+    const f = await actualAdminRoute(t, { environment: { GOOGLE_PUBSUB_TOPIC: 'projects/fixture/topics/gmail-watch' },
+      calendar: { methods: ['POST'], kv: {
+        get: async key => key === 'token_health:gmail_watch:failing_since' ? Date.now() - 60_000 : null,
+        set: async () => 'OK',
+        del: async key => { deleted.push(key); return 1; },
+      }, fetch: async () => new Response(JSON.stringify({ historyId: 'fixture-history' }), { status: 200 }) } });
+    const res = await f.send({ method: 'POST', url: '/api/cleaning/gmail-watch', body: {} });
+    assert.equal(res.code, 200);
+    assert.deepEqual(deleted, [
+      'token_health:gmail_watch:failing_since',
+      'token_health:gmail_watch:last_alert_at',
     ]);
   });
 });

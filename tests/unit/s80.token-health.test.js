@@ -288,6 +288,20 @@ describe('소스 계약 — registerCalendarWatch가 Gmail Watch와 같은 모�
     // 2026-11-13: 저장은 6일마다 아침 자동 갱신과 같은 함수로(키 `calendar_watch_expiration:<calendarId>`·보관 기간은 s117 이 실행해 확인)
     assert.match(body, /await saveCalendarWatchExpiration\(kv, calendarId, result\.expiration\);/);
   });
+
+  test('POST 성공 시 기존 Calendar Watch 장애 상태를 해제한다', () => {
+    assert.match(fnMatch[0], /await reportTokenSuccess\(kv, "calendar_watch", "Calendar Watch 갱신"\);/);
+  });
+});
+
+describe('소스 계약 — 수동 Gmail Watch 재등록 성공 시 장애 상태를 해제한다', () => {
+  const src = read('api/cleaning/[...slug].js');
+  const fnMatch = src.match(/async function registerGmailWatch[\s\S]*?\n}\n/);
+
+  test('registerGmailWatch 성공 경로에 reportTokenSuccess가 있다', () => {
+    assert.ok(fnMatch, 'registerGmailWatch 함수를 찾지 못함');
+    assert.match(fnMatch[0], /await reportTokenSuccess\(kv, "gmail_watch", "Gmail Watch 갱신"\);/);
+  });
 });
 
 describe('소스 계약 — CleaningManager.jsx에 Gmail Watch와 짝을 이루는 Calendar Watch 재등록 버튼이 있다', () => {
@@ -322,7 +336,7 @@ describe('소스 계약 — api/cron/[...slug].js의 Watch 갱신이 kv를 주�
     assert.doesNotMatch(src, /getGmailToken\(\)/);
   });
 
-  test('_tokenHealth에서 reportTokenFailure/markRenewed/checkStaleness/isRenewalDue를 import한다', () => {
+  test('_tokenHealth에서 reportTokenFailure/reportTokenSuccess/markRenewed/checkStaleness/isRenewalDue를 import한다', () => {
     assert.match(src, /from\s*["']\.\.\/\.\.\/server\/cleaning\/_tokenHealth\.js["']/);
     assert.match(src, /isRenewalDue/, 'isRenewalDue import가 없으면 재발방지 게이트 자체가 없다는 뜻');
   });
@@ -359,6 +373,11 @@ describe('소스 계약 — api/cron/[...slug].js의 Watch 갱신이 kv를 주�
       /Calendar Watch 갱신 실패: \$\{e\.message\}/,
       '기존에 있던 중복 postSlack 호출이 남아있으면 안 됨(이제 reportTokenFailure 하나로 통일)'
     );
+  });
+
+  test('Watch 자동 갱신 성공 시 기존 장애 상태를 해제한다', () => {
+    assert.match(src, /reportTokenSuccess\(kv, "gmail_watch", "Gmail Watch 갱신"\)/);
+    assert.match(src, /reportTokenSuccess\(kv, "calendar_watch", "Calendar Watch 갱신"\)/);
   });
 
   test('(버그 수정 확인) markRenewed("calendar_watch")가 전체 성공 조건에 더 안 묶여있다', () => {
