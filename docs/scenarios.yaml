@@ -9,7 +9,7 @@ system_pages:
     screen_key: ha
     title: 홈 어시스턴트
     landing_entry_label: 대표 숙소 상세 보기
-    component: src/components/HomeAssistant.jsx
+    component: src/components/v1/HomeAssistant.jsx
     primary_user: 대표 숙소 1곳을 끝까지 해결하는 관리자
     purpose: 한 숙소의 시나리오 1~5를 시간축으로 따라가며 현재 단계, 멈춘 지점, 즉시 제어 액션을 한 화면에서 해결한다.
     entry_condition: 특정 숙소 1건의 상태, 메시지, IoT, 청소, 정산 맥락을 함께 보며 끝까지 해결해야 할 때 진입한다.
@@ -32,7 +32,7 @@ system_pages:
     screen_key: cc
     title: 커맨드 센터
     landing_entry_label: 커맨드 센터 열기
-    component: src/components/CommandCenter.jsx
+    component: src/components/v1/CommandCenter.jsx
     primary_user: 100개 이상 숙소를 동시에 운영하는 관리자
     purpose: 1~5 시나리오를 공통 시간축으로 삼아 예외 숙소를 먼저 발견하고, 우선순위를 정한 뒤 상세 패널로 내려가 대응한다.
     entry_condition: 하루 운영을 시작하거나, 지금 어느 단계와 어느 숙소에 사람 개입이 필요한지 먼저 판단해야 할 때 진입한다.
@@ -58,7 +58,7 @@ scenarios:
     title: 체크인 전날 자동화
     stage_label: D-1 자동화
     landing_label: 내일 체크인 준비
-    component: src/components/D1AutomationPanel.jsx
+    component: src/components/v1/D1AutomationPanel.jsx
     diagram: myPlantUML/propos-scenario01-sequence.uml
     functional_test: tests/functional/s01.functional.test.js
     service: src/application/checkinPreparationService.js
@@ -82,7 +82,7 @@ scenarios:
     title: 체크인 당일 자동화
     stage_label: 체크인 당일
     landing_label: 당일 입실 확인
-    component: src/components/S02CheckinPanel.jsx
+    component: src/components/v1/S02CheckinPanel.jsx
     diagram: myPlantUML/propos-scenario02-sequence.uml
     functional_test: tests/functional/s02.functional.test.js
     service: src/application/checkinService.js
@@ -105,7 +105,7 @@ scenarios:
     title: 체류 중 실시간 모니터링
     stage_label: 체류 중
     landing_label: 체류 중 대응
-    component: src/components/S03MonitoringPanel.jsx
+    component: src/components/v1/S03MonitoringPanel.jsx
     diagram: myPlantUML/propos-scenario03-sequence.uml
     functional_test: tests/functional/s03.functional.test.js
     service: src/application/monitoringService.js
@@ -128,7 +128,7 @@ scenarios:
     title: 퇴실·청소 자동화
     stage_label: 퇴실·청소
     landing_label: 다음 예약 준비
-    component: src/components/S04CheckoutPanel.jsx
+    component: src/components/v1/S04CheckoutPanel.jsx
     diagram: myPlantUML/propos-scenario04-sequence.uml
     functional_test: tests/functional/s04.functional.test.js
     service: src/application/checkoutService.js
@@ -152,7 +152,7 @@ scenarios:
     title: 수익 정산 자동화
     stage_label: 수익 정산
     landing_label: 정산 검토
-    component: src/components/S05RevenuePanel.jsx
+    component: src/components/v1/S05RevenuePanel.jsx
     diagram: myPlantUML/propos-scenario05-sequence.uml
     functional_test: tests/functional/s05.functional.test.js
     service: src/application/settlementService.js

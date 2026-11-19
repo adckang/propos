@@ -29,7 +29,7 @@ npm run test:smoke
 
 ## UC-001 · D-1 체크인 전날 자동화
 
-**구현 파일:** `src/components/D1AutomationPanel.jsx`
+**구현 파일:** `src/components/v1/D1AutomationPanel.jsx`
 **진입 경로:** 랜딩 → `S01 · 내일 체크인 준비` 카드 → 커맨드 센터 → `D-1 자동화 일괄 처리`
 
 ---
@@ -172,7 +172,7 @@ npm run test:smoke
 
 ## SYS-HA · 홈 어시스턴트
 
-**구현 파일:** `src/components/HomeAssistant.jsx`  
+**구현 파일:** `src/components/v1/HomeAssistant.jsx`\
 **진입 경로:** 랜딩 → `대표 숙소 상세 보기`
 
 ### TC-SYS-HA-001 · 핵심 구조 확인
@@ -203,7 +203,7 @@ npm run test:smoke
 
 ## SYS-CC · 커맨드 센터
 
-**구현 파일:** `src/components/CommandCenter.jsx`  
+**구현 파일:** `src/components/v1/CommandCenter.jsx`\
 **진입 경로:** 랜딩 → `커맨드 센터 열기`
 
 ### TC-SYS-CC-001 · 초기 관제 구조 확인
@@ -234,7 +234,7 @@ npm run test:smoke
 
 ## UC-002 · 체크인 당일 자동화
 
-**구현 파일:** `src/components/S02CheckinPanel.jsx`  
+**구현 파일:** `src/components/v1/S02CheckinPanel.jsx`\
 **진입 경로:** 랜딩 → `S02 · 당일 입실 확인` 카드 → 커맨드 센터 → `체크인 예외 일괄 처리`
 
 ### TC-UI-201 · 초기 화면 구조
@@ -278,7 +278,7 @@ npm run test:smoke
 
 ## UC-003 · 체류 중 실시간 모니터링
 
-**구현 파일:** `src/components/S03MonitoringPanel.jsx`  
+**구현 파일:** `src/components/v1/S03MonitoringPanel.jsx`\
 **진입 경로:** 랜딩 → `S03 · 체류 중 대응` 카드 → 커맨드 센터 → `체류 중 예외 일괄 처리`
 
 ### TC-UI-301 · 초기 화면 구조
@@ -319,7 +319,7 @@ npm run test:smoke
 
 ## UC-004 · 퇴실·청소 자동화
 
-**구현 파일:** `src/components/S04CheckoutPanel.jsx`  
+**구현 파일:** `src/components/v1/S04CheckoutPanel.jsx`\
 **진입 경로:** 랜딩 → `S04 · 다음 예약 준비` 카드 → 커맨드 센터 → `퇴실·청소 일괄 처리`
 
 ### TC-UI-401 · 초기 화면 구조
@@ -362,7 +362,7 @@ npm run test:smoke
 
 ## UC-005 · 수익 정산 자동화
 
-**구현 파일:** `src/components/S05RevenuePanel.jsx`  
+**구현 파일:** `src/components/v1/S05RevenuePanel.jsx`\
 **진입 경로:** 랜딩 → `S05 · 정산 검토` 카드 → 커맨드 센터 → `수익 정산 일괄 처리`
 
 ### TC-UI-501 · 초기 화면 구조
