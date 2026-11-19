@@ -6,7 +6,7 @@ import { computeOperationalMetrics, computeSafetyIndex, describeSafetyIndexBasis
 
 /**
  * Template-P — 7개 운영 지표 (건수 / 성공률)
- * 적용: PAST 기간 (last_week / yesterday / last_hour / last_month)
+ * 적용: PAST 기간 + ACTIVE(this_week/this_month)의 [완료] 섹션
  * report-architecture.md 섹션 4 Template-P 참조.
  *
  * 지표 라벨·분자/분모 정의는 operationalMetricsDomain.computeOperationalMetrics 가 정본 —

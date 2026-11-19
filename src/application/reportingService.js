@@ -147,7 +147,7 @@ async function loadPreStayContext(db, events, range, now, preparationBefore = nu
 /**
  * countPeriodEvents가 0으로 둔 청소 지표 6·7을 채운다 (report-architecture 지표 표).
  *   cleaningOnTime  = 청소 완료 - 3시간 초과 건 (드릴다운 실패 목록과 같은 기준. 시작 이벤트가 없는 완료는 감점하지 않음)
- *   cleaningCreated / cleaningAssigned = cleaning_jobs (체크아웃이 이미 지난 건만). 조회 실패 시 null → 화면 "해당 없음"
+ *   cleaningCreated / cleaningAssigned = cleaning_jobs (체크아웃이 이미 지난 건만). 조회 실패 시 null → 화면 "데이터 없음"
  */
 async function injectCleaningMetrics(stats, { db, events, range, propertyIds, period, now }) {
   stats.cleaningOnTime = Math.max(0, stats.cleaningFinished - detectCleaningTimeFailures(events).length);

@@ -284,7 +284,7 @@ LIFECYCLE/OPERATIONS는 발생 사실(fact)이므로 resolution 개념 없음. A
 
 ### Template-A — Active Hybrid
 
-**적용:** W x ACTIVE (this_week), D x ACTIVE (today) 전용
+**현재 적용:** W x ACTIVE (`this_week`), M x ACTIVE (`this_month`). D x ACTIVE (`today`)는 `TodayStatusPanel`이 현재 상태 집계만 보여준다.
 **Scope:** All-Properties 또는 Single-Property
 
 기간을 "현재 시각"을 기준으로 두 구간으로 분할하여 3개 섹션으로 표시.
@@ -303,7 +303,7 @@ Template-A는 **[완료]** + **[예정]** 두 섹션으로만 구성한다.
 >
 > **KST 기준 필수:** period_start/end는 KST(UTC+9) 자정 기준. UTC로 계산하면 한국 호스트의 "오늘"과 9시간 불일치 발생.
 
-#### All-Properties 형식 (D x ACTIVE = today)
+#### All-Properties 형식 (D x ACTIVE = today, 최초 설계·현재 미구현)
 
 ```
 오늘 현황 — {M월 D일 (요일)} 기준 {HH:mm}
@@ -719,11 +719,11 @@ Slack 레포트의 텍스트 포맷은 `reporting-feature-design.md` 섹션 11�
 | W x PAST | last_week | PAST | Template-P | Postgres | O |
 | D x PAST | yesterday | PAST | Template-P | Postgres | O |
 | H x PAST | last_hour | PAST | Template-P (목록) | Postgres | - (상대시간) |
-| W x ACTIVE | this_week | ACTIVE | Template-A | KV + Postgres + iCal | O |
-| D x ACTIVE | today | ACTIVE | Template-A | Postgres(현재 상태 계산·이벤트) + iCal | O |
+| W x ACTIVE | this_week | ACTIVE | Template-A | Postgres + `properties[].reservations` + cleaning_jobs | O |
+| D x ACTIVE | today | ACTIVE | `TodayStatusPanel` | Postgres 이벤트 기록(현재 상태 계산) | O |
 | H x NOW | now | NOW | Template-C | Postgres 이벤트 기록(현재 상태 계산) | - |
-| W x FUTURE | next_week | FUTURE | Template-F | iCal + cleaning_jobs + HA all-states + properties[] | O |
-| D x FUTURE | tomorrow | FUTURE | Template-F | iCal + cleaning_jobs + HA all-states + properties[] | O |
+| W x FUTURE | next_week | FUTURE | Template-F | `properties[].reservations` + cleaning_jobs | O |
+| D x FUTURE | tomorrow | FUTURE | Template-F | `properties[].reservations` + cleaning_jobs | O |
 | H x FUTURE | next_event | FUTURE | Template-F (단건) | iCal | - |
 
 > **KST 날짜 기준 O 표시:** `getPeriodRange()`에서 UTC가 아닌 KST(UTC+9) 기준 자정으로
@@ -772,7 +772,7 @@ Slack 레포트의 텍스트 포맷은 `reporting-feature-design.md` 섹션 11�
 | 네비게이션 | Tense | KPI Tiles 역할 | 펼쳐지는 Template 섹션 |
 |---|---|---|---|
 | 전날 | PAST | 어제 이벤트 카운트 | Template-P: [결과] only |
-| 오늘 | ACTIVE | **실시간 상태 카운트** (이번주 동일) | Template-A: [완료 so far] + [예정 remaining] |
+| 오늘 | ACTIVE | **실시간 상태 카운트** | `TodayStatusPanel`: 현재 상태 분포(완료·예정 분할 없음) |
 | 내일 | FUTURE | 내일 예정 카운트 | Template-F: [계획] only |
 
 > **이번주/오늘 KPI Tiles = [현재] 역할 대체.** Template 안에 [현재] 섹션을 따로 두지 않는다.
@@ -838,13 +838,13 @@ PAST 기간 레포트(Template-P)에서 지표 실패 건수를 탭하면 해당
 
 | METRIC_KEYS 인덱스 | metric key | EventMatrixPanel 라벨 | 실패 감지 방식 |
 |---|---|---|---|
-| 0 | `pre_stay_optimization` | 입실전 숙소 최적화율 | 구형 A안은 준비부터 다음 준비/입실 전 첫 완료를 연결. `sensor-v1`은 동일 제어 회차의 센서 완료/명시 실패를 집계하고 생략·취소·미확인은 제외. [정본](pre-stay-optimization.md#prep-04) |
-| 1 | `post_checkout_energy` | 퇴실후 청소전 절전 적용률 | `post_checkout_energy_waste_detected` 이벤트 직접 집계 |
-| 2 | `post_checkout_security` | 퇴실후 청소전 보안 적용률 | `post_checkout_security_breach_detected` 이벤트 직접 집계 |
-| 3 | `vacant_energy` | 청소후 공실중 절전 적용률 | `vacant_energy_waste_detected` 이벤트 직접 집계 |
-| 4 | `post_cleaning_security` | 청소후 공실중 보안 적용률 | `post_cleaning_security_breach_detected` 이벤트 직접 집계 |
-| 5 | `cleaning_time` | 청소 시작~완료 시간 준수율 | `cleaning_started`→`cleaning_finished` 페어링, 소요시간 > 3h |
-| 6 | `null` | 청소 스케줄 할당 성공률 | 드릴다운 미지원 (scheduling 데이터 없음) |
+| 0 | `pre_stay_optimization` | 게스트 맞이 준비 | 구형 A안은 준비부터 다음 준비/입실 전 첫 완료를 연결. `sensor-v1`은 동일 제어 회차의 센서 완료/명시 실패를 집계하고 생략·취소·미확인은 제외. [정본](pre-stay-optimization.md#prep-04) |
+| 1 | `post_checkout_energy` | 퇴실 후 절전 | 감지 이벤트를 세고 직전 퇴실 시각을 `detail.anchor_at`에 연결 |
+| 2 | `post_checkout_security` | 퇴실 후 보안 | 감지 이벤트를 세고 직전 퇴실 시각을 `detail.anchor_at`에 연결 |
+| 3 | `vacant_energy` | 빈방 절전 유지 | 감지 이벤트와 이후 해소 이벤트를 연결해 `detail.resolved_at`을 담음 |
+| 4 | `post_cleaning_security` | 빈방 보안 유지 | 감지 이벤트를 세고 직전 청소 완료 시각을 `detail.anchor_at`에 연결 |
+| 5 | `cleaning_time` | 청소시간 준수 | `cleaning_started`→`cleaning_finished` 페어링, 소요시간 > 3h |
+| 6 | `null` | 청소 담당자 배정 | 드릴다운 미지원 (`cleaning_jobs` 집계지만 숙소별 목록 API는 없음) |
 
 ### 12-3. 아키텍처 계층
 
@@ -853,7 +853,7 @@ EventMatrixPanel.jsx       — MetricRow 탭 이벤트 → DrilldownSheet 열기
 DrilldownSheet.jsx         — /api/stats/drilldown 호출 → 실패 건 목록 → 숙소 탭 → onSelectRoom 콜백
 api/stats/drilldown.js     — GET ?period=&metric= → reportingService.getDrilldownForMetric()
 reportingService.js        — METRIC_DETECTORS 맵 → domain 함수 호출
-metricDrilldownDomain.js   — 순수 함수 3개 (cleaning_time / eventType / pre_stay_optimization)
+metricDrilldownDomain.js   — 지표별 실패 감지·앞뒤 이벤트 연결 순수 함수
 ```
 
 ### 12-3a. 목록의 한 줄 (D-018)
@@ -874,7 +874,7 @@ metricDrilldownDomain.js   — 순수 함수 3개 (cleaning_time / eventType / p
 
 `GET /api/stats/drilldown?period={period}&metric={metric_key}`
 
-**유효 period:** `yesterday` `last_hour` `last_week` `last_month`
+**유효 period:** `periodCapabilities(period).drilldown === true`인 기간. 모든 과거 기간(`yesterday`, `last_hour`, `last_week`, `last_month`, `days_ago_N`, `weeks_ago_N`) + 진행 중인 `this_week`·`this_month`.
 **유효 metric:** 12-2 테이블의 6개 key (index 6 null 제외)
 
 **응답:**
@@ -894,7 +894,9 @@ metricDrilldownDomain.js   — 순수 함수 3개 (cleaning_time / eventType / p
 | 함수 | 입력 | 실패 판정 기준 |
 |---|---|---|
 | `detectCleaningTimeFailures(events)` | events[] | cleaning_started→finished 페어, 소요시간 > 3h |
-| `detectEventTypeFailures(events, eventType)` | events[], string | 해당 eventType의 모든 이벤트 |
+| `detectPostCheckoutFailures(events, eventType)` | events[], string | 해당 위반 + 직전 퇴실 시각 |
+| `detectVacantEnergyFailures(events)` | events[] | 공실 전력 낭비 + 이후 해소 시각 |
+| `detectPostCleaningFailures(events, eventType)` | events[], string | 해당 위반 + 직전 청소 완료 시각 |
 | `detectPreStayOptimizationFailures(events, context)` | 기간 내 events[] + 기간 밖 연결 근거 | 구형 A안: 같은 숙소의 준비 시작부터 다음 준비/입실 전 첫 완료, 날짜 경계 허용. 신규 `sensor-v1`: 같은 숙소·optimizationRunId의 명시 실패만 반환. 조기 입실 뒤 완료 허용. [정본](pre-stay-optimization.md) |
 
 반환 공통 형식: `[{ property_id, occurred_at, detail }]`
@@ -921,6 +923,8 @@ DrilldownSheet → EventMatrixPanel(onSelectRoom)
 - `detectPreStayOptimizationFailures` 매칭/미매칭
 - 통합: 여러 지표 혼합 이벤트 배열
 
+`tests/unit/s54.violation-detail.test.js`는 퇴실·청소 완료·해소 이벤트 연결과 화면용 심각도·문장을 함께 검증한다.
+
 ---
 
 ## 13. 구현 완료된 패널 뼈대 (EventMatrixPanel / FutureMatrixPanel)
@@ -933,7 +937,7 @@ DrilldownSheet → EventMatrixPanel(onSelectRoom)
 
 ### 13-1. SharedMetricRow 포맷 (공통 행 단위)
 
-EventMatrixPanel과 FutureMatrixPanel이 공유하는 3-컬럼 행 포맷:
+`EventMatrixPanel`이 쓰는 운영 지표 행 포맷. `FutureMatrixPanel`은 현재 예약·청소 세부 팝업을 위한 자체 `Row`를 쓴다.
 
 ```
 ┌──────────────────────┬──────────────────┬──────────┐
@@ -945,9 +949,9 @@ EventMatrixPanel과 FutureMatrixPanel이 공유하는 3-컬럼 행 포맷:
 
 | 컬럼 | 내용 | 비고 |
 |------|------|------|
-| 라벨 | 지표명 (한국어) | API 오류 시 `⚠️` suffix 자동 추가 |
-| count | `n/m건` (ratio) / `N건` (isCount) / `—` | noData=true 시 `—` |
-| ratio | `N%` (ratio) / `—` (isCount) / `준비 중` (noData) | — |
+| 라벨 | 지표명 (한국어) | 그대로 표시(오류 suffix 자동 추가 없음) |
+| count | `n/m건` (ratio) / `N건` (isCount·측정 제외의 대상 건수) / `—` | 로딩·데이터 없음·대상 없음은 `—` |
+| ratio | `N%` / `—` / `준비 중` / `측정 제외` / `데이터 없음` / `해당 없음` | 상태에 따라 구분 |
 
 **색상 임계값 (`computeMetricRowDisplay`):**
 
@@ -957,12 +961,14 @@ EventMatrixPanel과 FutureMatrixPanel이 공유하는 3-컬럼 행 포맷:
 | 70 ≤ pct < 90 | `#d97706` (amber) | `#fef9c3` |
 | pct < 70 | `#dc2626` (red) | `#fee2e2` |
 
-**세 가지 모드 (우선순위 순):**
+**표시 모드 (우선순위 순):**
 
-1. `isCount` — 건수 전용. ratio 없음. failCount = count (count가 null 또는 0이면 0).
-2. `noData` — 로딩/준비 중. `준비 중` 표시. failCount = 0.
+1. `rateExcluded` — 대상 건수와 실제 실패 배지는 유지하고 성공률만 `측정 제외`.
+2. `isCount` — 건수 전용. ratio 없음. failCount = count (count가 null 또는 0이면 0).
+3. `noData` — 로딩/준비 중. `준비 중` 표시. failCount = 0.
    - **반드시 `noData=true`로만 로딩 상태를 표현한다.** numerator/denominator를 null로만 전달하면 isEmpty로 처리돼 `해당 없음`이 표시된다 — 의미가 다르다.
-3. ratio (기본) — `n/m건` + `N%`. failCount = `max(0, denominator - numerator)`.
+4. `dataUnavailable` — 대상은 있을 수 있지만 조회가 실패한 상태. `데이터 없음`, failCount = 0.
+5. ratio (기본) — 분자/분모가 없거나 분모가 0이면 `해당 없음`, 그 밖에는 `n/m건` + `N%`. failCount = `observedFailCount ?? max(0, denominator - numerator)`.
 
 > **isEmpty 규칙:** `numerator == null || denominator == null || denominator === 0` → `해당 없음` 표시.
 > `numerator=null`, `denominator=5` 조합도 isEmpty로 처리 (`null/5건` 방지).
@@ -974,20 +980,20 @@ EventMatrixPanel과 FutureMatrixPanel이 공유하는 3-컬럼 행 포맷:
 ### 13-2. Template-P 구현체 — EventMatrixPanel
 
 **파일:** `src/components/v2/reporting/EventMatrixPanel.jsx`
-**적용:** PAST 기간 (`last_week`, `yesterday`, `last_hour`)
+**적용:** 모든 PAST 기간(`last_week`, `yesterday`, `last_hour`, `last_month`, 일반화된 `days_ago_N`·`weeks_ago_N`) + ACTIVE `this_week`·`this_month`의 [완료] 섹션
 **데이터 소스:** `GET /api/stats?period=` → Postgres `events` 테이블
 
 #### 7개 지표 행
 
 | # | 라벨 | 분자 (계산식) | 분모 | 모드 | 드릴다운 key |
 |---|------|--------------|------|------|------------|
-| 1 | 입실전 숙소 최적화율 | `preStayOptimized` | `preStayAttempts` | ratio | `pre_stay_optimization` |
-| 2 | 퇴실후 청소전 절전 적용률 | `checkOuts - postCheckoutEnergyWaste` | `checkOuts` | ratio | `post_checkout_energy` |
-| 3 | 퇴실후 청소전 보안 적용률 | `checkOuts - postCheckoutSecurityBreach` | `checkOuts` | ratio | `post_checkout_security` |
-| 4 | 청소후 공실중 절전 적용률 | `cleaningFinished - vacantEnergyWaste` | `cleaningFinished` | ratio | `vacant_energy` |
-| 5 | 청소후 공실중 보안 적용률 | `cleaningFinished - postCleaningSecurityBreach` | `cleaningFinished` | ratio | `post_cleaning_security` |
-| 6 | 청소 시작~완료 시간 준수율 | `cleaningOnTime` (= 청소 완료 − 3시간 초과 건. 드릴다운 실패 목록과 동일 기준) | `cleaningFinished` | ratio | `cleaning_time` |
-| 7 | 청소 스케줄 할당 성공률 | `cleaningAssigned` (ASSIGNED+COMPLETED) | `cleaningCreated` (CANCELLED 제외 생성 잡, `cleaning_jobs.checkout_at` 기준·체크아웃이 지난 건만). 조회 실패 시 null → "해당 없음" | ratio | — (드릴다운 미지원) |
+| 1 | 게스트 맞이 준비 | `preStayOptimized` | `preStayAttempts` | ratio | `pre_stay_optimization` |
+| 2 | 퇴실 후 절전 | `checkOuts - postCheckoutEnergyWaste` | `checkOuts` | rateExcluded | `post_checkout_energy` |
+| 3 | 퇴실 후 보안 | `checkOuts - postCheckoutSecurityBreach` | `checkOuts` | rateExcluded | `post_checkout_security` |
+| 4 | 빈방 절전 유지 | `cleaningFinished - vacantEnergyWaste` | `cleaningFinished` | rateExcluded | `vacant_energy` |
+| 5 | 빈방 보안 유지 | `cleaningFinished - postCleaningSecurityBreach` | `cleaningFinished` | rateExcluded | `post_cleaning_security` |
+| 6 | 청소시간 준수 | `cleaningOnTime` (= 청소 완료 − 3시간 초과 건. 드릴다운 실패 목록과 동일 기준) | `cleaningFinished` | ratio | `cleaning_time` |
+| 7 | 청소 담당자 배정 | `cleaningAssigned` (ASSIGNED+COMPLETED) | `cleaningCreated` (CANCELLED 제외 생성 잡, `cleaning_jobs.checkout_at` 기준·체크아웃이 지난 건만). 조회 실패 시 null → "데이터 없음" | ratio | — (드릴다운 미지원) |
 
 > **역산 패턴 (지표 #2~#5):** 위반 건수를 분모에서 빼서 달성 건수로 환산.
 > `max(0, 분모 - 위반건수)` — 음수 방지.
@@ -1058,15 +1064,14 @@ EventMatrixPanel과 FutureMatrixPanel이 공유하는 3-컬럼 행 포맷:
 
 ```
 src/domain/
-  metricRowDomain.js       computeMetricRowDisplay() — 3가지 모드, 색상 임계값
-  cleaningStatsDomain.js   computeCleaningStats()    — CANCELLED 제외, 배정 상태 분류
-  futureReportDomain.js    assessDeviceReadiness()   — HA states → ready/total/issues
-                           getOccupancyIssues()      — OCCUPIED + ISSUE 상태 필터
+  metricRowDomain.js       computeMetricRowDisplay() — EventMatrixPanel 행 상태·색상 임계값
+  monthlyCalendarDomain.js summarizeFutureCleaning() — 예약 퇴실과 cleaning_jobs를 맞춰 미래 배정 상태 분류
+  violationDetailDomain.js 미래 청소 문제·공실률 목록 문장·정렬
 
 src/components/v2/reporting/
-  SharedMetricRow.jsx      3-컬럼 행 공통 컴포넌트 (EventMatrixPanel + FutureMatrixPanel 공유)
+  SharedMetricRow.jsx      EventMatrixPanel의 3-컬럼 운영 지표 행
   EventMatrixPanel.jsx     Template-P 패널 (7개 지표)
-  FutureMatrixPanel.jsx    Template-F 패널 (4개 지표)
+  FutureMatrixPanel.jsx    Template-F 패널 (5개 헤드라인 행 + 세부 팝업)
   DrilldownSheet.jsx       바텀 시트 — fetch 모드 (Template-P) + staticItems 모드 (Template-F)
 ```
 
@@ -1074,23 +1079,23 @@ src/components/v2/reporting/
 - `tests/unit/s38.metric-drilldown.test.js` — 28개 (Template-P 드릴다운 도메인)
 - `tests/unit/s39.future-report.test.js` — Template-F 도메인
 - `tests/unit/s40.shared-components.test.js` — 34개 (computeMetricRowDisplay + computeCleaningStats)
-- `tests/unit/s42.active-matrix.test.js` — 25개 (periodToDateRange this/last_week + splitActiveStats)
+- `tests/unit/s42.active-matrix.test.js` — 38개 (periodToDateRange 기간 경계 + splitActiveStats + 패널 배선)
 
 ---
 
 ### 13-5. Template-A 구현체 — ActiveHybridPanel
 
-**적용:** W x ACTIVE (`this_week`), D x ACTIVE (`today`), M x ACTIVE (`this_month`)
+**적용:** W x ACTIVE (`this_week`), M x ACTIVE (`this_month`). `today`는 `ReportPanel`에서 `TodayStatusPanel`로 분기한다.
 
 **구조:** `[완료]` + `[예정]` 두 섹션을 하나의 패널에 수직 결합.
 
 ```
 ActiveHybridPanel
 ├── [완료] 섹션 헤더 (녹색, #059669)
-│   └── EventMatrixPanel (Template-P — 7개 과거 지표 + 안심지수)
+│   └── EventMatrixPanel (Template-P — 7개 완료 지표 + 안심지수)
 │       props: stats=pastStats, period, isMobile, onSelectRoom
 └── [예정] 섹션 헤더 (파란색, #1e40af)
-    └── FutureMatrixPanel (Template-F — 4개 미래 지표)
+    └── FutureMatrixPanel (Template-F — 5개 헤드라인 행 + 세부 팝업)
         props: stats=futureStats, period, properties, isMobile, onSelectRoom
 ```
 
@@ -1101,7 +1106,7 @@ ActiveHybridPanel
 | 필드 | 분류 | 용도 |
 |------|------|------|
 | `checkOuts`, `preStayAttempts`, `preStayOptimized`, `cleaningFinished`, `cleaningOnTime`, `cleaningAssigned`, `cleaningCreated`, `vacantEnergyWaste`, `postCheckoutEnergyWaste`, `postCheckoutSecurityBreach`, `postCleaningSecurityBreach` | `pastStats` | EventMatrixPanel |
-| `checkIns` | `futureStats.checkIns` | FutureMatrixPanel 체크인 예정 행 (이번 주 남은 체크인 수) |
+| `checkIns` | `futureStats.checkIns` | 패널 렌더 가능 상태를 유지하는 호환 값. 실제 체크인 예정 건수는 `properties[].reservations`와 `periodToRemainingRange`로 다시 계산 |
 
 불변식:
 - `checkIns` 는 `pastStats`에 포함되지 않는다
@@ -1124,7 +1129,7 @@ ActiveHybridPanel
 
 3주 연속성 불변식: `last_week.to === this_week.from === next_week.from - 7days`
 
-`api/cleaning/[...slug].js`의 `periodToDateRange` 인라인 함수도 동일 로직으로 업데이트됨.
+기간 계산은 `src/domain/periodDomain.js` 하나가 정본이다. `api/cleaning/[...slug].js`에는 별도 인라인 `periodToDateRange`가 없다.
 
 **공유 인프라 추가:**
 

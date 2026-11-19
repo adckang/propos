@@ -1,11 +1,11 @@
 /**
  * Template-A — Active Hybrid Panel
- * 적용: ACTIVE 기간 (this_week / today / this_month)
+ * 적용: ACTIVE 기간 (this_week / this_month). today는 TodayStatusPanel이 담당.
  *
  * [완료] 섹션 — EventMatrixPanel (Template-P) 7개 과거 지표
- * [예정] 섹션 — FutureMatrixPanel (Template-F) 4개 미래 지표
+ * [예정] 섹션 — FutureMatrixPanel (Template-F) 5개 헤드라인 행
  *
- * splitActiveStats()로 this_week 통합 stats를 분리해서 각 패널에 전달.
+ * splitActiveStats()로 ACTIVE 통합 stats를 분리해서 각 패널에 전달.
  */
 
 import EventMatrixPanel  from './EventMatrixPanel.jsx';
