@@ -17,32 +17,63 @@ const SECRET = 'fixture-webhook-secret';
 const b64 = value => Buffer.from(typeof value === 'string' ? value : JSON.stringify(value)).toString('base64');
 
 // ── Gmail 새 메일 알림 (공개 경로 gmail-webhook) ─────────────────────────────
+// RF-39: Gmail 알림은 "메일함이 바뀌었다 + 지금 기록 번호"만 준다. 새 메일은 그 번호 "까지"에 들어 있으므로
+// 마지막으로 처리한 번호(KV)부터 읽어야 한다 — 예전엔 알림의 번호부터 읽어 새 메일을 늘 놓쳤다.
 
-function gmailApi({ history = [], subjects = {}, fail = false } = {}) {
-  return async url => {
+const LAST = 'gmail_last_history_id';
+const LOCK = 'gmail_history_lock';
+const RESERVATION_SLACK = '[PROPOS] 📬 에어비앤비 신규 예약 이메일 감지. iCal 재폴링 트리거.';
+
+/** 가짜 Gmail. pages: history.list 응답을 차례로(시작 번호·쪽 표시는 실제 요청 주소로 확인한다) */
+function gmailApi({ pages = [{ history: [], historyId: '0' }], subjects = {}, status = 200, fail = false, watch, current = '0' } = {}) {
+  let page = 0;
+  return async (url, options = {}) => {
     if (fail) throw new Error('fixture gmail outage');
     const u = new URL(url);
-    if (u.pathname === '/gmail/v1/users/me/history') return { ok: true, json: async () => ({ history }) };
+    if (u.pathname === '/gmail/v1/users/me/watch' && (options.method ?? 'GET') === 'POST') return { ok: true, status: 200, json: async () => watch };
+    if (u.pathname === '/gmail/v1/users/me/profile') return { ok: true, status: 200, json: async () => ({ historyId: current }) };
+    if (u.pathname === '/gmail/v1/users/me/history') {
+      if (status !== 200) return { ok: false, status, json: async () => ({ error: { code: status } }) };
+      return { ok: true, status: 200, json: async () => pages[Math.min(page++, pages.length - 1)] };
+    }
     const id = u.pathname.split('/').pop();
-    return { ok: true, json: async () => ({ payload: { headers: [{ name: 'Subject', value: subjects[id] ?? '' }] } }) };
+    return { ok: true, status: 200, json: async () => ({ payload: { headers: [{ name: 'Subject', value: subjects[id] ?? '' }] } }) };
   };
 }
 
-async function gmailWebhook(t, { api = gmailApi(), expectErrors = false } = {}) {
-  const f = await cleaningDeclineFixture({ icalSync: async () => ({}), calendar: { fetch: api, methods: ['GET'] } });
+/** KV 한 곳(값·NX·만료 옵션 기록) */
+function memoryKv(initial = {}) {
+  const store = new Map(Object.entries(initial));
+  const writes = [];
+  return {
+    store, writes,
+    get: async key => (store.has(key) ? store.get(key) : null),
+    set: async (key, value, options = {}) => {
+      writes.push([key, String(value), options]);
+      if (options.nx && store.has(key)) return null;
+      store.set(key, String(value)); return 'OK';
+    },
+    del: async key => { const had = store.delete(key); return had ? 1 : 0; },
+  };
+}
+
+async function gmailWebhook(t, { api = gmailApi(), kv = memoryKv(), expectErrors = false, methods = ['GET'] } = {}) {
+  const f = await cleaningDeclineFixture({ icalSync: async () => ({}), calendar: { fetch: api, methods, kv } });
   t.after(() => {
     try {
       assert.equal(f.pendingResponses, 0, 'all scripted DB results consumed');
       assert.deepEqual(f.unexpectedQueries, [], 'no hidden unexpected SQL');
       assert.deepEqual(f.blocked, [], 'no unmocked external I/O');
       if (!expectErrors) assert.deepEqual(f.errors, [], 'no hidden handler errors');
+      assert.ok(!kv.store.has(LOCK), 'the processing lock is always released');
       assert.deepEqual(globalThis.__productionFetchTrap?.calls ?? [], [], 'no production requests');
     } finally { f.restore(); }
   });
   const send = ({ method = 'POST', url = `/api/cleaning/gmail-webhook?secret=${SECRET}`, data, rawBody } = {}) =>
     f.invoke({ method, url, headers: {}, rawBody: rawBody ?? JSON.stringify({ message: data === undefined ? {} : { data } }) });
-  return { ...f, send };
+  return { ...f, send, kv };
 }
+const historyUrls = f => f.calendarRequests.map(r => r.url).filter(u => u.includes('/users/me/history'));
 
 function assertNothingHappened(f) {
   assert.deepEqual(f.tokenCalls, []);
@@ -78,30 +109,68 @@ describe('actual gmail-webhook — Pub/Sub new-mail notice', () => {
     ['missing message.data', undefined],
     ['message.data that is not base64 JSON', b64('!!! not json')],
     ['a payload without historyId', b64({ emailAddress: 'fixture@example.invalid' })],
+    ['a historyId that is not a number', b64({ historyId: '12abc' })],
   ]) test(`${label} is acknowledged with 200 without reading Gmail`, async t => {
     const f = await gmailWebhook(t);
     const res = await f.send({ data });
     assert.equal(res.code, 200);
     assertNothingHappened(f);
+    assert.deepEqual(f.kv.writes, []);
   });
 
-  test('a reservation email triggers one Slack notice and one iCal re-sync, stopping at the first match', async t => {
-    const f = await gmailWebhook(t, { api: gmailApi({
-      history: [{ messagesAdded: [{ message: { id: 'm1' } }, { message: { id: 'm2' } }, { message: { id: 'm3' } }] }],
+  test('RF-39: a reservation email is found by reading from the last handled number, not from the notice number', async t => {
+    const kv = memoryKv({ [LAST]: '100' });
+    const f = await gmailWebhook(t, { kv, api: gmailApi({
+      pages: [{ historyId: '106', history: [{ messagesAdded: [{ message: { id: 'm1' } }, { message: { id: 'm2' } }, { message: { id: 'm3' } }] }] }],
       subjects: { m1: 'Weekly digest', m2: 'Reservation confirmed - Fixture Stay', m3: 'Reservation confirmed - Other' },
     }) });
-    const res = await f.send({ data: b64({ historyId: '2694059', emailAddress: 'fixture@example.invalid' }) });
+    const res = await f.send({ data: b64({ historyId: '105', emailAddress: 'fixture@example.invalid' }) });
     assert.equal(res.code, 200);
     assert.deepEqual(f.calendarRequests.map(r => r.url), [
-      'https://gmail.googleapis.com/gmail/v1/users/me/history?startHistoryId=2694059&historyTypes=messageAdded',
+      'https://gmail.googleapis.com/gmail/v1/users/me/history?startHistoryId=100&historyTypes=messageAdded',
       'https://gmail.googleapis.com/gmail/v1/users/me/messages/m1?format=metadata&metadataHeaders=Subject',
       'https://gmail.googleapis.com/gmail/v1/users/me/messages/m2?format=metadata&metadataHeaders=Subject',
     ]);
     assert.ok(f.calendarRequests.every(r => r.options.headers.Authorization === 'Bearer fixture-gmail-token'));
-    assert.deepEqual(f.slackCalls, [['[PROPOS] 📬 에어비앤비 신규 예약 이메일 감지. iCal 재폴링 트리거.']]);
+    assert.deepEqual(f.slackCalls, [[RESERVATION_SLACK]]);
     assert.equal(f.icalSyncCalls.length, 1);
     assert.equal(f.icalSyncCalls[0][0], f.db);
     assert.ok('kv' in f.icalSyncCalls[0][1]);
+    assert.equal(kv.store.get(LAST), '106', 'moves to the newest number Gmail reported');
+  });
+
+  test('every page of the mailbox history is read, from the same start number', async t => {
+    const kv = memoryKv({ [LAST]: '100' });
+    const f = await gmailWebhook(t, { kv, api: gmailApi({
+      pages: [{ historyId: '110', nextPageToken: 'p2', history: [{ messagesAdded: [{ message: { id: 'm1' } }] }] },
+        { historyId: '110', history: [{ messagesAdded: [{ message: { id: 'm2' } }] }] }],
+      subjects: { m1: 'Newsletter', m2: '[Airbnb] 예약 확정 안내' },
+    }) });
+    await f.send({ data: b64({ historyId: '110' }) });
+    assert.deepEqual(historyUrls(f), [
+      'https://gmail.googleapis.com/gmail/v1/users/me/history?startHistoryId=100&historyTypes=messageAdded',
+      'https://gmail.googleapis.com/gmail/v1/users/me/history?startHistoryId=100&historyTypes=messageAdded&pageToken=p2',
+    ]);
+    assert.equal(f.icalSyncCalls.length, 1);
+    assert.equal(kv.store.get(LAST), '110');
+  });
+
+  test('no reservation email: nothing is sent, but the number still moves forward', async t => {
+    const kv = memoryKv({ [LAST]: '100' });
+    const f = await gmailWebhook(t, { kv, api: gmailApi({ pages: [{ historyId: '104', history: [{ messagesAdded: [{ message: { id: 'm1' } }] }] }], subjects: { m1: 'Reservation request from a guest' } }) });
+    await f.send({ data: b64({ historyId: '103' }) });
+    assert.deepEqual(f.slackCalls, []); assert.deepEqual(f.icalSyncCalls, []);
+    assert.equal(kv.store.get(LAST), '104', 'Gmail\'s newest number');
+  });
+
+  test('a forged huge notice number cannot push the start point past Gmail\'s real number (real notices keep working)', async t => {
+    const kv = memoryKv({ [LAST]: '100' });
+    const f = await gmailWebhook(t, { kv, api: gmailApi({ pages: [{ historyId: '130', history: [] }, { historyId: '131', history: [{ messagesAdded: [{ message: { id: 'm9' } }] }] }], subjects: { m9: 'Reservation confirmed - Real' } }) });
+    await f.send({ data: b64({ historyId: '99999999999999999999' }) });
+    assert.equal(kv.store.get(LAST), '130', 'only the number Gmail itself reported is kept');
+    await f.send({ data: b64({ historyId: '131' }) });
+    assert.equal(f.icalSyncCalls.length, 1, 'the next real notice is still processed');
+    assert.equal(kv.store.get(LAST), '131');
   });
 
   for (const [subject, triggers] of [
@@ -109,20 +178,80 @@ describe('actual gmail-webhook — Pub/Sub new-mail notice', () => {
     ['BOOKING CONFIRMED: Fixture Stay', true],
     ['Reservation request from a guest', false],
   ]) test(`subject "${subject}" ${triggers ? 'triggers' : 'does not trigger'} the re-sync`, async t => {
-    const f = await gmailWebhook(t, { api: gmailApi({ history: [{ messagesAdded: [{ message: { id: 'm1' } }] }], subjects: { m1: subject } }) });
+    const f = await gmailWebhook(t, { kv: memoryKv({ [LAST]: '6' }), api: gmailApi({ pages: [{ historyId: '7', history: [{ messagesAdded: [{ message: { id: 'm1' } }] }] }], subjects: { m1: subject } }) });
     const res = await f.send({ data: b64({ historyId: '7' }) });
     assert.equal(res.code, 200);
     assert.equal(f.icalSyncCalls.length, triggers ? 1 : 0);
     assert.equal(f.slackCalls.length, triggers ? 1 : 0);
   });
 
-  test('a Gmail API failure is logged and still acknowledged with 200', async t => {
-    const f = await gmailWebhook(t, { api: gmailApi({ fail: true }), expectErrors: true });
-    const res = await f.send({ data: b64({ historyId: '7' }) });
+  test('the first notice (no number remembered yet) starts from Gmail\'s own current number and runs one catch-up sync without Slack', async t => {
+    const kv = memoryKv();
+    const f = await gmailWebhook(t, { kv, api: gmailApi({ current: '480' }) });
+    const res = await f.send({ data: b64({ historyId: '500' }) });
     assert.equal(res.code, 200);
+    assert.deepEqual(historyUrls(f), [], 'nothing to compare against yet');
+    assert.equal(kv.store.get(LAST), '480', 'the start point comes from Gmail, never from the notice');
+    assert.equal(f.icalSyncCalls.length, 1, 'cannot tell what was missed, so re-sync once');
     assert.deepEqual(f.slackCalls, []);
-    assert.deepEqual(f.icalSyncCalls, []);
+  });
+
+  test('if Gmail will not give its current number, nothing is stored or synced (no sync loop on every mailbox change)', async t => {
+    const kv = memoryKv();
+    const f = await gmailWebhook(t, { kv, api: gmailApi({ current: null }), expectErrors: true });
+    const res = await f.send({ data: b64({ historyId: '500' }) });
+    assert.equal(res.code, 200);
+    assert.equal(kv.store.get(LAST), undefined);
+    assert.deepEqual(f.icalSyncCalls, []); assert.deepEqual(f.slackCalls, []);
     assert.ok(f.errors.some(args => args[0] === '[gmail-webhook]'));
+  });
+
+  for (const notice of ['150', '200']) test(`a notice not newer than the remembered number (${notice} ≤ 200) is acknowledged without reading Gmail`, async t => {
+    const kv = memoryKv({ [LAST]: '200' });
+    const f = await gmailWebhook(t, { kv });
+    const res = await f.send({ data: b64({ historyId: notice }) });
+    assert.equal(res.code, 200);
+    assert.deepEqual(historyUrls(f), []); assert.deepEqual(f.icalSyncCalls, []);
+    assert.equal(kv.store.get(LAST), '200');
+  });
+
+  test('if Gmail no longer has the remembered number (404), it re-syncs once and starts again from the notice', async t => {
+    const kv = memoryKv({ [LAST]: '100' });
+    const f = await gmailWebhook(t, { kv, api: gmailApi({ status: 404, current: '880' }) });
+    const res = await f.send({ data: b64({ historyId: '900' }) });
+    assert.equal(res.code, 200);
+    assert.equal(historyUrls(f).length, 1);
+    assert.equal(f.icalSyncCalls.length, 1); assert.deepEqual(f.slackCalls, []);
+    assert.equal(kv.store.get(LAST), '880', 'restarts from Gmail\'s current number');
+  });
+
+  for (const [label, api] of [['a Gmail outage', gmailApi({ fail: true })], ['a Gmail 500', gmailApi({ status: 500 })]]) {
+    test(`${label} keeps the remembered number so the next notice reads the same range again`, async t => {
+      const kv = memoryKv({ [LAST]: '100' });
+      const f = await gmailWebhook(t, { kv, api, expectErrors: true });
+      const res = await f.send({ data: b64({ historyId: '120' }) });
+      assert.equal(res.code, 200);
+      assert.deepEqual(f.slackCalls, []); assert.deepEqual(f.icalSyncCalls, []);
+      assert.equal(kv.store.get(LAST), '100');
+      assert.ok(f.errors.some(args => args[0] === '[gmail-webhook]'));
+    });
+  }
+
+  test('while another notice is being handled, the new one asks Pub/Sub to deliver it again later (503)', async t => {
+    const kv = memoryKv({ [LAST]: '100', [LOCK]: '1' });
+    const f = await gmailWebhook(t, { kv });
+    const res = await f.send({ data: b64({ historyId: '120' }) });
+    assert.equal(res.code, 503);
+    assert.deepEqual(historyUrls(f), []);
+    assert.equal(kv.store.get(LAST), '100');
+    kv.store.delete(LOCK); // 다른 요청이 잡고 있던 잠금 — 이 시험이 푼 게 아님을 분명히
+  });
+
+  test('the lock expires on its own (1 minute) so a crashed handler cannot block notices forever', async t => {
+    const kv = memoryKv({ [LAST]: '100' });
+    const f = await gmailWebhook(t, { kv, api: gmailApi({ pages: [{ historyId: '101', history: [] }] }) });
+    await f.send({ data: b64({ historyId: '101' }) });
+    assert.deepEqual(kv.writes.find(([key]) => key === LOCK)?.[2], { nx: true, ex: 60 });
   });
 
   test('the /api/gmail/webhook vercel.json rewrite reaches the same handler', async t => {
@@ -132,6 +261,30 @@ describe('actual gmail-webhook — Pub/Sub new-mail notice', () => {
     const f = await gmailWebhook(t);
     const res = await f.send({ url: `${rule.destination}&secret=${SECRET}`, rawBody: 'not json' });
     assert.equal(res.code, 400);
+  });
+});
+
+describe('actual gmail-watch registration — remembers where to start reading', () => {
+  async function register(t, kv) {
+    const before = process.env.GOOGLE_PUBSUB_TOPIC;
+    process.env.GOOGLE_PUBSUB_TOPIC = 'projects/fixture/topics/gmail';
+    t.after(() => { if (before === undefined) delete process.env.GOOGLE_PUBSUB_TOPIC; else process.env.GOOGLE_PUBSUB_TOPIC = before; });
+    const f = await gmailWebhook(t, { kv, methods: ['GET', 'POST'], api: gmailApi({ watch: { historyId: '777', expiration: String(Date.now() + 7 * 86_400_000) } }) });
+    const { createSessionToken } = await import('../../server/auth/operatorAuth.js');
+    const cookie = 'propos_session=' + createSessionToken(process.env, Date.now(), { role: 'admin' });
+    return f.invoke({ method: 'POST', url: '/api/cleaning/gmail-watch', headers: { cookie } });
+  }
+  test('with no number remembered, the watch reply becomes the starting point', async t => {
+    const kv = memoryKv();
+    const res = await register(t, kv);
+    assert.equal(res.code, 200);
+    assert.equal(kv.store.get(LAST), '777');
+  });
+  test('an already remembered number is kept, so mail between the two is not skipped', async t => {
+    const kv = memoryKv({ [LAST]: '500' });
+    const res = await register(t, kv);
+    assert.equal(res.code, 200);
+    assert.equal(kv.store.get(LAST), '500');
   });
 });
 
@@ -248,7 +401,8 @@ describe('actual morning cron — Gmail Watch renewal by elapsed time', () => {
     assert.deepEqual(JSON.parse(requests[0].options.body),
       { topicName: 'projects/fixture/topics/gmail', labelIds: ['INBOX'], labelFilterBehavior: 'INCLUDE' });
     const expiration = String(Date.parse(TUESDAY_0800_KST) + WEEK);
-    assert.deepEqual(named('kv.set').map(a => [a[0], a[1], a[2]]), [['gmail_watch_expiration', expiration, { ex: 7 * 24 * 3600 + 3600 }]]);
+    assert.deepEqual(named('kv.set').map(a => [a[0], a[1], a[2]]), [['gmail_watch_expiration', expiration, { ex: 7 * 24 * 3600 + 3600 }],
+      ['gmail_last_history_id', '1', { nx: true }]], 'RF-39: the renewal number becomes the start point only if none is remembered');
     assert.deepEqual(named('markRenewed').map(a => a[1]), ['gmail_watch']);
     assert.ok(named('postSlack').some(a => a[0] === '[PROPOS] 📬 Gmail Watch 자동 갱신 완료 (만료: 2026-11-23)'));
     assert.equal(res.body.ran.at(-1), 'gmail-watch-renewed');
@@ -287,7 +441,7 @@ describe('actual morning cron — Gmail Watch renewal by elapsed time', () => {
 
   test('a renewal reply without expiration still marks renewal and reports an unknown expiry', async t => {
     const { res, named } = await morning(t, { reply: () => ({ ok: true, json: async () => ({ historyId: '1' }) }) });
-    assert.deepEqual(named('kv.set'), []);
+    assert.deepEqual(named('kv.set').map(a => a[0]), ['gmail_last_history_id']);
     assert.deepEqual(named('markRenewed').map(a => a[1]), ['gmail_watch']);
     assert.ok(named('postSlack').some(a => a[0] === '[PROPOS] 📬 Gmail Watch 자동 갱신 완료 (만료: 알 수 없음)'));
     assert.equal(res.body.ran.at(-1), 'gmail-watch-renewed');

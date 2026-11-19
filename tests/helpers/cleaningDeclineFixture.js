@@ -52,7 +52,7 @@ export async function cleaningDeclineFixture({ responses = [], advance, slack, n
     const allowedGmailPath = target.hostname === 'gmail.googleapis.com'
       && target.pathname === '/gmail/v1/users/me/watch' && method === 'POST';
     const allowedGmailRead = target.hostname === 'gmail.googleapis.com' && method === 'GET'
-      && (target.pathname === '/gmail/v1/users/me/history' || /^\/gmail\/v1\/users\/me\/messages\/[^/]+$/.test(target.pathname));
+      && (target.pathname === '/gmail/v1/users/me/history' || target.pathname === '/gmail/v1/users/me/profile' || /^\/gmail\/v1\/users\/me\/messages\/[^/]+$/.test(target.pathname));
     if (!calendar?.fetch || target.protocol !== 'https:' || (!allowedCalendarPath && !allowedGmailPath && !allowedGmailRead)
       || !(calendar.methods ?? ['GET']).includes(method)) return fail('HTTP');
     calendarRequests.push({ url: String(url), options });

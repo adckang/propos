@@ -44,7 +44,8 @@ describe('정기 작업이 예약을 먼저 가져온다', () => {
     assert.ok(!/async function syncAllPropertiesIcal/.test(api), '화면 API 에 사본이 남아 있으면 안 된다');
     assert.match(api, /import \{ syncAllPropertiesIcal \} from "\.\.\/\.\.\/server\/cleaning\/_icalSync\.js";/);
     assert.match(cron, /import \{ syncAllPropertiesIcal \} from "\.\.\/\.\.\/server\/cleaning\/_icalSync\.js";/);
-    assert.match(api, /await syncAllPropertiesIcal\(db, \{ kv \}\)\.catch\(/, '예약 확정 메일');
+    // 예약 확정 메일(RF-39 이후 처리 규칙은 _gmailHistory.js): 같은 공용 모듈을 부르는지 — 실제 동작은 s36이 실제 핸들러로 확인
+    assert.match(api, /syncAllPropertiesIcal\(db, \{ kv \}\)\.catch\(/, '예약 확정 메일');
     assert.match(api, /await syncAllPropertiesIcal\(countingDb, \{ kv, filterPropertyId: property_id \?\? null \}\);/, '수동·화면 15분');
   });
 });

@@ -29,6 +29,7 @@ import { notify } from "../../server/cleaning/_notify.js";
 import { syncAllPropertiesIcal } from "../../server/cleaning/_icalSync.js";
 import { assignFromCalendarEvents } from "../../server/cleaning/_calendarAssign.js";
 import { isCheckoutCancelled, postAssignmentSlack } from "../../server/cleaning/_reservationSync.js";
+import { handleGmailNotification, isHistoryId, rememberGmailStart } from "../../server/cleaning/_gmailHistory.js";
 import { markRenewed } from "../../server/cleaning/_tokenHealth.js";
 import { periodToRemainingRange } from "../../src/domain/periodDomain.js";
 import { validatePropertyName } from "../../src/domain/propertyIdentityDomain.js";
@@ -624,7 +625,10 @@ async function getCleaningStats(req, res, scope) {
 async function handleCalendarWebhook(req, res) {
   if (req.method !== "POST") return res.status(405).end();
   const webhookSecret = process.env.GOOGLE_WEBHOOK_SECRET;
-  if (webhookSecret && req.headers["x-goog-channel-token"] !== webhookSecret) return res.status(200).end();
+  if (webhookSecret && req.headers["x-goog-channel-token"] !== webhookSecret) {
+    console.warn("[calendar-webhook] 비밀값이 맞지 않는 알림 — 무시"); // RF-38: 비밀값 전환 뒤 확인용
+    return res.status(200).end();
+  }
   if (req.headers["x-goog-resource-state"] === "sync") return res.status(200).end();
   const resourceUri = req.headers["x-goog-resource-uri"] ?? "";
   const uriMatch = resourceUri.match(/\/calendars\/([^/?]+)\//);
@@ -654,7 +658,10 @@ async function handleGmailWebhook(req, res) {
   const webhookSecret = process.env.GOOGLE_WEBHOOK_SECRET;
   if (webhookSecret) {
     const qs = new URL(req.url, "http://localhost").searchParams;
-    if (qs.get("secret") !== webhookSecret) return res.status(200).end();
+    if (qs.get("secret") !== webhookSecret) {
+      console.warn("[gmail-webhook] 비밀값이 맞지 않는 알림 — 무시"); // RF-38: 비밀값 전환 뒤 확인용
+      return res.status(200).end();
+    }
   }
   const chunks = [];
   for await (const c of req) chunks.push(c);
@@ -667,31 +674,34 @@ async function handleGmailWebhook(req, res) {
   try { payload = JSON.parse(Buffer.from(b64, "base64").toString("utf8")); }
   catch { return res.status(200).end(); }
   const { historyId } = payload;
-  if (!historyId) return res.status(200).end();
+  if (!isHistoryId(historyId)) return res.status(200).end(); // 번호가 아니면 Gmail을 읽지 않는다
+  // RF-39: 마지막으로 처리한 기록 번호부터 읽는다(알림의 번호부터 읽으면 새 메일을 늘 놓친다) — 규칙은 _gmailHistory.js
+  let outcome = null;
   try {
     const token = await getGmailToken(kv);
-    const histRes = await fetch(
-      `${GMAIL_API}/users/me/history?startHistoryId=${historyId}&historyTypes=messageAdded`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    for (const h of (await histRes.json()).history ?? []) {
-      for (const added of (h.messagesAdded ?? [])) {
-        const msgRes = await fetch(
-          `${GMAIL_API}/users/me/messages/${added.message.id}?format=metadata&metadataHeaders=Subject`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        const msg = await msgRes.json();
-        const subject = (msg.payload?.headers ?? []).find((hdr) => hdr.name === "Subject")?.value ?? "";
-        if (RESERVATION_SUBJECTS.some((s) => subject.toLowerCase().includes(s))) {
-          await postSlack("[PROPOS] 📬 에어비앤비 신규 예약 이메일 감지. iCal 재폴링 트리거.");
-          await syncAllPropertiesIcal(db, { kv }).catch((e) =>
-            console.error("[gmail-webhook] iCal 재폴링 실패:", e.message)
-          );
-          return res.status(200).end();
-        }
-      }
-    }
+    const auth = { headers: { Authorization: `Bearer ${token}` } };
+    const resync = () => syncAllPropertiesIcal(db, { kv }).catch((e) => console.error("[gmail-webhook] iCal 재폴링 실패:", e.message));
+    outcome = await handleGmailNotification(historyId, {
+      kv,
+      listHistory: async (startId, pageToken) => {
+        const r = await fetch(`${GMAIL_API}/users/me/history?startHistoryId=${startId}&historyTypes=messageAdded${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`, auth);
+        return { status: r.status, body: r.ok ? await r.json() : null };
+      },
+      getSubject: async (id) => {
+        const msg = await (await fetch(`${GMAIL_API}/users/me/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=Subject`, auth)).json();
+        return (msg.payload?.headers ?? []).find((hdr) => hdr.name === "Subject")?.value ?? "";
+      },
+      getCurrentHistoryId: async () => (await (await fetch(`${GMAIL_API}/users/me/profile`, auth)).json())?.historyId ?? null,
+      isReservation: (subject) => RESERVATION_SUBJECTS.some((s) => subject.toLowerCase().includes(s)),
+      onReservation: async () => {
+        await postSlack("[PROPOS] 📬 에어비앤비 신규 예약 이메일 감지. iCal 재폴링 트리거.");
+        await resync();
+      },
+      onCatchUp: resync, // 놓쳤을 수 있을 때(처음·번호 만료) — 예약 동기화는 같은 예약을 두 번 만들지 않는다
+    });
   } catch (e) { console.error("[gmail-webhook]", e.message); }
+  // 다른 알림이 같은 범위를 처리 중이면 Pub/Sub에 나중에 다시 보내 달라고 한다(그 사이 온 메일을 놓치지 않게)
+  if (outcome?.result === "busy") return res.status(503).end();
   return res.status(200).end();
 }
 
@@ -1220,6 +1230,8 @@ async function registerGmailWatch(req, res) {
     const ttlSec = Math.floor((Number(result.expiration) - Date.now()) / 1000) + 3600;
     await kv.set("gmail_watch_expiration", result.expiration, { ex: ttlSec }).catch(() => {});
   }
+  // RF-39: 아직 시작점이 없으면 구독 응답의 번호부터 읽는다(이미 있으면 그대로 — 그 사이 메일을 건너뛰지 않게)
+  await rememberGmailStart(kv, result.historyId).catch(() => {});
   // 수동 재등록도 "성공 갱신"으로 기록 — registerCalendarWatch와 같은 이유.
   await markRenewed(kv, "gmail_watch");
   return sendJson(res, 200, { ok: true, historyId: result.historyId, expiration: result.expiration });

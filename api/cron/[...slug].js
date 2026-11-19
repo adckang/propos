@@ -3,6 +3,7 @@
 // GET /api/cron/monthly-cleaning  — 매월 15일 청소 배치. 별도 크론 없음 — 아침 정기 작업(morning, KST 08:00) 안에서 15일에만 돈다
 // GET /api/cron/cleaning-followup — 리마인드·에스컬레이션. 별도 크론 없음 — 아침·저녁 정기 작업 안에서(+ 청소 일정 목록을 열어 두면 1분마다)
 
+import { rememberGmailStart } from "../../server/cleaning/_gmailHistory.js";
 import { Pool } from "pg";
 import { kv } from "@vercel/kv";
 import {
@@ -536,6 +537,8 @@ export default async function handler(req, res) {
               const ttlSec = Math.floor((Number(w.expiration) - Date.now()) / 1000) + 3600;
               await kv.set("gmail_watch_expiration", w.expiration, { ex: ttlSec }).catch(() => {});
             }
+            // RF-39: 아직 시작점이 없으면 이 번호부터 새 메일을 읽는다(이미 있으면 그대로 — 그 사이 메일을 건너뛰지 않게)
+            await rememberGmailStart(kv, w.historyId).catch(() => {});
             // 갱신 자체(API 응답 ok)는 성공했으므로, 이후 메시지 포맷팅이 실패해도 markRenewed는 지킨다.
             await markRenewed(kv, "gmail_watch");
             const expLabel = w.expiration ? new Date(Number(w.expiration)).toISOString().slice(0, 10) : "알 수 없음";
