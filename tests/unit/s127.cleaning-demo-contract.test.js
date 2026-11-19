@@ -10,6 +10,7 @@
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import makeConfig from '../../vite.config.mjs';
 import { cleaningDeclineFixture } from '../helpers/cleaningDeclineFixture.js';
 import { createSessionToken } from '../../server/auth/operatorAuth.js';
@@ -66,5 +67,41 @@ describe('cleaning stats: DEMO checks the period exactly like production', () =>
     const local = await viteDemo('/api/cleaning/stats?period=next_week');
     assert.deepEqual([prod.code, demo.code, local.code], [200, 200, 200]);
     assert.deepEqual(local.body, demo.body, 'the local DEMO server gives the same answer as the DEMO API');
+  });
+});
+
+describe('로컬 Vite 데모 중계는 청소·숙소 API의 데모 응답을 직접 만들지 않고 실제 핸들러를 부른다', () => {
+  // 예전엔 Vite 설정이 같은 데모 응답을 따로 다시 만들어, 한쪽만 바뀌면 어긋났다(RF-37: 기간 없는 요청이 데모만 200).
+  for (const url of ['/api/cleaning/properties', '/api/cleaning/stats?period=this_month&items=true&property_ids=P001,P003',
+    '/api/cleaning/jobs', '/api/cleaning/cleaners']) {
+    test(`${url}: 로컬 데모 서버와 데모 API 핸들러의 답이 같다`, async t => {
+      t.mock.timers.enable({ apis: ['Date'], now: Date.now() }); // 데모 데이터는 "지금" 기준 시각을 쓴다 — 같은 순간에 비교
+      const demo = await api(t, 'demo', url);
+      const local = await viteDemo(url);
+      assert.equal(local.code, demo.code);
+      assert.deepEqual(local.body, demo.body);
+    });
+  }
+
+  test('/api/properties: 로컬 데모 서버가 실제 숙소 메타데이터 핸들러의 데모 분기와 같은 목록을 준다', async () => {
+    const before = process.env.PROPOS_DATA_PROFILE;
+    process.env.PROPOS_DATA_PROFILE = 'demo';
+    try {
+      const { default: handler } = await import('../../api/properties.js');
+      const res = { statusCode: 200, headers: {}, setHeader(k, v) { this.headers[k] = v; }, end(body) { this.body = JSON.parse(body); } };
+      await handler({ method: 'GET', url: '/api/properties', query: {}, headers: {} }, res);
+      const local = await viteDemo('/api/properties');
+      assert.equal(res.statusCode, 200);
+      assert.deepEqual(local, { code: 200, body: res.body });
+    } finally {
+      if (before === undefined) delete process.env.PROPOS_DATA_PROFILE; else process.env.PROPOS_DATA_PROFILE = before;
+    }
+  });
+
+  test('Vite 설정에는 데모 응답을 만드는 코드가 없다 — 실제 핸들러 두 개를 부를 뿐', () => {
+    const vite = readFileSync(new URL('../../vite.config.mjs', import.meta.url), 'utf8');
+    assert.doesNotMatch(vite, /getDemoCleaningStats|getDemoPropertyConfigs|demoReportingService/);
+    assert.match(vite, /runDemoApiHandler\(req, res, "\.\/api\/cleaning\/\[\.\.\.slug\]\.js"\)/);
+    assert.match(vite, /runDemoApiHandler\(req, res, "\.\/api\/properties\.js"\)/);
   });
 });

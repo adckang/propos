@@ -1,10 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import eruda from "vite-plugin-eruda";
-import {
-  getDemoCleaningStats,
-  getDemoPropertyConfigs,
-} from "./src/application/demoReportingService.js";
 import { DATA_PROFILE, resolveBuildDataProfile } from "./src/config/dataProfile.js";
 
 function sendJson(res, status, body) {
@@ -29,16 +25,21 @@ function vercelResponse(res) {
   return res;
 }
 
-// Only explicit DEMO reports execute locally. Service data and all physical
-// device operations always pass through the production API below.
+// Only explicit DEMO answers execute locally, and they come from the API handlers' own DEMO branches —
+// a second copy here drifted from production once (RF-37). Service data and all physical device
+// operations always pass through the production API below.
+async function runDemoApiHandler(req, res, modulePath) {
+  try {
+    req.query = queryFromUrl(req.url || '');
+    const { default: handler } = await import(modulePath);
+    await handler(req, vercelResponse(res));
+  } catch (error) { sendJson(res, 500, { error: error.message }); }
+}
+
 async function handleDemoReportApi(req, res) {
   const raw = req.url || '';
   if (!(raw === '/api/stats' || raw.startsWith('/api/stats?') || raw.startsWith('/api/stats/'))) return false;
-  try {
-    req.query = queryFromUrl(raw);
-    const { default: handler } = await import('./api/stats.js');
-    await handler(req, vercelResponse(res));
-  } catch (error) { sendJson(res, 500, { error: error.message }); }
+  await runDemoApiHandler(req, res, './api/stats.js');
   return true;
 }
 
@@ -58,35 +59,13 @@ function apiProxyPlugin(dataProfile) {
         return;
       }
       if (await handleDemoReportApi(req, res)) return;
-      if (dataProfile === DATA_PROFILE.DEMO && req.url?.startsWith("/api/cleaning/stats") && req.method === "GET") {
-        const csUrl      = new URL(req.url, "http://localhost");
-        const withItems  = csUrl.searchParams.get("items") === "true";
-        const rawIds     = csUrl.searchParams.get("property_ids") ?? "";
-        const selectedIds = rawIds ? rawIds.split(",").map(s => s.trim()).filter(Boolean) : null;
-        const period = csUrl.searchParams.get("period") ?? undefined; // 운영과 같이 기간이 없으면 400(QA-06)
-        try {
-          sendJson(res, 200, getDemoCleaningStats(period, { propertyIds: selectedIds, withItems }));
-        } catch (error) {
-          sendJson(res, 400, { error: error.message, dataProfile: "demo" });
-        }
-        return;
-      }
-      if (dataProfile === DATA_PROFILE.DEMO && req.url?.startsWith("/api/cleaning/properties") && req.method === "GET") {
-        sendJson(res, 200, getDemoPropertyConfigs());
-        return;
-      }
+      // 청소 API(통계·숙소·그 밖은 403)와 숙소 메타데이터 API의 데모 응답은 실제 핸들러의 데모 분기가 만든다
       if (dataProfile === DATA_PROFILE.DEMO && req.url?.startsWith("/api/cleaning/")) {
-        sendJson(res, 403, { error: "demo profile is read-only", dataProfile: "demo" });
+        await runDemoApiHandler(req, res, "./api/cleaning/[...slug].js");
         return;
       }
       if (dataProfile === DATA_PROFILE.DEMO && req.url?.startsWith("/api/properties") && req.method === "GET") {
-        sendJson(res, 200, getDemoPropertyConfigs().map(property => ({
-          id: property.property_id,
-          name: property.name,
-          checkOutHour: property.checkout_hour,
-          cleaningDurationHours: property.cleaning_duration_hours,
-          dataOrigin: "DEMO",
-        })));
+        await runDemoApiHandler(req, res, "./api/properties.js");
         return;
       }
       if (dataProfile === DATA_PROFILE.DEMO && req.url?.startsWith("/api/config") && req.method === "GET") {

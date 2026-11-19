@@ -351,9 +351,9 @@ describe('RF-26 · DEMO·개발 스텁도 같은 계산 계약', () => {
     assert.equal(computeSafetyIndex(stats).excluded, 4);
   });
 
-  test('개발 스텁은 DEMO 서비스를 그대로 쓴다(자체 계산 없음)', () => {
+  test('개발 스텁은 자체 계산 없이 실제 레포트 API(DEMO 분기 → DEMO 서비스)를 부른다', () => {
     const src = read('vite.config.mjs');
-    assert.match(src, /demoReportingService\.js/);
+    assert.match(src, /runDemoApiHandler\(req, res, '\.\/api\/stats\.js'\)/);
     assert.ok(!/summarizeOperationalMetrics|computeSafetyIndex/.test(src));
   });
 });
