@@ -3,7 +3,7 @@
  * 적용: ACTIVE 기간 (this_week / this_month). today는 TodayStatusPanel이 담당.
  *
  * [완료] 섹션 — EventMatrixPanel (Template-P) 7개 과거 지표
- * [예정] 섹션 — FutureMatrixPanel (Template-F) 5개 헤드라인 행
+ * [예정] 섹션 — FutureMatrixPanel (Template-F) 5개 기본 헤드라인 + 조건부 퇴실 없는 청소
  *
  * splitActiveStats()로 ACTIVE 통합 stats를 분리해서 각 패널에 전달.
  */
