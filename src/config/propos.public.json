@@ -2,6 +2,7 @@
   "entities": {
     "tvLight": "light.rgbcct_8002",
     "tvPlug": "switch.tv_smart_plug_socket_1",
+    "smallStand": "switch.3ch_wifi_usb_switch_module_cbu_switch_1",
     "tempSensor": "sensor.temperature_humidity_sensor_temperature",
     "humiditySensor": "sensor.temperature_humidity_sensor_humidity",
     "noiseSensor": null,

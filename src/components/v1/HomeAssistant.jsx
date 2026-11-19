@@ -5,6 +5,10 @@ import {
   INTERVENTION_LABELS, SINGLE_PROP, SMART_SWITCHES,
 } from "../../data/mockData";
 import Toast from "../../utils/toast";
+import PROPOS_CONFIG from "../../config/publicConfig.js";
+
+// 실기기 ID는 공개 설정에서 읽는다 (entity ID 하드코딩 금지)
+const { tvLight: MAIN_LIGHT_ENTITY, smallStand: SMALL_STAND_ENTITY } = PROPOS_CONFIG.entities;
 
 // ============================================================
 // HomeAssistant.jsx — 개별 숙소 원격 자동화 조치 콘솔
@@ -39,15 +43,15 @@ function HomeAssistant({ onBack, onOpenCommandCenter, initialStage = "stay", han
 
   // HA 실기기 초기 상태 동기화
   useEffect(() => {
-    // 메인 조명 (light.rgbcct_8002)
-    fetch("/api/ha/state?entityId=light.rgbcct_8002")
+    // 메인 조명
+    fetch(`/api/ha/state?entityId=${encodeURIComponent(MAIN_LIGHT_ENTITY)}`)
       .then(r => r.json())
       .then(({ state }) => {
         if (state) setDevs(list => list.map(d => d.id === "light" ? { ...d, state: state.state === "on" } : d));
       })
       .catch(() => {});
-    // 작은 스탠드 (switch.3ch_wifi_usb_switch_module_cbu_switch_1)
-    fetch("/api/ha/state?entityId=switch.3ch_wifi_usb_switch_module_cbu_switch_1")
+    // 작은 스탠드
+    fetch(`/api/ha/state?entityId=${encodeURIComponent(SMALL_STAND_ENTITY)}`)
       .then(r => r.json())
       .then(({ state }) => {
         if (state) setDevs(list => list.map(d => d.id === "mood" ? { ...d, state: state.state === "on" } : d));
@@ -63,7 +67,7 @@ function HomeAssistant({ onBack, onOpenCommandCenter, initialStage = "stay", han
         fetch("/api/ha/service", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ domain: "light", service: next ? "turn_on" : "turn_off", data: { entity_id: "light.rgbcct_8002" } }),
+          body: JSON.stringify({ domain: "light", service: next ? "turn_on" : "turn_off", data: { entity_id: MAIN_LIGHT_ENTITY } }),
         }).catch(() => {});
         return list.map(d => d.id === "light" ? { ...d, state: next } : d);
       });
@@ -74,7 +78,7 @@ function HomeAssistant({ onBack, onOpenCommandCenter, initialStage = "stay", han
         fetch("/api/ha/service", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ domain: "switch", service: next ? "turn_on" : "turn_off", data: { entity_id: "switch.3ch_wifi_usb_switch_module_cbu_switch_1" } }),
+          body: JSON.stringify({ domain: "switch", service: next ? "turn_on" : "turn_off", data: { entity_id: SMALL_STAND_ENTITY } }),
         }).catch(() => {});
         return list.map(d => d.id === "mood" ? { ...d, state: next } : d);
       });

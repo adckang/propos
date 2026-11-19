@@ -162,8 +162,9 @@ function makeMockInfra(onAlert, failPropId) {
 
 // ── Real HA Infrastructure (TV방) ─────────────────────────────
 const _ha = (() => {
-  const TV_LIGHT = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.entities.tvLight : 'light.rgbcct_8002';
-  const TV_PLUG  = (typeof PROPOS_CONFIG !== 'undefined') ? PROPOS_CONFIG.entities.tvPlug  : 'switch.tv_smart_plug_socket_1';
+  // 설정은 위에서 import 한다 — 예전의 예비값(기기 ID 직접 표기)은 쓰일 일이 없어 지웠다
+  const TV_LIGHT = PROPOS_CONFIG.entities.tvLight;
+  const TV_PLUG  = PROPOS_CONFIG.entities.tvPlug;
   async function setLockCode(entityId, code, name) {
     await haBrowserClient.callService('persistent_notification', 'create', {
       title:'[PROPOS] PIN 발급 완료',
