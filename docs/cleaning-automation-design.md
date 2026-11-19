@@ -707,7 +707,7 @@ Calendar API 블로커 이벤트 생성/삭제, Calendar Webhook 등록, Gmail W
 
 - **상태 보는 곳:** KV `token_health:<이름>:failing_since`·`last_alert_at`·`last_renewed_at`, `gmail_watch_expiration`, `calendar_watch_expiration:<캘린더>` / 화면은 청소 관리 › 숙소 탭의 Watch 상태.
 - **주의:** 갱신 성공 기록(`last_renewed_at`)이 아예 없으면 "6일 넘음" 알림은 나가지 않는다 — 로그인 토큰이 먼저 끊기면 실패 경로가 호출될 때만 토큰 실패 알림이 남는다(같은 실패의 재알림은 최대 3시간에 한 번). 2026-10-30~11-19에 Gmail 로그인이 거절돼 Gmail 알림 경로가 3주 멈췄다(`docs/refactoring.md` RF-40). 그동안 예약은 08:00·22:00 정기 동기화로 들어왔다.
-- **`scripts/setup-google-apis.mjs`는 쓰지 않는다** — 캘린더 구독을 Gmail 계정 토큰으로 등록하고 TLS 검사를 꺼 둔다(정리 후보).
+- **구독을 처음 등록하거나 다시 등록할 때는** 청소 관리 › 숙소 탭의 "Gmail Watch 재등록"·"Calendar Watch 재등록" 버튼을 쓴다(각 구독에 맞는 계정 토큰·웹훅 비밀값으로 서버가 등록). 예전 일괄 등록 스크립트 `scripts/setup-google-apis.mjs`는 캘린더 구독을 Gmail 계정 토큰으로 등록하고 TLS 검사를 꺼 두는 등 지금 구조와 맞지 않아 2026-11-19 삭제했다.
 
 ---
 
@@ -715,8 +715,8 @@ Calendar API 블로커 이벤트 생성/삭제, Calendar Webhook 등록, Gmail W
 
 | 항목 | 우선순위 | 비고 |
 |------|---------|------|
-| Google OAuth 자격증명 Vercel 설정 | HIGH | `GOOGLE_CLIENT_ID` `GOOGLE_CLIENT_SECRET` `GOOGLE_REFRESH_TOKEN` `GOOGLE_PUBSUB_TOPIC`은 설정됨(2026-11-19 이름 확인). **`GOOGLE_WEBHOOK_SECRET`만 없음** → 웹훅이 출처를 확인하지 않는다(refactoring.md RF-38) |
-| Gmail Watch 실제 등록 | MEDIUM | `POST /api/gmail/watch` 엔드포인트 구현 완료. 실제 Gmail API 호출 1회 필요 (7일마다 갱신 필요) |
+| ~~Google OAuth 자격증명 Vercel 설정~~ | — | ✅ `GOOGLE_CLIENT_ID` `GOOGLE_CLIENT_SECRET` `GOOGLE_REFRESH_TOKEN` `GOOGLE_PUBSUB_TOPIC` `GOOGLE_WEBHOOK_SECRET` 모두 설정(웹훅 비밀값은 2026-11-19 RF-38) |
+| ~~Gmail Watch 실제 등록~~ | — | ✅ 2026-11-19 등록(RF-38·RF-40). 이후 갱신은 아침 정기 작업이 한다(13-1) |
 | ~~CRON_SECRET Vercel 환경변수 설정~~ | — | ✅ Production·Preview에 설정돼 있음(2026-11-19 이름 확인) |
 | cleaning-followup 크론 주기 | LOW | 현재 아침·저녁 정기 작업 안에서 하루 2회 + 관리자가 청소 일정 목록을 열어 둔 동안 1분마다(2026-11-18 `vercel.json`·코드 확인). 그래서 VIP 1시간·재안내 1시간·에스컬레이션 3시간은 그 시간이 지난 뒤 다음 실행 때 처리된다. Vercel Pro 업그레이드 시 `*/30 * * * *` 변경 권장 |
 
