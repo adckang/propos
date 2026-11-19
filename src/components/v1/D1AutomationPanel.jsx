@@ -114,14 +114,13 @@ const _ical = (() => {
       });
   }
 
-  // allorigins.win CORS 프록시를 통해 iCal 텍스트 fetch
+  // 우리 서버의 iCal 중계(/api/ical, 관리자 로그인)로 iCal 텍스트 fetch — 캘린더 주소에 비밀값(?s=)이 있어 외부 공개 중계로 보내지 않는다(D-012)
   async function fetchViaProxy(url) {
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-    const res = await fetch(proxyUrl, { cache:'no-store' });
+    const res = await fetch(`/api/ical?url=${encodeURIComponent(url)}`, { cache:'no-store' });
     if (!res.ok) throw new Error(`프록시 응답 오류 (${res.status})`);
-    const json = await res.json();
-    if (!json.contents) throw new Error('iCal 내용이 비어있습니다');
-    return json.contents;
+    const text = await res.text();
+    if (!text) throw new Error('iCal 내용이 비어있습니다');
+    return text;
   }
 
   return { parse, toBookings, fetchViaProxy };
