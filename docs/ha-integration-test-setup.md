@@ -74,7 +74,7 @@ npm run test:integration
 # IT-001/002 (실제 HA — RUN_LIVE_HA=1 없으면 건너뜀. 연결값은 환경변수, 없으면 로컬 propos.config.json)
 RUN_LIVE_HA=1 node --test tests/integration/s30.watcher-ha.test.js
 
-# E2E 테스트 (dev 서버 자동 기동, tests/e2e 의 *.spec.js 만 실행)
+# E2E 테스트 (데모 데이터 전용 dev 서버를 5174에 자동 기동, tests/e2e 의 *.spec.js 만 실행 — 운영 API에 연결하지 않음)
 npm run test:e2e
 
 # E2E-003 (실제 HA + 실제 Pi 워처 설정을 잠깐 바꿨다가 되돌림 — 세 값 모두 명시해야 실행, 로컬 설정 파일은 읽지 않음)

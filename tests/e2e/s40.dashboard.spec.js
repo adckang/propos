@@ -6,16 +6,41 @@
  * E2E-003: (HA 필요) 도어 토글 → 폴링 후 watcher 배지 갱신 확인
  *
  * 실행: npm run test:e2e
- * 전제: npm run dev 가 port 5173에서 실행 중이어야 함 (playwright가 자동 기동)
+ * 서버: playwright.e2e.config.mjs 가 데모 프로필 전용 개발 서버(5174)를 자동 기동한다.
+ *       E2E-003 을 고른 실행(RUN_LIVE_HA=1 + PROPOS_DATA_PROFILE=real)만 운영 연결 서버를 쓴다.
  */
 
 import { test, expect } from '@playwright/test';
+import { isProductionHost } from '../helpers/productionHosts.js';
 
 const RUN_LIVE_HA  = process.env.RUN_LIVE_HA === '1';
 const HA_BASE_URL  = process.env.PROPOS_HA_BASE_URL || '';
 const HA_TOKEN     = process.env.PROPOS_HA_TOKEN || '';
 const HA_AVAILABLE = RUN_LIVE_HA && !!(HA_BASE_URL && HA_TOKEN);
 const REAL_DATA_PROFILE = process.env.PROPOS_DATA_PROFILE === 'real';
+// playwright.e2e.config.mjs 와 같은 규칙 — 이 조합일 때만 개발 서버가 운영 API에 연결된다.
+const LIVE_HA_RUN = RUN_LIVE_HA && REAL_DATA_PROFILE;
+
+// 화면 시험(E2E-001·002·004)은 데모 서버에서만 돈다. 서버가 혹시 운영에 연결돼 있어도 쓰기·외부 전송이
+// 나가지 않도록 브라우저 쪽에서도 막는다 — 운영 쪽 주소는 전부, 그 밖의 곳은 조회(GET)만 통과
+// (개발 모드의 디버그 도구 eruda 를 CDN 에서 받는다). 실제 HA 시험(E2E-003)은 제외.
+const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+test.beforeEach(async ({ page }, testInfo) => {
+  if (testInfo.title.startsWith('E2E-003')) return;
+  test.skip(LIVE_HA_RUN, '실제 HA 시험 실행(운영 연결 서버)에서는 데모 화면 시험을 건너뜀');
+  await page.route('**/*', route => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const isLocal = LOCAL_HOSTS.includes(url.hostname);
+    if (isProductionHost(url.hostname) || (!isLocal && request.method() !== 'GET')) {
+      return route.fulfill({ status: 204, body: '' });
+    }
+    if (isLocal && url.pathname.startsWith('/api/') && request.method() !== 'GET') {
+      return route.fulfill({ status: 403, json: { error: 'UI test is read-only' } });
+    }
+    return route.continue();
+  });
+});
 
 // ────────────────────────────────────────────────────────────────────────────
 // E2E-001  페이지 로드 → DashboardView 렌더

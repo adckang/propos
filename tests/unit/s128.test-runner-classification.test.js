@@ -72,6 +72,40 @@ test('Playwright E2E 설정은 *.spec.js 만 수집한다 — node:test 외부 �
   assert.match(read(CONNECTIVITY), /from "node:test"/); // 이 파일이 Playwright 용이 아니라는 전제
 });
 
+// 설정 파일을 실제로 불러와 어떤 개발 서버를 띄우는지 본다(환경변수는 불러올 때 읽히므로 자식 프로세스로).
+function e2eWebServer(extraEnv) {
+  const script = "const { default: c } = await import('./playwright.e2e.config.mjs'); console.log(JSON.stringify({ webServer: c.webServer, baseURL: c.use.baseURL }));";
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: ROOT, env: { PATH: process.env.PATH, HOME: process.env.HOME, ...extraEnv }, encoding: 'utf8', timeout: 30_000,
+  });
+  assert.equal(r.status, 0, r.stderr);
+  return JSON.parse(r.stdout.trim().split('\n').pop());
+}
+
+test('Playwright E2E 서버는 기본으로 데모 프로필 전용 서버다 — 운영에 연결된 기존 개발 서버를 재사용하지 않는다', () => {
+  // 개발 서버의 기본(hybrid)은 /api 를 운영으로 넘겨, 대시보드가 열리면 운영 iCal 동기화(POST)가 나간다.
+  for (const env of [{}, { PROPOS_DATA_PROFILE: 'hybrid' }, { PROPOS_DATA_PROFILE: 'real' }, { RUN_LIVE_HA: '1' }]) {
+    const { webServer, baseURL } = e2eWebServer(env);
+    assert.equal(webServer.env?.PROPOS_DATA_PROFILE, 'demo', `${JSON.stringify(env)} 에서 데모가 아닌 서버를 띄운다`);
+    assert.equal(webServer.reuseExistingServer, false, '이미 떠 있는 (운영 연결) 서버를 재사용하면 안 된다');
+    assert.doesNotMatch(webServer.command, /--port 5173\b/, '평소 개발 서버 포트(5173)를 쓰면 안 된다');
+    assert.equal(new URL(baseURL).port, new URL(webServer.url).port);
+  }
+  // 실제 HA 시험(E2E-003)을 둘 다 명시해 고른 경우만 운영 연결 서버
+  assert.equal(e2eWebServer({ RUN_LIVE_HA: '1', PROPOS_DATA_PROFILE: 'real' }).webServer.env.PROPOS_DATA_PROFILE, 'real');
+});
+
+test('데모 화면 시험은 브라우저에서도 운영 주소·쓰기 요청을 막고, 실제 HA 시험 실행에서는 건너뛴다', () => {
+  const dashboard = read('tests/e2e/s40.dashboard.spec.js');
+  const guard = dashboard.match(/test\.beforeEach\(async \(\{ page \}, testInfo\) => \{([\s\S]*?)\n\}\);/)?.[1] ?? '';
+  assert.ok(guard, '화면 시험용 beforeEach 차단이 있어야 한다');
+  assert.match(guard, /test\.skip\(LIVE_HA_RUN,/);
+  assert.match(guard, /page\.route\('\*\*\/\*'/);
+  assert.match(guard, /isProductionHost\(url\.hostname\)/);
+  assert.match(guard, /request\.method\(\) !== 'GET'/);
+  assert.match(dashboard, /const LIVE_HA_RUN = RUN_LIVE_HA && REAL_DATA_PROFILE;/);
+});
+
 test('package.json 은 외부 연결 시험을 별도 명령으로만 노출한다', () => {
   const pkg = JSON.parse(read('package.json'));
   assert.equal(pkg.scripts['test:connectivity'], `node --test ${CONNECTIVITY}`);
