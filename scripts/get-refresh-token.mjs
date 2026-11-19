@@ -34,7 +34,7 @@ const CLIENT_SECRET = envVars.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_
 const REDIRECT_URI  = "http://localhost:9876/callback";
 const SCOPES        = (GMAIL_MODE
   ? ["https://www.googleapis.com/auth/gmail.metadata"]
-  : ["https://www.googleapis.com/auth/calendar", "https://mail.google.com/"]
+  : ["https://www.googleapis.com/auth/calendar"]
 ).join(" ");
 
 if (!CLIENT_ID || !CLIENT_SECRET) {

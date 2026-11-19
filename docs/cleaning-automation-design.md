@@ -699,14 +699,14 @@ Calendar API 블로커 이벤트 생성/삭제, Calendar Webhook 등록, Gmail W
 
 | 항목 | 만료·주기 | 누가 갱신 | 실패하면 | 복구 |
 | --- | --- | --- | --- | --- |
-| 캘린더 로그인 토큰 `GOOGLE_CALENDAR_REFRESH_TOKEN` | 기한 없음. 단 비밀번호 변경·접근 해제·OAuth 앱 "테스트" 상태(7일)면 끊김 | 사람 | 발급 실패를 Slack으로 **3시간마다** 알림(KV `token_health:google_calendar:*`) | `node scripts/get-refresh-token.mjs` → Vercel 값 교체 → 재배포 → "Calendar Watch 재등록" |
+| 캘린더 로그인 토큰 `GOOGLE_CALENDAR_REFRESH_TOKEN` | 기한 없음. 단 비밀번호 변경·접근 해제·OAuth 앱 "테스트" 상태(7일)면 끊김 | 사람 | 실패 경로가 호출될 때 Slack 알림(같은 실패는 **최대 3시간에 한 번**, KV `token_health:google_calendar:*`) | `node scripts/get-refresh-token.mjs` → Vercel 값 교체 → 재배포 → "Calendar Watch 재등록" |
 | Gmail 로그인 토큰 `GOOGLE_REFRESH_TOKEN` | 위와 같음 | 사람 | 위와 같음(`token_health:google_gmail:*`) | `node scripts/get-refresh-token.mjs --gmail`(다른 기기에서 승인하면 `--url-only`로 주소를 받고 돌아온 주소를 `--code=`로) → `vercel env update GOOGLE_REFRESH_TOKEN production` → 재배포 → "Gmail Watch 재등록" |
 | Gmail 알림 구독(Gmail Watch) | 7일 만료 | 아침 정기 작업(08:00 KST)이 **마지막 성공 갱신 뒤 6일이 지나면** 갱신(요일 기준 아님). 실패하면 다음 날부터 매일 다시 | 갱신 실패 알림 + "6일 넘게 갱신 안 됨" 알림 | 청소 관리 › 숙소 탭 "Gmail Watch 재등록" |
 | 캘린더 알림 구독(Calendar Watch) | 7일 만료(`ttl` 604800초) | 위와 같은 방식(`calendar_watch`) | 위와 같음 | "Calendar Watch 재등록" |
 | Gmail 처리 시작 번호 `gmail_last_history_id`(KV, RF-39) | 없음. 약 1주 넘게 안 쓰면 Gmail이 404 → 서버가 자동으로 다시 시작하고 한 번 동기화 | 자동 | — | 필요 없음 |
 
 - **상태 보는 곳:** KV `token_health:<이름>:failing_since`·`last_alert_at`·`last_renewed_at`, `gmail_watch_expiration`, `calendar_watch_expiration:<캘린더>` / 화면은 청소 관리 › 숙소 탭의 Watch 상태.
-- **주의:** 갱신 성공 기록(`last_renewed_at`)이 아예 없으면 "6일 넘음" 알림은 나가지 않는다 — 로그인 토큰이 먼저 끊기면 토큰 실패 알림(3시간마다)만 남는다. 2026-10-30~11-19에 Gmail 로그인이 거절돼 Gmail 알림 경로가 3주 멈췄다(`docs/refactoring.md` RF-40). 그동안 예약은 08:00·22:00 정기 동기화로 들어왔다.
+- **주의:** 갱신 성공 기록(`last_renewed_at`)이 아예 없으면 "6일 넘음" 알림은 나가지 않는다 — 로그인 토큰이 먼저 끊기면 실패 경로가 호출될 때만 토큰 실패 알림이 남는다(같은 실패의 재알림은 최대 3시간에 한 번). 2026-10-30~11-19에 Gmail 로그인이 거절돼 Gmail 알림 경로가 3주 멈췄다(`docs/refactoring.md` RF-40). 그동안 예약은 08:00·22:00 정기 동기화로 들어왔다.
 - **`scripts/setup-google-apis.mjs`는 쓰지 않는다** — 캘린더 구독을 Gmail 계정 토큰으로 등록하고 TLS 검사를 꺼 둔다(정리 후보).
 
 ---

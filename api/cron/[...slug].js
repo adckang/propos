@@ -598,7 +598,7 @@ export default async function handler(req, res) {
       }
 
       // 매일: Watch 갱신이 몇 주 전부터 조용히 계속 실패해도 7일 만료 전에 미리 알리기
-      // (위 블록은 월요일에만 시도하므로, 그 시도 자체가 매번 조용히 실패하는 경우를 여기서 잡는다)
+      // (위 블록의 갱신 성공 시각과 별개로 경과 시간을 확인해, 만료 전 경고가 빠지지 않게 한다)
       await checkStaleness(kv, "gmail_watch", "Gmail Watch", WATCH_STALE_MS);
       await checkStaleness(kv, "calendar_watch", "Calendar Watch", WATCH_STALE_MS);
 

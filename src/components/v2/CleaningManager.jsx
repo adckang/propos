@@ -417,7 +417,7 @@ function PropertyPanel({ syncConfig, onDataChanged }) {
         Calendar Watch 상태
       </div>
       <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 14, lineHeight: 1.6 }}>
-        구글 캘린더 변경(청소 배정 반영) 감지용. 7일마다 만료되며 매일 자동 갱신을 시도합니다.
+        구글 캘린더 변경(청소 배정 반영) 감지용. 7일마다 만료되며, 마지막 성공 6일 후 자동 갱신하고 실패하면 다음 날 다시 시도합니다.
         배정이 캘린더엔 있는데 화면엔 미배정으로 보이면 아래에서 수동 재등록하세요.
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -460,7 +460,7 @@ function PropertyPanel({ syncConfig, onDataChanged }) {
         Gmail Watch 상태
       </div>
       <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 14, lineHeight: 1.6 }}>
-        에어비앤비 예약 이메일 감지용. 7일마다 만료되며 매주 월요일 자동 갱신됩니다.
+        에어비앤비 예약 이메일 감지용. 7일마다 만료되며, 마지막 성공 6일 후 자동 갱신하고 실패하면 다음 날 다시 시도합니다.
         청소 일정이 자동 생성되지 않으면 아래에서 수동 재등록하세요.
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>

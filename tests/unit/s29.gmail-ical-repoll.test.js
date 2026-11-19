@@ -346,7 +346,7 @@ describe("Calendar Webhook 보안 — x-goog-channel-token 검증", () => {
 
 describe("Gmail/Calendar 토큰 분리 아키텍처", () => {
   // getGoogleToken → GOOGLE_CALENDAR_REFRESH_TOKEN (bnb.paju, calendar scope)
-  // getGmailToken  → GOOGLE_REFRESH_TOKEN          (nam5821,  mail.google.com scope)
+  // getGmailToken  → GOOGLE_REFRESH_TOKEN          (nam5821, gmail.metadata scope)
 
   function resolveCalendarRefreshToken(env) {
     return env.GOOGLE_CALENDAR_REFRESH_TOKEN ?? env.GOOGLE_REFRESH_TOKEN;
