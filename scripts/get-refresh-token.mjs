@@ -1,10 +1,13 @@
 /**
  * Google OAuth Refresh Token 발급 스크립트
- * 실행: node scripts/get-refresh-token.mjs
+ * 실행: node scripts/get-refresh-token.mjs           — 캘린더 계정(bnb.paju) → GOOGLE_CALENDAR_REFRESH_TOKEN (토큰을 화면에 출력)
+ *       node scripts/get-refresh-token.mjs --gmail   — 예약 메일을 받는 Gmail 계정 → GOOGLE_REFRESH_TOKEN
+ *         (계정 선택 화면에서 고른다. 권한은 메일 머리글 읽기(gmail.metadata)만 — 구독·변경 기록·제목·현재 번호에 충분.
+ *          토큰은 화면에 출력하지 않고 .env.local 의 GOOGLE_REFRESH_TOKEN 줄에 바로 쓴다. RF-40)
  */
 import http from "http";
 import { exec } from "child_process";
-import { readFileSync } from "fs";
+import { readFileSync, writeFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
@@ -18,13 +21,14 @@ try {
   }
 } catch {}
 
+const GMAIL_MODE    = process.argv.includes("--gmail");
 const CLIENT_ID     = envVars.GOOGLE_CLIENT_ID     || process.env.GOOGLE_CLIENT_ID;
 const CLIENT_SECRET = envVars.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
 const REDIRECT_URI  = "http://localhost:9876/callback";
-const SCOPES        = [
-  "https://www.googleapis.com/auth/calendar",
-  "https://mail.google.com/",
-].join(" ");
+const SCOPES        = (GMAIL_MODE
+  ? ["https://www.googleapis.com/auth/gmail.metadata"]
+  : ["https://www.googleapis.com/auth/calendar", "https://mail.google.com/"]
+).join(" ");
 
 if (!CLIENT_ID || !CLIENT_SECRET) {
   console.error("❌ GOOGLE_CLIENT_ID 또는 GOOGLE_CLIENT_SECRET 없음");
@@ -40,7 +44,18 @@ const authUrl =
   `&access_type=offline` +
   // select_account: 브라우저에 이미 로그인된 다른 계정으로 자동 진행되지 않고 계정 선택 화면을 강제로 띄움
   `&prompt=${encodeURIComponent("select_account consent")}` +
-  `&login_hint=${encodeURIComponent("bnb.paju@gmail.com")}`;
+  (GMAIL_MODE ? "" : `&login_hint=${encodeURIComponent("bnb.paju@gmail.com")}`);
+
+/** .env.local 의 KEY= 줄을 바꾸거나(없으면 끝에 추가) — 다른 줄은 그대로 */
+function saveToEnvLocal(key, value) {
+  let text = "";
+  try { text = readFileSync(envPath, "utf8"); } catch {}
+  const lines = text.split("\n");
+  const at = lines.findIndex(line => line.startsWith(`${key}=`));
+  if (at >= 0) lines[at] = `${key}=${value}`;
+  else lines.splice(lines.length && lines[lines.length - 1] === "" ? lines.length - 1 : lines.length, 0, `${key}=${value}`);
+  writeFileSync(envPath, lines.join("\n"), { mode: 0o600 });
+}
 
 console.log("\n🚀 브라우저를 여는 중...");
 console.log("↳ 자동으로 열린 창이 원치 않는 계정으로 들어가면, 이 URL을 복사해서 시크릿창(쪽)에 직접 붙여넣어 보세요:");
@@ -70,7 +85,12 @@ const server = http.createServer(async (req, res) => {
   });
   const data = await tokenRes.json();
 
-  if (data.refresh_token) {
+  if (data.refresh_token && GMAIL_MODE) {
+    saveToEnvLocal("GOOGLE_REFRESH_TOKEN", data.refresh_token);
+    console.log("\n✅ Gmail Refresh Token 발급 완료 — .env.local 의 GOOGLE_REFRESH_TOKEN 줄에 저장했습니다(화면에는 출력하지 않음).");
+    console.log(`   권한 범위: ${data.scope}`);
+    console.log("   다음: Vercel 환경변수 GOOGLE_REFRESH_TOKEN(Production)을 이 값으로 바꾸고 재배포하세요.");
+  } else if (data.refresh_token) {
     console.log("\n✅ Refresh Token 발급 완료!\n");
     console.log("⚠️ 이 토큰은 bnb.paju@gmail.com(캘린더용)입니다.");
     console.log("아래 값을 Vercel 환경변수 GOOGLE_CALENDAR_REFRESH_TOKEN에 붙여넣으세요 (GOOGLE_REFRESH_TOKEN 아님!):\n");
@@ -83,5 +103,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(9876, () => {
-  console.log("브라우저에서 bnb.paju@gmail.com으로 로그인하고 권한을 허용해주세요...");
+  console.log(GMAIL_MODE
+    ? "브라우저 계정 선택 화면에서 에어비앤비 예약 메일을 받는 Gmail 계정을 고르고 권한을 허용해주세요..."
+    : "브라우저에서 bnb.paju@gmail.com으로 로그인하고 권한을 허용해주세요...");
 });
