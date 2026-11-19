@@ -2,6 +2,8 @@
 > 버전: v1.0 | 작성: 2026-08-04
 > 구현 기준 문서 — 이 파일을 축으로 삼아 스토리지 코드를 작성·수정한다.
 > 이벤트 타입 정의는 `event-detection-design.md`가 정본. 이 파일은 저장 방식만 다룬다.
+>
+> **현재 상태(2026-11-19):** Blob 계층은 구현되지 않았다(2026-11-19 확인: 의존성·`blob_url`을 쓰는 코드 없음). 실제 쓰기 순서는 Postgres → KV → Slack(`src/application/eventService.js`). CCTV 사진은 HA의 `/config/www/snapshots`에 있고 Pi 워처와 `/api/camera/snapshot`이 중계한다(D-035). DB 접속 라이브러리는 `@vercel/postgres`가 아니라 `pg`. 아래의 Blob 관련 내용(1·2장의 Blob, 쓰기 순서 4단계, `blob_url`)은 최초 설계이며 미구현이다.
 
 ---
 
@@ -141,7 +143,7 @@ export const SOFT_EVENT_TYPES = new Set([
 3. KV 업데이트  state:{property_id} (TTL 5분)
    └─ 실패해도 계속 — 캐시 miss 시 Postgres에서 자동 복구
 
-4. Blob 업로드  (check_in_detected / check_out_detected 에만)
+4. Blob 업로드  (check_in_detected / check_out_detected 에만) — ⚠️ 미구현(2026-11-19 확인). 실제는 3 → 5로 바로 간다
    ├─ 성공 → Postgres UPDATE SET blob_url = '{id}.jpg'
    └─ 실패해도 계속 — blob_url null로 이벤트는 보존
 

@@ -501,7 +501,7 @@ extendedProperties.shared["goo.createdByAvailId"] = "6l42efisiehi77mscb5qoh295f"
 ### 월간 배치 (매월 15일) — 블로커 + 예약 일괄 처리
 
 ```
-매월 15일 Vercel Cron 발동
+매월 15일 아침 정기 작업(KST 08:00, `/api/cron/morning`) 안에서 실행 — 월간 배치만의 별도 크론은 없다
     ↓
 [1] 다음 달 전체 날짜에 블로커 이벤트 일괄 생성 (숙소당 ~31회 API 호출)
     → 모든 슬롯이 기본 "예약 불가" 상태
@@ -654,9 +654,9 @@ checkout_at이 오늘부터 14일 이내?
 > 상세 플로우는 섹션 10 참고.
 
 ```
-Vercel Cron 발동 (UTC 00:00 = KST 09:00)
+15일 아침 정기 작업 안에서 실행 (KST 08:00 = UTC 전날 23:00)
     ↓
-[1] 다음 달 블로커 일괄 생성 → [2] iCal 폴링 → [3] 예약 날짜 블로커 삭제
+[1] 다음 달 블로커 일괄 생성 → [2] iCal 폴링 → [3] 예약마다 청소 일정 생성(칸은 열지 않음 — 요청하는 날 연다, DEC-07)
     ↓
 dispatch_after 스케줄링 (같은 날 여러 건 → 10분 간격)
     ↓
@@ -698,9 +698,9 @@ Calendar API 블로커 이벤트 생성/삭제, Calendar Webhook 등록, Gmail W
 
 | 항목 | 우선순위 | 비고 |
 |------|---------|------|
-| Google OAuth 자격증명 Vercel 설정 | HIGH | `GOOGLE_CLIENT_ID` `GOOGLE_CLIENT_SECRET` `GOOGLE_REFRESH_TOKEN` `GOOGLE_PUBSUB_TOPIC` `GOOGLE_WEBHOOK_SECRET` |
+| Google OAuth 자격증명 Vercel 설정 | HIGH | `GOOGLE_CLIENT_ID` `GOOGLE_CLIENT_SECRET` `GOOGLE_REFRESH_TOKEN` `GOOGLE_PUBSUB_TOPIC`은 설정됨(2026-11-19 이름 확인). **`GOOGLE_WEBHOOK_SECRET`만 없음** → 웹훅이 출처를 확인하지 않는다(refactoring.md RF-38) |
 | Gmail Watch 실제 등록 | MEDIUM | `POST /api/gmail/watch` 엔드포인트 구현 완료. 실제 Gmail API 호출 1회 필요 (7일마다 갱신 필요) |
-| CRON_SECRET Vercel 환경변수 설정 | LOW | 외부 크론 호출 차단 |
+| ~~CRON_SECRET Vercel 환경변수 설정~~ | — | ✅ Production·Preview에 설정돼 있음(2026-11-19 이름 확인) |
 | cleaning-followup 크론 주기 | LOW | 현재 아침·저녁 정기 작업 안에서 하루 2회 + 관리자가 청소 일정 목록을 열어 둔 동안 1분마다(2026-11-18 `vercel.json`·코드 확인). 그래서 VIP 1시간·재안내 1시간·에스컬레이션 3시간은 그 시간이 지난 뒤 다음 실행 때 처리된다. Vercel Pro 업그레이드 시 `*/30 * * * *` 변경 권장 |
 
 ### 완료된 항목 (2026-08-23)

@@ -1,7 +1,7 @@
 // GET /api/cron/daily-plan        — 오전 8시 KST 브리핑
 // GET /api/cron/daily-result      — 저녁 10시 KST 결산
-// GET /api/cron/monthly-cleaning  — 매월 15일 KST 09:00 청소 배치 (cron: 0 0 15 * *)
-// GET /api/cron/cleaning-followup — 30분마다 리마인드·에스컬레이션 (cron: 30min)
+// GET /api/cron/monthly-cleaning  — 매월 15일 청소 배치. 별도 크론 없음 — 아침 정기 작업(morning, KST 08:00) 안에서 15일에만 돈다
+// GET /api/cron/cleaning-followup — 리마인드·에스컬레이션. 별도 크론 없음 — 아침·저녁 정기 작업 안에서(+ 청소 일정 목록을 열어 두면 1분마다)
 
 import { Pool } from "pg";
 import { kv } from "@vercel/kv";
@@ -277,7 +277,7 @@ async function handleMonthlyClean(db, res) {
   return res.status(200).json({ ok: true, blockersCreated, jobsCreated, jobsFailed, scheduled });
 }
 
-// ── 후속 처리 크론 (30분마다) ─────────────────────────────
+// ── 후속 처리 (아침·저녁 정기 작업 안에서) ─────────────────
 
 async function handleCleaningFollowup(db, res) {
   let advanced = await recoverInitialDeliveries(db);

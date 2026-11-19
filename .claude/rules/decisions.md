@@ -425,6 +425,7 @@
   - device_time = 표시·비즈니스 기준 / server_time = 삽입 순서 보장용
 - **버린 대안**: Supabase 별도 도입 → Vercel 내장 스토리지로 충분
 - **버린 대안**: Pi JSON 파일만 → Pi 장애 시 히스토리 접근 불가
+- **현재 상태(2026-11-19, 결정 기록은 보존)**: Blob 계층은 구현되지 않았다(2026-11-19 확인: 의존성·`blob_url`을 쓰는 코드 없음). 실제 쓰기 순서는 Postgres → KV → Slack(`src/application/eventService.js`). CCTV 사진은 HA의 `/config/www/snapshots`에 있고 Pi 워처와 `/api/camera/snapshot`이 중계한다(D-035). DB 접속 라이브러리는 `@vercel/postgres`가 아니라 `pg`. 위 "핵심 규칙"의 Blob 단계와 `@vercel/*` 문구는 이 상태로 읽는다 — 서버 전용 규칙은 `CLAUDE.md` 코드 규칙이 정본
 
 ## [D-010] 시나리오 레지스트리 경량화
 - **결정**: `docs/scenarios.yaml`에 `entry_function` 추가, `content_keys` 제거

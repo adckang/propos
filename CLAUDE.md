@@ -11,8 +11,8 @@
 - entity ID 하드코딩 금지 → `src/config/publicConfig.js`
 - iCal URL 소스코드 커밋 금지 → localStorage(`propos_calendar_sync`)만
 - 다크 색상 재사용 금지: `#02080d` `#030f18` `#00d4ff` `#00ff88`
-- DB/KV/Blob/Slack 자격증명 브라우저 번들 포함 금지 → `api/*` 프록시만
-- `@vercel/postgres` `@vercel/kv` `@vercel/blob` → `api/` 폴더에서만 import (`src/` 금지)
+- DB/KV/Slack 자격증명 브라우저 번들 포함 금지 → `api/*` 프록시만
+- DB(`pg`)·KV(`@vercel/kv`) 라이브러리는 서버 코드(`api/`·`server/`·`scripts/`)에서만 import — 브라우저 코드(`src/`) 금지
 - `PROPOS_SLACK_WEBHOOK` 소스코드·git 커밋 금지 → Vercel 환경변수만
 
 ## 작업 방식
@@ -43,16 +43,18 @@ npm run verify:scenarios  시나리오 드리프트 확인
 - **프로덕션 프로젝트**: `propos-project-v2` (커스텀 도메인 구매, GitHub 자동배포 연결됨)
 - **프로덕션 URL**: `www.proposonline.com`
 - **중복 프로젝트 `propos` (propos-henna.vercel.app)는 2026-11-16 삭제함** — 로그인 없이 운영 DB·HA에 연결된 채 공개돼 있었다(`docs/refactoring.md` RF-24). Vercel 프로젝트는 `propos-project-v2` 하나만 둔다
-- **배포 성공**: API 함수 17개 → 10개 통합 (Hobby 12함수 한도 해소)
+- **API 함수: 12개 — Hobby 한도(12)에 꽉 참** (2026-11-19 확인). 새 Vercel API 진입점(`api/` 아래 `_`로 시작하지 않는 파일)을 하나라도 추가하면 배포가 실패한다 → 기존 catch-all에 경로를 붙인다
 - **API catch-all 구조**:
   - `api/ha/[...slug].js` — state/states/service/history/template
-  - `api/cron/[...slug].js` — daily-plan/daily-result
+  - `api/cron/[...slug].js` — morning/evening(정기 작업 2개) + daily-plan/daily-result/monthly-cleaning/cleaning-followup/worker-health-check
   - `api/monitoring/[...slug].js` — config/state
   - `api/events/[...slug].js` — history/:uuid
+  - `api/cleaning/[...slug].js` — 청소 일정·숙소·담당자·통계·웹훅·거절 링크 등
+  - `api/workers/[...slug].js` — 담당자 앱 register/heartbeat/token/profile
 - **환경변수** (`propos-project-v2`에 모두 설정 완료):
   - `POSTGRES_URL` — Neon Postgres (`neon-violet-park`)
   - `KV_REST_API_URL` + `KV_REST_API_TOKEN` — Upstash KV (`upstash-kv-coral-ridge`)
   - `PROPOS_SLACK_WEBHOOK` — Slack 인커밍 웹훅 (설정 완료)
-  - `CRON_SECRET` — 크론 외부 호출 차단 (미설정 → 추가 필요)
+  - `CRON_SECRET` — 크론 외부 호출 차단 (Production·Preview 설정 확인, 2026-11-19)
 - **크론 스케줄**: 매일 UTC 23:00 (KST 08:00) 브리핑 / UTC 13:00 (KST 22:00) 결산
 - **Slack 알림**: 정상 작동 확인 (2026-08-06)
