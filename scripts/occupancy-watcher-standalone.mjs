@@ -20,6 +20,10 @@ import { loadProperties, saveProperties } from '../server/propertiesStore.js';
 import { getHaBaseUrl, getHaToken } from '../server/haProxy.js';
 import { handleMonitoringEventRequest } from '../server/monitoringEventHandler.js';
 import { createUnauthenticatedLogger, decideWatcherRequest, watcherAuthStartupMessage } from '../server/watcherAuth.js';
+import { installLogTimestamps } from '../server/logTimestamps.js';
+
+// watcher.log 의 줄마다 한국 시각을 붙인다(RF-30) — 가장 먼저 설치해 시작 기록부터 시각이 붙는다
+installLogTimestamps(console);
 
 const PORT = Number(process.env.PROPOS_WATCHER_PORT ?? 3001);
 // 키가 없거나 틀린 요청 기록(처리한 것·거절한 것 모두) — 같은 경로는 10분에 한 번만(인터넷의 봇이 기록 파일을 채우지 않게)

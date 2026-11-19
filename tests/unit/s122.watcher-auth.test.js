@@ -9,8 +9,12 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createUnauthenticatedLogger, decideWatcherRequest, hasWatcherSecret, watcherAuthMode, watcherAuthStartupMessage, WATCHER_SECRET_HEADER } from '../../server/watcherAuth.js';
 import { watcherRequestHeaders } from '../../server/auth/watcherScope.js';
+import { LOG_METHODS } from '../../server/logTimestamps.js';
 
 const KEY = 'k'.repeat(40);
+// 워처 기록은 줄마다 한국 시각으로 시작한다(RF-30, s131). 내용을 비교할 때는 시각을 떼고 본다.
+const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+09:00 /;
+const untimed = lines => lines.map(line => line.replace(TIMESTAMP, ''));
 const withKey = (value = KEY) => ({ [WATCHER_SECRET_HEADER]: value });
 
 describe('워처가 받는 요청 확인', () => {
@@ -121,7 +125,8 @@ const ROUTES = [
 async function startActualWatcherServer(env) {
   const key = '__watcherAuthServer_' + randomUUID().replaceAll('-', '');
   const io = { handler: null, calls: [], fetches: [], logs: [], warns: [] };
-  const saved = { fetch: globalThis.fetch, log: console.log, warn: console.warn,
+  // 워처가 console 메서드를 시각 붙이는 함수로 감싸므로 다섯 개 모두 저장했다가 돌려놓는다
+  const saved = { fetch: globalThis.fetch, console: Object.fromEntries(LOG_METHODS.map(m => [m, console[m]])),
     env: Object.fromEntries(['PROPOS_PI_SECRET', 'PROPOS_WATCHER_AUTH_MODE'].map(name => [name, process.env[name]])) };
   const setEnv = values => { for (const [name, value] of Object.entries(values)) { if (value == null) delete process.env[name]; else process.env[name] = value; } };
   globalThis[key] = io;
@@ -154,7 +159,7 @@ async function startActualWatcherServer(env) {
       } }],
     });
     await import('data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text + `\n// ${key}`).toString('base64'));
-  } finally { console.log = saved.log; }
+  } finally { console.log = saved.console.log; }
 
   async function request(method, url, headers = {}, body) {
     const content = body === undefined ? '' : JSON.stringify(body);
@@ -166,7 +171,7 @@ async function startActualWatcherServer(env) {
   return {
     io, request, setEnv,
     stop() {
-      globalThis.fetch = saved.fetch; console.warn = saved.warn;
+      globalThis.fetch = saved.fetch; Object.assign(console, saved.console);
       setEnv(saved.env);
       delete globalThis[key];
     },
@@ -227,7 +232,7 @@ describe('실제 워처 서버 — 기록', () => {
       [{ PROPOS_PI_SECRET: null, PROPOS_WATCHER_AUTH_MODE: null }, '[watcher-auth] 모드: 차단 — 경고: 공유키(PROPOS_PI_SECRET)가 없어 서버 요청까지 모두 401 로 거절합니다'],
     ]) {
       const w = await startActualWatcherServer(env);
-      try { assert.ok(w.io.logs.includes(expected), `${JSON.stringify(env)}: ${w.io.logs.join(' / ')}`); } finally { w.stop(); }
+      try { assert.ok(untimed(w.io.logs).includes(expected), `${JSON.stringify(env)}: ${w.io.logs.join(' / ')}`); } finally { w.stop(); }
     }
   });
 
@@ -240,7 +245,7 @@ describe('실제 워처 서버 — 기록', () => {
     }
     const expected = ROUTES.map(([method, url]) => `[watcher-auth] 키가 없거나 틀린 요청 ${method} ${url.split('?')[0]} → 401 거절`);
     expected.push('[watcher-auth] 키가 없거나 틀린 요청 GET (기타 경로) → 401 거절');
-    assert.deepEqual([...w.io.warns].sort(), expected.sort());
+    assert.deepEqual(untimed(w.io.warns).sort(), expected.sort());
   });
 
   test('기록 모드는 키 없는 요청도 처리하되(→ 401 표시 없이) 남긴다', async t => {
@@ -249,6 +254,21 @@ describe('실제 워처 서버 — 기록', () => {
     const res = await w.request('GET', '/api/monitoring/state');
     assert.equal(res.status, 200);
     assert.ok(w.io.calls.includes('getMonitoringState'));
-    assert.deepEqual(w.io.warns, ['[watcher-auth] 키가 없거나 틀린 요청 GET /api/monitoring/state']);
+    assert.deepEqual(untimed(w.io.warns), ['[watcher-auth] 키가 없거나 틀린 요청 GET /api/monitoring/state']);
+  });
+
+  test('워처가 남기는 줄은 시작 기록부터 거절 기록까지 모두 지금 한국 시각으로 시작한다 (RF-30)', async t => {
+    const before = Date.now();
+    const w = await startActualWatcherServer({ PROPOS_PI_SECRET: KEY, PROPOS_WATCHER_AUTH_MODE: null });
+    t.after(() => w.stop());
+    await w.request('GET', '/api/monitoring/state');
+    const after = Date.now();
+    const lines = [...w.io.logs, ...w.io.warns];
+    assert.ok(w.io.logs.length >= 2 && w.io.warns.length === 1, lines.join(' / '));
+    for (const line of lines) {
+      assert.match(line, TIMESTAMP, line);
+      const at = new Date(line.slice(0, 29)).getTime();
+      assert.ok(at >= before && at <= after, `${line} — 지금 시각이어야 한다`);
+    }
   });
 });

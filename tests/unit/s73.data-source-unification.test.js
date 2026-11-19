@@ -23,6 +23,7 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { TEST_DATA_DIR } from '../helpers/isolateDataDir.js';
 import { WATCHER_SECRET_HEADER } from '../../server/watcherAuth.js';
+import { LOG_METHODS } from '../../server/logTimestamps.js';
 import { createSessionToken } from '../../server/auth/operatorAuth.js';
 
 const PI_KEY = 'fixture-pi-secret';
@@ -42,11 +43,13 @@ const STORED = [{ id: '파주201', name: '파주201', district: '파주', watche
 describe('actual Pi watcher server keeps watcher metadata only', () => {
   const key = '__piWatcherFixture_' + randomUUID().replaceAll('-', '');
   const io = { handler: null, started: 0, fetches: [] };
-  let savedFetch, savedKey, savedLog;
+  let savedFetch, savedKey, savedConsole;
 
   before(async () => {
     globalThis[key] = io;
-    savedFetch = globalThis.fetch; savedKey = process.env.PROPOS_PI_SECRET; savedLog = console.log;
+    savedFetch = globalThis.fetch; savedKey = process.env.PROPOS_PI_SECRET;
+    // 워처가 console 메서드를 시각 붙이는 함수로 감싸므로(RF-30) 다섯 개 모두 돌려놓는다
+    savedConsole = Object.fromEntries(LOG_METHODS.map(m => [m, console[m]]));
     globalThis.fetch = async (url) => { io.fetches.push(String(url)); throw new Error('Pi watcher fixture: network blocked'); };
     process.env.PROPOS_PI_SECRET = PI_KEY;
     console.log = () => {};
@@ -73,7 +76,7 @@ describe('actual Pi watcher server keeps watcher metadata only', () => {
     await import('data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text + `\n// ${key}`).toString('base64'));
   });
   after(() => {
-    globalThis.fetch = savedFetch; console.log = savedLog;
+    globalThis.fetch = savedFetch; Object.assign(console, savedConsole);
     if (savedKey === undefined) delete process.env.PROPOS_PI_SECRET; else process.env.PROPOS_PI_SECRET = savedKey;
     delete globalThis[key];
   });
