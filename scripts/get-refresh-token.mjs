@@ -1,6 +1,6 @@
 /**
  * Google OAuth Refresh Token 발급 스크립트
- * 실행: node scripts/get-refresh-token.mjs           — 캘린더 계정(bnb.paju) → GOOGLE_CALENDAR_REFRESH_TOKEN (토큰을 화면에 출력)
+ * 실행: node scripts/get-refresh-token.mjs           — 캘린더 계정(bnb.paju) → GOOGLE_CALENDAR_REFRESH_TOKEN
  *       node scripts/get-refresh-token.mjs --gmail   — 예약 메일을 받는 Gmail 계정 → GOOGLE_REFRESH_TOKEN
  *         (계정 선택 화면에서 고른다. 권한은 메일 머리글 읽기(gmail.metadata)만 — 구독·변경 기록·제목·현재 번호에 충분.
  *          토큰은 화면에 출력하지 않고 .env.local 의 GOOGLE_REFRESH_TOKEN 줄에 바로 쓴다. RF-40)
@@ -91,11 +91,9 @@ async function exchangeAndSave(code) {
     console.log(`   권한 범위: ${data.scope}`);
     console.log("   다음: Vercel 환경변수 GOOGLE_REFRESH_TOKEN(Production)을 이 값으로 바꾸고 재배포하세요.");
   } else if (data.refresh_token) {
-    console.log("\n✅ Refresh Token 발급 완료!\n");
-    console.log("⚠️ 이 토큰은 bnb.paju@gmail.com(캘린더용)입니다.");
-    console.log("아래 값을 Vercel 환경변수 GOOGLE_CALENDAR_REFRESH_TOKEN에 붙여넣으세요 (GOOGLE_REFRESH_TOKEN 아님!):\n");
-    console.log(data.refresh_token);
-    console.log("\n그리고 .env.local의 GOOGLE_CALENDAR_REFRESH_TOKEN도 교체하세요.");
+    saveToEnvLocal("GOOGLE_CALENDAR_REFRESH_TOKEN", data.refresh_token);
+    console.log("\n✅ Calendar Refresh Token 발급 완료 — .env.local 의 GOOGLE_CALENDAR_REFRESH_TOKEN 줄에 저장했습니다(화면에는 출력하지 않음).");
+    console.log("   다음: Vercel 환경변수 GOOGLE_CALENDAR_REFRESH_TOKEN(Production)을 이 값으로 바꾸고 재배포하세요.");
   } else {
     console.error("\n❌ 토큰 교환 실패:", JSON.stringify(data, null, 2));
   }
