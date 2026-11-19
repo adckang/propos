@@ -679,7 +679,7 @@ Calendar API 블로커 이벤트 생성/삭제, Calendar Webhook 등록, Gmail W
 
 1. Google Cloud Console → OAuth 2.0 클라이언트 ID 생성 (Desktop 또는 Web 유형)
 2. Google Calendar API + Gmail API + Pub/Sub API 활성화
-3. OAuth 동의 화면 설정 (scope: `calendar`, `gmail.readonly`)
+3. OAuth 동의 화면 설정 — 권한: 캘린더 계정 `calendar`, Gmail 계정 `gmail.metadata`(메일 머리글만 — 2026-11-19 재발급부터). **게시 상태를 "프로덕션"으로** — "테스트" 상태면 로그인 토큰이 7일마다 만료된다
 4. Access Token 최초 발급 후 **Refresh Token** 보관 → 이후 자동 갱신
 5. Google Calendar → 공유 설정 → OAuth 계정 이메일에 **편집 권한** 부여
 6. 각 값을 Vercel 환경변수로 등록 (`propos-project-v2` 프로젝트)
@@ -688,9 +688,26 @@ Calendar API 블로커 이벤트 생성/삭제, Calendar Webhook 등록, Gmail W
 |--------|------|------|
 | `GOOGLE_CLIENT_ID` | OAuth2 클라이언트 ID | ✅ |
 | `GOOGLE_CLIENT_SECRET` | OAuth2 클라이언트 시크릿 | ✅ |
-| `GOOGLE_REFRESH_TOKEN` | 장기 갱신 토큰 | ✅ |
+| `GOOGLE_CALENDAR_REFRESH_TOKEN` | **캘린더 계정**(bnb.paju) 로그인 토큰 — 청소 칸(블로커)·배정 읽기·Calendar Watch | ✅ |
+| `GOOGLE_REFRESH_TOKEN` | **예약 메일을 받는 Gmail 계정** 로그인 토큰 — Gmail Watch·새 메일 확인 | ✅ |
 | `GOOGLE_PUBSUB_TOPIC` | Gmail Watch Pub/Sub 토픽 (`projects/{proj}/topics/{topic}`) | ✅ |
 | `GOOGLE_WEBHOOK_SECRET` | Calendar/Gmail webhook 요청 인증 (미설정 시 검증 생략) | 권장 |
+
+### 13-1. 토큰·구독 갱신 정리 (2026-11-19 코드 기준)
+
+두 Google 계정의 로그인 토큰은 사람이 발급하고, 그 토큰으로 7일짜리 알림 구독(Watch)을 서버가 스스로 갱신한다.
+
+| 항목 | 만료·주기 | 누가 갱신 | 실패하면 | 복구 |
+| --- | --- | --- | --- | --- |
+| 캘린더 로그인 토큰 `GOOGLE_CALENDAR_REFRESH_TOKEN` | 기한 없음. 단 비밀번호 변경·접근 해제·OAuth 앱 "테스트" 상태(7일)면 끊김 | 사람 | 발급 실패를 Slack으로 **3시간마다** 알림(KV `token_health:google_calendar:*`) | `node scripts/get-refresh-token.mjs` → Vercel 값 교체 → 재배포 → "Calendar Watch 재등록" |
+| Gmail 로그인 토큰 `GOOGLE_REFRESH_TOKEN` | 위와 같음 | 사람 | 위와 같음(`token_health:google_gmail:*`) | `node scripts/get-refresh-token.mjs --gmail`(다른 기기에서 승인하면 `--url-only`로 주소를 받고 돌아온 주소를 `--code=`로) → `vercel env update GOOGLE_REFRESH_TOKEN production` → 재배포 → "Gmail Watch 재등록" |
+| Gmail 알림 구독(Gmail Watch) | 7일 만료 | 아침 정기 작업(08:00 KST)이 **마지막 성공 갱신 뒤 6일이 지나면** 갱신(요일 기준 아님). 실패하면 다음 날부터 매일 다시 | 갱신 실패 알림 + "6일 넘게 갱신 안 됨" 알림 | 청소 관리 › 숙소 탭 "Gmail Watch 재등록" |
+| 캘린더 알림 구독(Calendar Watch) | 7일 만료(`ttl` 604800초) | 위와 같은 방식(`calendar_watch`) | 위와 같음 | "Calendar Watch 재등록" |
+| Gmail 처리 시작 번호 `gmail_last_history_id`(KV, RF-39) | 없음. 약 1주 넘게 안 쓰면 Gmail이 404 → 서버가 자동으로 다시 시작하고 한 번 동기화 | 자동 | — | 필요 없음 |
+
+- **상태 보는 곳:** KV `token_health:<이름>:failing_since`·`last_alert_at`·`last_renewed_at`, `gmail_watch_expiration`, `calendar_watch_expiration:<캘린더>` / 화면은 청소 관리 › 숙소 탭의 Watch 상태.
+- **주의:** 갱신 성공 기록(`last_renewed_at`)이 아예 없으면 "6일 넘음" 알림은 나가지 않는다 — 로그인 토큰이 먼저 끊기면 토큰 실패 알림(3시간마다)만 남는다. 2026-10-30~11-19에 Gmail 로그인이 거절돼 Gmail 알림 경로가 3주 멈췄다(`docs/refactoring.md` RF-40). 그동안 예약은 08:00·22:00 정기 동기화로 들어왔다.
+- **`scripts/setup-google-apis.mjs`는 쓰지 않는다** — 캘린더 구독을 Gmail 계정 토큰으로 등록하고 TLS 검사를 꺼 둔다(정리 후보).
 
 ---
 

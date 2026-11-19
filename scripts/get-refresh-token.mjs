@@ -4,6 +4,11 @@
  *       node scripts/get-refresh-token.mjs --gmail   — 예약 메일을 받는 Gmail 계정 → GOOGLE_REFRESH_TOKEN
  *         (계정 선택 화면에서 고른다. 권한은 메일 머리글 읽기(gmail.metadata)만 — 구독·변경 기록·제목·현재 번호에 충분.
  *          토큰은 화면에 출력하지 않고 .env.local 의 GOOGLE_REFRESH_TOKEN 줄에 바로 쓴다. RF-40)
+ *
+ * 다른 기기(휴대폰 등)에서 승인할 때 — 승인 뒤 localhost 주소로 돌아가 "페이지 없음"이 떠도 주소창에 code 가 있다:
+ *       node scripts/get-refresh-token.mjs --gmail --url-only            승인 주소만 출력(브라우저·대기 서버 없음)
+ *       node scripts/get-refresh-token.mjs --gmail --code="<돌아온 주소 전체 또는 code 값>"   그 code 로 바로 교환·저장
+ *       (code 는 한 번만 쓰이고 몇 분 뒤 만료된다)
  */
 import http from "http";
 import { exec } from "child_process";
@@ -22,6 +27,8 @@ try {
 } catch {}
 
 const GMAIL_MODE    = process.argv.includes("--gmail");
+const URL_ONLY      = process.argv.includes("--url-only");
+const CODE_ARG      = process.argv.find(a => a.startsWith("--code="))?.slice("--code=".length) ?? null;
 const CLIENT_ID     = envVars.GOOGLE_CLIENT_ID     || process.env.GOOGLE_CLIENT_ID;
 const CLIENT_SECRET = envVars.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
 const REDIRECT_URI  = "http://localhost:9876/callback";
@@ -57,21 +64,14 @@ function saveToEnvLocal(key, value) {
   writeFileSync(envPath, lines.join("\n"), { mode: 0o600 });
 }
 
-console.log("\n🚀 브라우저를 여는 중...");
-console.log("↳ 자동으로 열린 창이 원치 않는 계정으로 들어가면, 이 URL을 복사해서 시크릿창(쪽)에 직접 붙여넣어 보세요:");
-console.log(authUrl + "\n");
-exec(`open "${authUrl}"`);
+if (URL_ONLY) {
+  console.log("\n아래 주소를 승인할 기기의 브라우저에서 여세요. 승인 뒤 localhost 주소로 돌아가 '페이지 없음'이 떠도 정상 — 그 주소 전체를 --code= 로 넘기세요:\n");
+  console.log(authUrl + "\n");
+  process.exit(0);
+}
 
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, "http://localhost:9876");
-  const code = url.searchParams.get("code");
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  if (!code) { res.end("code 없음"); return; }
-
-  res.end("<h2>인증 완료! 터미널을 확인하세요.</h2>");
-  server.close();
-
-  // code → refresh_token 교환
+/** code(또는 code 가 든 주소) → refresh_token 교환 후 저장·안내 */
+async function exchangeAndSave(code) {
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -99,6 +99,30 @@ const server = http.createServer(async (req, res) => {
   } else {
     console.error("\n❌ 토큰 교환 실패:", JSON.stringify(data, null, 2));
   }
+}
+
+if (CODE_ARG) {
+  let code = CODE_ARG.trim();
+  try { const u = new URL(code); code = u.searchParams.get("code") ?? ""; } catch { /* code 값만 넘긴 경우 */ }
+  if (!code) { console.error("❌ code 를 찾지 못했어요 — 돌아온 주소 전체나 code= 뒤의 값을 넘기세요"); process.exit(1); }
+  await exchangeAndSave(code);
+  process.exit(0);
+}
+
+console.log("\n🚀 브라우저를 여는 중...");
+console.log("↳ 자동으로 열린 창이 원치 않는 계정으로 들어가면, 이 URL을 복사해서 시크릿창(쪽)에 직접 붙여넣어 보세요:");
+console.log(authUrl + "\n");
+exec(`open "${authUrl}"`);
+
+const server = http.createServer(async (req, res) => {
+  const url = new URL(req.url, "http://localhost:9876");
+  const code = url.searchParams.get("code");
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  if (!code) { res.end("code 없음"); return; }
+
+  res.end("<h2>인증 완료! 터미널을 확인하세요.</h2>");
+  server.close();
+  await exchangeAndSave(code);
   process.exit(0);
 });
 

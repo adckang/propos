@@ -49,7 +49,7 @@
 
 | 순서 | ID | 누가 · 무엇을 | 왜 필요한가 |
 | --- | --- | --- | --- |
-| 0 | <a id="rf-40"></a>RF-40 | 사용자: 예약 메일을 받는 Gmail 계정의 Google 권한 다시 허용 — `node scripts/get-refresh-token.mjs --gmail`(계정 선택·메일 머리글 읽기 권한만, 토큰은 `.env.local`에만 저장) → Vercel `GOOGLE_REFRESH_TOKEN`(Production) 교체·재배포 → 청소 관리 › "Gmail Watch 재등록" → 테스트 메일 | Gmail 로그인이 **10-30 08:26부터 계속 거절**(`invalid_grant`)돼 Gmail 구독이 만료됐다 — 예약 메일 알림 경로 전체가 약 3주 멈춤(예약은 08:00·22:00 정기 동기화로 들어옴). 캘린더 로그인은 운영에서 정상. 이 Mac의 `.env.local` 캘린더 토큰도 낡음(운영 값과 다름) |
+| 0 | <a id="rf-40"></a>RF-40 | 사용자: 청소 관리 › "Gmail Watch 재등록" → 제목에 "Reservation confirmed"가 든 테스트 메일 → Slack 1건 확인(RF-39 확인도 겸함) | Gmail 로그인이 10-30 08:26부터 거절(`invalid_grant`)돼 Gmail 구독이 만료, 예약 메일 알림 경로가 3주 멈춤. **11-19 복구 진행:** 휴대폰 승인으로 새 토큰 발급(권한 `gmail.metadata`만, 동작 확인), Vercel `GOOGLE_REFRESH_TOKEN`(Production) 교체·재배포 완료. 남은 것은 왼쪽 확인. 토큰·갱신 정리는 [cleaning-automation-design 13-1](cleaning-automation-design.md) |
 | 1 | — | 사용자: 파주201 현관 움직임 센서 배터리·연결 복구 | 10-30부터 사용 불가 → 입실·퇴실 감지가 지금 안 된다 |
 | 2 | <a id="act-02"></a>ACT-02 | 사용자: Smart Life 앱에서 `에어컨on/off` 장면이 어떤 기기·어느 방인지, 켜기/끄기가 따로인지 확인 | HA로는 장면 안을 읽을 수 없다. 눌러 볼 필요는 없음 |
 | 3 | <a id="act-03"></a>ACT-03 | 사용자: 기존 Slack 워크스페이스·채널 이름 알려주기 | 프로젝트엔 웹훅만 있어 목적지를 확인할 수 없다. URL·토큰은 전달하지 않음 |
