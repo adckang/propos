@@ -279,63 +279,9 @@ describe("Calendar Webhook — updatedMin 기반 감지", () => {
 
 // ============================================================
 // Webhook 보안 — GOOGLE_WEBHOOK_SECRET 검증
+// 실제 핸들러로 확인한다: 캘린더 s14(틀림·없음·미설정), Gmail s36(틀림·맞음), 거의 맞는 값·비밀값 없음·미설정 s129.
+// (이 자리에 있던 시험은 비교 로직을 시험 안에 복사해 그 복사본을 검사해서, 실제 코드가 바뀌어도 통과했다.)
 // ============================================================
-
-describe("Gmail Webhook 보안 — GOOGLE_WEBHOOK_SECRET 검증", () => {
-  // handleGmailWebhook: URL ?secret=X 쿼리와 env 비교
-  function validateGmailWebhookSecret(requestSecret, envSecret) {
-    if (!envSecret) return true; // 환경변수 미설정 시 통과
-    return requestSecret === envSecret;
-  }
-
-  test("환경변수 미설정 → 모든 요청 통과", () => {
-    assert.ok(validateGmailWebhookSecret("any", undefined));
-    assert.ok(validateGmailWebhookSecret("", undefined));
-  });
-
-  test("올바른 secret → 통과", () => {
-    assert.ok(validateGmailWebhookSecret("MY_SECRET", "MY_SECRET"));
-  });
-
-  test("잘못된 secret → 거절 (200 조용히 종료)", () => {
-    assert.ok(!validateGmailWebhookSecret("WRONG", "MY_SECRET"));
-  });
-
-  test("secret 없음 + env 설정됨 → 거절", () => {
-    assert.ok(!validateGmailWebhookSecret("", "MY_SECRET"));
-    assert.ok(!validateGmailWebhookSecret(null, "MY_SECRET"));
-  });
-});
-
-describe("Calendar Webhook 보안 — x-goog-channel-token 검증", () => {
-  // handleCalendarWebhook: X-Goog-Channel-Token 헤더와 env 비교
-  function validateCalendarWebhookToken(headerToken, envSecret) {
-    if (!envSecret) return true; // 환경변수 미설정 시 통과
-    return headerToken === envSecret;
-  }
-
-  test("환경변수 미설정 → 모든 요청 통과", () => {
-    assert.ok(validateCalendarWebhookToken("any", undefined));
-  });
-
-  test("올바른 토큰 → 통과", () => {
-    assert.ok(validateCalendarWebhookToken("MY_TOKEN", "MY_TOKEN"));
-  });
-
-  test("잘못된 토큰 → 거절 (200 조용히 종료)", () => {
-    assert.ok(!validateCalendarWebhookToken("WRONG", "MY_TOKEN"));
-  });
-
-  test("토큰 없음 + env 설정됨 → 거절", () => {
-    assert.ok(!validateCalendarWebhookToken(undefined, "MY_TOKEN"));
-  });
-
-  test("resourceState='sync' → 무조건 통과 (초기 등록 ping)", () => {
-    // 보안 통과 후 sync 상태는 즉시 200 return (무시)
-    const resourceState = "sync";
-    assert.equal(resourceState, "sync"); // 조건 확인용 — 실제 코드는 200 반환
-  });
-});
 
 // ============================================================
 // Gmail/Calendar 토큰 분리 아키텍처

@@ -41,6 +41,7 @@ import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataPro
 import { requireAdminSession, requireScope } from "../../server/auth/operatorAuth.js";
 import { createOperator, listOperators, updateOperator } from "../../server/auth/operatorAdmin.js";
 import { canAccessProperty, isAdminScope, scopeQueryIds } from "../../server/auth/operatorAccounts.js";
+import { secretMatches } from "../../server/auth/secretMatch.js";
 let db = new Pool({ connectionString: process.env.POSTGRES_URL });
 /** 테스트 전용: 핸들러를 가짜 DB 로 실행해 숙소 범위 제한을 검증한다 */
 export function _setDbForTest(fake) { db = fake; }
@@ -625,7 +626,7 @@ async function getCleaningStats(req, res, scope) {
 async function handleCalendarWebhook(req, res) {
   if (req.method !== "POST") return res.status(405).end();
   const webhookSecret = process.env.GOOGLE_WEBHOOK_SECRET;
-  if (webhookSecret && req.headers["x-goog-channel-token"] !== webhookSecret) {
+  if (webhookSecret && !secretMatches(req.headers["x-goog-channel-token"], webhookSecret)) {
     console.warn("[calendar-webhook] 비밀값이 맞지 않는 알림 — 무시"); // RF-38: 비밀값 전환 뒤 확인용
     return res.status(200).end();
   }
@@ -658,7 +659,7 @@ async function handleGmailWebhook(req, res) {
   const webhookSecret = process.env.GOOGLE_WEBHOOK_SECRET;
   if (webhookSecret) {
     const qs = new URL(req.url, "http://localhost").searchParams;
-    if (qs.get("secret") !== webhookSecret) {
+    if (!secretMatches(qs.get("secret"), webhookSecret)) {
       console.warn("[gmail-webhook] 비밀값이 맞지 않는 알림 — 무시"); // RF-38: 비밀값 전환 뒤 확인용
       return res.status(200).end();
     }

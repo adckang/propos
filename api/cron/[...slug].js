@@ -36,6 +36,7 @@ import { getStatsForPeriod } from "../../src/application/reportingService.js";
 import { countPeriodEvents } from "../../src/domain/reportingDomain.js";
 import { queryEvents } from "../../src/infrastructure/eventRepository.js";
 import { reportTokenFailure, reportTokenSuccess, markRenewed, checkStaleness, isRenewalDue } from "../../server/cleaning/_tokenHealth.js";
+import { secretMatches } from "../../server/auth/secretMatch.js";
 
 // RF-27 결과를 로그에 남긴다 — 워처 주소는 남기지 않고 숙소·결과·HTTP 상태만
 function logWatcherReservationPush(label, results) {
@@ -460,7 +461,7 @@ export default async function handler(req, res) {
   }
 
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && req.headers.authorization !== `Bearer ${cronSecret}`) {
+  if (cronSecret && !secretMatches(req.headers.authorization, `Bearer ${cronSecret}`)) {
     return res.status(401).end();
   }
 

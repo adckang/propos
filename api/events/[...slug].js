@@ -16,6 +16,7 @@ import { queryEvents, insertEvent } from "../../src/infrastructure/eventReposito
 import { validateEvent, validateWriteEvent } from "../../src/domain/eventValidation.js";
 import { processEvent } from "../../src/application/eventService.js";
 import { notifyEvent } from "../../server/slackNotifier.js";
+import { hasWatcherSecret } from "../../server/watcherAuth.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 
 import { requireScope } from "../../server/auth/operatorAuth.js";
@@ -66,8 +67,8 @@ export default async function handler(req, res) {
     // Both machine-ingestion branches use the same credential; GET keeps its
     // existing operator/session scope below. Do not expose a new root route.
     if (req.method === "POST" && (!action || action === "write")) {
-      const secret = req.headers["x-pi-secret"];
-      if (!process.env.PROPOS_PI_SECRET || secret !== process.env.PROPOS_PI_SECRET) {
+      // 워처와 같은 확인(RF-21) — 서버 값이 비면 거절, 비교 시간으로 키가 새지 않게 해시 비교
+      if (!hasWatcherSecret(req.headers, process.env)) {
         return sendJson(res, 401, { error: "Unauthorized" });
       }
     }

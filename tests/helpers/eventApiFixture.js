@@ -7,6 +7,7 @@ import * as validation from '../../src/domain/eventValidation.js';
 import { insertEvent } from '../../src/infrastructure/eventRepository.js';
 import { processEvent } from '../../src/application/eventService.js';
 import { DATA_PROFILE } from '../../src/config/dataProfile.js';
+import { hasWatcherSecret } from '../../server/watcherAuth.js';
 
 const source = readFileSync(new URL('../../api/events/[...slug].js', import.meta.url), 'utf8');
 const declarations = parse(source, { sourceType: 'module' }).program.body.map(node => node.declaration ?? node);
@@ -35,7 +36,7 @@ export async function request(action, body, { duplicate = false, secret = 'fixtu
     process: { env: serverSecret == null ? {} : { PROPOS_PI_SECRET: serverSecret } }, DATA_PROFILE,
     resolveServerDataProfile: () => demo ? DATA_PROFILE.DEMO : DATA_PROFILE.HYBRID,
     readBody: actual('readBody'), sendJson: actual('sendJson'), ensureTable: actual('ensureTable'),
-    randomUUID, ...validation, insertEvent, processEvent,
+    randomUUID, ...validation, insertEvent, processEvent, hasWatcherSecret,
     kv: { async set(...args) { cache.push(args); }, async del(...args) { cache.push(args); } },
     notifyEvent: async (...args) => { notices.push(args); return { sent: true }; },
     requireScope: () => { throw new Error('Pi writes cannot depend on a browser session'); },
