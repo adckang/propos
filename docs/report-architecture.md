@@ -501,7 +501,7 @@ iCal 마지막 동기화: N분 전 ✅ / ⚠ N시간 전 (오래된 경우 강�
 | `vite.config.mjs`(개발 스텁)·DEMO | 같은 도메인 함수 사용 | 같은 규칙(DEMO 포함) |
 
 - 그대로 두는 것: 실패 이벤트 저장, 달력의 문제 배지, 상세 실패 목록(`metricDrilldownDomain`).
-- 검증·변경 파일·남은 한계는 [RF-26 결과](refactoring.md#rf26-result)에 있다.
+- 검증·변경 파일·남은 한계는 커밋 `a9c1d52` 메시지와 [RF-26](refactoring.md#rf26-result)에 있다.
 
 <a id="automation-rate"></a>
 
