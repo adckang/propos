@@ -1,12 +1,29 @@
 import { expect, test } from "@playwright/test";
 import { getDemoStats, getDemoDrilldown, getDemoMonthlyCalendar } from '../../src/application/demoReportingService.js';
+import { productionCsp } from '../helpers/cspPolicy.js';
+
+// 운영 응답의 CSP(vercel.json)를 미리보기 서버의 화면 응답에 그대로 붙이되 **차단** 모드로 건다 — 운영은 아직
+// Report-Only 지만, 시험에서는 막히는 것이 있으면 화면이 깨지고 위반이 기록되어 바로 실패한다(나중에 차단으로 바꿀 근거).
+const CSP = productionCsp().value;
+let cspViolations = [];
 
 // Local preview shares production APIs. UI tests must never send writes or
 // telemetry to the occupied property; all service requests use fixture data.
 test.beforeEach(async ({ page }) => {
+  cspViolations = [];
+  await page.exposeFunction('__proposCspViolation', violation => { cspViolations.push(violation); });
+  await page.addInitScript(() => {
+    document.addEventListener('securitypolicyviolation', event => {
+      window.__proposCspViolation(`${event.effectiveDirective} ${event.blockedURI}`);
+    });
+  });
   await page.route('**/*', async route => {
     const url = new URL(route.request().url());
     if (!['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) return route.fulfill({ status: 204, body: '' });
+    if (route.request().resourceType() === 'document') {
+      const response = await route.fetch();
+      return route.fulfill({ response, headers: { ...response.headers(), 'content-security-policy': CSP } });
+    }
     if (!url.pathname.startsWith('/api/')) return route.continue();
     let body = {};
     if (route.request().method() !== 'GET') return route.fulfill({ status: 403, json: { error: 'UI test is read-only' } });
@@ -17,6 +34,10 @@ test.beforeEach(async ({ page }) => {
     else if (url.pathname === '/api/stats') body = getDemoStats(url.searchParams.get('period') ?? 'now');
     return route.fulfill({ status: 200, json: body });
   });
+});
+
+test.afterEach(() => {
+  expect(cspViolations, '운영 CSP 위반').toEqual([]);
 });
 
 test.describe("PROPOS smoke", () => {
@@ -140,5 +161,60 @@ test.describe("PROPOS smoke", () => {
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);
     expect(failedResponses).toEqual([]);
+  });
+
+  test("CSP: 위 흐름 밖의 화면(로그인·개인정보·약관·목록/상세)도 운영 정책을 지킨다", async ({ page }) => {
+    const pageErrors = [];
+    page.on("pageerror", error => { pageErrors.push(String(error)); });
+
+    await page.goto("/privacy-policy");
+    await expect(page.getByRole("heading", { name: "개인정보처리방침" })).toBeVisible();
+    await page.goto("/terms-of-service");
+    await expect(page.locator("h1").first()).toBeVisible();
+
+    await page.goto("/");
+    await expect(page.getByText("현황 대시보드")).toBeVisible();
+    await page.locator('[data-testid="status-details-toggle"]').click();
+    await page.locator('[data-testid="status-card-OCCUPIED"]').click();
+    await expect(page.getByRole("button", { name: /← (대시보드|뒤로)/ }).first()).toBeVisible();
+
+    // 로그인을 요구하는 서버(enforce)라면 보이는 로그인 화면
+    await page.route("**/api/auth/me", route => route.fulfill({ json: { required: true, mode: "enforce", authenticated: false } }));
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "PROPOS 운영자 로그인" })).toBeVisible();
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("CSP: 정책은 필요한 곳(같은 사이트·Clarity·구글 폰트)만 열고 그 밖은 막는다 — 비어 있는 정책이 아님", async ({ page }) => {
+    await page.goto("/privacy-policy");
+    await expect(page.getByRole("heading", { name: "개인정보처리방침" })).toBeVisible();
+    await page.evaluate(async () => {
+      const add = (tag, attrs) => { const el = document.createElement(tag); Object.assign(el, attrs); document.head.appendChild(el); };
+      // 열려 있어야 하는 것 — 운영의 Clarity 분석(태그·본체·수집), 구글 폰트, 같은 사이트 API·이미지
+      add("script", { src: "https://www.clarity.ms/tag/csp-probe" });
+      add("script", { src: "https://scripts.clarity.ms/0.8.0/clarity.js" });
+      add("img", { src: "https://c.bing.com/c.gif" });
+      add("img", { src: "https://c.clarity.ms/c.gif" });
+      add("link", { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Probe" });
+      add("img", { src: "/api/camera/snapshot?path=/local/snapshots/csp-probe.jpg" }); // CCTV 사진은 같은 사이트 이미지
+      await fetch("https://k.clarity.ms/collect", { method: "POST", mode: "no-cors" }).catch(() => {});
+      await fetch("/api/stats?period=now").catch(() => {});
+      // 막혀야 하는 것 — 다른 곳의 스크립트, 페이지 안에 직접 쓴 스크립트, 다른 곳으로 보내는 요청, 허용 목록 밖 이미지
+      add("script", { src: "https://cdn.csp-probe.invalid/x.js" });
+      add("script", { textContent: "window.__cspInlineRan = true;" });
+      await fetch("https://collect.csp-probe.invalid/x", { method: "POST", mode: "no-cors" }).catch(() => {});
+      add("img", { src: "https://images.unsplash.com/photo-csp-probe" }); // 앱에서 갈 수 없는 옛 소개 화면만 쓴다
+      add("img", { src: "data:image/gif;base64,R0lGODlhAQABAAAAACw=" }); // 앱 코드가 쓰지 않는다
+    });
+    const expected = [
+      "connect-src https://collect.csp-probe.invalid/x",
+      "img-src data",
+      "img-src https://images.unsplash.com/photo-csp-probe",
+      "script-src-elem https://cdn.csp-probe.invalid/x.js",
+      "script-src-elem inline",
+    ];
+    await expect.poll(() => [...cspViolations].sort()).toEqual(expected);
+    expect(await page.evaluate(() => window.__cspInlineRan)).toBeUndefined();
+    cspViolations = []; // 의도한 위반 — 공통 검사(afterEach)에서 빼기
   });
 });

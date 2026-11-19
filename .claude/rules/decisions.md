@@ -449,8 +449,8 @@
 
 ## [D-003] ~~CSP 메타태그 제거~~ → 역사 기록
 - **당시 결정**: Netlify Drop에서 CDN 차단으로 CSP 메타태그 삭제
-- **현재(2026-11-19)**: Vercel 프로덕션을 쓰지만 `vercel.json`에는 CSP 헤더가 없다.
-- **재검토**: 인라인 스타일·외부 폰트·Analytics 영향까지 확인해야 하므로 `docs/refactoring.md` 후보 작업으로 보류.
+- **현재(2026-11-19)**: `vercel.json`이 모든 응답에 `Content-Security-Policy-Report-Only`를 붙인다(같은 사이트·Clarity·구글 폰트만 허용, 스타일만 인라인 허용, 사용자 위임). 막지 않고 브라우저 콘솔에 위반만 남긴다. smoke 시험이 같은 정책을 차단 모드로 걸어 화면 위반 0을 확인한다(`tests/smoke/app.smoke.spec.js`, `tests/unit/s133`).
+- **재검토**: 차단(`Content-Security-Policy`) 전환은 운영 화면에서 위반이 없는지 본 뒤 — `docs/refactoring.md` 후보.
 
 ## [D-007] ~~개발/배포 분리 수동 구조~~ → 폐기 (D-008로 대체)
 - **당시 결정**: `src/` 편집 후 `dist/index.html`에 수동 인라인 반영
