@@ -316,7 +316,7 @@ describe('월간 배치(매월 15일) — 실제 핸들러 실행 (RF-19, 시나
   });
 
   test('한 날짜의 일정 생성이 거절돼도(예약 목록에 아직 없는 새 예약) 나머지 날짜의 일정 생성·요청 시각 잡기는 계속한다', async () => {
-    const d1 = kstDay(40), d2 = kstDay(41), d3 = kstDay(42);
+    const [d1, d2, d3] = consecutiveDaysInOneMonth(40, 3);
     const { inserts, blockerDeletes, updates, res, errors, slack } = await runMonthly({
       checkouts: [d1, d2, d3], failInsertOn: [d2], pendingJobs: [{ id: 'j1', cleaning_start_at: start(d1) }],
     });
