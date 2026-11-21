@@ -7,6 +7,7 @@ import * as validation from '../../src/domain/eventValidation.js';
 import { insertEvent } from '../../src/infrastructure/eventRepository.js';
 import { processEvent } from '../../src/application/eventService.js';
 import { DATA_PROFILE } from '../../src/config/dataProfile.js';
+import { OPERATOR_ALERT_EVENT_TYPES } from '../../src/config/eventTypes.js';
 import { hasWatcherSecret } from '../../server/watcherAuth.js';
 
 const source = readFileSync(new URL('../../api/events/[...slug].js', import.meta.url), 'utf8');
@@ -21,7 +22,7 @@ export const event = {
   id: '123e4567-e89b-42d3-a456-426614174000', property_id: 'fixture-ingestion-property',
   type: 'check_in_detected', device_time: '2026-11-09T03:00:00.000Z',
 };
-export async function request(action, body, { duplicate = false, secret = 'fixture-key', serverSecret = 'fixture-key', demo = false, raw } = {}) {
+export async function request(action, body, { duplicate = false, secret = 'fixture-key', serverSecret = 'fixture-key', demo = false, raw, notifyFails = false } = {}) {
   const calls = [], notices = [], cache = [];
   let allocations = 0;
   const db = {
@@ -36,9 +37,9 @@ export async function request(action, body, { duplicate = false, secret = 'fixtu
     process: { env: serverSecret == null ? {} : { PROPOS_PI_SECRET: serverSecret } }, DATA_PROFILE,
     resolveServerDataProfile: () => demo ? DATA_PROFILE.DEMO : DATA_PROFILE.HYBRID,
     readBody: actual('readBody'), sendJson: actual('sendJson'), ensureTable: actual('ensureTable'),
-    randomUUID, ...validation, insertEvent, processEvent, hasWatcherSecret,
+    randomUUID, ...validation, insertEvent, processEvent, hasWatcherSecret, OPERATOR_ALERT_EVENT_TYPES,
     kv: { async set(...args) { cache.push(args); }, async del(...args) { cache.push(args); } },
-    notifyEvent: async (...args) => { notices.push(args); return { sent: true }; },
+    notifyEvent: async (...args) => { notices.push(args); if (notifyFails) throw new Error('fixture Slack down'); return { sent: true }; },
     requireScope: () => { throw new Error('Pi writes cannot depend on a browser session'); },
     console: { error() {} },
   });

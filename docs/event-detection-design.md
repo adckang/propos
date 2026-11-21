@@ -153,6 +153,24 @@ CLEANING/CLEANING_IN_PROGRESS 상태에서:
   → 의심 취소 (재입실)
 ```
 
+### 4-E. sensor_offline_detected · sensor_offline_resolved (RF-28, DEC-08)
+
+입실·퇴실 감지(Layer 1)가 읽는 센서가 꺼지면 감지가 멈춘다. 그 센서 — 숙소 구역의 `binary_sensor` 중 문(`door`)·움직임(`motion`) — 를 감지 필수 센서로 본다. 판정은 감지기(Layer 2)가 아니라 워처의 매 주기에서 한다(`src/domain/sensorHealthDomain.js`). 객실 상태는 바꾸지 않는다.
+
+```
+[HA 상태 unavailable]   → 꺼짐 추적 시작 (꺼진 시각 = 그 상태의 last_changed). 그 뒤 unknown을 거쳐도 같은 끊김
+[꺼짐 30분 이상]        → sensor_offline_detected 1건 (발생 시각 = 꺼진 시각 + 30분) + 운영자 알림
+[30분 안에 복구]        → 아무것도 남기지 않음 (정기 재시작·업데이트)
+[알린 뒤 값이 다시 들어옴] → sensor_offline_resolved 1건 (발생 시각 = 복구 시각), HA 알림창의 끊김 알림을 지움
+```
+
+- `unknown`만으로는 꺼짐이 아니다 — 값이 바뀔 때만 보고하는 센서는 HA 재시작 뒤 한동안 `unknown`이지만 고장이 아니다.
+- 운영자 알림: HA 알림창(`persistent_notification`) + 숙소 설정 `optimization.operatorNotifyService`(`notify.*`, 입실 준비 안전 알림과 같은 값)가 있으면 그 휴대폰 + Slack 링크. Slack은 Vercel의 Pi 입구(`/api/events/write`)가 이 종류(`OPERATOR_ALERT_EVENT_TYPES`)를 **처음 저장할 때만** 한 번 보낸다(재전송은 DB 중복이라 다시 안 감, 5초 제한, 실패는 로그만 — 재시도 없음). Pi에는 Slack 주소가 없다. Pi 입구의 다른 이벤트는 여전히 저장만 한다(RF-06) — 퇴실 지연(RF-29)도 Slack은 가지 않는다.
+- 보고(`reportedAt`)와 알림(`alertedAt`)을 따로 저장한다. 놓친 기록을 다시 처리하는 동안(HA 재연결) 생긴 끊김은 알림을 미뤘다가, 처리가 끝난 뒤에도 꺼져 있을 때만 보낸다 — 이미 끝난 끊김으로 휴대폰을 울리지 않는다. 그사이 워처가 재시작해도 "보고했지만 아직 안 알림"이 남아 다음 정상 주기에 보낸다. 기록(이벤트)은 그대로 남는다.
+- 추적 상태는 워처 상태 파일(`sensorHealth`)에 저장 — 재시작해도 같은 끊김을 다시 알리지 않는다. 깨진 항목은 버린다. 발생 시각에 센서마다 고정된 0~999ms를 더해 같은 순간 넘거나 돌아온 두 센서가 DB 중복 방지(숙소·종류·발생 시각)에 걸리지 않게 하고, 그래도 겹치면 같은 판정 안에서 1ms 민다.
+- 구역 상태를 잠깐 못 읽어 센서가 안 보이면 추적을 유지하고, 구역 기기 목록에서 빠지면(교체·이동) 추적을 지우고 HA 알림창 알림도 지운다(복구를 본 게 아니므로 해소 이벤트 없음 — 달력의 그 문제는 해소되지 않은 채 남는다). 구역 목록이 비어 오면 지우지 않는다(HA가 잠깐 빈 목록을 줄 때 같은 끊김을 다시 알리지 않게).
+- 문제·이상 건수에 1건(복구는 세지 않음). 달력 문제 목록 "감지 센서 연결 끊김" — 구분은 **판정할 때의** 객실 상태(`data.mainStatus`, 배포 직후처럼 늦게 판정하면 꺼진 순간과 다를 수 있다), 해소는 같은 센서(`data.entityId`)의 복구만 짝짓는다.
+
 ---
 
 ## 5. 이벤트 분류
@@ -171,6 +189,8 @@ CLEANING/CLEANING_IN_PROGRESS 상태에서:
 | 이벤트 | 발생 조건 |
 |---|---|
 | `late_checkout_detected` | checkOut + CHECKOUT_GRACE_MIN까지 실제 퇴실 미확인 (예약당 1건) |
+| `sensor_offline_detected` | 감지 필수 센서(문·움직임) unavailable로 30분 넘게(그 뒤 unknown도 이어진 끊김) — 끊김 1회에 1건 + 운영자 알림 |
+| `sensor_offline_resolved` | 알린 센서 복구 (건수에 넣지 않음) |
 
 ### Soft 이벤트 (ConfirmationManager로 라우팅, 상태 변경 없음)
 | 이벤트 | 의미 |

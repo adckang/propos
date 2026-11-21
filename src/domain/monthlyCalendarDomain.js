@@ -30,12 +30,20 @@ const DIRECT_ISSUES = Object.freeze({
   vacant_energy_waste_detected:              { category: 'VACANT',         label: '공실 중 에너지 낭비' },
   post_cleaning_security_breach_detected:    { category: 'VACANT',         label: '청소 후 공실 보안 문제' },
   maintenance_required:                     { category: 'VACANT',         label: '정비 필요' },
+  // 어느 단계에서나 생긴다 — 꺼진 기준을 넘은 순간의 객실 상태로 구분한다(감시기가 data.mainStatus로 보낸다)
+  sensor_offline_detected:                  { category: event => phaseCategory(event.data?.mainStatus), label: '감지 센서 연결 끊김' },
 });
+
+// 객실 상태를 모르면 공실 문제로 본다 — 감시기는 늘 상태를 함께 보내므로 옛 기록·손으로 넣은 기록만 해당
+function phaseCategory(mainStatus) {
+  return Object.hasOwn(ISSUE_CATEGORY_META, mainStatus) ? mainStatus : 'VACANT';
+}
 
 const RESOLUTION_OF = Object.freeze({
   energy_waste_detected:        'energy_waste_resolved',
   complaint_detected:           'complaint_resolved',
   vacant_energy_waste_detected: 'vacant_energy_waste_resolved',
+  sensor_offline_detected:      'sensor_offline_resolved',
 });
 
 function asDate(raw) {
@@ -84,9 +92,12 @@ export function kstDayOffsetFromToday(dateKey, now = new Date()) {
 function findResolution(eventsAsc, event, resolutionType) {
   const detectedAt = asDate(event.device_time)?.getTime();
   if (detectedAt == null) return null;
+  // 대상 기기가 있는 문제(감지 센서)는 같은 기기의 해소만 짝짓는다 — 다른 센서가 돌아온 것을 이 센서의 해소로 보지 않는다
+  const entityId = event.data?.entityId ?? null;
   const resolved = eventsAsc.find(candidate =>
     candidate.property_id === event.property_id
     && candidate.type === resolutionType
+    && (entityId == null || candidate.data?.entityId === entityId)
     && (asDate(candidate.device_time)?.getTime() ?? -Infinity) > detectedAt
   );
   return resolved?.device_time ?? null;
@@ -120,7 +131,7 @@ export function buildIssueItems(events = [], cleaningIssues = [], preStayContext
     items.push(normalizeItem({
       property_id: event.property_id,
       occurred_at: event.device_time,
-      category: meta.category,
+      category: typeof meta.category === 'function' ? meta.category(event) : meta.category,
       type: event.type,
       label: meta.label,
       resolved_at: RESOLUTION_OF[event.type]

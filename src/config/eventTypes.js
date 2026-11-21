@@ -4,6 +4,9 @@ export const EVENT_TYPES = Object.freeze({
   CHECK_OUT_DETECTED: "check_out_detected",
   SCHEDULED_CHECKOUT_REACHED: "scheduled_checkout_reached",
   LATE_CHECKOUT_DETECTED: "late_checkout_detected",
+  // 감지 필수 센서(문·움직임) 30분 넘게 꺼짐 / 복구 — 상태 변경 없음 (RF-28)
+  SENSOR_OFFLINE_DETECTED: "sensor_offline_detected",
+  SENSOR_OFFLINE_RESOLVED: "sensor_offline_resolved",
   CLEANING_STARTED: "cleaning_started",
   CLEANING_FINISHED: "cleaning_finished",
   ENERGY_WASTE_DETECTED: "energy_waste_detected",
@@ -40,6 +43,11 @@ export const SOFT_EVENT_TYPES = new Set([
   "checkout_confirmation_needed",
   "early_checkin_suspected",
   "no_show_suspected",
+]);
+
+// Pi 입구(/api/events/write)는 저장만 한다(RF-06). 운영자에게 알려야 하는 문제만 처음 저장될 때 Slack 링크를 보낸다 (RF-28, DEC-08)
+export const OPERATOR_ALERT_EVENT_TYPES = new Set([
+  "sensor_offline_detected",
 ]);
 
 // 미구현 이벤트 (Zod 검증 통과시키되 파이프라인 처리 건너뜀)
