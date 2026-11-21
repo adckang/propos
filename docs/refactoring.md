@@ -160,5 +160,5 @@
 ## 8. 운영 참고
 
 - 리팩토링 전 복구 기준: `43339da` (태그 `v-before-refactor-20261105`는 그보다 앞선 `eda0f13`).
-- Pi 반영: 런타임 파일만 교체한다. 실제 버전은 Pi Git HEAD가 아니라 `/config/propos/.propos-release.json`과 파일 해시로 확인하고, 복구본은 `/config/propos/.rollout/`에 둔다. [반영 기록](event-ingestion-audit.md#rf-06-rollout)
+- Pi 반영: 런타임 파일만 교체한다. 실제 버전은 Pi Git HEAD가 아니라 `/config/propos/.propos-release.json`과 파일 해시로 확인하고, 복구본은 `/config/propos/.rollout/`에 둔다. [사람용 배포 절차](runbooks/pi-watcher-rollout.md) · [반영 기록](event-ingestion-audit.md#rf-06-rollout)
 - 반영 순서: Pi → Vercel API·화면 → 로컬 재시작. 화면만 먼저 바뀌면 옛 Pi가 새 요청을 모른다.
