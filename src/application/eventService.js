@@ -62,6 +62,7 @@ async function _updateRoomStateCache(kv, event) {
   const STATE_MAP = {
     check_in_detected: { mainStatus: "OCCUPIED", subStatus: "GOOD_CONDITION" },
     check_out_detected: { mainStatus: "CLEANING", subStatus: "CLEANING_PENDING" },
+    scheduled_checkout_reached: { mainStatus: "CLEANING", subStatus: "CLEANING_PENDING" },
     cleaning_started: { mainStatus: "CLEANING", subStatus: "CLEANING_IN_PROGRESS" },
     cleaning_finished: { mainStatus: "VACANT", subStatus: "CLEANING_FINISHED" },
     energy_waste_detected: null,         // subStatus만 변경 → 즉시 캐시 무효화 (delRoomState)

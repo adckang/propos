@@ -171,16 +171,17 @@ function toIso(ms) {
  *
  * @param {object[]} events
  * @param {string} eventType                감지 이벤트 (예: vacant_energy_waste_detected)
- * @param {{ anchorType?: string, resolutionType?: string }} [opts]
- *   anchorType     — 이 건 "직전"의 기준 이벤트 (예: check_out_detected). 있으면 detail.anchor_at
+ * @param {{ anchorType?: string|string[], resolutionType?: string }} [opts]
+ *   anchorType     — 이 건 "직전"의 기준 이벤트 (예: check_out_detected, 여러 종류면 배열). 있으면 detail.anchor_at
  *   resolutionType — 이 건 "직후"의 해소 이벤트 (예: vacant_energy_waste_resolved). 있으면 detail.resolved_at
  * 그 밖에 이벤트 data.reason 이 문자열이면 detail.reason 으로 옮긴다.
  */
 export function detectEventFailuresWithContext(events, eventType, { anchorType, resolutionType } = {}) {
   const byProperty = (type) => {
+    const types = new Set(Array.isArray(type) ? type : [type]);
     const map = new Map();
     for (const e of events) {
-      if (e.type !== type) continue;
+      if (!types.has(e.type)) continue;
       const ms = toMs(e.device_time);
       if (ms == null) continue;
       if (!map.has(e.property_id)) map.set(e.property_id, []);
@@ -219,9 +220,11 @@ export function detectVacantEnergyFailures(events) {
   });
 }
 
-/** 퇴실 후 청소 전 절전·보안 위반 — 퇴실 감지로부터 몇 분 뒤였는지 */
+/** 퇴실 후 청소 전 절전·보안 위반 — 퇴실(옛 감지 또는 예정 시각 전환, RF-29)로부터 몇 분 뒤였는지 */
 export function detectPostCheckoutFailures(events, eventType) {
-  return detectEventFailuresWithContext(events, eventType, { anchorType: "check_out_detected" });
+  return detectEventFailuresWithContext(events, eventType, {
+    anchorType: ["check_out_detected", "scheduled_checkout_reached"],
+  });
 }
 
 /** 청소 완료 후 보안 위반 — 청소 완료로부터 몇 분 뒤였는지 */

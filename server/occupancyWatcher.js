@@ -33,6 +33,7 @@ import {
   isValidTransition,
   INITIAL_STATE,
 } from '../src/domain/room-state/roomStateDomain.js';
+import { planMonitoringReservationUpdate } from '../src/domain/monitoringReservationDomain.js';
 
 const __dir    = dirname(fileURLToPath(import.meta.url));
 // 테스트는 PROPOS_DATA_DIR 로 임시 폴더를 지정해 실제 운영 기록(data/)을 덮어쓰지 않는다
@@ -55,7 +56,7 @@ let roomState = INITIAL_STATE;
 let config    = null;
 const monitor  = new OccupancyMonitor();
 const eventLog     = [];
-const softEventLog = [];  // checkout_confirmation_needed / early_checkin_suspected / no_show_suspected
+const softEventLog = [];  // 상태를 바꾸지 않는 기록: soft 이벤트(checkout_confirmation_needed / early_checkin_suspected / no_show_suspected) + 문제 이벤트(late_checkout_detected)
 const snapshotLog  = [];  // { path, ts, roomState } — CCTV 출입 스냅샷
 let preparationOutbox = [];
 let eventDeliveryRejected = [];
@@ -257,6 +258,7 @@ function buildSnapshotFromStates(stateMap) {
 function buildReservation() {
   if (!config?.reservation) return null;
   return {
+    uid: config.reservation.uid ?? null,
     checkOut: new Date(config.reservation.checkOut),
     ...(config.reservation.checkIn ? { checkIn: new Date(config.reservation.checkIn) } : {}),
   };
@@ -283,6 +285,7 @@ const SOFT_EVENTS = new Set([
   'early_checkin_suspected',
   'no_show_suspected',
 ]);
+const PROBLEM_EVENTS = new Set(['late_checkout_detected']);
 
 async function handleSoftEvent(event) {
   const entry = {
@@ -296,9 +299,31 @@ async function handleSoftEvent(event) {
   softEventLog.push(entry);
   if (softEventLog.length > 50) softEventLog.shift();
 
-  reportEventToVercel(event.type, true, { reason: event.reason ?? null }).catch(() => {});
+  reportEventToVercel(event.type, true, {
+    ...event.data,
+    subType: event.subType ?? null,
+    reason: event.reason ?? null,
+  }, event.timestamp).catch(() => {});
 
   console.log(`[SoftEvent] ${event.type}/${entry.subType ?? '-'} → [${entry.recipients.join(', ')}] "${event.reason}"`);
+}
+
+// 운영 문제 기록 — 객실 상태는 바꾸지 않는다(DEC-08). 전송 대기열에 넣는 것까지는 즉시 끝나므로
+// 다른 이벤트처럼 전송 완료를 기다리지 않는다(느린 네트워크가 같은 주기의 상태 전환을 늦추지 않게).
+// 전환 기록(eventLog)이 아니라 상태를 바꾸지 않는 기록(softEventLog)에 남긴다 — 화면은 eventLog 마지막 줄을 "마지막 전환"으로 보여준다.
+function handleProblemEvent(event) {
+  softEventLog.push({ type: event.type, subType: null, reason: event.reason, recipients: [], ts: Date.now(), roomState: { ...roomState } });
+  if (softEventLog.length > 50) softEventLog.shift();
+  reportEventToVercel(event.type, false, { ...event.data, reason: event.reason ?? null }, event.timestamp).catch(() => {});
+  console.warn(`[ProblemEvent] ${event.type} — ${event.reason}`);
+}
+
+// RF-29: 체류 중 퇴실 전환 전에 도착해 대기시킨 예약(null = 예약 없음)을 전환이 끝난 뒤 쓴다.
+function promotePendingReservation() {
+  if (!config || !Object.hasOwn(config, 'pendingReservation') || roomState.mainStatus === 'OCCUPIED') return;
+  const { pendingReservation, ...rest } = config;
+  config = { ...rest, reservation: pendingReservation };
+  persistConfig(config);
 }
 
 // ── 상태 전환 적용 ────────────────────────────────────────────────────────────
@@ -319,7 +344,7 @@ async function applyTransition(event) {
     prevState: entry.prevState,
     newState:  nextState,
     reason:    event.reason ?? null,
-  }).catch(() => {});
+  }, event.timestamp).catch(() => {});
 
   console.log(`[Watcher] 상태 전환: ${nextState.mainStatus}/${nextState.subStatus} ← ${event.type}`);
 
@@ -337,6 +362,7 @@ async function applyTransition(event) {
   }
 
   persistState();
+  promotePendingReservation();
 }
 
 // ── 핵심 처리 ─────────────────────────────────────────────────────────────────
@@ -368,6 +394,8 @@ async function processNow(now = Date.now()) {
     for (const event of events) {
       if (SOFT_EVENTS.has(event.type)) {
         await handleSoftEvent(event);
+      } else if (PROBLEM_EVENTS.has(event.type)) {
+        handleProblemEvent(event);
       } else {
         await applyTransition(event);
       }
@@ -446,13 +474,14 @@ async function flushPreparationOutbox() {
   finally { flushingPreparationOutbox = false; }
 }
 
-async function reportEventToVercel(type, isSoft, data = null) {
+async function reportEventToVercel(type, isSoft, data = null, occurredAt = Date.now()) {
   const isPreparation = data?.preparationPolicy === 'sensor-v1' && data.optimizationRunId;
   const propertyId = isPreparation ? data.propertyId ?? config?.areaName : config?.areaName;
   if (!propertyId) return;
   const sourceRef = isPreparation ? `optimization:${data.optimizationRunId}:${type}` : `watcher:event:${randomUUID()}`;
   if (!preparationOutbox.some(event => event.source_ref === sourceRef)) {
-    preparationOutbox.push({ type, is_soft: isSoft, device_time: Date.now(), property_id: propertyId,
+    const deviceTime = Number.isFinite(occurredAt) ? occurredAt : Date.now();
+    preparationOutbox.push({ type, is_soft: isSoft, device_time: deviceTime, property_id: propertyId,
       data: structuredClone(data), source_system: 'HA_WATCHER', source_ref: sourceRef });
     if (!persistState()) return;
   }
@@ -715,7 +744,14 @@ export function setMonitoringConfig(cfg) {
   if (isProcessing) { pendingConfig = { ...pendingConfig, ...cfg }; return; }
   const prevCheckIn = config?.reservation?.checkIn ?? null;
   // Browser reservation refreshes must preserve hardware/sensor mappings.
-  config = { ...config, ...cfg };
+  const nextConfig = { ...config, ...cfg };
+  if (Object.hasOwn(cfg, 'reservation')) {
+    const planned = planMonitoringReservationUpdate(config?.reservation ?? null, cfg.reservation, roomState, new Date());
+    nextConfig.reservation = planned.reservation;
+    if (planned.deferred) nextConfig.pendingReservation = planned.pendingReservation; // null도 "예약 없음"으로 대기
+    else if (!planned.keepPending) delete nextConfig.pendingReservation;
+  }
+  config = nextConfig;
   persistConfig(config);
 
   // 예약 취소 감지: 이전에 checkIn이 있었는데 이제 없어진 경우
@@ -743,6 +779,7 @@ export function setMonitoringConfig(cfg) {
 export function setRoomState(newState) {
   roomState = newState;
   persistState();
+  promotePendingReservation(); // 운영자가 체류 중 멈춤을 손으로 풀었을 때도 대기 중인 다음 예약을 쓴다
 }
 
 // Browser requests express an operation, never a predicted room state. Keep

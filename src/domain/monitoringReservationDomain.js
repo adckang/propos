@@ -52,3 +52,46 @@ export function toMonitoringReservation(reservation) {
     checkOut: reservation.checkOut?.toISOString?.() ?? null,
   };
 }
+
+// 빈 값(null)은 읽을 수 없는 시각이다 — new Date(null)은 1970-01-01(0)이 되어 "이미 지난 시각"으로 보인다
+const timeOf = value => (value == null || value === '' ? NaN : new Date(value).getTime());
+
+function sameReservation(a, b) {
+  if (!a || !b) return a === b;
+  if (a.uid != null && b.uid != null) return String(a.uid) === String(b.uid);
+  return timeOf(a.checkIn) === timeOf(b.checkIn) && timeOf(a.checkOut) === timeOf(b.checkOut);
+}
+
+/**
+ * 체류 상태가 아직 예약의 예정 퇴실을 처리하지 못했는데(RF-29) 서버·화면이 다음 예약이나
+ * "예약 없음"(퇴실 시각이 지나 고를 예약이 없을 때 null)을 보내면, 지난 예약을 퇴실 전환이
+ * 끝날 때까지 보존하고 받은 값은 대기시킨다(deferred). 전환 뒤 호출부가 pendingReservation을
+ * 승격한다 — null도 승격할 값이다. 그 밖에는 받은 예약을 그대로 쓴다.
+ * 다음 손님의 입실 시각까지 이미 지난 예약이 오면 보존하지 않는다(그 숙박이 지금 체류다).
+ * 지금 예약과 같은 예약이 다시 오면 이미 대기 중인 값은 그대로 둔다(keepPending) — 늦게 온 같은 예약이
+ * 대기 중인 다음 예약을 지우지 않게.
+ */
+export function planMonitoringReservationUpdate(currentReservation, incomingReservation, roomState, now = new Date()) {
+  const nowMs = timeOf(now);
+  const currentCheckOut = timeOf(currentReservation?.checkOut);
+  const currentStayUnprocessed = roomState?.mainStatus === 'OCCUPIED'
+    && Boolean(currentReservation)
+    && Number.isFinite(nowMs)
+    && Number.isFinite(currentCheckOut)
+    && currentCheckOut <= nowMs;
+  const incomingCheckIn = timeOf(incomingReservation?.checkIn);
+  // 입실 시각을 읽을 수 없는 다른 예약도 보존 쪽으로 — 지난 예약의 퇴실 전환을 잃는 것보다 한 주기 늦게 쓰는 게 낫다
+  const replacesWithLaterOrNone = incomingReservation == null
+    || (!sameReservation(currentReservation, incomingReservation)
+      && (!Number.isFinite(incomingCheckIn) || incomingCheckIn > nowMs));
+
+  if (currentStayUnprocessed && replacesWithLaterOrNone) {
+    return { reservation: currentReservation, pendingReservation: incomingReservation ?? null, deferred: true, keepPending: false };
+  }
+  return {
+    reservation: incomingReservation,
+    pendingReservation: null,
+    deferred: false,
+    keepPending: Boolean(currentReservation && incomingReservation && sameReservation(currentReservation, incomingReservation)),
+  };
+}

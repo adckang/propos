@@ -2,6 +2,8 @@ export const EVENT_TYPES = Object.freeze({
   // 상태 기계 이벤트 (is_soft: false)
   CHECK_IN_DETECTED: "check_in_detected",
   CHECK_OUT_DETECTED: "check_out_detected",
+  SCHEDULED_CHECKOUT_REACHED: "scheduled_checkout_reached",
+  LATE_CHECKOUT_DETECTED: "late_checkout_detected",
   CLEANING_STARTED: "cleaning_started",
   CLEANING_FINISHED: "cleaning_finished",
   ENERGY_WASTE_DETECTED: "energy_waste_detected",

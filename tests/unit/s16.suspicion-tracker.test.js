@@ -35,38 +35,45 @@ function evalTracker(tracker, sensorResult, roomState, reservation, motionNow, n
 }
 
 // ============================================================
-// check_out_detected
+// 예정 체크아웃 전환 (RF-29) — 옛 check_out_detected 대신 scheduled_checkout_reached
 // ============================================================
-describe('check_out_detected', () => {
-  test('Case 1: checkOut 경과 후 EXIT → 즉시 check_out_detected', () => {
+const typesOf = events => events.map(e => e.type);
+const CHECKOUT_TYPES = ['check_out_detected', 'scheduled_checkout_reached', 'late_checkout_detected'];
+const checkoutEvents = events => events.filter(e => CHECKOUT_TYPES.includes(e.type));
+
+describe('scheduled_checkout_reached', () => {
+  test('Case 1: checkOut 경과 후 EXIT → 즉시 전환, 퇴실 지연 판정 없음', () => {
     const t = new SuspicionTracker();
     const res = { checkOut: new Date(0) };
     const events = evalTracker(t, withExit(4 * MIN), OCCUPIED, res, false, 5 * MIN);
-    assert.ok(events.some(e => e.type === 'check_out_detected'));
+    assert.deepEqual(typesOf(checkoutEvents(events)), ['scheduled_checkout_reached']);
+    assert.equal(t.lateCheckoutWatch, null);
   });
 
   test('Case 2: checkOut 전 EXIT → 의심 기록, 이벤트 없음', () => {
     const t = new SuspicionTracker();
     const res = { checkOut: new Date(60 * MIN) };
     const events = evalTracker(t, withExit(5 * MIN), OCCUPIED, res, false, 5 * MIN);
-    assert.equal(events.filter(e => e.type === 'check_out_detected').length, 0);
+    assert.deepEqual(checkoutEvents(events), []);
     assert.ok(t.checkoutSuspectedAt !== null);
   });
 
-  test('의심 상태 → checkOut 도래 → check_out_detected', () => {
+  test('의심 상태 → checkOut 도래 + 모션 없음 → 전환, 퇴실 확인됨', () => {
     const t = new SuspicionTracker();
     const res = { checkOut: new Date(30 * MIN) };
     evalTracker(t, withExit(9 * MIN), OCCUPIED, res, false, 10 * MIN);
     const events = evalTracker(t, noSensor(), OCCUPIED, res, false, 31 * MIN);
-    assert.ok(events.some(e => e.type === 'check_out_detected'));
+    assert.deepEqual(typesOf(checkoutEvents(events)), ['scheduled_checkout_reached']);
+    assert.equal(t.lateCheckoutWatch, null);
   });
 
-  test('의심 상태 + 모션 있으면 → check_out_detected 없음', () => {
+  test('의심 상태 + 모션 있으면 → 예정 시각에 전환하되 퇴실은 미확인', () => {
     const t = new SuspicionTracker();
     const res = { checkOut: new Date(30 * MIN) };
     evalTracker(t, withExit(9 * MIN), OCCUPIED, res, false, 10 * MIN);
     const events = evalTracker(t, noSensor(), OCCUPIED, res, true, 31 * MIN);
-    assert.equal(events.filter(e => e.type === 'check_out_detected').length, 0);
+    assert.deepEqual(typesOf(checkoutEvents(events)), ['scheduled_checkout_reached']);
+    assert.notEqual(t.lateCheckoutWatch, null, '유예 시간 동안 실제 퇴실을 기다린다');
   });
 
   test('의심 상태 + ENTRY → 의심 취소', () => {
@@ -77,23 +84,25 @@ describe('check_out_detected', () => {
     assert.equal(t.checkoutSuspectedAt, null);
   });
 
-  test('예약 없으면 check_out_detected 없음', () => {
+  test('예약 없으면 전환·퇴실 지연 모두 없음', () => {
     const t = new SuspicionTracker();
     const events = evalTracker(t, withExit(0), OCCUPIED, null, false, 60 * MIN);
-    assert.equal(events.filter(e => e.type === 'check_out_detected').length, 0);
+    assert.deepEqual(checkoutEvents(events), []);
+    assert.equal(t.lateCheckoutWatch, null);
   });
 
-  test('OCCUPIED 아닌 상태에서 EXIT → 퇴실 이벤트 없음', () => {
+  test('OCCUPIED 아닌 상태에서는 예정 시각이 지나도 전환 없음', () => {
     const t = new SuspicionTracker();
     const res = { checkOut: new Date(0) };
     const events = evalTracker(t, withExit(0), PRE_STAY_OPTIMIZED, res, false, 5 * MIN);
-    assert.equal(events.filter(e => e.type === 'check_out_detected').length, 0);
+    assert.deepEqual(checkoutEvents(events), []);
   });
 
-  test('의심 만료: checkOut + 120분 경과 → 의심 자동 취소', () => {
+  test('전환하면 퇴실 의심 기록이 지워진다', () => {
     const t = new SuspicionTracker();
     const res = { checkOut: new Date(10 * MIN) };
     evalTracker(t, withExit(4 * MIN), OCCUPIED, res, false, 5 * MIN);
+    assert.notEqual(t.checkoutSuspectedAt, null);
     evalTracker(t, noSensor(), OCCUPIED, res, true, 10 * MIN + 121 * MIN);
     assert.equal(t.checkoutSuspectedAt, null);
   });
@@ -103,36 +112,16 @@ describe('check_out_detected', () => {
 // checkout_confirmation_needed
 // ============================================================
 describe('checkout_confirmation_needed', () => {
-  test('Case A — checkOut + GRACE 경과 + 모션 있음 → late_checkout 발행', () => {
+  test('체크아웃 경과 후 점유 징후 → 옛 late_checkout 확인 요청 대신 퇴실 지연 문제 1건 (RF-29)', () => {
     const t = new SuspicionTracker();
     const res = { checkOut: new Date(0) };
-    // now = checkOut + 21분 (GRACE 20분 초과), 모션 있음
-    const events = evalTracker(t, noSensor(), OCCUPIED, res, true, 21 * MIN);
-    assert.ok(events.some(e => e.type === 'checkout_confirmation_needed' && e.subType === 'late_checkout'));
-  });
-
-  test('Case A — AC 가동 중 → late_checkout 발행', () => {
-    const t = new SuspicionTracker();
-    const res = { checkOut: new Date(0) };
-    const events = evalTracker(t, noSensor(), OCCUPIED, res, false, 21 * MIN, { acPower: 200 });
-    assert.ok(events.some(e => e.type === 'checkout_confirmation_needed' && e.subType === 'late_checkout'));
-  });
-
-  test('Case A — 점유 징후 없으면 발행 안됨', () => {
-    const t = new SuspicionTracker();
-    const res = { checkOut: new Date(0) };
-    // 모션/AC/소음 모두 없음
-    const events = evalTracker(t, noSensor(), OCCUPIED, res, false, 21 * MIN, { acPower: 10, noiseLevel: 30 });
+    const events = [
+      ...evalTracker(t, noSensor(), OCCUPIED, res, true, 1),
+      ...evalTracker(t, noSensor(), CLEANING_PENDING, res, true, 21 * MIN, { acPower: 200 }),
+      ...evalTracker(t, noSensor(), CLEANING_PENDING, res, true, 22 * MIN, { acPower: 200 }),
+    ];
     assert.equal(events.filter(e => e.type === 'checkout_confirmation_needed').length, 0);
-  });
-
-  test('Case A — 중복 발행 방지 (caseAFiredAt)', () => {
-    const t = new SuspicionTracker();
-    const res = { checkOut: new Date(0) };
-    evalTracker(t, noSensor(), OCCUPIED, res, true, 21 * MIN);
-    // 두 번째 poll
-    const events = evalTracker(t, noSensor(), OCCUPIED, res, true, 22 * MIN);
-    assert.equal(events.filter(e => e.type === 'checkout_confirmation_needed').length, 0);
+    assert.equal(events.filter(e => e.type === 'late_checkout_detected').length, 1);
   });
 
   test('Case B — EXIT 후 EARLY_CHECKOUT_QUIET 경과 + 방 비어있음 → early_checkout 발행', () => {

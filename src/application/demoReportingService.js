@@ -74,7 +74,7 @@ function monthlyDemoIssues(period, selectedIds = null, now = new Date()) {
 
 function alignMonthlyStatsWithIssues(stats, issues) {
   const count = type => issues.filter(item => item.type === type).length;
-  const anomalies = count('complaint_detected') + count('energy_waste_detected');
+  const anomalies = count('complaint_detected') + count('energy_waste_detected') + count('late_checkout_detected');
   const preStayFailures = count('pre_stay_optimization_failed');
   const cleaningTimeFailures = count('cleaning_time_exceeded');
   const assignmentFailures = count('cleaning_assignment_issue');

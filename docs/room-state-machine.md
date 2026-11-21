@@ -103,7 +103,9 @@ Airbnb iCal·Google Calendar는 지난 일정을 내보내지 않지만 PROPOS�
 | `vacant_energy_waste_resolved` | 공실 중 에너지낭비 자동 절전처리 완료 (VACANT 전용) |
 | `complaint_detected` | 민원 / 위험 이벤트 감지 |
 | `complaint_resolved` | 민원 / 위험 해소됨 |
-| `check_out_detected` | 체크아웃 감지 — **OCCUPIED 4개 Sub-Status 공통** (`OCCUPIED_COMMON`) |
+| `scheduled_checkout_reached` | 예약 체크아웃 시각 도래 — **OCCUPIED 4개 Sub-Status 공통** (`OCCUPIED_COMMON`). 실제 퇴실 확인을 기다리지 않는다(RF-29, DEC-08) |
+| `check_out_detected` | 옛 체크아웃 감지(EXIT 확인 뒤 전환). 감시기는 더 내지 않지만 지난 기록을 읽기 위해 같은 전환을 유지 |
+| `late_checkout_detected` | 퇴실 지연 — 예정 체크아웃 + 유예 시간까지 실제 퇴실 미확인. **상태를 바꾸지 않는** 문제 이벤트(예약당 1건) |
 | `cleaning_started` | 청소 시작됨 |
 | `cleaning_finished` | 청소 완료됨 |
 
@@ -190,7 +192,7 @@ OCCUPIED / GOOD_CONDITION
 **OCCUPIED_COMMON (4개 Sub-Status 공통):**
 ```
 모든 OCCUPIED Sub-Status
-  -- check_out_detected -->
+  -- scheduled_checkout_reached (옛 기록: check_out_detected) -->
 CLEANING / CLEANING_PENDING
 ```
 
@@ -254,7 +256,7 @@ VACANT / CLEANING_FINISHED
 
 | # | From (Main/Sub) | Event | To (Main/Sub) |
 |---|---|---|---|
-| OC1 | OCCUPIED/\* (4개 전체) | check_out_detected | CLEANING/CLEANING_PENDING |
+| OC1 | OCCUPIED/\* (4개 전체) | scheduled_checkout_reached (옛 기록: check_out_detected) | CLEANING/CLEANING_PENDING |
 
 ### 5C. 상태별 전환
 
@@ -331,7 +333,7 @@ PRE_STAY_READY / OPTIMIZED
 OCCUPIED / GOOD_CONDITION
   -- (energy_waste_detected | complaint_detected | 해소 이벤트) -->
 OCCUPIED / GOOD_CONDITION | ENERGY_WASTE | ISSUE_COMPLAINT | ISSUE_AND_ENERGY
-  -- check_out_detected -->
+  -- scheduled_checkout_reached -->
 CLEANING / CLEANING_PENDING
   -- cleaning_started -->
 CLEANING / CLEANING_IN_PROGRESS
@@ -383,7 +385,7 @@ IoT 센서 / 외부 시스템
 | 이벤트 그룹 | STALE_THRESHOLD |
 |---|---|
 | checkin_prep_time_reached | 10분 |
-| check_in_detected / check_out_detected | 5분 |
+| check_in_detected / check_out_detected / scheduled_checkout_reached | 5분 |
 | energy_waste_* / complaint_* | 2분 |
 | vacant_energy_waste_* | 2분 |
 | cleaning_* / maintenance_* | 10분 |

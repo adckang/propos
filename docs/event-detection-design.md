@@ -31,9 +31,9 @@ Raw Sensor (30초 폴링)
         ▼
 [Layer 2: SuspicionTracker]
   EXIT/ENTRY + 예약시각 + 현재상태 → 의심 기록 → 확신 이벤트 생성
-        │  check_out_detected / check_in_detected /
+        │  scheduled_checkout_reached / late_checkout_detected / check_in_detected /
         │  cleaning_started / cleaning_finished /
-        │  checkout_confirmation_needed / early_checkin_suspected / no_show_suspected
+        │  checkout_confirmation_needed(early_checkout) / early_checkin_suspected / no_show_suspected
         ▼
 [Layer 3: OccupancyMonitor.process()]
   기존 이벤트(smoke/noise/energy/environment) + 새 이벤트 통합 반환
@@ -81,27 +81,34 @@ ENTRY 후보 취소: ③ 완료 전 모션이 EXIT_NO_MOTION_MIN 이상 없음 �
 
 ## 4. Layer 2 — SuspicionTracker 이벤트별 로직
 
-### 4-A. check_out_detected
+### 4-A. scheduled_checkout_reached · late_checkout_detected (RF-29, DEC-08)
+
+객실 상태는 예약 체크아웃 시각을 기준으로 바꾼다. 실제 퇴실(EXIT) 확인은 전환을 늦추지 않고, 확인되지 않으면 문제로만 남긴다.
 
 ```
 OCCUPIED 상태에서:
 
-[EXIT 감지 시]
-  Case 1: checkOut 시각 이미 경과 → 즉시 check_out_detected 발생
-  Case 2: checkOut 시각 미경과   → CHECKOUT_SUSPECTED 기록 (상태 변경 없음)
+[checkOut 전 EXIT]         → CHECKOUT_SUSPECTED 기록 (상태 변경 없음)
+[CHECKOUT_SUSPECTED + ENTRY] → 의심 취소 (나갔다가 다시 돌아옴)
 
-[CHECKOUT_SUSPECTED 상태 + checkOut 도래 + 모션 없음]
-  → check_out_detected 발생 (정상 퇴실: 먼저 나갔다가 checkOut 시각 도래)
+[checkOut 시각 도래 — 예약당 1회]
+  → scheduled_checkout_reached (발생 시각 = 예약 checkOut) → CLEANING / CLEANING_PENDING
+  퇴실 확인 = 그 판정의 EXIT, 또는 CHECKOUT_SUSPECTED + 지금 모션 없음
+  확인되지 않았으면 CHECKOUT_GRACE_MIN 동안 EXIT를 더 기다린다 (상태와 무관)
+    — EXIT는 문 닫힘 + EXIT_NO_MOTION_MIN 뒤에 확정되므로 정시에 나간 손님도 전환 순간엔 미확인일 수 있다
 
-[ENTRY 감지 시 + CHECKOUT_SUSPECTED 상태]
-  → 의심 취소 (나갔다가 다시 돌아옴)
-
-[EXIT 없음 + checkOut + grace 경과 + 모션 없음]
-  → checkout_confirmation_needed (메시지 발송 트리거, soft event)
-
-[의심 만료: checkOut + SUSPICION_EXPIRE_MIN 경과]
-  → 의심 자동 취소
+[유예 안에 EXIT 확인]     → 문제 없음
+[checkOut + GRACE 경과, 미확인] → late_checkout_detected 1건 (발생 시각 = 예약 checkOut, 상태 변경 없음)
+[유예가 지난 뒤 처음 판정]  → 전환만, 지연 판정 안 함 (워처가 꺼져 있던 구간은 보지 못했다)
 ```
+
+- "같은 퇴실" = 예약 uid + checkOut 시각. 연장으로 checkOut이 바뀌면 새 시각에 다시 전환한다.
+- 판정 상태(유예 대기)는 메모리에만 있다 — 유예 20분 안에 워처가 재시작하면 그 예약의 지연 판정은 빠진다.
+- 체류 중인데 보유 예약의 checkIn이 아직 미래면(전환 전에 예약이 바뀐 경우) 자동으로 바로잡지 않는다 — 체류 중 재시작은 상태·기기를 건드리지 않는다(s103). 운영자가 상태를 바꾸면 대기 중인 예약도 그때 쓴다.
+
+- 예전의 Case A(`checkout_confirmation_needed` / `late_checkout`, 게스트 확인 요청)는 퇴실 지연 문제로 대체했다.
+- Pi가 퇴실 전환 전에 다음 예약이나 "예약 없음"을 받으면 지난 예약을 전환이 끝날 때까지 보존한다(`planMonitoringReservationUpdate`).
+- 옛 `check_out_detected` 기록은 같은 전환·건수로 계속 읽는다.
 
 ### 4-B. check_in_detected
 
@@ -154,16 +161,21 @@ CLEANING/CLEANING_IN_PROGRESS 상태에서:
 | 이벤트 | 발생 조건 |
 |---|---|
 | `check_in_detected` | ENTRY + checkIn 시각 이후 |
-| `check_out_detected` | EXIT + checkOut 도래 또는 이미 경과 |
+| `scheduled_checkout_reached` | 예약 checkOut 시각 도래 (예약당 1회) |
 | `cleaning_started` | ENTRY + 모션 20분 지속 |
 | `cleaning_finished` | EXIT + 10분 조용 |
 | `energy_waste_detected/resolved` | 기존 로직 유지 |
 | `complaint_detected/resolved` | 기존 로직 유지 |
 
+### 문제 이벤트 (상태 변경 없음, 문제·이상 건수에 포함)
+| 이벤트 | 발생 조건 |
+|---|---|
+| `late_checkout_detected` | checkOut + CHECKOUT_GRACE_MIN까지 실제 퇴실 미확인 (예약당 1건) |
+
 ### Soft 이벤트 (ConfirmationManager로 라우팅, 상태 변경 없음)
 | 이벤트 | 의미 |
 |---|---|
-| `checkout_confirmation_needed` | 퇴실 여부 게스트에게 확인 필요 |
+| `checkout_confirmation_needed` | 조기 퇴실 징후(early_checkout) — 청소 조기 배정 가능 |
 | `early_checkin_suspected` | 조기 체크인 가능성, 운영자 확인 |
 | `no_show_suspected` | No-show 가능성, 운영자 확인 |
 
@@ -182,8 +194,8 @@ CLEANING_SUSTAINED_MIN: 20  // cleaning_started: 모션 지속 (게스트와 구
 CLEANING_DONE_QUIET_MIN:10  // cleaning_finished: 조용 지속
 
 // 퇴실 의심
-CHECKOUT_GRACE_MIN:     20  // checkout_confirmation_needed 발동 grace
-SUSPICION_EXPIRE_MIN:  120  // 의심 상태 최대 유효 기간
+CHECKOUT_GRACE_MIN:     20  // 예정 체크아웃 뒤 실제 퇴실을 기다리는 시간 → 지나면 late_checkout_detected
+SUSPICION_EXPIRE_MIN:  120  // (RF-29 이후 퇴실 판정에 쓰지 않음 — 전환 때 의심을 지운다)
 
 // 체크인
 NO_SHOW_WINDOW_MIN:     60  // no_show_suspected 발동 기준

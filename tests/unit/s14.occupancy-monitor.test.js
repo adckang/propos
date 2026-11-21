@@ -291,84 +291,85 @@ describe('장시간 문 열림', () => {
 });
 
 // ============================================================
-// 퇴실 감지 (새 로직: EXIT 시맨틱 이벤트 → 의심 → 확신)
+// 퇴실 (RF-29): 예정 체크아웃 시각에 청소 대기로 전환, 실제 퇴실(EXIT)은 유예 시간 안에 확인
 // ============================================================
-describe('퇴실 감지', () => {
-  test('도어 이벤트 없이 모션 없음만으로는 퇴실 감지 안 됨', () => {
+const CLEANING_PENDING = { mainStatus: 'CLEANING', subStatus: 'CLEANING_PENDING' };
+const CHECKOUT_TYPES = ['check_out_detected', 'scheduled_checkout_reached', 'late_checkout_detected'];
+
+// 워처처럼 예정 체크아웃 전환이 나오면 그 뒤로는 청소 대기 상태로 판정한다.
+function runSteps(m, res, steps) {
+  let state = GOOD;
+  const seen = [];
+  for (const [at, s] of steps) {
+    for (const e of call(m, s, state, res, at)) {
+      if (!CHECKOUT_TYPES.includes(e.type)) continue;
+      seen.push({ type: e.type, at, timestamp: e.timestamp });
+      if (e.type === 'scheduled_checkout_reached') state = CLEANING_PENDING;
+    }
+  }
+  return seen;
+}
+// 모션 → 문 열림 → 문 닫힘 → 5분 조용 = EXIT 확정 (문 닫힘 + 5분)
+const exitSequence = (doorClosedAt) => [
+  [doorClosedAt - 2 * MIN, snap({ motionDetected: true,  doorOpen: false })],
+  [doorClosedAt - 1 * MIN, snap({ motionDetected: false, doorOpen: true  })],
+  [doorClosedAt,           snap({ motionDetected: false, doorOpen: false })],
+  [doorClosedAt + 5 * MIN + 1, snap({ motionDetected: false, doorOpen: false })],
+];
+const quietUntil = (from, to) => Array.from({ length: Math.floor((to - from) / MIN) + 1 },
+  (_, i) => [from + i * MIN, snap({ motionDetected: false, doorOpen: false })]);
+
+describe('퇴실 (예정 시각 전환 + 퇴실 지연)', () => {
+  test('도어 이벤트 없이 모션 없음만으로는 퇴실 확인이 안 된다 → 예정 시각 전환 + 퇴실 지연 1건', () => {
     const m = new OccupancyMonitor();
     const res = reservation(1); // checkOut = 지금
-
-    call(m, snap({ motionDetected: false }), GOOD, res, 0);
-    const events = call(m, snap({ motionDetected: false }), GOOD, res, 60 * MIN);
-    assert.equal(events.filter(e => e.type === 'check_out_detected').length, 0,
-      'EXIT 없이 모션 없음만으로는 퇴실 감지 안 됨');
+    const seen = runSteps(m, res, quietUntil(0, 60 * MIN));
+    assert.deepEqual(seen.map(e => e.type), ['scheduled_checkout_reached', 'late_checkout_detected']);
+    assert.equal(seen[0].at, MIN, '예정 시각 뒤 첫 판정에서 전환');
+    assert.equal(seen[1].at, 21 * MIN, '유예 20분이 지나서 판정');
+    assert.ok(seen.every(e => e.timestamp === 1), '두 이벤트 모두 발생 시각 = 예정 체크아웃');
   });
 
-  test('EXIT 시퀀스 + 체크아웃 시각 도래 → check_out_detected', () => {
+  test('체크아웃 전에 나감(EXIT 확정) → 예정 시각에 전환, 퇴실 지연 없음', () => {
     const m = new OccupancyMonitor();
     const checkOutMs = 30 * MIN;
-    const res = reservation(checkOutMs);
-
-    // t=0: 모션 ON (누군가 있었음)
-    call(m, snap({ motionDetected: true,  doorOpen: false }), GOOD, res, 0);
-    // t=1min: 문 열림 (나가는 중)
-    call(m, snap({ motionDetected: false, doorOpen: true  }), GOOD, res, 1 * MIN);
-    // t=2min: 문 닫힘 → exitPendingAt=2min
-    call(m, snap({ motionDetected: false, doorOpen: false }), GOOD, res, 2 * MIN);
-    // t=7min+1: EXIT 확정 (5분 경과), checkOut(30min) 미도래 → CHECKOUT_SUSPECTED
-    call(m, snap({ motionDetected: false, doorOpen: false }), GOOD, res, 7 * MIN + 1);
-    // t=31min: checkOut(30min) 도래 + 모션 없음 → check_out_detected
-    const events = call(m, snap({ motionDetected: false, doorOpen: false }), GOOD, res, 31 * MIN);
-    assert.ok(events.some(e => e.type === 'check_out_detected'), 'check_out_detected 있어야 함');
+    const seen = runSteps(m, reservation(checkOutMs), [...exitSequence(2 * MIN), ...quietUntil(8 * MIN, 60 * MIN)]);
+    assert.deepEqual(seen.map(e => e.type), ['scheduled_checkout_reached']);
+    assert.equal(seen[0].at, checkOutMs);
   });
 
-  test('EXIT + checkOut 이미 경과 → 즉시 check_out_detected', () => {
-    const m = new OccupancyMonitor();
-    const checkOutMs = 0; // 이미 경과
-    const res = reservation(checkOutMs);
-
-    call(m, snap({ motionDetected: true,  doorOpen: false }), GOOD, res, 0);
-    call(m, snap({ motionDetected: false, doorOpen: true  }), GOOD, res, 1 * MIN);
-    call(m, snap({ motionDetected: false, doorOpen: false }), GOOD, res, 2 * MIN);
-    // t=7min+1: EXIT 확정, checkOut 이미 경과 → 즉시 확신
-    const events = call(m, snap({ motionDetected: false, doorOpen: false }), GOOD, res, 7 * MIN + 1);
-    assert.ok(events.some(e => e.type === 'check_out_detected'), '즉시 check_out_detected');
-  });
-
-  test('EXIT 후 재입실(모션 재감지) → 의심 취소, 퇴실 감지 안 됨', () => {
+  test('정시에 나간 손님 — EXIT 확정이 예정 시각보다 늦어도 퇴실 지연이 아니다', () => {
     const m = new OccupancyMonitor();
     const checkOutMs = 30 * MIN;
-    const res = reservation(checkOutMs);
-
-    call(m, snap({ motionDetected: true,  doorOpen: false }), GOOD, res, 0);
-    call(m, snap({ motionDetected: false, doorOpen: true  }), GOOD, res, 1 * MIN);
-    call(m, snap({ motionDetected: false, doorOpen: false }), GOOD, res, 2 * MIN);
-    call(m, snap({ motionDetected: false, doorOpen: false }), GOOD, res, 7 * MIN + 1); // EXIT 확정
-    // 돌아옴 (모션 재감지 → SuspicionTracker에서 의심 취소)
-    call(m, snap({ motionDetected: true,  doorOpen: false }), GOOD, res, 8 * MIN);
-    const events = call(m, snap({ motionDetected: true,  doorOpen: false }), GOOD, res, 31 * MIN);
-    assert.equal(events.filter(e => e.type === 'check_out_detected').length, 0,
-      '재입실로 의심 취소됨');
+    // 문을 29분에 닫고 나감 → EXIT 확정은 34분(예정 시각 뒤). 판정은 1분마다.
+    const [moving, opening, closed, confirmed] = exitSequence(29 * MIN);
+    const seen = runSteps(m, reservation(checkOutMs),
+      [moving, opening, closed, ...quietUntil(30 * MIN, 33 * MIN), confirmed, ...quietUntil(35 * MIN, 80 * MIN)]);
+    assert.deepEqual(seen.map(e => e.type), ['scheduled_checkout_reached']);
+    assert.equal(seen[0].at, checkOutMs, '전환은 EXIT 확정을 기다리지 않는다');
   });
 
-  test('모션 있으면 EXIT 자체가 감지 안 됨 → 퇴실 감지 없음', () => {
+  test('유예 시간을 넘겨 나간 손님 → 퇴실 지연 1건 (그 뒤 EXIT로 지워지지 않음)', () => {
     const m = new OccupancyMonitor();
-    const res = reservation(1); // checkOut = 지금
-
-    for (let t = 0; t <= 40 * MIN; t += 5 * MIN)
-      call(m, snap({ motionDetected: true }), GOOD, res, t);
-
-    const events = call(m, snap({ motionDetected: true }), GOOD, res, 40 * MIN + 1);
-    assert.equal(events.filter(e => e.type === 'check_out_detected').length, 0);
+    const checkOutMs = 30 * MIN;
+    const present = Array.from({ length: 30 }, (_, i) => [checkOutMs + i * MIN, snap({ motionDetected: true, doorOpen: false })]);
+    const seen = runSteps(m, reservation(checkOutMs), [...present, ...exitSequence(62 * MIN), ...quietUntil(68 * MIN, 90 * MIN)]);
+    assert.deepEqual(seen.map(e => e.type), ['scheduled_checkout_reached', 'late_checkout_detected']);
+    assert.equal(seen[1].at, checkOutMs + 20 * MIN);
   });
 
-  test('예약 없으면 퇴실 감지 없음', () => {
+  test('EXIT 후 재입실(모션 재감지) → 예정 시각에 전환하고 유예 뒤 퇴실 지연', () => {
     const m = new OccupancyMonitor();
-    call(m, snap({ motionDetected: true,  doorOpen: false }), GOOD, null, 0);
-    call(m, snap({ motionDetected: false, doorOpen: true  }), GOOD, null, 1 * MIN);
-    call(m, snap({ motionDetected: false, doorOpen: false }), GOOD, null, 2 * MIN);
-    const events = call(m, snap({ motionDetected: false }), GOOD, null, 60 * MIN);
-    assert.equal(events.filter(e => e.type === 'check_out_detected').length, 0);
+    const checkOutMs = 30 * MIN;
+    const back = Array.from({ length: 60 }, (_, i) => [8 * MIN + i * MIN, snap({ motionDetected: true, doorOpen: false })]);
+    const seen = runSteps(m, reservation(checkOutMs), [...exitSequence(2 * MIN), ...back]);
+    assert.deepEqual(seen.map(e => e.type), ['scheduled_checkout_reached', 'late_checkout_detected']);
+  });
+
+  test('예약 없으면 퇴실 전환·지연 모두 없음', () => {
+    const m = new OccupancyMonitor();
+    const seen = runSteps(m, null, [...exitSequence(2 * MIN), ...quietUntil(8 * MIN, 60 * MIN)]);
+    assert.deepEqual(seen, []);
   });
 });
 

@@ -24,6 +24,7 @@ const DIRECT_ISSUES = Object.freeze({
   complaint_detected:                       { category: 'OCCUPIED',       label: '민원 발생' },
   energy_waste_detected:                    { category: 'OCCUPIED',       label: '체류 중 에너지 낭비' },
   checkout_confirmation_needed:             { category: 'CLEANING',       label: '체크아웃 확인 필요' },
+  late_checkout_detected:                    { category: 'CLEANING',       label: '퇴실 지연' },
   post_checkout_energy_waste_detected:       { category: 'CLEANING',       label: '퇴실 후 청소 전 에너지 낭비' },
   post_checkout_security_breach_detected:    { category: 'CLEANING',       label: '퇴실 후 청소 전 보안 문제' },
   vacant_energy_waste_detected:              { category: 'VACANT',         label: '공실 중 에너지 낭비' },

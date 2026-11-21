@@ -204,7 +204,7 @@ export class OccupancyMonitor {
       const iHum  = indoorHum(snap);
 
       return [
-        ...occupancyEvents,   // check_out_detected (먼저 배치 — 우선 상태 전환)
+        ...occupancyEvents,   // scheduled_checkout_reached (먼저 배치 — 우선 상태 전환)
         ...this._smoke(snap, sub, now),
         ...this._noise(snap, sub, now),
         ...this._environment(seas, iTemp, iHum, sub, now),

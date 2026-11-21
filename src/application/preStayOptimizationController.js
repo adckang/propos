@@ -222,7 +222,7 @@ export class PreStayOptimizationController {
         reason: 'guest_arrived_before_preparation', targets: null, controlled: [], pendingOff: [], arrivedAt: now };
       this._save();
       await this._event('optimization_skipped');
-    } else if (['check_out_detected', 'cleaning_started', 'maintenance_required', 'maintenance_started'].includes(type) && run?.status === 'PREPARING') {
+    } else if (['check_out_detected', 'scheduled_checkout_reached', 'cleaning_started', 'maintenance_required', 'maintenance_started'].includes(type) && run?.status === 'PREPARING') {
       await this._end('CANCELLED', 'room_no_longer_available_for_preparation');
     }
   }

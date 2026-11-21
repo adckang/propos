@@ -30,7 +30,8 @@ const GLOBAL_TRANSITIONS = {
  * docs/room-state-machine.md 섹션 5B 기준.
  */
 const OCCUPIED_COMMON = {
-  check_out_detected: { mainStatus: 'CLEANING', subStatus: 'CLEANING_PENDING' },
+  check_out_detected:          { mainStatus: 'CLEANING', subStatus: 'CLEANING_PENDING' },
+  scheduled_checkout_reached:  { mainStatus: 'CLEANING', subStatus: 'CLEANING_PENDING' },
 };
 
 /**
