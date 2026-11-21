@@ -1,4 +1,4 @@
-// s133 — 운영 응답의 CSP(콘텐츠 보안 정책, vercel.json). 2026-11-19 사용자 위임: Report-Only 로 먼저 켜고, 차단 전환은 나중.
+// s133 — 운영 응답의 CSP(콘텐츠 보안 정책, vercel.json). Report-Only 관찰 뒤 2026-11-21 RF-47에서 차단으로 전환.
 // 실제 브라우저에서 정책대로 열리고 막히는지·모든 화면이 위반 0 인지는 smoke(tests/smoke/app.smoke.spec.js)가 같은 정책을
 // 차단 모드로 걸고 확인한다. 여기서는 npm test 에서 바로 보이는 것만: 정책의 뼈대와, 빌드된 화면에 인라인 스크립트가 없는지.
 import { test } from 'node:test';
@@ -9,9 +9,9 @@ import { productionCsp, parseCsp } from '../helpers/cspPolicy.js';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
-test('모든 경로에 CSP 가 하나 붙고, 지금은 보고만 하는(Report-Only) 단계다', () => {
+test('모든 경로에 차단 CSP가 하나 붙는다', () => {
   const { key } = productionCsp();
-  assert.equal(key, 'Content-Security-Policy-Report-Only', '차단(Content-Security-Policy)으로 바꾸는 것은 따로 정한다');
+  assert.equal(key, 'Content-Security-Policy');
 });
 
 test('스크립트는 같은 사이트와 Clarity 만 — 인라인·eval·와일드카드 출처를 열지 않는다', () => {

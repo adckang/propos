@@ -2,8 +2,8 @@ import { expect, test } from "@playwright/test";
 import { getDemoStats, getDemoDrilldown, getDemoMonthlyCalendar } from '../../src/application/demoReportingService.js';
 import { productionCsp } from '../helpers/cspPolicy.js';
 
-// 운영 응답의 CSP(vercel.json)를 미리보기 서버의 화면 응답에 그대로 붙이되 **차단** 모드로 건다 — 운영은 아직
-// Report-Only 지만, 시험에서는 막히는 것이 있으면 화면이 깨지고 위반이 기록되어 바로 실패한다(나중에 차단으로 바꿀 근거).
+// 운영 응답의 CSP(vercel.json)를 미리보기 서버의 화면 응답에도 **차단** 모드로 건다.
+// 막히는 것이 있으면 화면이 깨지고 위반이 기록되어 바로 실패한다.
 const CSP = productionCsp().value;
 let cspViolations = [];
 
