@@ -995,9 +995,10 @@ async function cancelJob(req, res, jobId, scope) {
   if (["COMPLETED", "CANCELLED"].includes(job.status))
     return sendJson(res, 409, { error: `이미 ${job.status} 상태` });
 
+  // 읽어 둔 상태일 때만 취소한다 — 그사이 배정되면(담당자 구글 일정이 생김) 0행이라 409로 끝나고, 일정을 남긴 채 취소하지 않는다
   const { rows: updated } = await db.query(
-    `UPDATE cleaning_jobs SET status='CANCELLED', updated_at=NOW() WHERE id=$1 RETURNING id`,
-    [jobId]
+    `UPDATE cleaning_jobs SET status='CANCELLED', updated_at=NOW() WHERE id=$1 AND status=$2 RETURNING id`,
+    [jobId, job.status]
   );
   if (!updated.length) return sendJson(res, 409, { error: "업데이트 실패" });
 
