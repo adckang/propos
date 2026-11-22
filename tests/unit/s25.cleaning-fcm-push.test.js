@@ -218,8 +218,9 @@ describe('actual FCM notification — recipient state and channel boundaries', (
       const { notify } = await actualCleaningModule('server/cleaning/_notify.js');
       assert.deepEqual(await notify(f.store.db, PUSH_CLEANER, { ...PUSH_PAYLOAD, smsText: 'Fixture SMS', notifId: 'fixture-notif' }),
         { ok: true, channel: 'SMS_FALLBACK' });
-      assert.deepEqual(f.store.queries[0].params, [PUSH_CLEANER.id]);
-      assert.ok(f.store.queries[0].sql.includes(`SET fcm_status='${status}'`));
+      // 실패한 그 토큰일 때만 표시 — 그사이 바뀐 새 토큰을 죽었다고 적지 않는다(DEC-09 재등록 근거)
+      assert.deepEqual(f.store.queries[0].params, [PUSH_CLEANER.id, PUSH_CLEANER.fcm_token]);
+      assert.ok(f.store.queries[0].sql.includes(`SET fcm_status='${status}' WHERE id=$1 AND fcm_token=$2`));
       assert.match(f.store.queries[0].sql, /WHERE id=\$1/);
       assert.deepEqual(f.store.queries[1].params, ['SMS_FALLBACK', 'fixture-notif']);
       assert.equal(f.calls.slack.length, 1); assert.equal(f.calls.sms.length, 1); assert.equal(f.calls.push.length, 1);
@@ -332,5 +333,42 @@ describe('actual FCM producers — VIP, BULK, reminder and completion', () => {
     assertPushMessage(f, { title: '[PROPOS] 청소 재안내', body: 'Fixture Stay 청소 일정 아직 미확정입니다' },
       { jobId: PUSH_JOB.id, token: 'ABC123', calendarUrl: PUSH_PROPERTY.google_calendar_booking_url, hostPhone: PUSH_PROPERTY.host_phone });
     assert.equal(f.store.ends, 1); assert.deepEqual(f.calls.sms, []);
+  });
+});
+
+// DEC-09 — 담당자 앱 재설치 때 옛 토큰이 정말 없어졌는지 시험 발송(기기에 안 감)으로 묻는다
+describe('actual FCM token probe (validate only)', () => {
+  async function actualProbe(t, { send, account = { fixture: true } } = {}) {
+    const sent = [];
+    const f = await actualPush(t, { account, sdk: { getMessaging: () => ({ send: async (message, dryRun) => { sent.push({ message, dryRun }); return send(message, dryRun); } }) } });
+    const { probeToken } = await actualCleaningModule('server/cleaning/_push.js');
+    return { ...f, sent, probeToken };
+  }
+  test('a live token is "alive" and the request is validate-only (nothing reaches the device)', async t => {
+    const f = await actualProbe(t, { send: async () => 'projects/x/messages/fake' });
+    assert.equal(await f.probeToken('old-token'), 'alive');
+    assert.deepEqual(f.sent, [{ message: { token: 'old-token', data: { probe: '1' } }, dryRun: true }]);
+  });
+  for (const code of ['messaging/registration-token-not-registered', 'messaging/invalid-registration-token']) {
+    test(`${code} means the old token is gone → "dead"`, async t => {
+      const f = await actualProbe(t, { send: async () => { throw Object.assign(new Error('fixture'), { errorInfo: { code } }); } });
+      assert.equal(await f.probeToken('old-token'), 'dead');
+    });
+  }
+  for (const [label, send] of [
+    ['quota', async () => { throw Object.assign(new Error('fixture'), { errorInfo: { code: 'messaging/quota-exceeded' } }); }],
+    ['invalid-argument (could be the probe message itself)', async () => { throw Object.assign(new Error('fixture'), { errorInfo: { code: 'messaging/invalid-argument' } }); }],
+    ['server error', async () => { throw Object.assign(new Error('fixture'), { errorInfo: { code: 'messaging/internal-error' } }); }],
+    ['no reply', () => new Promise(() => {})],
+  ]) test(`${label} cannot tell → "unknown" (the caller keeps the number blocked)`, async t => {
+    const f = await actualProbe(t, { send });
+    assert.equal(await f.probeToken('old-token', { timeoutMs: 20 }), 'unknown');
+  });
+  test('missing Firebase setting → "unknown", and an empty token is "dead"', async t => {
+    const f = await actualPush(t, { account: undefined, apps: [] });
+    const { probeToken } = await actualCleaningModule('server/cleaning/_push.js');
+    assert.equal(await probeToken('old-token'), 'unknown');
+    assert.equal(await probeToken(''), 'dead');
+    assert.deepEqual(f.sdkCalls.messaging, []);
   });
 });

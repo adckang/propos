@@ -65,3 +65,28 @@ export async function sendPush(fcmToken, { title, body, data = {} }, options = {
         code === 'messaging/quota-exceeded' ? 'RETRYABLE' : 'UNKNOWN' } : {}) };
   } finally { if (timer) clearTimeout(timer); }
 }
+
+/**
+ * 옛 토큰이 아직 쓸 수 있는지 알림 서버에 시험 발송(validate only — 기기에는 아무것도 가지 않는다)으로 묻는다.
+ * 담당자 앱을 다시 설치하면 옛 토큰은 알림 서버에서 없어진다 — 그때만 재등록으로 새 토큰을 받는다 (DEC-09).
+ * 확인할 수 없으면(설정 없음·응답 없음·그 밖의 오류) 'unknown' — 호출부는 막는 쪽으로 다룬다.
+ * @returns {Promise<'dead'|'alive'|'unknown'>}
+ */
+export async function probeToken(fcmToken, { timeoutMs = 5_000 } = {}) {
+  if (!fcmToken) return "dead";
+  let timer;
+  try {
+    const messaging = getMessaging(getAdminApp());
+    await Promise.race([
+      messaging.send({ token: fcmToken, data: { probe: "1" } }, true),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Object.assign(new Error("FCM response unknown"), { code: "FCM_RESPONSE_TIMEOUT" })), timeoutMs); }),
+    ]);
+    return "alive";
+  } catch (err) {
+    const code = String(err?.errorInfo?.code ?? err?.code ?? "");
+    // 등록 안 됨·잘못된 토큰만 "없음"이다. invalid-argument는 시험 메시지 자체의 문제일 수도 있어(그러면 모든 토큰이 없음으로
+    // 보여 누구나 번호를 가로챈다) 확인 불가로 둔다
+    if (code.includes("registration-token-not-registered") || code.includes("invalid-registration-token")) return "dead";
+    return "unknown";
+  } finally { if (timer) clearTimeout(timer); }
+}

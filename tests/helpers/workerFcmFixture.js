@@ -10,7 +10,7 @@ export const PENDING_KEY = '@propos/fcm_token_pending';
 export const WORKER_ID = '11111111-1111-4111-8111-111111111111';
 export const response = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
 
-export async function workerFcmFixture({ stored = 'fixture-old', token = 'fixture-new', storage, answer, db, storageFailure, slack, initialNotification = null } = {}) {
+export async function workerFcmFixture({ stored = 'fixture-old', token = 'fixture-new', storage, answer, db, storageFailure, slack, probe, initialNotification = null } = {}) {
   const saved = { fetch: globalThis.fetch, profile: process.env.PROPOS_DATA_PROFILE };
   const key = '__workerFcmFixture_' + randomUUID().replaceAll('-', '');
   const values = storage ?? new Map(stored ? [[TOKEN_KEY, stored]] : []);
@@ -48,8 +48,14 @@ export async function workerFcmFixture({ stored = 'fixture-old', token = 'fixtur
     render(Component, props = {}) { this.hookIndex = 0; return Component(props); },
     cleanup() { for (const fn of this.effects.splice(0)) fn(); },
   };
+  const probeCalls = [];
   const io = {
-    db, permission: 1, token, initialNotification, ui,
+    db, permission: 1, token, initialNotification, ui, probeCalls,
+    async probeToken(...args) {
+      probeCalls.push(args);
+      if (probe) return probe(...args);
+      throw new Error('Unexpected FCM probe blocked');
+    },
     async postSlack(...args) {
       slackCalls.push(args);
       if (slack) return slack(...args);
@@ -100,6 +106,7 @@ export async function workerFcmFixture({ stored = 'fixture-old', token = 'fixtur
     'react-native-webview': `const ui=globalThis[${JSON.stringify(key)}].ui; export const WebView=props=>ui.native('WebView',props);`,
     pg: `export class Pool { constructor(){return globalThis[${JSON.stringify(key)}].db;} }`,
     '../../server/cleaning/_dispatch.js': `export const postSlack=(...a)=>globalThis[${JSON.stringify(key)}].postSlack(...a);`,
+    '../../server/cleaning/_push.js': `export const probeToken=(...a)=>globalThis[${JSON.stringify(key)}].probeToken(...a);`,
   };
   async function load(relative) {
     const bundle = await build({ entryPoints: [resolve(root, relative)], bundle: true, write: false, platform: 'node', format: 'esm',
@@ -135,7 +142,7 @@ export async function workerFcmFixture({ stored = 'fixture-old', token = 'fixtur
     }
     return response(200, call.method === 'GET' ? { ok: true, worker_id: WORKER_ID } : { ok: true });
   };
-  return { values, calls, writes, slackCalls, io, invoke, loadApi: () => load('worker-app/src/services/api.ts'),
+  return { values, calls, writes, slackCalls, probeCalls, io, invoke, loadApi: () => load('worker-app/src/services/api.ts'),
     loadClient: () => load('worker-app/src/services/fcm.ts'),
     loadApp: () => load('worker-app/App.tsx'),
     loadNavigation: () => load('worker-app/src/navigation/index.tsx'),

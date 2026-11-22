@@ -15,7 +15,7 @@ const REGISTER_BODY = { phone: '01012345678', email: '  WORKER@Example.INVALID  
 const WORKER_ROW = { id: WORKER_ID, name: 'Fixture Worker', phone: '010-1234-5678',
   email: 'worker@example.invalid', tier: 'BULK', active: false, fcm_status: 'active' };
 
-async function actualWorker(t, { rows = [WORKER_ROW], query, slack, profile = 'hybrid' } = {}) {
+async function actualWorker(t, { rows = [WORKER_ROW], query, slack, probe, profile = 'hybrid' } = {}) {
   const queries = [];
   const f = await workerFcmFixture({
     db: { async query(sql, params) {
@@ -23,6 +23,7 @@ async function actualWorker(t, { rows = [WORKER_ROW], query, slack, profile = 'h
       return query ? query(sql, params) : { rows };
     } },
     slack: slack ?? (async () => {}),
+    probe,
   });
   process.env.PROPOS_DATA_PROFILE = profile;
   t.after(() => {
@@ -42,6 +43,21 @@ function assertWorkerReply(res, code, body) {
 
 // The SQL checks below verify the actual DB call contract, never execute a
 // second copy of normalization, routing, upsert or heartbeat business logic.
+// 등록은 질의마다 다른 답을 준다: 이 기기 토큰을 다른 번호가 쓰는지 → 번호 등록(upsert) → (막히면) 지금 토큰 → 표시 → 다시 upsert
+function registerDb({ holders = [], upserts = [[WORKER_ROW]], current = [], upsertError, storedPhones = [] } = {}) {
+  const queue = [...upserts];
+  return (sql, params) => {
+    if (/SELECT 1 FROM cleaners WHERE phone = \$1 LIMIT 1/.test(sql)) return { rows: storedPhones.includes(params[0]) ? [{ '?column?': 1 }] : [] };
+    if (/SELECT id FROM cleaners WHERE fcm_token = \$1 AND phone <> \$2/.test(sql)) return { rows: holders };
+    if (/INSERT INTO cleaners/.test(sql)) { if (upsertError) throw upsertError; return { rows: queue.shift() ?? [] }; }
+    if (/SELECT id, fcm_token FROM cleaners WHERE phone = \$1/.test(sql)) return { rows: current };
+    if (/UPDATE cleaners SET fcm_status = 'unregistered' WHERE id = \$1 AND fcm_token = \$2/.test(sql)) return { rows: [], rowCount: 1 };
+    throw new Error(`unexpected register SQL: ${sql}`);
+  };
+}
+const upsertOf = f => f.queries.filter(q => /INSERT INTO cleaners/.test(q.sql));
+const PUBLIC_ROW = ({ name, email, ...rest }) => rest; // 응답에는 이름·저장된 이메일을 싣지 않는다
+
 describe('actual worker handler — register', () => {
   for (const method of ['GET', 'PUT', 'PATCH', 'DELETE']) test(`${method} is rejected before DB/Slack`, async t => {
     const f = await actualWorker(t);
@@ -68,34 +84,92 @@ describe('actual worker handler — register', () => {
   for (const [phone, expected] of [
     ['010-1234-5678', '010-1234-5678'], ['01012345678', '010-1234-5678'],
     ['+821012345678', '010-1234-5678'], ['821012345678', '010-1234-5678'],
-    ['010 1234 5678', '010-1234-5678'], ['12345', '12345'],
+    ['010 1234 5678', '010-1234-5678'],
   ]) test(`phone ${phone} and email are normalized in the actual INSERT arguments`, async t => {
-    const f = await actualWorker(t);
+    const f = await actualWorker(t, { query: registerDb() });
     const res = await f.send('register', 'POST', { ...REGISTER_BODY, phone });
     assert.equal(res.code, 200);
-    assert.equal(f.queries.length, 1);
-    assert.deepEqual(f.queries[0].params, [expected, 'worker@example.invalid', FIXTURE_TOKEN]);
+    assert.deepEqual(f.queries[0].params, [FIXTURE_TOKEN, expected]);
+    assert.deepEqual(upsertOf(f).map(q => q.params), [[expected, 'worker@example.invalid', FIXTURE_TOKEN]]);
   });
-  test('INSERT defaults and conflict updates preserve approval/tier/installation time', async t => {
-    const f = await actualWorker(t);
+  for (const phone of ['12345', '0111234567', '010-123-45678-9']) test(`phone ${phone} that is not a mobile number does not create a worker (DEC-08 unique numbers)`, async t => {
+    const f = await actualWorker(t, { query: registerDb() });
+    assertWorkerReply(await f.send('register', 'POST', { ...REGISTER_BODY, phone }), 400, { error: '전화번호 형식이 올바르지 않습니다' });
+    assert.equal(upsertOf(f).length, 0);
+  });
+  test('a non-mobile number the host stored with exactly that spelling still links the app to that worker', async t => {
+    const f = await actualWorker(t, { query: registerDb({ storedPhones: ['0111234567'] }) });
+    assert.equal((await f.send('register', 'POST', { ...REGISTER_BODY, phone: '0111234567' })).code, 200);
+    assert.deepEqual(upsertOf(f).map(q => q.params[0]), ['0111234567']);
+  });
+  test('INSERT defaults; an existing number only takes a token when it has no usable one, never a new email (D-033, DEC-08)', async t => {
+    const f = await actualWorker(t, { query: registerDb() });
     await f.send('register', 'POST', REGISTER_BODY);
-    const { sql, params } = f.queries[0];
+    const [{ sql, params }] = upsertOf(f);
     assert.match(sql, /INSERT INTO cleaners\s*\(phone,\s*email,\s*tier,\s*active,\s*fcm_token,/i);
     assert.match(sql, /VALUES\s*\(\$1,\s*\$2,\s*'BULK',\s*false,\s*\$3,\s*NOW\(\),\s*NOW\(\),\s*NOW\(\),\s*'active'\)/i);
-    const update = sql.split(/ON CONFLICT\s*\(phone\)\s*DO UPDATE SET/i)[1]?.split(/RETURNING/i)[0];
-    assert.ok(update, 'phone conflicts must update the existing registration');
-    for (const field of ['email', 'fcm_token']) assert.match(update, new RegExp(`\\b${field}\\s*=\\s*EXCLUDED\\.${field}\\b`, 'i'));
-    for (const field of ['fcm_token_at', 'last_seen_at']) assert.match(update, new RegExp(`\\b${field}\\s*=\\s*NOW\\(\\)`, 'i'));
-    assert.match(update, /fcm_status\s*=\s*'active'/i);
-    assert.doesNotMatch(update, /\b(?:name|tier|active|app_installed_at)\s*=/i);
+    const [update, guard] = sql.split(/ON CONFLICT\s*\(phone\)\s*DO UPDATE SET/i)[1]?.split(/RETURNING/i)[0].split(/\bWHERE\b/i) ?? [];
+    assert.ok(update && guard, 'phone conflicts update only under a guard');
+    assert.match(update, /\bfcm_token\s*=\s*EXCLUDED\.fcm_token\b/i);
+    assert.match(update, /\blast_seen_at\s*=\s*NOW\(\)/i);
+    assert.match(update, /fcm_token_at\s*=\s*CASE WHEN cleaners\.fcm_token = EXCLUDED\.fcm_token THEN cleaners\.fcm_token_at ELSE NOW\(\) END/i);
+    assert.match(update, /fcm_status\s*=\s*CASE WHEN cleaners\.fcm_token = EXCLUDED\.fcm_token THEN cleaners\.fcm_status ELSE 'active' END/i,
+      '같은 토큰의 재시도는 죽은 표시를 되살리지 않는다');
+    assert.doesNotMatch(update, /\b(?:name|email|tier|active|app_installed_at)\s*=/i, '이메일(캘린더 배정 기준)·승인·등급은 등록으로 바꾸지 않는다');
+    assert.match(guard, /cleaners\.fcm_token IS NULL/i);
+    assert.match(guard, /cleaners\.fcm_token = EXCLUDED\.fcm_token/i);
+    assert.match(guard, /cleaners\.fcm_status = 'unregistered'/i);
+    assert.doesNotMatch(guard, /'active'|'inactive'|'invalid'/i, '살아 있는 토큰·발송 내용 오류일 수 있는 invalid는 상태만으로 덮어쓰지 않는다');
+    assert.doesNotMatch(sql.split(/RETURNING/i)[1], /\bemail\b/i, '저장된 이메일을 돌려주지 않는다');
     assert.deepEqual(params, ['010-1234-5678', 'worker@example.invalid', FIXTURE_TOKEN]);
+    assert.deepEqual(f.probeCalls, [], '막히지 않으면 알림 서버에 묻지 않는다');
   });
-  for (const active of [false, true]) test(`active=${active} returns the DB worker and correct approval message`, async t => {
+  test('a number held by another live device answers 409 and changes nothing else', async t => {
+    const f = await actualWorker(t, { query: registerDb({ upserts: [[]], current: [{ id: WORKER_ID, fcm_token: 'old-live' }] }), probe: async () => 'alive' });
+    assertWorkerReply(await f.send('register', 'POST', REGISTER_BODY), 409, { error: '이미 다른 기기에 등록된 번호입니다. 호스트에게 문의해 주세요' });
+    assert.deepEqual(f.probeCalls.map(([token]) => token), ['old-live']);
+    assert.equal(upsertOf(f).length, 1);
+    assert.equal(f.queries.filter(q => /UPDATE cleaners/.test(q.sql)).length, 0);
+    assert.deepEqual(f.slackCalls, []);
+  });
+  test('when the probe cannot tell (no reply, no setting) the number stays blocked', async t => {
+    const f = await actualWorker(t, { query: registerDb({ upserts: [[]], current: [{ id: WORKER_ID, fcm_token: 'old-live' }] }), probe: async () => 'unknown' });
+    assert.equal((await f.send('register', 'POST', REGISTER_BODY)).code, 409);
+    assert.equal(f.queries.filter(q => /UPDATE cleaners/.test(q.sql)).length, 0);
+  });
+  test('reinstall: the old token is gone at the push server → marked unregistered and the same rule takes the new token (DEC-09)', async t => {
+    const f = await actualWorker(t, { query: registerDb({ upserts: [[], [WORKER_ROW]], current: [{ id: WORKER_ID, fcm_token: 'old-gone' }] }), probe: async () => 'dead' });
+    const res = await f.send('register', 'POST', REGISTER_BODY);
+    assert.equal(res.code, 200);
+    const mark = f.queries.find(q => /UPDATE cleaners SET fcm_status = 'unregistered'/.test(q.sql));
+    assert.deepEqual(mark.params, [WORKER_ID, 'old-gone'], '그 토큰일 때만 표시 — 그사이 바뀌었으면 건드리지 않는다');
+    assert.equal(upsertOf(f).length, 2);
+  });
+  test('this device token already sits on another number → 409 before any write', async t => {
+    const f = await actualWorker(t, { query: registerDb({ holders: [{ id: 'another-worker' }] }) });
+    assertWorkerReply(await f.send('register', 'POST', REGISTER_BODY), 409, { error: '이 기기는 다른 번호로 이미 등록돼 있습니다' });
+    assert.equal(upsertOf(f).length, 0);
+  });
+  test('an email another worker already uses answers 409 instead of 500', async t => {
+    const f = await actualWorker(t, { query: registerDb({ upsertError: Object.assign(new Error('duplicate key'), { code: '23505', constraint: 'cleaners_email_key' }) }) });
+    assertWorkerReply(await f.send('register', 'POST', REGISTER_BODY), 409, { error: '이미 다른 담당자가 쓰는 이메일입니다' });
+  });
+  test('another unique conflict (a concurrent insert of the same new number) is not reported as an email problem', async t => {
+    const f = await actualWorker(t, { query: registerDb({ upsertError: Object.assign(new Error('duplicate key'), { code: '23505', constraint: 'cleaners_phone_key' }) }) });
+    const res = await f.send('register', 'POST', REGISTER_BODY);
+    assert.equal(res.code, 500);
+    assert.notEqual(res.body.error, '이미 다른 담당자가 쓰는 이메일입니다');
+  });
+  test('an old token marked "invalid" (may be a payload error) is re-checked with the push server, not trusted', async t => {
+    const f = await actualWorker(t, { query: registerDb({ upserts: [[]], current: [{ id: WORKER_ID, fcm_token: 'old-invalid' }] }), probe: async () => 'alive' });
+    assert.equal((await f.send('register', 'POST', REGISTER_BODY)).code, 409);
+    assert.deepEqual(f.probeCalls.map(([token]) => token), ['old-invalid']);
+  });
+  for (const active of [false, true]) test(`active=${active} returns the DB worker (without email) and correct approval message`, async t => {
     const worker = { ...WORKER_ROW, active, tier: active ? 'VIP_2' : 'BULK' };
-    const f = await actualWorker(t, { rows: [{ ...worker, app_installed_at: '2026-01-01T00:00:00Z' }] });
-    const { name, ...publicWorker } = worker;
+    const f = await actualWorker(t, { query: registerDb({ upserts: [[{ ...worker, app_installed_at: '2026-01-01T00:00:00Z' }]] }) });
     assertWorkerReply(await f.send('register', 'POST', REGISTER_BODY), 200, {
-      ok: true, worker: publicWorker, message: active ? '등록 완료' : '등록 완료. 호스트 승인 대기 중',
+      ok: true, worker: PUBLIC_ROW(worker), message: active ? '등록 완료' : '등록 완료. 호스트 승인 대기 중',
     });
     assert.deepEqual(f.slackCalls, []);
   });
@@ -106,7 +180,7 @@ describe('actual worker handler — register', () => {
     ['null timestamp', null, false], ['missing timestamp', undefined, false],
   ]) test(`new-install Slack: ${label}`, async t => {
     t.mock.method(Date, 'now', () => now);
-    const f = await actualWorker(t, { rows: [{ ...WORKER_ROW, app_installed_at: installedAt == null ? installedAt : new Date(installedAt).toISOString() }] });
+    const f = await actualWorker(t, { query: registerDb({ upserts: [[{ ...WORKER_ROW, app_installed_at: installedAt == null ? installedAt : new Date(installedAt).toISOString() }]] }) });
     const res = await f.send('register', 'POST', REGISTER_BODY);
     assert.equal(res.code, 200);
     assert.equal(f.slackCalls.length, shouldNotify ? 1 : 0);
@@ -119,7 +193,7 @@ describe('actual worker handler — register', () => {
   });
   test('Slack failure cannot turn a saved registration into an API error', async t => {
     t.mock.method(Date, 'now', () => now);
-    const f = await actualWorker(t, { rows: [{ ...WORKER_ROW, app_installed_at: new Date(now).toISOString() }],
+    const f = await actualWorker(t, { query: registerDb({ upserts: [[{ ...WORKER_ROW, app_installed_at: new Date(now).toISOString() }]] }),
       slack: async () => { throw new Error('fixture Slack unavailable'); } });
     const res = await f.send('register', 'POST', REGISTER_BODY);
     assert.equal(res.code, 200); assert.equal(res.body.ok, true); assert.equal(f.slackCalls.length, 1);

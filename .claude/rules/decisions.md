@@ -53,7 +53,7 @@
 - **버린 대안**: 공유 비밀키를 프런트에 두기(번들에서 꺼내 쓸 수 있어 무의미) / Vercel 배포 보호(유료 가능성·크론·웹훅·Pi 예외 처리 필요) / 읽기 응답 필드 제거만(위 이유).
 - **구현**: `server/auth/operatorAuth.js`(순수 함수: 모드·토큰·쿠키·문지기·로그인 경로), 각 `api/*` 핸들러에 `guardOperator`, `api/config.js`·`vercel.json`(로그인 경로), `src/components/AuthGate.jsx`·`src/main.jsx`. 테스트 `tests/unit/s76.operator-auth.test.js`(36개: 모드별 동작·위조/만료 토큰·시도 제한·적용 범위 소스 계약). 실제 핸들러를 enforce로 호출해 보호 대상은 DB에 닿기 전 401, 문자 링크(`d`)는 통과, `/api/auth/me`는 열림을 확인.
 - **켜는 법(운영자 작업)**: Vercel 환경변수 `PROPOS_ADMIN_PASSWORD`(길게), `PROPOS_SESSION_SECRET`(`openssl rand -hex 32`), 먼저 `PROPOS_AUTH_MODE=log`로 재배포해 어떤 호출이 로그인 없이 오는지 로그 확인 → 문제 없으면 `enforce`. 되돌리기는 값을 `off`로 바꾸고 재배포.
-- **결정 당시 못 고친 노출의 현재 상태(2026-11-19)**: ① `POST /api/events`는 RF-06에서 `PROPOS_PI_SECRET` 검사를 붙여 해결했다(비교는 RF-44에서 워처와 같은 해시·상수 시간 비교로 바꿨다 — 구글 웹훅·`CRON_SECRET`도 같이). ② `POST /api/workers/register`는 전화번호만 알면 그 담당자의 푸시 토큰을 덮어쓸 수 있어 아직 남아 있다. ③ `CRON_SECRET`은 운영·미리보기 환경에 설정된 것을 확인했지만, 코드가 값이 없으면 통과시키는 구조는 그대로다. ④ 이미 노출됐던 값의 재발급 고려는 유효하다.
+- **결정 당시 못 고친 노출의 현재 상태(2026-11-19, ②는 2026-11-22 갱신)**: ① `POST /api/events`는 RF-06에서 `PROPOS_PI_SECRET` 검사를 붙여 해결했다(비교는 RF-44에서 워처와 같은 해시·상수 시간 비교로 바꿨다 — 구글 웹훅·`CRON_SECRET`도 같이). ② `POST /api/workers/register`가 전화번호만으로 담당자의 푸시 토큰·이메일을 덮어쓰던 것은 2026-11-22 해결했다 — 살아 있는 토큰은 덮어쓰지 않고, 옛 토큰이 알림 서버에서 없어진 번호(평소 발송 실패로 표시됐거나 등록 때 시험 발송으로 확인)만 새 토큰을 받는다. 이메일은 등록으로 바뀌지 않는다(DEC-08·DEC-09, `docs/refactoring.md`). ③ `CRON_SECRET`은 운영·미리보기 환경에 설정된 것을 확인했지만, 코드가 값이 없으면 통과시키는 구조는 그대로다. ④ 이미 노출됐던 값의 재발급 고려는 유효하다.
 - **재검토 시점**: enforce 전환 후 로그에서 로그인 없이 오는 정당한 호출자가 새로 발견되면 허용 목록에 추가.
 
 ## [D-032] 숙소 이름 변경이 FK에 막히던 결함 — ON UPDATE CASCADE + 레거시 고아 uid 정리 (2026-10-15 확정)

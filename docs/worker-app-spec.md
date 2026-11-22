@@ -179,7 +179,11 @@ FCM 토큰 자동 발급
 POST /api/workers/register  { phone, email, fcm_token }
 → cleaners 테이블: phone 기준 upsert
   신규 → name=null, active=false, tier='BULK', fcm_status='active' 로 삽입
-  기존 → email·fcm_token·fcm_token_at·fcm_status='active' 갱신
+  기존 → 쓸 수 있는 토큰이 없을 때만 fcm_token·fcm_token_at·fcm_status='active' 갱신
+         (토큰 없음 · 옛 토큰이 unregistered/invalid · 같은 토큰 재시도).
+         살아 있어 보이면 등록 때 알림 서버에 시험 발송(validate only)으로 확인 — 없어졌으면 unregistered 표시 후 갱신,
+         살아 있거나 확인 불가면 409, 아무것도 안 바꿈. 번호는 010-0000-0000 형식만, 다른 번호에 붙은 기기 토큰이면 409
+         email은 바꾸지 않는다(배정 매핑 키 — 변경은 대시보드에서). D-033·DEC-08·DEC-09
     ↓
 호스트가 PROPOS 대시보드에서 확인
   → name 입력, tier 지정, active=true 승인
@@ -211,7 +215,7 @@ ALTER TABLE cleaners ADD COLUMN fcm_status       TEXT DEFAULT 'uninstalled';
 | 푸시 발송 실패 (`UNREGISTERED`) | `active` → `unregistered` + Slack 알림 |
 | 토큰 형식 오류 (`INVALID_ARGUMENT`) | → `invalid` + Slack 알림 |
 | 30일 미접속 (크론) | `active` → `inactive` |
-| 앱 재설치 후 토큰 재등록 | → `active` 복구 |
+| 앱 재설치 후 토큰 재등록 | 옛 토큰이 알림 서버에서 없어졌을 때만 → `active` 복구(등록 때 시험 발송으로 바로 확인. 살아 있거나 확인 불가면 409) |
 
 ### 9-3. 푸시 발송 시 FCM 응답 처리
 

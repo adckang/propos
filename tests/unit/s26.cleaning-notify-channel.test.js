@@ -25,7 +25,8 @@ function fakeDb(route = () => { throw new Error('Unexpected fixture DB query'); 
 // notify() swallows its own UPDATE failures (`.catch`), so an assertion thrown
 // inside a fake DB route would be swallowed too. Check recorded queries after the call.
 const CHANNEL_SQL = /UPDATE cleaning_notifs SET channel=\$1 WHERE id=\$2/;
-const stateSql = status => new RegExp(`UPDATE cleaners SET fcm_status='${status}' WHERE id=\\$1`);
+// 실패한 그 토큰일 때만 표시한다(DEC-09 재등록 근거 — 그사이 바뀐 새 토큰을 죽었다고 적지 않는다)
+const stateSql = status => new RegExp(`UPDATE cleaners SET fcm_status='${status}' WHERE id=\\$1 AND fcm_token=\\$2`);
 const rejectWith = code => async () => { throw Object.assign(new Error('fixture rejection'), { code }); };
 function assertQueries(queries, expected) {
   assert.equal(queries.length, expected.length, 'DB query count');
@@ -100,7 +101,7 @@ describe('actual notify — delivery and channel recording', () => {
     assert.equal(io.calls.push.length, 1);
     assert.deepEqual(io.calls.sms.map(c => c.body.message), [PAYLOAD.smsText]);
     assert.equal(io.calls.slack.length, 1);
-    assertQueries(store.queries, [[stateSql(status), [ACTIVE.id]], [CHANNEL_SQL, ['SMS_FALLBACK', `notif-${status}`]]]);
+    assertQueries(store.queries, [[stateSql(status), [ACTIVE.id, ACTIVE.fcm_token]], [CHANNEL_SQL, ['SMS_FALLBACK', `notif-${status}`]]]);
   });
 
   test('definite invalid token without a phone updates recipient state but returns NONE', async t => {
@@ -112,7 +113,7 @@ describe('actual notify — delivery and channel recording', () => {
     assert.deepEqual(await notify(store.db, { ...ACTIVE, phone: null }, PAYLOAD), { ok: false, channel: 'NONE' });
     assert.equal(io.calls.slack.length, 1);
     assert.deepEqual(io.calls.sms, []);
-    assertQueries(store.queries, [[stateSql('invalid'), [ACTIVE.id]]]);
+    assertQueries(store.queries, [[stateSql('invalid'), [ACTIVE.id, ACTIVE.fcm_token]]]);
   });
 
   test('definite FCM rejection without smsText updates recipient state but sends no SMS and records nothing', async t => {
@@ -127,7 +128,7 @@ describe('actual notify — delivery and channel recording', () => {
     assert.equal(io.calls.push.length, 1);
     assert.deepEqual(io.calls.sms, []);
     assert.equal(io.calls.slack.length, 1);
-    assertQueries(store.queries, [[stateSql('unregistered'), [ACTIVE.id]]]);
+    assertQueries(store.queries, [[stateSql('unregistered'), [ACTIVE.id, ACTIVE.fcm_token]]]);
   });
 
   test('definite FCM rejection with the SMS gateway unconfigured returns NONE after the recipient update', async t => {
@@ -144,7 +145,7 @@ describe('actual notify — delivery and channel recording', () => {
     assert.equal(io.calls.push.length, 1);
     assert.deepEqual(io.calls.sms, []);
     assert.equal(io.calls.slack.length, 1);
-    assertQueries(store.queries, [[stateSql('invalid'), [ACTIVE.id]]]);
+    assertQueries(store.queries, [[stateSql('invalid'), [ACTIVE.id, ACTIVE.fcm_token]]]);
   });
 
   test('missing smsText prevents direct SMS and leaves the notification channel unrecorded', async t => {
@@ -257,7 +258,7 @@ describe('actual sendCompletionSmsToRest — remaining recipients', () => {
     assert.equal(io.calls.slack.length, 1);
     assert.equal(store.queries.length, 3);
     assert.match(store.queries[2].sql, stateSql('unregistered'));
-    assert.deepEqual(store.queries[2].params, [ACTIVE.id]);
+    assert.deepEqual(store.queries[2].params, [ACTIVE.id, ACTIVE.fcm_token]);
   });
 
   for (const [label, rows] of [['missing job', []], ['SIMULATED job', [{ ...job, data_origin: 'SIMULATED' }]]]) {

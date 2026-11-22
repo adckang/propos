@@ -16,19 +16,21 @@ import { sendPush } from "./_push.js";
 import { sendSms } from "./_sms.js";
 import { postSlack } from "./_slack.js";
 
+// 실패한 그 토큰일 때만 표시한다 — 그사이 앱이 토큰을 바꿨으면 새 토큰은 살아 있다. 이 표시는 앱 재등록(DEC-09)이
+// "옛 토큰이 죽었다"는 근거로 쓰므로, 남의 살아 있는 토큰을 죽었다고 적으면 그 번호를 가로챌 수 있게 된다
 async function handleFcmFailure(db, cleaner, errorCode) {
   if (errorCode === "UNREGISTERED") {
     await db.query(
-      `UPDATE cleaners SET fcm_status='unregistered' WHERE id=$1`,
-      [cleaner.id]
+      `UPDATE cleaners SET fcm_status='unregistered' WHERE id=$1 AND fcm_token=$2`,
+      [cleaner.id, cleaner.fcm_token]
     ).catch(() => {});
     await postSlack(
       `[PROPOS] ⚠️ ${cleaner.name ?? cleaner.phone ?? cleaner.id} 앱 삭제 감지 — 푸시 전달 실패`
     );
   } else if (errorCode === "INVALID_ARGUMENT") {
     await db.query(
-      `UPDATE cleaners SET fcm_status='invalid' WHERE id=$1`,
-      [cleaner.id]
+      `UPDATE cleaners SET fcm_status='invalid' WHERE id=$1 AND fcm_token=$2`,
+      [cleaner.id, cleaner.fcm_token]
     ).catch(() => {});
     await postSlack(
       `[PROPOS] ⚠️ ${cleaner.name ?? cleaner.phone ?? cleaner.id} FCM 토큰 오류 — 재설치 필요`
