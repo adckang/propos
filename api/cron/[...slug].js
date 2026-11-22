@@ -21,6 +21,7 @@ import { notify } from "../../server/cleaning/_notify.js";
 import { syncAllPropertiesIcal } from "../../server/cleaning/_icalSync.js";
 import { pushCurrentReservationsToWatchers } from "../../server/watcherReservationSync.js";
 import { isCheckoutCancelled, reservationUidOf } from "../../server/cleaning/_reservationSync.js";
+import { recordUnassignedAtStart } from "../../server/cleaning/_problems.js";
 import { parseVEvents, airbnbEventsToReservations } from "../../src/domain/room-state/icalParser.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 import {
@@ -282,6 +283,13 @@ async function handleMonthlyClean(db, res) {
 // ── 후속 처리 (아침·저녁 정기 작업 안에서) ─────────────────
 
 async function handleCleaningFollowup(db, res) {
+  // RF-32: 청소 시작 예정 시각에 담당자가 없는 청소를 문제로 남긴다(청소 1건에 1번). 맨 앞에서 따로 — 뒤 단계가 실패해도 기록은 되고,
+  // 이 기록이 실패해도 후속 처리는 그대로(응답 모양도 그대로)
+  try {
+    const recorded = await recordUnassignedAtStart(db);
+    if (recorded) console.log(`[followup] 청소 시작 시 담당자 없음 ${recorded}건 기록`);
+  } catch (e) { console.error("[followup] 시작 시 미배정 기록 실패:", e.message); }
+
   let advanced = await recoverInitialDeliveries(db);
   let reminded = 0;
   let escalated = 0;

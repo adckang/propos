@@ -267,41 +267,90 @@ describe('actual job cancellation — real blocker creation with fake Google', (
     assertCancelReply(await f.send(), 'fixture-new-blocker');
     assert.deepEqual(order, ['cancel-update', 'notification', 'google-create']); assertBlockerPersistence(f);
   });
-  test('DELETE transport failure is logged but blocker recreation still runs', async t => {
-    const f = await actualCancellation(t, { responses: [[{ ...CANCEL_JOB, status: 'ASSIGNED', google_calendar_id: CANCEL_CALENDAR, google_event_id: 'fixture-event' }],
-      [{ id: CANCEL_JOB.id }], [], [], []], google: [new Error('fixture DELETE unavailable'), blockerReply()], expectedErrors: 1 });
-    assertCancelReply(await f.send(), 'fixture-new-blocker'); assertBlockerPersistence(f);
+  // RF-32 (DEC-08): 취소는 그대로 두고, 실패한 후속 단계는 응답에 덧붙이고 문제 이벤트 1건으로 남긴다
+  const ASSIGNED_JOB = { ...CANCEL_JOB, status: 'ASSIGNED', google_calendar_id: CANCEL_CALENDAR, google_event_id: 'fixture-event',
+    checkout_at: '2026-11-20T02:00:00.000Z' };
+  const problemRow = [{ id: 'fixture-problem-event' }];
+  function assertProblem(f, failures) {
+    const stored = JSON.stringify(f.queries.filter(q => /INSERT INTO events/.test(q.sql)).map(q => q.params[5]));
+    assert.doesNotMatch(stored, /fixture (DELETE|POST|OAuth|blocker-insert|job-link)|denied|rejected/, '오류 원문은 기록에 남기지 않는다');
+    const inserts = f.queries.filter(q => /INSERT INTO events/.test(q.sql));
+    assert.equal(inserts.length, 1, '문제 이벤트 1건');
+    const [, propertyId, type, isSoft, deviceTime, data, sourceSystem, sourceRef] = inserts[0].params;
+    assert.equal(propertyId, CANCEL_JOB.property_id);
+    assert.equal(type, 'cleaning_cancel_followup_failed');
+    assert.equal(isSoft, false);
+    assert.ok(deviceTime instanceof Date && Number.isFinite(deviceTime.getTime()));
+    assert.equal(data.jobId, CANCEL_JOB.id);
+    assert.deepEqual(data.failures.map(({ step }) => step), failures.map(({ step }) => step));
+    for (const [i, expected] of failures.entries()) for (const [k, v] of Object.entries(expected)) assert.deepEqual(data.failures[i][k], v, k);
+    assert.equal(sourceSystem, 'PROPOS_CLEANING');
+    assert.equal(sourceRef, `cleaning_job:${CANCEL_JOB.id}:cancel_followup`);
+  }
+  const assertNoProblem = f => assert.equal(f.queries.filter(q => /INSERT INTO events/.test(q.sql)).length, 0);
+  function assertFailedReply(res, steps, blocker = null) {
+    assert.equal(res.code, 200);
+    assert.deepEqual(res.body, { ok: true, newBlockerEventId: blocker, followupFailed: steps });
+  }
+
+  test('DELETE transport failure is recorded as a problem while blocker recreation still runs', async t => {
+    const f = await actualCancellation(t, { responses: [[ASSIGNED_JOB], [{ id: CANCEL_JOB.id }], [], [], [], problemRow],
+      google: [new Error('fixture DELETE unavailable'), blockerReply()], expectedErrors: 1 });
+    assertFailedReply(await f.send(), ['google_event_delete'], 'fixture-new-blocker'); assertBlockerPersistence(f);
     assert.match(f.errors[0][0], /캘린더 이벤트 삭제 실패/);
     assert.equal(f.errors[0][1], 'fixture DELETE unavailable');
+    assertProblem(f, [{ step: 'google_event_delete', reason: 'request_failed', googleEventId: 'fixture-event' }]);
   });
-  test('known limitation: DELETE HTTP failure is currently ignored (no rollback or error receipt)', async t => {
-    const f = await actualCancellation(t, { responses: [[{ ...CANCEL_JOB, status: 'ASSIGNED', google_calendar_id: CANCEL_CALENDAR, google_event_id: 'fixture-event' }],
-      [{ id: CANCEL_JOB.id }], [], [], []], google: [new Response('fixture denied', { status: 403 }), blockerReply()] });
-    assertCancelReply(await f.send(), 'fixture-new-blocker'); assertBlockerPersistence(f);
+  for (const status of [403, 500]) test(`DELETE HTTP ${status} is no longer ignored — logged, answered and recorded`, async t => {
+    const f = await actualCancellation(t, { responses: [[ASSIGNED_JOB], [{ id: CANCEL_JOB.id }], [], [], [], problemRow],
+      google: [new Response('fixture denied', { status }), blockerReply()], expectedErrors: 1 });
+    assertFailedReply(await f.send(), ['google_event_delete'], 'fixture-new-blocker'); assertBlockerPersistence(f);
     assert.deepEqual(f.calendarRequests.map(r => r.options.method), ['DELETE', 'POST']);
-    assert.deepEqual(f.errors, [], 'current code never checks DELETE response.ok; not evidence of a successful deletion');
+    assert.match(f.errors[0][0], /캘린더 이벤트 삭제 실패/); assert.equal(f.errors[0][1], `HTTP ${status}`);
+    assertProblem(f, [{ step: 'google_event_delete', httpStatus: status }]);
   });
-  test('blocker OAuth failure preserves current success/null response without Google or link writes', async t => {
-    const f = await actualCancellation(t, { responses: [[{ ...CANCEL_JOB, google_calendar_id: CANCEL_CALENDAR }], [{ id: CANCEL_JOB.id }], []],
+  for (const status of [404, 410]) test(`DELETE HTTP ${status} means already gone — success without a problem`, async t => {
+    const f = await actualCancellation(t, { responses: [[ASSIGNED_JOB], [{ id: CANCEL_JOB.id }], [], [], []],
+      google: [new Response(null, { status }), blockerReply()] });
+    assertCancelReply(await f.send(), 'fixture-new-blocker'); assertBlockerPersistence(f); assertNoProblem(f);
+  });
+  test('blocker OAuth failure keeps the cancellation and records a blocker problem', async t => {
+    const f = await actualCancellation(t, { responses: [[{ ...CANCEL_JOB, google_calendar_id: CANCEL_CALENDAR }], [{ id: CANCEL_JOB.id }], [], problemRow],
       expectedErrors: 1, calendar: { getToken: async () => { throw new Error('fixture OAuth unavailable'); } } });
-    assertCancelReply(await f.send()); assertCancelWrite(f); assert.deepEqual(f.calendarRequests, []);
+    assertFailedReply(await f.send(), ['blocker_create']); assertCancelWrite(f); assert.deepEqual(f.calendarRequests, []);
     assert.match(f.errors[0][0], /블로커 재생성 실패/);
+    assertProblem(f, [{ step: 'blocker_create', reason: 'request_failed' }]);
   });
   for (const response of [new Error('fixture POST unavailable'), new Response('fixture rejected', { status: 403 })]) {
-    test(`blocker creation failure preserves current success/null response (${response instanceof Error ? 'transport' : 'HTTP 403'})`, async t => {
-      const f = await actualCancellation(t, { responses: [[{ ...CANCEL_JOB, google_calendar_id: CANCEL_CALENDAR }], [{ id: CANCEL_JOB.id }], []],
+    test(`blocker creation failure is recorded (${response instanceof Error ? 'transport' : 'HTTP 403'})`, async t => {
+      const f = await actualCancellation(t, { responses: [[{ ...CANCEL_JOB, google_calendar_id: CANCEL_CALENDAR }], [{ id: CANCEL_JOB.id }], [], problemRow],
         google: [response], expectedErrors: 1 });
-      assertCancelReply(await f.send()); assertCancelWrite(f); assert.match(f.errors[0][0], /블로커 재생성 실패/);
-      assert.equal(f.queries.length, 3);
+      assertFailedReply(await f.send(), ['blocker_create']); assertCancelWrite(f); assert.match(f.errors[0][0], /블로커 재생성 실패/);
+      assert.equal(f.queries.length, 4);
+      assertProblem(f, [{ step: 'blocker_create' }]);
     });
   }
-  for (const failedWrite of ['blocker-insert', 'job-link']) test(`current partial failure at ${failedWrite} is logged without pretending rollback`, async t => {
+  for (const failedWrite of ['blocker-insert', 'job-link']) test(`partial failure at ${failedWrite} records which write failed and the blocker to clean up`, async t => {
     const responses = [[{ ...CANCEL_JOB, google_calendar_id: CANCEL_CALENDAR }], [{ id: CANCEL_JOB.id }], [],
-      ...(failedWrite === 'job-link' ? [[]] : []), new Error(`fixture ${failedWrite} unavailable`)];
+      ...(failedWrite === 'job-link' ? [[]] : []), new Error(`fixture ${failedWrite} unavailable`), problemRow];
     const f = await actualCancellation(t, { responses, google: [blockerReply()], expectedErrors: 1 });
-    assertCancelReply(await f.send()); assertCancelWrite(f); assert.match(f.errors[0][0], /블로커 재생성 실패/);
+    const step = failedWrite === 'job-link' ? 'blocker_job_link' : 'blocker_record';
+    assertFailedReply(await f.send(), [step]); assertCancelWrite(f); assert.match(f.errors[0][0], /블로커 재생성 실패/);
     assert.equal(f.calendarRequests.length, 1);
     assert.equal(f.queries.filter(q => /SET google_blocker_event_id/.test(q.sql)).length, failedWrite === 'job-link' ? 1 : 0);
+    assertProblem(f, [{ step, reason: 'db_write_failed', blockerEventId: 'fixture-new-blocker' }]);
+  });
+  test('both steps failing is one problem with both failures', async t => {
+    const f = await actualCancellation(t, { responses: [[ASSIGNED_JOB], [{ id: CANCEL_JOB.id }], [], problemRow],
+      google: [new Response('fixture denied', { status: 403 }), new Response('fixture rejected', { status: 403 })], expectedErrors: 2 });
+    assertFailedReply(await f.send(), ['google_event_delete', 'blocker_create']);
+    assertProblem(f, [{ step: 'google_event_delete', httpStatus: 403 }, { step: 'blocker_create' }]);
+  });
+  test('a failing problem record is logged and the cancellation still answers 200', async t => {
+    const f = await actualCancellation(t, { responses: [[ASSIGNED_JOB], [{ id: CANCEL_JOB.id }], [], [], [], new Error('fixture events unavailable')],
+      google: [new Response('fixture denied', { status: 403 }), blockerReply()], expectedErrors: 2 });
+    assertFailedReply(await f.send(), ['google_event_delete'], 'fixture-new-blocker');
+    assert.match(f.errors[1][0], /cleaning_cancel_followup_failed 기록 실패/);
   });
 });
 

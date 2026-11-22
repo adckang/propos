@@ -29,6 +29,7 @@ import { notify } from "../../server/cleaning/_notify.js";
 import { syncAllPropertiesIcal } from "../../server/cleaning/_icalSync.js";
 import { assignFromCalendarEvents } from "../../server/cleaning/_calendarAssign.js";
 import { isCheckoutCancelled, postAssignmentSlack } from "../../server/cleaning/_reservationSync.js";
+import { CLEANING_CANCEL_FOLLOWUP_FAILED, recordCleaningProblem } from "../../server/cleaning/_problems.js";
 import { handleGmailNotification, isHistoryId, rememberGmailStart } from "../../server/cleaning/_gmailHistory.js";
 import { markRenewed, reportTokenSuccess } from "../../server/cleaning/_tokenHealth.js";
 import { periodToRemainingRange } from "../../src/domain/periodDomain.js";
@@ -1021,26 +1022,38 @@ async function cancelJob(req, res, jobId, scope) {
     }
   }
 
+  // 취소 저장 뒤 외부 작업의 실패는 취소를 되돌리지 않고 문제 이벤트로 남긴다 (RF-32, DEC-08).
+  // 기록에는 단계·HTTP 상태·분류만 남긴다 — 구글·DB 오류 원문(캘린더 주소가 섞일 수 있다)은 서버 로그에만 (운영자도 달력에서 이 기록을 본다)
+  const failures = [];
+
   // ASSIGNED 상태 취소 시 청소자 구글 캘린더 이벤트 삭제 (GAP-003 fix)
   if (job.status === "ASSIGNED" && job.google_event_id && job.google_calendar_id) {
     try {
       const gTok = await getGoogleToken(kv);
-      await fetch(
+      const deleted = await fetch(
         `${CALENDAR_API}/calendars/${encodeURIComponent(job.google_calendar_id)}/events/${job.google_event_id}`,
         { method: "DELETE", headers: { Authorization: `Bearer ${gTok}` } }
       );
+      // 404·410 = 이미 지워짐(같은 결과). 그 밖의 거절(권한·서버 오류)은 담당자 일정이 남아 있을 수 있다
+      if (!deleted.ok && ![404, 410].includes(deleted.status)) {
+        console.error(`[cancelJob] 캘린더 이벤트 삭제 실패 (${jobId}):`, `HTTP ${deleted.status}`);
+        failures.push({ step: "google_event_delete", httpStatus: deleted.status, googleEventId: job.google_event_id });
+      }
     } catch (e) {
       console.error(`[cancelJob] 캘린더 이벤트 삭제 실패 (${jobId}):`, e.message);
+      failures.push({ step: "google_event_delete", reason: "request_failed", googleEventId: job.google_event_id });
     }
   }
 
   // 블로커 재생성 → 슬롯 다시 잠금
   let newBlockerEventId = null;
   if (job.google_calendar_id) {
+    let eventId = null;
+    let savedBlocker = false;
     try {
       const gTok = await getGoogleToken(kv);
       const date = new Date(job.cleaning_start_at).toISOString().slice(0, 10);
-      const eventId = await createBlockerEvent(
+      eventId = await createBlockerEvent(
         job.google_calendar_id, date,
         job.checkout_hour, job.cleaning_duration_hours,
         job.property_id, gTok
@@ -1051,6 +1064,7 @@ async function cancelJob(req, res, jobId, scope) {
          ON CONFLICT (property_id, block_date) DO UPDATE SET event_id=$3, created_at=NOW()`,
         [job.property_id, date, eventId]
       );
+      savedBlocker = true;
       await db.query(
         `UPDATE cleaning_jobs SET google_blocker_event_id=$1 WHERE id=$2`,
         [eventId, jobId]
@@ -1058,9 +1072,21 @@ async function cancelJob(req, res, jobId, scope) {
       newBlockerEventId = eventId;
     } catch (e) {
       console.error(`[cancelJob] 블로커 재생성 실패 (${jobId}):`, e.message);
+      // 구글에 만든 뒤 저장이 실패하면: 막힘 기록 저장 실패 = 구글에만 있는 막힘 일정, 청소 일정 연결 실패 = 기록은 있고 연결만 빠짐.
+      // 어느 쪽이든 그 막힘 일정 번호를 함께 남겨 찾아 정리할 수 있게 한다
+      if (!eventId) failures.push({ step: "blocker_create", reason: "request_failed" });
+      else failures.push({ step: savedBlocker ? "blocker_job_link" : "blocker_record", reason: "db_write_failed", blockerEventId: eventId });
     }
   }
-  return sendJson(res, 200, { ok: true, newBlockerEventId });
+  if (failures.length) {
+    await recordCleaningProblem(db, {
+      propertyId: job.property_id, type: CLEANING_CANCEL_FOLLOWUP_FAILED, deviceTime: new Date(),
+      data: { jobId: job.id, checkoutAt: job.checkout_at ?? null, failures },
+      sourceRef: `cleaning_job:${job.id}:cancel_followup`,
+    });
+  }
+  // 취소 자체는 끝났으므로 200을 유지하고, 실패한 후속 단계만 덧붙인다(화면은 아직 이 칸을 읽지 않는다)
+  return sendJson(res, 200, { ok: true, newBlockerEventId, ...(failures.length ? { followupFailed: failures.map(f => f.step) } : {}) });
 }
 
 // ── Calendar Watch 등록 ─────────────────────────────────────

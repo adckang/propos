@@ -323,7 +323,8 @@ describe('actual FCM producers — VIP, BULK, reminder and completion', () => {
     const reminder = { id: 'fixture-notif', cleaner_id: PUSH_CLEANER.id, job_id: PUSH_JOB.id, property_id: PUSH_JOB.property_id,
       token: 'ABC123', cleaning_start_at: PUSH_JOB.cleaning_start_at, job_checkout_at: PUSH_JOB.checkout_at,
       phone: PUSH_CLEANER.phone, fcm_token: PUSH_CLEANER.fcm_token, fcm_status: 'active' };
-    const f = await actualPush(t, { responses: [[], [], [], [], [reminder], [{ gone: false }], [PUSH_PROPERTY], [], [], [], []] });
+    // 첫 [] = 청소 시작 시 담당자 없음 확인(RF-32, 후속 처리 맨 앞) — 대상 없음
+    const f = await actualPush(t, { responses: [[], [], [], [], [], [reminder], [{ gone: false }], [PUSH_PROPERTY], [], [], [], []] });
     const { default: handler } = await actualCleaningModule('api/cron/[...slug].js');
     const res = { code: null, body: undefined, status(n) { this.code = n; return this; }, json(value) { this.body = value; return this; }, end() { return this; } };
     await handler({ method: 'GET', url: '/api/cron/cleaning-followup', query: {}, headers: { authorization: 'Bearer fixture-cron-secret' } }, res);

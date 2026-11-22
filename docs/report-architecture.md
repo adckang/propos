@@ -545,7 +545,7 @@ iCal 마지막 동기화: N분 전 ✅ / ⚠ N시간 전 (오래된 경우 강�
 | 소음 3분 이상 지속 | 없음 | Pi 불만 기록(소음) — 10분 누적 점수 8점 이상([`_noise`](../src/application/occupancyMonitor.js#L237)) |
 | 빈방 에너지 낭비 30분 이상 | 없음 | Pi 에너지 낭비 기록 — 체류 중(부재·고전력) 3분 기준([`_energyWaste`](../src/application/occupancyMonitor.js#L304), [기준값](../src/config/monitoringThresholds.js#L29)). 빈방용 이름 `vacant_energy_waste_detected`(재사용하기로 결정, [7절](#vacant-energy-design))는 만드는 코드가 없다 |
 | 게스트 불만 키워드 + 센서 이상 | 없음 | 게스트 메시지 키워드는 답장 초안용([`messageDomain`](../src/domain/messageDomain.js#L129))으로만 쓰인다 |
-| 체크인 12시간 이내 청소 미배정 | 없음 | 청소 일정의 현재 상태만 — 상태가 덮어써져 이력이 없고, 캘린더 알림·"캘린더 다시 확인"·관리자 직접 배정을 구분하는 기록이 없다([배정 함수](../server/cleaning/_calendarAssign.js#L5)) |
+| 체크인 12시간 이내 청소 미배정 | 없음 | 청소 일정의 현재 상태만 — 상태가 덮어써져 이력이 없고, 캘린더 알림·"캘린더 다시 확인"·관리자 직접 배정을 구분하는 기록이 없다([배정 함수](../server/cleaning/_calendarAssign.js#L5)). 청소 **시작** 시각에 담당자가 없던 청소는 RF-32부터 기록된다(`cleaning_unassigned_at_start`) — 기준 시각이 정본(체크인 12시간 전)과 다르다 |
 | 기기 오프라인 30분 이상 | 없음 | Pi 감지 센서 오프라인 기록(RF-28) — 대상이 입실·퇴실 감지용 문·움직임 센서뿐이고, 이 절의 상태·이력 계약(안정화 시간·개입 기록)이 아직 없다([판정](../src/domain/sensorHealthDomain.js)) |
 
 Pi 불만 기록 중 연기·실내 온습도·문 열림은 정본 5가지 어디에도 해당하지 않는다.

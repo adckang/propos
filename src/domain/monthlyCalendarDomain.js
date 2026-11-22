@@ -30,9 +30,19 @@ const DIRECT_ISSUES = Object.freeze({
   vacant_energy_waste_detected:              { category: 'VACANT',         label: '공실 중 에너지 낭비' },
   post_cleaning_security_breach_detected:    { category: 'VACANT',         label: '청소 후 공실 보안 문제' },
   maintenance_required:                     { category: 'VACANT',         label: '정비 필요' },
-  // 어느 단계에서나 생긴다 — 꺼진 기준을 넘은 순간의 객실 상태로 구분한다(감시기가 data.mainStatus로 보낸다)
+  // 어느 단계에서나 생긴다 — 판정할 때의 객실 상태로 구분한다(감시기가 data.mainStatus로 보낸다)
   sensor_offline_detected:                  { category: event => phaseCategory(event.data?.mainStatus), label: '감지 센서 연결 끊김' },
+  // RF-32: 청소 시작 시 담당자 없음 — 청소 일정 표의 현재 상태로 만드는 배정 문제와 같은 문구. 그 항목이 사라진(나중에 배정된) 청소만 보인다
+  cleaning_unassigned_at_start:             { category: 'CLEANING', label: event => cleaningAssignmentIssueLabel(event.data?.status) },
+  cleaning_cancel_followup_failed:          { category: 'CLEANING', label: '청소 취소 후속 처리 실패' },
 });
+
+/** 배정되지 않은 청소의 문제 문구 — 청소 일정 표에서 만드는 항목과 시작 시 기록(RF-32)이 같이 쓴다 */
+export function cleaningAssignmentIssueLabel(status) {
+  if (status === 'ESCALATED') return '청소 배정 실패';
+  if (status === 'CANCELLED') return '청소 재배정 필요';
+  return '청소 미배정';
+}
 
 // 객실 상태를 모르면 공실 문제로 본다 — 감시기는 늘 상태를 함께 보내므로 옛 기록·손으로 넣은 기록만 해당
 function phaseCategory(mainStatus) {
@@ -125,15 +135,20 @@ export function buildIssueItems(events = [], cleaningIssues = [], preStayContext
   );
   const items = [];
 
+  // 청소 시작 시 담당자 없음 기록(RF-32)은 이력이다. 그 청소가 지금도 배정되지 않았으면 지금 상태로 만든 항목이 최신 문구를
+  // 보여 주므로 그것만 쓰고, 나중에 배정돼 지금 상태 항목이 사라진 청소만 기록으로 남긴다 — 같은 청소를 두 번 세지 않는다
+  const liveCleaningJobs = new Set(cleaningIssues.map(issue => issue.detail?.jobId).filter(Boolean));
   for (const event of eventsAsc) {
     const meta = DIRECT_ISSUES[event.type];
     if (!meta) continue;
+    if (event.type === 'cleaning_unassigned_at_start' && liveCleaningJobs.has(event.data?.jobId)) continue;
     items.push(normalizeItem({
       property_id: event.property_id,
-      occurred_at: event.device_time,
+      // 청소 시작 시 담당자 없음은 지금 상태 항목과 같은 날(퇴실 시각)에 둔다 — 퇴실과 청소 시작이 다른 달이어도 두 번 보이지 않게
+      occurred_at: event.type === 'cleaning_unassigned_at_start' ? (event.data?.checkoutAt ?? event.device_time) : event.device_time,
       category: typeof meta.category === 'function' ? meta.category(event) : meta.category,
       type: event.type,
-      label: meta.label,
+      label: typeof meta.label === 'function' ? meta.label(event) : meta.label,
       resolved_at: RESOLUTION_OF[event.type]
         ? findResolution(eventsAsc, event, RESOLUTION_OF[event.type])
         : null,

@@ -45,6 +45,13 @@ export const SOFT_EVENT_TYPES = new Set([
   "no_show_suspected",
 ]);
 
+// 청소 운영 문제 — 서버(청소 API·후속 처리)가 직접 events 표에 남긴다, 상태 변경 없음 (RF-32).
+// EVENT_TYPES(= Pi 입구가 받는 종류)에 넣지 않는다 — Pi 키로 가짜 문제를 넣거나 서버 기록 자리를 먼저 차지하지 못하게
+export const SERVER_PROBLEM_EVENT_TYPES = Object.freeze({
+  CLEANING_CANCEL_FOLLOWUP_FAILED: "cleaning_cancel_followup_failed",
+  CLEANING_UNASSIGNED_AT_START: "cleaning_unassigned_at_start",
+});
+
 // Pi 입구(/api/events/write)는 저장만 한다(RF-06). 운영자에게 알려야 하는 문제만 처음 저장될 때 Slack 링크를 보낸다 (RF-28, DEC-08)
 export const OPERATOR_ALERT_EVENT_TYPES = new Set([
   "sensor_offline_detected",

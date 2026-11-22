@@ -3,6 +3,8 @@
  * db는 인자로 주입 ({ query }) — eventRepository와 동일 방식.
  */
 
+import { cleaningAssignmentIssueLabel } from "../domain/monthlyCalendarDomain.js";
+
 /**
  * 기간 내 체크아웃(checkout_at) 기준 청소 잡 수.
  *   created  = 취소(CANCELLED)를 제외한 생성 잡 수 (지표 7 분모)
@@ -90,7 +92,7 @@ export async function queryCleaningIssueItems(db, range, propertyIds = null, now
   }
 
   const { rows } = await db.query(
-    `SELECT property_id, checkout_at, status
+    `SELECT id, property_id, checkout_at, status
        FROM cleaning_jobs
       WHERE ${where}
       ORDER BY checkout_at ASC`,
@@ -102,11 +104,7 @@ export async function queryCleaningIssueItems(db, range, propertyIds = null, now
     occurred_at: row.checkout_at,
     category: 'CLEANING',
     type: 'cleaning_assignment_issue',
-    label: row.status === 'ESCALATED'
-      ? '청소 배정 실패'
-      : row.status === 'CANCELLED'
-        ? '청소 재배정 필요'
-        : '청소 미배정',
-    detail: { status: row.status },
+    label: cleaningAssignmentIssueLabel(row.status),
+    detail: { status: row.status, jobId: row.id },
   }));
 }

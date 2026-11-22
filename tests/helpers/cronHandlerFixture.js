@@ -35,6 +35,7 @@ export async function actualCronModule() {
         export const openCleaningSlot = (...args) => call('openCleaningSlot', args);
         export const requestedCleaningDays = (...args) => call('requestedCleaningDays', args);
         export const saveCalendarWatchExpiration = (...args) => call('saveCalendarWatchExpiration', args);`,
+      '../../server/cleaning/_problems.js': `export const recordUnassignedAtStart = (...args) => globalThis.__cronHandlerIO.invoke('recordUnassignedAtStart', args);`,
       '../../src/application/reportingService.js': `export const getStatsForPeriod = (...args) => globalThis.__cronHandlerIO.invoke('getStatsForPeriod', args);`,
       '../../src/domain/reportingDomain.js': `export const countPeriodEvents = (...args) => globalThis.__cronHandlerIO.invoke('countPeriodEvents', args);`,
       '../../src/infrastructure/eventRepository.js': `export const queryEvents = (...args) => globalThis.__cronHandlerIO.invoke('queryEvents', args);`,
@@ -99,6 +100,7 @@ export function installCronIO({ behavior = {}, profile = 'hybrid', silent = true
     queryEvents: async () => [],
     countPeriodEvents: () => ({ checkIns: 0, checkOuts: 0, anomalies: 0, energyWaste: 0 }),
     isCheckoutCancelled: async () => false,
+    recordUnassignedAtStart: async () => 0,
     getPropertyConfig: async () => null,
     buildSmsRemind: () => 'fixture reminder',
     notify: async () => ({ ok: true }),
