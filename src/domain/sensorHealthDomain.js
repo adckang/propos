@@ -18,6 +18,7 @@ export const PRECHECK_OFFSETS = Object.freeze([
 const OFF_STATE = 'unavailable';
 const PHASE_LABEL = Object.freeze({ checkout: '퇴실', checkin: '입실', cleaning: '청소' });
 const DONE_KEEP_MS = 3 * 24 * 3_600_000;
+const PRESENCE_DOMAINS = new Set(['light', 'switch']);
 
 const timeOf = value => {
   const ms = value instanceof Date ? value.getTime() : typeof value === 'number' ? value : Date.parse(value ?? '');
@@ -36,6 +37,40 @@ export function detectionSensors(stateMap = {}) {
   return sensors.sort((a, b) => (a.entityId < b.entityId ? -1 : a.entityId > b.entityId ? 1 : 0));
 }
 
+/** 사람이 숙소 안에서 직접 조작할 수 있는 스위치·조명·플러그·물리 버튼. */
+export function presenceActivitySources(stateMap = {}) {
+  const sources = [];
+  for (const [entityId, state] of Object.entries(stateMap ?? {})) {
+    if (!state) continue;
+    const domain = entityId.split('.')[0];
+    const isPhysicalButton = domain === 'event' && state.attributes?.device_class === 'button';
+    if (!PRESENCE_DOMAINS.has(domain) && !isPhysicalButton) continue;
+    sources.push({
+      entityId,
+      name: state.attributes?.friendly_name || entityId,
+      state: state.state,
+    });
+  }
+  return sources.sort((a, b) => (a.entityId < b.entityId ? -1 : a.entityId > b.entityId ? 1 : 0));
+}
+
+/**
+ * 지금 시각까지 기록된 가장 최근의 사람 조작. HA 사용자·자동화 문맥이 붙은 변경은 원격/자동 제어일 수 있어 제외한다.
+ * Smart Life 쪽에서 문맥 없이 들어온 원격 조작은 물리 조작과 구분할 수 없다.
+ */
+export function latestPresenceEvidence(stateMap = {}, now = Date.now()) {
+  let latest = null;
+  for (const source of presenceActivitySources(stateMap)) {
+    if (source.state === OFF_STATE || source.state === 'unknown') continue;
+    const state = stateMap[source.entityId];
+    if (state.context?.user_id != null || state.context?.parent_id != null) continue;
+    const at = timeOf(state.last_changed ?? state.last_updated);
+    if (at == null || at > now || (latest && at <= latest.at)) continue;
+    latest = { at, name: source.name, entityId: source.entityId };
+  }
+  return latest;
+}
+
 /**
  * 지금 꺼져 있는 감지 센서. 구역 상태를 아직 못 읽었으면(빈 목록) 판단하지 않고 [] —
  * 읽었는데 문·움직임 센서가 하나도 없으면 "센서 없음" 한 항목.
@@ -45,6 +80,28 @@ export function offDetectionSensors(stateMap = {}) {
   const sensors = detectionSensors(stateMap);
   if (sensors.length === 0) return [{ entityId: null, role: null, roleLabel: '감지 센서', name: '문·움직임 센서 없음' }];
   return sensors.filter(sensor => sensor.state === OFF_STATE).map(({ state, ...sensor }) => sensor);
+}
+
+/**
+ * 입실은 문 센서 + (움직임 센서 또는 사람 조작 기기)로 확인한다. 퇴실은 여전히 offDetectionSensors의 문+움직임이 필요하다.
+ */
+export function offEntryDetectionSensors(stateMap = {}) {
+  if (!stateMap || Object.keys(stateMap).length === 0) return [];
+  const sensors = detectionSensors(stateMap);
+  const doors = sensors.filter(sensor => sensor.role === 'door');
+  const motions = sensors.filter(sensor => sensor.role === 'motion');
+  const presenceSources = presenceActivitySources(stateMap).filter(source => source.state !== OFF_STATE);
+  const off = [];
+
+  if (!doors.some(sensor => sensor.state !== OFF_STATE)) {
+    if (doors.length) off.push(...doors.filter(sensor => sensor.state === OFF_STATE).map(({ state, ...sensor }) => sensor));
+    else off.push({ entityId: null, role: 'door', roleLabel: '문 센서', name: '문 센서 없음' });
+  }
+  if (!motions.some(sensor => sensor.state !== OFF_STATE) && presenceSources.length === 0) {
+    if (motions.length) off.push(...motions.filter(sensor => sensor.state === OFF_STATE).map(({ state, ...sensor }) => sensor));
+    else off.push({ entityId: null, role: 'presence', roleLabel: '사람 흔적 센서', name: '움직임·사람 흔적 센서 없음' });
+  }
+  return off;
 }
 
 /** 앞으로의 퇴실·입실 시각 — 지금 예약과 체류 중 미뤄 둔 다음 예약에서 */
@@ -113,8 +170,13 @@ export function handoffAlertMessage(areaName, event) {
   const phase = event.data?.phase;
   const at = timeOf(event.data?.checkOut ?? event.data?.checkIn ?? event.data?.startAt ?? event.timestamp);
   const when = at != null ? `${kstLabel(at)} ` : '';
+  const presenceAt = timeOf(event.data?.lastPresence?.at);
+  const presenceName = typeof event.data?.lastPresence?.name === 'string' ? event.data.lastPresence.name : '';
+  const presenceNote = presenceAt != null
+    ? ` 마지막 사람 흔적: ${kstLabel(presenceAt)}${presenceName ? ` ${presenceName}` : ''}.`
+    : '';
   if (event.type === 'late_checkout_detected') {
-    return { title: `[PROPOS] ${name} 퇴실 지연`, message: `${when}퇴실이 확인되지 않아 청소 모드(에어컨 끄기·조명·환기)를 켜지 않았어요. 확인 후 직접 켜 주세요.` };
+    return { title: `[PROPOS] ${name} 퇴실 지연`, message: `${when}퇴실이 확인되지 않아 청소 모드(에어컨 끄기·조명·환기)를 켜지 않았어요. 확인 후 직접 켜 주세요.${presenceNote}` };
   }
   if (event.type === 'checkin_not_detected') {
     const deadline = timeOf(event.data?.deadline);
@@ -132,7 +194,7 @@ export function handoffAlertMessage(areaName, event) {
       exit_not_seen: '청소 담당자가 나간 것을 보지 못했어요',
     }[event.data?.cause] ?? '그 시각에 감시가 멈춰 있었어요';
     const devices = { checkout: '청소 모드를 켜지 않았어요. ', checkin: '체류 기기 제어를 하지 않았어요. ', cleaning: '공실 기기 제어(끄기·잠금)를 하지 않았어요. ' }[phase] ?? '';
-    return { title: `[PROPOS] ${name} ${what} 확인 불가`, message: `${when}${what}${phase === 'cleaning' ? '를' : '을'} 확인할 수 없어요(${cause}). ${devices}직접 확인하고 처리해 주세요.` };
+    return { title: `[PROPOS] ${name} ${what} 확인 불가`, message: `${when}${what}${phase === 'cleaning' ? '를' : '을'} 확인할 수 없어요(${cause}). ${devices}직접 확인하고 처리해 주세요.${presenceNote}` };
   }
   return null;
 }

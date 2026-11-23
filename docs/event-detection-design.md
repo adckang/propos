@@ -26,7 +26,7 @@
 
 ```
 Raw Sensor (30초 폴링)
-        │  snap: { doorOpen, motionDetected, acPower, noiseLevel, ... }
+        │  snap: { doorOpen, motionDetected, presenceEvidence, acPower, noiseLevel, ... }
         ▼
 [Layer 1: SensorEventGenerator]
   원시 센서 → EXIT / ENTRY 시맨틱 이벤트 조합
@@ -66,18 +66,26 @@ Raw Sensor (30초 폴링)
 
 ### ENTRY (들어옴)
 ```
-조건 순서 (모두 충족):
+모션 경로 (모두 충족):
   ① 문 열림 → 닫힘 이벤트              (들어왔다)
   ② 이후 모션 감지                      (실내 있음)
   ③ 모션 N분 이상 지속                  (머물고 있다)
+
+사람 조작 경로 (모션 센서가 꺼져 있어도 사용):
+  ① 문 열림
+  ② 그 뒤 스위치·조명·플러그·물리 버튼의 새 조작 기록
+  ③ 문 닫힘                             (②는 문이 닫힌 직후여도 됨)
 
 파라미터:
   ENTRY_SUSTAINED_MIN = 3   (③: 모션 지속 시간)
 ```
 
+- 사람 조작 경로는 기기의 켜짐 상태 자체가 아니라 HA `last_changed`가 문이 열린 뒤인 새 기록만 쓴다. HA 사용자·자동화 문맥(`context.user_id`·`parent_id`)이 붙은 변경은 제외한다. Smart Life가 문맥 없이 보낸 원격 조작은 물리 조작과 구분할 수 없다.
+- 문 동작 없는 조작은 ENTRY가 아니다. 이 보조 경로는 입실·청소 담당자가 들어온 것만 확인하며, 사람이 나간 것으로는 쓰지 않는다.
+
 ### 취소 조건
 ```
-EXIT 후보 취소: ③ 완료 전 모션 감지 → "나갔다가 돌아옴"
+EXIT 후보 취소: ③ 완료 전 모션 또는 문 뒤 사람 조작 감지 → "나갔다가 돌아옴"
 ENTRY 후보 취소: ③ 완료 전 모션이 EXIT_NO_MOTION_MIN 이상 없음 → "잠깐 들어왔다가 나감"
 ```
 
@@ -114,6 +122,7 @@ OCCUPIED 상태에서:
 ```
 
 - "같은 퇴실" = 예약 uid + checkOut 시각. 연장으로 checkOut이 바뀌면 새 시각에 다시 전환한다.
+- 퇴실을 확인할 수 없어 운영자에게 넘길 때는 현재 체류에서 마지막으로 본 사람 조작 시각·기기 이름을 함께 준다. 이 단서는 판단 자료일 뿐 EXIT로 자동 확정하지 않는다.
 - 판정 상태(유예·입실 기다림, 처리한 예약, 조기 입실, 마지막 판정 시각)는 워처 상태 파일(`monitor`)에 저장한다 — 재시작해도 이어진다. 깨진 값은 버린다.
 - 워처 시작은 HA 기록을 다시 읽지 않는다. 그래서 되살린 기다림이 있는데 마지막 판정에서 10분 넘게 지났으면(또는 그 시각이 저장돼 있지 않으면) 그동안의 퇴실·입실을 놓쳤을 수 있다 — 그 기다림은 끝까지 판정하지 않고 `not_observed` 확인 불가로 넘긴다(그사이 확인되면 그대로 확인).
 - "같은 체류" = 예약 uid + checkIn 시각. 퇴실 처리한 체류는 늦게 연장돼도 다시 입실로 만들지 않는다(uid가 없는 예약도).
@@ -140,7 +149,7 @@ OCCUPIED 상태에서:
 
 [기다리는 중 ENTRY]           → checkin_confirmed — 그때 체류 기기 제어(조명·TV, 에어컨은 입실 준비가 맡음) + 입실 준비에 도착 기록
 [자정까지 미확인]             → checkin_not_detected 1건 (발생 시각 = 예약 checkIn, data.deadline = 기다린 시각) + 운영자에게("기기 상태를 직접 확인해 주세요")
-[입실 시각·자정에 감지 센서 꺼짐] → detection_unconfirmable(phase checkin, cause sensor_off) — 미감지로 단정하지 않음
+[입실 시각·자정에 입실 감지 경로가 없음] → detection_unconfirmable(phase checkin, cause sensor_off) — 문 센서와, 움직임 또는 사람 조작 기기 중 하나도 쓸 수 없을 때. 미감지로 단정하지 않음
 [자정이 지난 뒤 처음 판정]     → 전환 + detection_unconfirmable(cause not_observed)
 [기다리는 중 예약 취소·변경]    → 판정하지 않음
 ```
@@ -165,7 +174,7 @@ OCCUPIED 상태에서:
 [끝 시각]    → scheduled_cleaning_finished (발생 시각 = 끝 시각) → VACANT / CLEANING_FINISHED
                담당자가 나간 것을 봤으면(data.vacantConfirmed) 공실 기기 제어(전체 끄기·잠금). 아니면 하지 않는다 — 안에 있을 수 있다
                배정된 청소인데 퇴실 뒤 끝 시각까지 아무도 들어오지 않았으면(운영자가 시작을 누르지도 않음) → cleaning_not_detected (발생 시각 = 시작 시각) + 운영자에게
-               그동안 감지 센서가 한 번이라도 꺼졌으면 → detection_unconfirmable(phase cleaning, sensor_off, 발생 시각 = 끝 시각),
+               그동안 입실 감지 경로가 한 번이라도 없었으면 → detection_unconfirmable(phase cleaning, sensor_off, 발생 시각 = 끝 시각),
                감시가 멈춰 있었으면(재시작 뒤 10분 넘게 못 봄, 또는 시작 시각보다 한참 뒤에야 기다리기 시작) not_observed
 [끝 시각 뒤 1시간 안에 담당자가 나감] → cleaning_vacant_confirmed — 그때 공실 기기 제어
 [끝 시각 뒤 1시간 안에 나가는 것을 못 봄] → detection_unconfirmable(phase cleaning, exit_not_seen) — 공실 기기 제어를 하지 않은 채 운영자에게
@@ -193,11 +202,12 @@ CLEANING_IN_PROGRESS: [EXIT + CLEANING_DONE_QUIET_MIN 조용] → cleaning_finis
 
 ### 4-E. 감지 센서 사전 점검 · sensor_precheck_failed (DEC-12)
 
-입실·퇴실 확인(Layer 1)이 읽는 센서 — 숙소 구역의 `binary_sensor` 중 문(`door`)·움직임(`motion`) — 가 꺼지면 확인이 멈춘다. 꺼진 것을 시간 간격으로 반복해 알리지 않고, 그 센서가 **필요해지기 전에** 미리 점검한다(`src/domain/sensorHealthDomain.js`, 워처의 매 주기). 객실 상태·문제 건수는 바꾸지 않는다.
+퇴실 확인은 숙소 구역의 문(`door`)·움직임(`motion`) 센서가 모두 필요하다. 입실·청소 담당자 입장 확인은 문 센서와, 움직임 또는 사람 조작 기기(스위치·조명·플러그·물리 버튼) 중 하나가 필요하다(DEC-18). 필요한 감지 경로가 꺼진 것을 시간 간격으로 반복해 알리지 않고, 그 센서가 **필요해지기 전에** 미리 점검한다(`src/domain/sensorHealthDomain.js`, 워처의 매 주기). 객실 상태·문제 건수는 바꾸지 않는다.
 
 ```
 [퇴실·입실 하루 전, 2시간 전 — 각각 한 번]  지금 예약과 체류 중 미뤄 둔 다음 예약의 앞으로의 퇴실·입실 시각 기준
-  감지 센서 중 unavailable이 있거나 문·움직임 센서가 아예 없음
+  퇴실: 문·움직임 센서가 unavailable이거나 없음
+  입실: 문 센서를 쓸 수 없거나, 움직임·사람 조작 기기를 모두 쓸 수 없음
     → sensor_precheck_failed (soft) + 운영자 알림 "○○ 2시간 전 점검 — 꺼져 있는 센서: … 그 전에 확인해 주세요"
   워처가 꺼져 있어 두 점검 시각이 모두 지났으면 늦은 쪽(2시간 전)만 한다
 [퇴실·입실 그 시각에도 꺼져 있음] → detection_unconfirmable (4-A·4-B)
@@ -212,6 +222,7 @@ CLEANING_IN_PROGRESS: [EXIT + CLEANING_DONE_QUIET_MIN 조용] → cleaning_finis
 
 Pi가 운영자에게 넘기는 것 — `sensor_precheck_failed`·`late_checkout_detected`·`checkin_not_detected`·`detection_unconfirmable` — 은 **Slack + HA 앱** 둘 다 간다.
 - HA 앱: 알림창(`persistent_notification`) + 숙소 설정 `optimization.operatorNotifyService`(`notify.*`, 입실 준비 안전 알림과 같은 값)가 있으면 그 휴대폰. 무엇이 안 됐고 무엇을 해 달라는지 한국 시각과 함께(`handoffAlertMessage`·`precheckAlertMessage`). 놓친 기록을 다시 처리하는 중엔 보내지 않는다.
+- 퇴실·청소 퇴장을 확인하지 못한 알림에는 현재 체류·청소 구간의 마지막 사람 조작 시각과 기기 이름을 함께 적는다. 이 단서만으로 퇴장을 자동 확정하지 않는다.
 - Slack: Pi에는 Slack 주소가 없다. Vercel의 Pi 입구(`/api/events/write`)가 이 종류(`OPERATOR_ALERT_EVENT_TYPES`)를 **처음 저장할 때만** 한 번 보낸다(재전송은 DB 중복이라 다시 안 감, 5초 제한, 실패는 로그만 — 재시도 없음). 한 줄은 `[숙소] 무엇이 안 됐고 무엇을 해 달라는지 → 링크` — 기록 내용은 넣지 않는다(`OPERATOR_ALERT_LABELS`). 그 밖의 Pi 이벤트는 저장만 한다(RF-06).
 - 운영자가 할 수 있는 것: HA 앱·Smart Life로 기기 직접 제어, 화면의 청소 시작·완료·정비 전환.
 

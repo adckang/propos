@@ -16,8 +16,8 @@ const CFG = {
 
 function gen() { return new SensorEventGenerator(); }
 
-function snap(doorOpen, motionDetected) {
-  return { doorOpen: !!doorOpen, motionDetected: !!motionDetected };
+function snap(doorOpen, motionDetected, presenceEvidence = null) {
+  return { doorOpen: !!doorOpen, motionDetected: !!motionDetected, presenceEvidence };
 }
 
 // ============================================================
@@ -133,6 +133,29 @@ describe('ENTRY 감지', () => {
     const result = g.update(snap(false, true), 3 * MIN, CFG);  // 2min < 3min
     assert.equal(result.entry, false);
   });
+
+  test('문이 닫힌 뒤 벽 스위치를 누르면 모션 없이도 즉시 entry', () => {
+    const g = gen();
+    g.update(snap(true, false), 0, CFG);
+    g.update(snap(false, false), MIN, CFG);
+    const result = g.update(snap(false, false, { at: 2 * MIN, name: '욕실 스위치' }), 2 * MIN, CFG);
+    assert.deepEqual([result.entry, result.entryAt], [true, MIN]);
+  });
+
+  test('문이 열려 있는 동안 누른 스위치도 문이 닫히면 entry', () => {
+    const g = gen();
+    g.update(snap(true, false), 0, CFG);
+    g.update(snap(true, false, { at: 30_000, name: '거실 조명' }), 30_000, CFG);
+    const result = g.update(snap(false, false, { at: 30_000, name: '거실 조명' }), MIN, CFG);
+    assert.equal(result.entry, true);
+  });
+
+  test('문 동작 없는 스위치 조작과 문보다 오래된 조작은 entry가 아니다', () => {
+    const g = gen();
+    assert.equal(g.update(snap(false, false, { at: 0, name: '욕실 스위치' }), 0, CFG).entry, false);
+    g.update(snap(true, false, { at: 0, name: '욕실 스위치' }), MIN, CFG);
+    assert.equal(g.update(snap(false, false, { at: 0, name: '욕실 스위치' }), 2 * MIN, CFG).entry, false);
+  });
 });
 
 // ============================================================
@@ -156,6 +179,16 @@ describe('EXIT 후 재입실', () => {
     g.update(snap(false, true),  11 * MIN + 1, CFG);
     const entryResult = g.update(snap(false, true), 14 * MIN + 2, CFG);
     assert.equal(entryResult.entry, true, '재입실 ENTRY');
+  });
+
+  test('퇴실 후보 뒤 사람 조작이 보이면 퇴실을 취소하고 재입실로 본다', () => {
+    const g = gen();
+    g.update(snap(false, true), 0, CFG);
+    g.update(snap(true, false), MIN, CFG);
+    g.update(snap(false, false), 2 * MIN, CFG);
+    const returned = g.update(snap(false, false, { at: 3 * MIN, name: '은하수등 플러그' }), 3 * MIN, CFG);
+    assert.equal(returned.entry, true);
+    assert.equal(g.update(snap(false, false, { at: 3 * MIN, name: '은하수등 플러그' }), 8 * MIN, CFG).exit, false);
   });
 });
 

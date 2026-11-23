@@ -170,10 +170,11 @@ export class OccupancyMonitor {
    * @param {{ mainStatus, subStatus }} p.roomState
    * @param {object|null} p.reservation - { checkIn?: Date, checkOut?: Date }
    * @param {number} p.now            - Date.now()
-   * @param {object[]} [p.sensorsOff] - 지금 꺼져 있는 감지 센서(문·움직임) — 그 순간의 퇴실·입실 확인에 쓴다
+   * @param {object[]} [p.sensorsOff] - 지금 꺼져 있는 퇴실 감지 센서(문·움직임)
+   * @param {object[]} [p.entrySensorsOff] - 지금 꺼져 있는 입실 감지 센서(문 + 움직임 또는 사람 조작 기기)
    * @returns {{ type, subType?, severity?, reason, timestamp }[]}
    */
-  process({ snap, roomState, reservation, now, sensorsOff = [], cleaning = null }) {
+  process({ snap, roomState, reservation, now, sensorsOff = [], entrySensorsOff = sensorsOff, cleaning = null }) {
     // 모션·도어는 상태와 무관하게 항상 추적 (에너지낭비·문열림 감지용)
     this._trackMotion(snap.motionDetected, now);
     this._trackDoor(snap.doorOpen, now);
@@ -195,6 +196,8 @@ export class OccupancyMonitor {
       now,
       cfg: SUSPICION_CFG,
       sensorsOff,
+      entrySensorsOff,
+      presenceEvidence: snap.presenceEvidence ?? null,
       cleaning,
     });
 

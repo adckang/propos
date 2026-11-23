@@ -24,8 +24,10 @@ const OCCUPIED = { mainStatus: 'OCCUPIED', subStatus: 'GOOD_CONDITION' };
 const none = { exit: false, exitAt: null, entry: false, entryAt: null };
 const entered = { exit: false, exitAt: null, entry: true, entryAt: null };
 const OFF = [{ entityId: 'binary_sensor.motion', roleLabel: '움직임 센서', name: '현관 움직임' }];
-const run = (tracker, { roomState = OPTIMIZED, res = stay(), sensorResult = none, motionNow = false, now, sensorsOff = [] }) =>
-  tracker.evaluate({ sensorResult, roomState, reservation: res, motionNow, acPower: null, noiseLevel: null, now, cfg: CFG, sensorsOff });
+const run = (tracker, { roomState = OPTIMIZED, res = stay(), sensorResult = none, motionNow = false, now, sensorsOff = [],
+  entrySensorsOff = sensorsOff, presenceEvidence = null }) =>
+  tracker.evaluate({ sensorResult, roomState, reservation: res, motionNow, acPower: null, noiseLevel: null, now, cfg: CFG,
+    sensorsOff, entrySensorsOff, presenceEvidence });
 const types = events => events.map(e => e.type);
 
 describe('상태 표 — 입실 시각 전환이 갈 수 있는 곳', () => {
@@ -163,6 +165,28 @@ describe('확인할 수 없으면 단정하지 않고 운영자에게 (DEC-11·1
     assert.deepEqual(types(events), ['scheduled_checkout_reached', 'detection_unconfirmable']);
     assert.deepEqual([events[0].data.exitConfirmed, events[1].data.phase], [false, 'checkout']);
     assert.deepEqual(run(t, { roomState: { mainStatus: 'CLEANING', subStatus: 'CLEANING_PENDING' }, res, now: CHECK_IN + 30 * MIN }), []);
+  });
+
+  test('퇴실 확인 불가에는 마지막 사람 흔적을 함께 넘긴다', () => {
+    const t = new SuspicionTracker();
+    const res = stay({ checkIn: new Date(CHECK_IN - 20 * HOUR), checkOut: new Date(CHECK_IN) });
+    const events = run(t, { roomState: OCCUPIED, res, now: CHECK_IN, sensorsOff: OFF,
+      presenceEvidence: { at: CHECK_IN - MIN, name: '거실 욕실 스위치', entityId: 'switch.bathroom' } });
+    assert.deepEqual(events[1].data.lastPresence, {
+      at: new Date(CHECK_IN - MIN).toISOString(), name: '거실 욕실 스위치', entityId: 'switch.bathroom',
+    });
+
+    const old = new SuspicionTracker();
+    const oldEvents = run(old, { roomState: OCCUPIED, res, now: CHECK_IN, sensorsOff: OFF,
+      presenceEvidence: { at: CHECK_IN - 21 * HOUR, name: '이전 체류 스위치', entityId: 'switch.old' } });
+    assert.equal(oldEvents[1].data.lastPresence, undefined, '현재 체류 전의 오래된 흔적은 붙이지 않는다');
+  });
+
+  test('움직임 센서가 꺼져도 대체 사람 신호가 있으면 입실은 확인 불가로 끝내지 않고 기다린다', () => {
+    const t = new SuspicionTracker();
+    const events = run(t, { now: CHECK_IN, sensorsOff: OFF, entrySensorsOff: [] });
+    assert.deepEqual(types(events), ['scheduled_checkin_reached']);
+    assert.ok(t.checkinWatch);
   });
 
   test('센서가 꺼져 있으면 "움직임 없음"은 퇴실 확인이 아니다', () => {

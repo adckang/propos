@@ -11,7 +11,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { detectionSensors, duePrechecks, handoffAlertMessage, offDetectionSensors, precheckAlertMessage, precheckEventTime, upcomingTimes } from '../../src/domain/sensorHealthDomain.js';
+import { detectionSensors, duePrechecks, handoffAlertMessage, latestPresenceEvidence, offDetectionSensors, offEntryDetectionSensors,
+  precheckAlertMessage, precheckEventTime, presenceActivitySources, upcomingTimes } from '../../src/domain/sensorHealthDomain.js';
 import { request, event as apiEvent } from '../helpers/eventApiFixture.js';
 import { countPeriodEvents } from '../../src/domain/reportingDomain.js';
 import { buildIssueItems } from '../../src/domain/monthlyCalendarDomain.js';
@@ -32,6 +33,33 @@ describe('꺼진 감지 센서', () => {
   test('구역 상태를 아직 못 읽었으면 판단하지 않고, 읽었는데 문·움직임 센서가 없으면 확인할 수 없다', () => {
     assert.deepEqual(offDetectionSensors({}), []);
     assert.deepEqual(offDetectionSensors({ 'light.x': { state: 'on', attributes: {} } }).map(s => s.name), ['문·움직임 센서 없음']);
+  });
+
+  test('입실은 정상 문 센서와 스위치·조명·플러그·물리 버튼 중 하나가 있으면 움직임 센서를 대신할 수 있다', () => {
+    const base = {
+      'binary_sensor.motion': sensor('unavailable'),
+      'binary_sensor.door': sensor('off', { dc: 'door', name: '현관문' }),
+    };
+    assert.deepEqual(offEntryDetectionSensors(base).map(s => s.entityId), ['binary_sensor.motion']);
+    for (const [entityId, state] of [
+      ['switch.wall', { state: 'off', attributes: { friendly_name: '욕실 스위치' } }],
+      ['light.living', { state: 'off', attributes: { friendly_name: '거실 조명' } }],
+      ['event.remote', { state: 'press', attributes: { device_class: 'button', friendly_name: '무선 버튼' } }],
+    ]) {
+      assert.deepEqual(offEntryDetectionSensors({ ...base, [entityId]: state }), [], entityId);
+    }
+  });
+
+  test('사람 흔적은 사람 조작으로 생긴 가장 최근 스위치·조명·버튼 변경만 고른다', () => {
+    const now = Date.parse('2026-11-23T06:00:00.000Z');
+    const map = {
+      'switch.wall': { state: 'off', last_changed: '2026-11-23T05:58:00.000Z', attributes: { friendly_name: '욕실 스위치' }, context: { user_id: null, parent_id: null } },
+      'light.living': { state: 'on', last_changed: '2026-11-23T05:59:00.000Z', attributes: { friendly_name: '거실 조명' }, context: { user_id: 'operator', parent_id: null } },
+      'event.remote': { state: 'press', last_changed: '2026-11-23T05:57:00.000Z', attributes: { device_class: 'button', friendly_name: '무선 버튼' }, context: { user_id: null, parent_id: null } },
+      'sensor.energy': { state: '3.2', last_changed: '2026-11-23T05:59:30.000Z', attributes: { friendly_name: '전력량' } },
+    };
+    assert.deepEqual(presenceActivitySources(map).map(s => s.entityId), ['event.remote', 'light.living', 'switch.wall']);
+    assert.deepEqual(latestPresenceEvidence(map, now), { at: Date.parse('2026-11-23T05:58:00.000Z'), name: '욕실 스위치', entityId: 'switch.wall' });
   });
 });
 
@@ -114,6 +142,12 @@ describe('운영자에게 넘기는 문구 (DEC-11)', () => {
       message: '11/24 11:00 퇴실을 확인할 수 없어요(꺼져 있는 센서: 움직임 센서(현관 움직임)). 청소 모드를 켜지 않았어요. 직접 확인하고 처리해 주세요.' });
     const down = handoffAlertMessage('파주201', { type: 'detection_unconfirmable', data: { phase: 'checkin', cause: 'not_observed', checkIn } });
     assert.equal(down.message, '11/24 15:00 입실을 확인할 수 없어요(그 시각에 감시가 멈춰 있었어요). 체류 기기 제어를 하지 않았어요. 직접 확인하고 처리해 주세요.');
+  });
+  test('퇴실 확인 불가 — 마지막 사람 흔적 시각과 기기 이름을 함께 준다', () => {
+    const alert = handoffAlertMessage('파주201', { type: 'detection_unconfirmable', data: { phase: 'checkout', cause: 'sensor_off', checkOut,
+      sensors: [{ entityId: 'binary_sensor.motion', roleLabel: '움직임 센서', name: '현관 움직임' }],
+      lastPresence: { at: '2026-11-24T01:59:00.000Z', name: '거실 욕실 스위치', entityId: 'switch.bathroom' } } });
+    assert.match(alert.message, /마지막 사람 흔적: 11\/24 10:59 거실 욕실 스위치\.$/);
   });
   test('넘기지 않는 종류는 문구가 없다', () => {
     assert.equal(handoffAlertMessage('파주201', { type: 'scheduled_checkout_reached', data: {} }), null);
@@ -353,6 +387,39 @@ describe('워처 — 확인되지 않으면 기기 제어를 하지 않고 넘�
       }
       await until(() => f.watcher.getMonitoringState().eventLog.some(e => e.type === 'checkin_confirmed'));
       assert.deepEqual(deviceCalls(f.services).map(call => call.service).sort(), ['light/turn_on', 'light/turn_on']);
+      assert.deepEqual(deviceCalls(f.services).map(call => call.body.entity_id).sort(), ['light.fixture_entrance', 'light.fixture_living']);
+    } finally { Date.now = previousNow; f.cleanup(); }
+  });
+
+  test('움직임 센서가 꺼져 있어도 문 뒤 벽 스위치 조작으로 입실을 확인한다', async () => {
+    const previousNow = Date.now;
+    const base = Date.now(); let time = base, doorOpen = false, wallOn = false;
+    const changed = { door: base - 10 * MIN, wall: base - 10 * MIN };
+    const states = () => ({
+      'binary_sensor.entrance_door': { ...sensor(doorOpen ? 'on' : 'off', { dc: 'door', name: '현관문' }), last_changed: new Date(changed.door).toISOString() },
+      'binary_sensor.entrance_motion': sensor('unavailable'),
+      'switch.bathroom_wall': { state: wallOn ? 'on' : 'off', last_changed: new Date(changed.wall).toISOString(),
+        attributes: { friendly_name: '거실 욕실 스위치' }, context: { user_id: null, parent_id: null } },
+    });
+    const f = await watcherFixture(new Proxy({}, { get: (_, key) => states()[key], ownKeys: () => Object.keys(states()),
+      getOwnPropertyDescriptor: (_, key) => ({ enumerable: true, configurable: true, value: states()[key] }) }));
+    Date.now = () => time;
+    try {
+      const cfg = { areaName: 'fixture-handoff', dataOrigin: 'SIMULATED', devices: DEVICES,
+        reservation: stay('stay-1', base - MIN, base + 20 * HOUR) };
+      f.watcher.setRoomState(VACANT);
+      f.watcher.setMonitoringConfig(cfg);
+      await until(() => f.watcher.getMonitoringState().roomState.mainStatus === 'OCCUPIED');
+      assert.equal(ofType(f.outbox(), 'detection_unconfirmable').length, 0, '입실은 대체 사람 신호가 있어 확인 불가가 아니다');
+
+      time = base + MIN; doorOpen = true; changed.door = time;
+      f.watcher.setMonitoringConfig(cfg); await new Promise(resolve => setTimeout(resolve, 25));
+      time = base + 2 * MIN; doorOpen = false; changed.door = time;
+      f.watcher.setMonitoringConfig(cfg); await new Promise(resolve => setTimeout(resolve, 25));
+      time = base + 3 * MIN; wallOn = true; changed.wall = time;
+      f.watcher.setMonitoringConfig(cfg);
+
+      await until(() => f.watcher.getMonitoringState().eventLog.some(e => e.type === 'checkin_confirmed'));
       assert.deepEqual(deviceCalls(f.services).map(call => call.body.entity_id).sort(), ['light.fixture_entrance', 'light.fixture_living']);
     } finally { Date.now = previousNow; f.cleanup(); }
   });

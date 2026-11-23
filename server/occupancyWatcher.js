@@ -34,7 +34,8 @@ import {
   INITIAL_STATE,
 } from '../src/domain/room-state/roomStateDomain.js';
 import { planMonitoringReservationUpdate } from '../src/domain/monitoringReservationDomain.js';
-import { duePrechecks, handoffAlertMessage, offDetectionSensors, precheckAlertMessage, precheckEventTime, upcomingTimes } from '../src/domain/sensorHealthDomain.js';
+import { duePrechecks, handoffAlertMessage, latestPresenceEvidence, offDetectionSensors, offEntryDetectionSensors,
+  precheckAlertMessage, precheckEventTime, upcomingTimes } from '../src/domain/sensorHealthDomain.js';
 
 const __dir    = dirname(fileURLToPath(import.meta.url));
 // 테스트는 PROPOS_DATA_DIR 로 임시 폴더를 지정해 실제 운영 기록(data/)을 덮어쓰지 않는다
@@ -205,13 +206,14 @@ function roomLabel(friendly) {
 
 const OUTDOOR_RE = /현재|실외|외부|outdoor/i;
 
-function buildSnapshotFromStates(stateMap) {
+function buildSnapshotFromStates(stateMap, now = Date.now()) {
   const snap = {
     acMode: null, acPower: null, acTemp: null, acHumidity: null,
     smokeDetected: false,
     outdoorTemp: null, outdoorHumidity: null,
     indoorTemps: [], indoorHumidities: [],
     doorOpen: false, motionDetected: false,
+    presenceEvidence: null,
     noiseLevel: null,
   };
 
@@ -258,6 +260,7 @@ function buildSnapshotFromStates(stateMap) {
       continue;
     }
   }
+  snap.presenceEvidence = latestPresenceEvidence(stateMap, now);
   return snap;
 }
 
@@ -402,9 +405,11 @@ function runSensorPrechecks(now) {
   sensorPrechecks = done;
   if (changed) persistState();
   if (!due.length) return;
-  const off = offDetectionSensors(entityStateMap);
-  if (!off.length) return;
   for (const check of due) {
+    const off = check.phase === 'checkin'
+      ? offEntryDetectionSensors(entityStateMap)
+      : offDetectionSensors(entityStateMap);
+    if (!off.length) continue;
     const reason = `${check.phase === 'checkout' ? '퇴실' : '입실'} ${check.offsetLabel} 감지 센서 점검 — 꺼짐: ${off.map(s => s.name).join(', ')}`;
     const data = { phase: check.phase, at: new Date(check.at).toISOString(), offset: check.key.split('|').pop(),
       sensors: off.map(s => ({ entityId: s.entityId, roleLabel: s.roleLabel, name: s.name })) };
@@ -481,10 +486,11 @@ async function processNow(now = Date.now()) {
         completedManualEvents.push(request);
       } catch (error) { request.reject(error); }
     }
-    const snap        = buildSnapshotFromStates(entityStateMap);
+    const snap        = buildSnapshotFromStates(entityStateMap, now);
     const reservation = buildReservation();
     const sensorsOff  = offDetectionSensors(entityStateMap);
-    const events      = monitor.process({ snap, roomState, reservation, now, sensorsOff, cleaning: config?.cleaning ?? null });
+    const entrySensorsOff = offEntryDetectionSensors(entityStateMap);
+    const events      = monitor.process({ snap, roomState, reservation, now, sensorsOff, entrySensorsOff, cleaning: config?.cleaning ?? null });
 
     for (const event of events) {
       if (SOFT_EVENTS.has(event.type)) {

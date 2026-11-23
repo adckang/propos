@@ -2,7 +2,7 @@
  * SensorEventGenerator — 원시 센서 → EXIT/ENTRY 시맨틱 이벤트 변환 (Layer 1)
  *
  * EXIT (나감): ① 문 열리기 전 N분 이내 모션 → ② 문 열림→닫힘 → ③ N분간 모션 없음
- * ENTRY(들어옴): ① 문 열림→닫힘 → ② 모션 감지 → ③ 모션 N분 지속
+ * ENTRY(들어옴): ① 문 열림→닫힘 → ② 모션 N분 지속 또는 문이 열린 뒤 사람 조작(스위치·조명·플러그·버튼)
  *
  * 설계 문서: docs/event-detection-design.md
  * 임계값:    src/config/monitoringThresholds.js
@@ -24,11 +24,12 @@ export class SensorEventGenerator {
   // ENTRY 추적
   _entryPendingAt         = null;    // ENTRY 후보: 해당 문닫힘 시각
   _firstMotionAfterClose  = null;    // 문닫힘 후 첫 모션 시각
+  _presenceAfterDoorAt    = null;    // 문이 열린 뒤 마지막 사람 조작 시각
 
   /**
    * 매 폴링(30초)마다 호출. 스냅샷을 받아 EXIT/ENTRY 이벤트를 반환.
    *
-   * @param {object} snap - 센서 스냅샷 { doorOpen: boolean, motionDetected: boolean }
+   * @param {object} snap - 센서 스냅샷 { doorOpen: boolean, motionDetected: boolean, presenceEvidence?: { at, name, entityId } }
    * @param {number} now  - Date.now()
    * @param {{ EXIT_LOOKBACK_MS, EXIT_NO_MOTION_MS, ENTRY_SUSTAINED_MS }} cfg
    * @returns {{ exit: boolean, exitAt: number|null, entry: boolean, entryAt: number|null }}
@@ -37,6 +38,7 @@ export class SensorEventGenerator {
     const result    = { exit: false, exitAt: null, entry: false, entryAt: null };
     const doorNow   = !!snap.doorOpen;
     const motionNow = !!snap.motionDetected;
+    const presenceAt = Number(snap.presenceEvidence?.at);
 
     // ── 문 전환 감지 (rising/falling edge) ─────────────────────────────────
     const doorRising  = doorNow  && !this._prevDoorOpen;   // 닫힘 → 열림
@@ -52,6 +54,14 @@ export class SensorEventGenerator {
       // 새 도어 사이클 → ENTRY 추적 초기화
       this._entryPendingAt        = null;
       this._firstMotionAfterClose = null;
+      this._presenceAfterDoorAt   = null;
+    }
+
+    // 켜져 있는 상태가 아니라 문이 열린 뒤 생긴 새 조작만 사람 흔적으로 쓴다.
+    if (this._doorOpenAt !== null && Number.isFinite(presenceAt)
+        && presenceAt >= this._doorOpenAt && presenceAt <= now
+        && (this._presenceAfterDoorAt === null || presenceAt > this._presenceAfterDoorAt)) {
+      this._presenceAfterDoorAt = presenceAt;
     }
 
     if (doorFalling) {
@@ -83,6 +93,17 @@ export class SensorEventGenerator {
       if (this._noMotionAt === null) this._noMotionAt = now;
     }
 
+    // 문이 열린 뒤의 사람 조작은 사람이 안에 있다는 직접 단서다. 문이 닫힌 뒤 입실로 확정하고 퇴실 후보는 취소한다.
+    if (this._entryPendingAt !== null && this._presenceAfterDoorAt !== null) {
+      result.entry = true;
+      result.entryAt = this._entryPendingAt;
+      this._entryPendingAt = null;
+      this._firstMotionAfterClose = null;
+      this._presenceAfterDoorAt = null;
+      this._exitPendingAt = null;
+      this._motionBeforeDoor = false;
+    }
+
     // ── EXIT 확인: exitPending + 문닫힘 후 N분간 모션 없음 ─────────────────
     if (this._exitPendingAt !== null && !motionNow && this._noMotionAt !== null) {
       // 문닫힘과 모션중단 중 더 늦은 시각부터 카운트
@@ -95,7 +116,7 @@ export class SensorEventGenerator {
     }
 
     // ── ENTRY 확인: 문닫힘 후 첫 모션 + N분 지속 ────────────────────────────
-    if (this._firstMotionAfterClose !== null) {
+    if (!result.entry && this._firstMotionAfterClose !== null) {
       if (motionNow) {
         const sustainedMs = now - this._firstMotionAfterClose;
         if (sustainedMs >= cfg.ENTRY_SUSTAINED_MS) {

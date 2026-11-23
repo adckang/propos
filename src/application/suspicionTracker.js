@@ -95,19 +95,23 @@ export class SuspicionTracker {
    * @param {number|null} p.noiseLevel - dB 단위, null=센서 없음
    * @param {number} p.now
    * @param {object} p.cfg
-   * @param {object[]} [p.sensorsOff] - 지금 꺼져 있는 감지 센서(문·움직임). 있으면 그 순간 퇴실·입실을 확인할 수 없다
+   * @param {object[]} [p.sensorsOff] - 지금 꺼져 있는 퇴실 감지 센서(문·움직임)
+   * @param {object[]} [p.entrySensorsOff] - 지금 꺼져 있는 입실 감지 센서(문 + 움직임 또는 사람 조작 기기)
+   * @param {{ at: number, name: string, entityId: string }|null} [p.presenceEvidence] - 마지막 사람 조작 흔적
    * @param {object|null} [p.cleaning] - 서버가 보낸 청소 일정 { jobId, checkoutAt, startAt, endAt, assigned }
    */
-  evaluate({ sensorResult, roomState, reservation, motionNow, acPower, noiseLevel, now, cfg, sensorsOff = [], cleaning = null }) {
+  evaluate({ sensorResult, roomState, reservation, motionNow, acPower, noiseLevel, now, cfg, sensorsOff = [],
+    entrySensorsOff = sensorsOff, presenceEvidence = null, cleaning = null }) {
     const events = [];
     const { exit, exitAt, entry } = sensorResult;
     const main      = roomState?.mainStatus;
     const sub       = roomState?.subStatus;
     const checkOutMs = reservation?.checkOut?.getTime() ?? null;
     const checkInMs  = reservation?.checkIn?.getTime()  ?? null;
-    const sensorOff  = sensorsOff.length > 0;
+    const exitSensorOff  = sensorsOff.length > 0;
+    const entrySensorOff = entrySensorsOff.length > 0;
     // 센서가 꺼져 있으면 "움직임 없음"은 확인이 아니다
-    const quietRoom  = !motionNow && !sensorOff;
+    const quietRoom  = !motionNow && !exitSensorOff;
     const phaseLabel = phase => ({ checkout: '퇴실', checkin: '입실', cleaning: '청소' }[phase]);
     const UNCONFIRMABLE_REASON = {
       sensor_off: (phase, off) => `${phaseLabel(phase)} 시각에 감지 센서가 꺼져 있어 확인할 수 없음 (${off.map(s => s.name).join(', ')})`,
@@ -116,11 +120,20 @@ export class SuspicionTracker {
       exit_not_seen: () => '청소 담당자가 나간 것을 확인하지 못해 공실 기기 제어를 하지 않음',
     };
     const sensorRefs = list => list.map(s => ({ entityId: s.entityId, roleLabel: s.roleLabel, name: s.name }));
+    const normalizedPresence = Number.isFinite(presenceEvidence?.at) && presenceEvidence.at <= now
+      ? { at: iso(presenceEvidence.at), name: presenceEvidence.name, entityId: presenceEvidence.entityId }
+      : null;
+    const withLastPresence = (data, phase) => {
+      if (!normalizedPresence || (phase !== 'checkout' && phase !== 'cleaning')) return data;
+      const lowerBound = phase === 'checkout' ? checkInMs : timeOf(data.checkoutAt ?? data.startAt);
+      if (lowerBound != null && presenceEvidence.at < lowerBound) return data;
+      return { ...data, lastPresence: normalizedPresence };
+    };
     const unconfirmable = (phase, at, data, cause, offSensors = sensorsOff) => ({
       type: 'detection_unconfirmable',
       reason: UNCONFIRMABLE_REASON[cause](phase, offSensors),
       timestamp: at,
-      data: { ...data, phase, cause, ...(cause === 'sensor_off' ? { sensors: sensorRefs(offSensors) } : {}) },
+      data: withLastPresence({ ...data, phase, cause, ...(cause === 'sensor_off' ? { sensors: sensorRefs(offSensors) } : {}) }, phase),
     });
 
     // 되살린 기다림이 있는데 워처가 꺼져 있던 동안을 보지 못했으면, 그 기다림은 끝까지 판정할 수 없다
@@ -174,7 +187,7 @@ export class SuspicionTracker {
         const deadline = checkOutMs + cfg.CHECKOUT_GRACE_MS;
         this.lateCheckoutWatch = null;
         if (exitConfirmed) { /* 청소 모드는 전환과 함께 */ }
-        else if (sensorOff) events.push(unconfirmable('checkout', checkOutMs, data, 'sensor_off'));
+        else if (exitSensorOff) events.push(unconfirmable('checkout', checkOutMs, data, 'sensor_off'));
         // 유예 시간이 이미 지난 뒤 처음 판정하면(워처가 꺼져 있다 켜짐) 그 사이를 보지 못한 것 — 지연으로 단정하지 않는다
         else if (now >= deadline) events.push(unconfirmable('checkout', checkOutMs, data, 'not_observed'));
         else this.lateCheckoutWatch = { checkOutMs, deadline, leftBeforeCheckout, notEntered, unobserved: false, data };
@@ -221,12 +234,12 @@ export class SuspicionTracker {
         this.lateCheckoutWatch = null;
       } else if (now >= watch.deadline) {
         // 그 순간 센서가 꺼져 있거나, 기다리는 동안 감시가 멈췄거나, 입실이 확인되지 않은 체류면 지연으로 단정하지 않는다
-        const cause = sensorOff ? 'sensor_off' : watch.unobserved ? 'not_observed' : watch.notEntered ? 'not_entered' : null;
+        const cause = exitSensorOff ? 'sensor_off' : watch.unobserved ? 'not_observed' : watch.notEntered ? 'not_entered' : null;
         events.push(cause ? unconfirmable('checkout', watch.checkOutMs, watch.data, cause) : {
           type: 'late_checkout_detected',
           reason: `예정 체크아웃 후 ${Math.round(cfg.CHECKOUT_GRACE_MS / 60_000)}분 안에 실제 퇴실이 확인되지 않음`,
           timestamp: watch.checkOutMs,
-          data: watch.data,
+          data: withLastPresence(watch.data, 'checkout'),
         });
         this.lateCheckoutWatch = null;
       }
@@ -275,7 +288,7 @@ export class SuspicionTracker {
         this.stayData = data;
         // DEC-16: 그날(한국 날짜) 자정까지 기다린다 — 손님은 입실 시각보다 몇 시간 늦게 오는 일이 흔하다
         if (entryConfirmed) { /* 체류 기기 제어는 전환과 함께 */ }
-        else if (sensorOff) events.push(unconfirmable('checkin', checkInMs, data, 'sensor_off'));
+        else if (entrySensorOff) events.push(unconfirmable('checkin', checkInMs, data, 'sensor_off', entrySensorsOff));
         else if (now >= deadline) events.push(unconfirmable('checkin', checkInMs, data, 'not_observed'));
         else this.checkinWatch = { checkInMs, deadline, needsExitFirst: fromCleaning, unobserved: false, data };
         this._resetCheckin();
@@ -303,8 +316,8 @@ export class SuspicionTracker {
         this.checkinWatch = null;
         this.stayEntryConfirmed = true;
       } else if (now >= cw.deadline) {
-        const cause = sensorOff ? 'sensor_off' : cw.unobserved ? 'not_observed' : null;
-        events.push(cause ? unconfirmable('checkin', cw.checkInMs, cw.data, cause) : {
+        const cause = entrySensorOff ? 'sensor_off' : cw.unobserved ? 'not_observed' : null;
+        events.push(cause ? unconfirmable('checkin', cw.checkInMs, cw.data, cause, entrySensorsOff) : {
           type: 'checkin_not_detected',
           reason: '입실 날 자정까지 입실이 확인되지 않음',
           timestamp: cw.checkInMs,
@@ -342,7 +355,7 @@ export class SuspicionTracker {
         this.cleaningWatch = null;
       } else {
         if (entry) cl.seen = true;
-        if (sensorOff) { cl.sensorOffSeen = true; cl.offSensors = sensorsOff; }
+        if (entrySensorOff) { cl.sensorOffSeen = true; cl.offSensors = entrySensorsOff; }
         if (!cl.startedEmitted && now >= cl.startMs) {
           events.push({ type: 'scheduled_cleaning_started', reason: '청소 일정 시작 — 청소 중으로 전환', timestamp: cl.startMs, data: cl.data });
           cl.startedEmitted = true;
@@ -353,10 +366,10 @@ export class SuspicionTracker {
           events.push({ type: 'scheduled_cleaning_finished', reason: '청소 일정 끝 — 공실로 전환', timestamp: cl.endMs, data: { ...cl.data, vacantConfirmed } });
           // 담당자를 봤다 = 들어온 것을 봤거나, 실제 청소가 시작됐다(운영자가 시작을 누른 것 포함)
           if (cl.assigned && !cl.seen && (this.actualCleaning?.phase ?? 'waiting') === 'waiting') {
-            const cause = cl.sensorOffSeen || sensorOff ? 'sensor_off' : cl.unobserved ? 'not_observed' : null;
+            const cause = cl.sensorOffSeen || entrySensorOff ? 'sensor_off' : cl.unobserved ? 'not_observed' : null;
             // 확인 불가의 발생 시각은 끝 시각 — 퇴실 확인 불가(퇴실 시각 = 보통 청소 시작 시각)와 DB 중복 방지에서 겹치지 않게
             events.push(cause
-              ? unconfirmable('cleaning', cl.endMs, cl.data, cause, cl.sensorOffSeen ? cl.offSensors : sensorsOff)
+              ? unconfirmable('cleaning', cl.endMs, cl.data, cause, cl.sensorOffSeen ? cl.offSensors : entrySensorsOff)
               : { type: 'cleaning_not_detected', reason: '배정된 청소 시간 동안 담당자가 들어온 것이 보이지 않음', timestamp: cl.startMs, data: cl.data });
           }
           this.processedCleaningKey = cl.jobId;
