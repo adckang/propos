@@ -60,7 +60,7 @@ export default function MonthlyView({ onSelectStatus, onNavigateToList, onSelect
           {syncBadge && syncBadge}
           {unassignedCleaningCount > 0 && (
             <div style={{ background: '#fffbeb', border: '1.5px solid #fbbf24', borderRadius: 8, padding: isMobile ? '4px 8px' : '6px 12px', fontSize: isMobile ? 11 : 12, color: '#d97706', fontWeight: 700, flexShrink: 0 }}>
-              {isMobile ? `🧹 ${unassignedCleaningCount}` : `🧹 청소 미할당 ${unassignedCleaningCount}건`}
+              {isMobile ? `🧹 ${unassignedCleaningCount}` : `🧹 청소 미배정 ${unassignedCleaningCount}건`}
             </div>
           )}
         </div>

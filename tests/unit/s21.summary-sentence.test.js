@@ -348,22 +348,14 @@ describe("generateSummary — content-guide 어조 금지어 (양호합니다 / 
   });
 });
 
-describe("generateSummary — SOFT 이벤트 접미사", () => {
-  test("last_week, noShowSuspected=2 → 노쇼 언급 추가", () => {
-    const s = generateSummary("last_week", {
-      checkIns: 8, checkOuts: 7, anomalies: 0, energyWaste: 0,
-      noShowSuspected: 2,
-    });
-    assert.ok(s.includes("노쇼") || s.includes("2"), `노쇼 관련 없음: "${s}"`);
-    assert.ok(!hasInternalTerm(s), `내부 용어 노출됨: "${s}"`);
-  });
-
-  test("yesterday, noShowSuspected=1 → 노쇼 언급 추가", () => {
-    const s = generateSummary("yesterday", {
-      checkIns: 3, checkOuts: 3, anomalies: 0, energyWaste: 0,
-      noShowSuspected: 1,
-    });
-    assert.ok(s.includes("노쇼") || s.includes("1"), `노쇼 관련 없음: "${s}"`);
+describe("generateSummary — SOFT 이벤트 접미사 없음 (DEC-17)", () => {
+  // 노쇼 안내는 없앴다 — 입실 미감지는 문제 목록·이상 건수에 들어간다
+  test("last_week·yesterday, noShowSuspected가 있어도 노쇼 안내를 붙이지 않는다", () => {
+    for (const period of ["last_week", "yesterday"]) {
+      const s = generateSummary(period, { checkIns: 8, checkOuts: 7, anomalies: 0, energyWaste: 0, noShowSuspected: 2 });
+      assert.ok(!s.includes("노쇼"), `노쇼 안내 남음: "${s}"`);
+      assert.equal(s, generateSummary(period, { checkIns: 8, checkOuts: 7, anomalies: 0, energyWaste: 0 }));
+    }
   });
 
   test("last_week, noShowSuspected=0 → 기존 문장과 동일 (접미사 없음)", () => {

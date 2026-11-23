@@ -13,7 +13,6 @@ import {
 import { buildMonthlyInsights, buildWeeklyInsights } from "../domain/insightDomain.js";
 import { queryEvents, queryNextPreStayEvents, queryPreStayRunOutcomes, getLastKnownStatesFromDB, queryStateEventsForProperty } from "../infrastructure/eventRepository.js";
 import { queryCleaningJobCounts, queryCleaningJobCountsByProperty, queryCleaningIssueItems } from "../infrastructure/cleaningJobRepository.js";
-import { appendPastNoShowNotice } from '../domain/reportSummaryDomain.js';
 import { buildIssueItems, buildStateSegmentsFromEvents, groupIssueItemsByKstDate, toKstDateKey } from "../domain/monthlyCalendarDomain.js";
 
 // content-guide.md 규칙 준수: 한 문장에 숫자 최대 2개, 내부 상태명 노출 금지
@@ -51,7 +50,7 @@ export function generateSummary(period, stats) {
         ? `지난주 체크인 ${stats.checkIns}건 완료, 이상감지 ${stats.anomalies}건이 있었어요.`
         : `지난주 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`
     );
-    return appendPastNoShowNotice(period, stats, base);
+    return base;
   }
   if (period === "next_week") {
     return stats.checkIns > 0 ? `다음 주 체크인 ${stats.checkIns}건 예정이에요.` : `다음 주 예약이 없어요.`;
@@ -66,11 +65,11 @@ export function generateSummary(period, stats) {
     );
   }
   if (period === "last_month") {
-    return appendPastNoShowNotice(period, stats, summarizeOperationalMetrics(period, stats) ?? (
+    return summarizeOperationalMetrics(period, stats) ?? (
       stats.anomalies > 0
         ? `지난달 체크인 ${stats.checkIns}건 완료, 이상감지 ${stats.anomalies}건이 있었어요.`
         : `지난달 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`
-    ));
+    );
   }
   if (period === "next_month") {
     return stats.checkIns > 0 ? `다음 달 체크인 ${stats.checkIns}건 예정이에요.` : `다음 달 예약이 없어요.`;
@@ -83,7 +82,7 @@ export function generateSummary(period, stats) {
         ? `어제 체크인 ${stats.checkIns}건, 이상감지 ${stats.anomalies}건이 있었어요.`
         : `어제 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`
     );
-    return appendPastNoShowNotice(period, stats, base);
+    return base;
   }
   if (period === "tomorrow") {
     return stats.checkIns > 0 ? `내일 체크인 ${stats.checkIns}건 예정이에요.` : `내일 예약된 체크인이 없어요.`;
@@ -95,7 +94,7 @@ export function generateSummary(period, stats) {
       const total = (stats.checkIns ?? 0) + (stats.checkOuts ?? 0) + (stats.anomalies ?? 0);
       return total > 0 ? `지난 1시간 이벤트 ${total}건이 있었어요.` : `지난 1시간 이벤트가 없어요.`;
     };
-    return appendPastNoShowNotice(period, stats, summarizeOperationalMetrics(period, stats) ?? fallback());
+    return summarizeOperationalMetrics(period, stats) ?? fallback();
   }
   if (period === "next_hour") {
     return stats.checkIns > 0 ? `1시간 내 체크인 ${stats.checkIns}건 예정이에요.` : `1시간 내 예정된 이벤트가 없어요.`;
@@ -110,7 +109,7 @@ export function generateSummary(period, stats) {
           ? `${d.label} 체크인 ${stats.checkIns}건 완료, 이상감지 ${stats.anomalies}건이 있었어요.`
           : `${d.label} 체크인 ${stats.checkIns}건 완료, 이상 없었어요.`
       );
-      return appendPastNoShowNotice(period, stats, base);
+      return base;
     }
     return stats.checkIns > 0 ? `${d.label} 체크인 ${stats.checkIns}건 예정이에요.` : `${d.label} 예약이 없어요.`;
   }

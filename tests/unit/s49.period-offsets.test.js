@@ -297,8 +297,8 @@ describe('generateSummary — 몇 주·며칠 뒤/전', () => {
   test('3일 전, 이상 있음', () => {
     assert.equal(generateSummary('days_ago_3', { checkIns: 2, anomalies: 1 }), '3일 전 체크인 2건 완료, 이상감지 1건이 있었어요.');
   });
-  test('2주 전, 노쇼 의심은 덧붙는다', () => {
-    assert.match(generateSummary('weeks_ago_2', { checkIns: 1, anomalies: 0, noShowSuspected: 2 }), /노쇼 의심 2건/);
+  test('2주 전, 노쇼 의심이 있어도 안내를 덧붙이지 않는다 (DEC-17)', () => {
+    assert.equal(generateSummary('weeks_ago_2', { checkIns: 1, anomalies: 0, noShowSuspected: 2 }), '2주 전 체크인 1건 완료, 이상 없었어요.');
   });
   test('2주 뒤: 예약 있음/없음', () => {
     assert.equal(generateSummary('weeks_ahead_2', { checkIns: 4 }), '2주 뒤 체크인 4건 예정이에요.');

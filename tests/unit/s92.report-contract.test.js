@@ -209,7 +209,7 @@ describe('B. 서버 API — 기간별 통계·상세·캘린더·발견된 패�
 });
 
 // ── C. 요약 문장 ───────────────────────────────────────────────────────────
-// 7개 운영 지표가 다 있는 기간(실패 10건) / 이벤트 몇 건만 있는 얕은 기간(노쇼 1건) / 아무 일 없는 기간
+// 7개 운영 지표가 다 있는 기간(실패 10건) / 이벤트 몇 건만 있는 얕은 기간(노쇼 1건 — 안내는 붙지 않는다, DEC-17) / 아무 일 없는 기간
 const OPS = {
   checkIns: 14, checkOuts: 12, anomalies: 3, energyWaste: 1, noShowSuspected: 1,
   vacantEnergyWaste: 3, vacantEnergyResolved: 3, preStayAttempts: 12, preStayOptimized: 11,
@@ -218,19 +218,18 @@ const OPS = {
 };
 const SHALLOW = { checkIns: 3, checkOuts: 2, anomalies: 2, noShowSuspected: 1 };
 const QUIET = { checkIns: 3, checkOuts: 2, anomalies: 0, noShowSuspected: 0 };
-const NOSHOW = ' 노쇼 의심 1건 확인이 필요해요.';
 
 // [기간, OPS 문장, SHALLOW 문장, QUIET 문장]
 // RF-26(2026-11-17): 판정 기록이 없는 4개 지표는 등급 점수에서 빠진다 — OPS는 성공률 대상 3개 평균(92)이라 "양호해요",
 // SHALLOW·QUIET는 퇴실 수만 있어 계산 가능한 지표도 실제 실패도 없으므로 기존 문장으로 대체된다
 // (예전엔 퇴실 후 절전·보안이 실패 기록 없이 100%로 세져 "완벽해요"가 나왔다).
 const SUMMARIES = [
-  ['last_hour',     `지난 1시간 양호해요 (실패 10건)${NOSHOW}`, `지난 1시간 이벤트 7건이 있었어요.${NOSHOW}`, '지난 1시간 이벤트 5건이 있었어요.'],
-  ['yesterday',     `어제 양호해요 (실패 10건)${NOSHOW}`, `어제 체크인 3건, 이상감지 2건이 있었어요.${NOSHOW}`, '어제 체크인 3건 완료, 이상 없었어요.'],
-  ['days_ago_5',    `5일 전 양호해요 (실패 10건)${NOSHOW}`, `5일 전 체크인 3건 완료, 이상감지 2건이 있었어요.${NOSHOW}`, '5일 전 체크인 3건 완료, 이상 없었어요.'],
-  ['last_week',     `지난주 양호해요 (실패 10건)${NOSHOW}`, `지난주 체크인 3건 완료, 이상감지 2건이 있었어요.${NOSHOW}`, '지난주 체크인 3건 완료, 이상 없었어요.'],
-  ['weeks_ago_2',   `2주 전 양호해요 (실패 10건)${NOSHOW}`, `2주 전 체크인 3건 완료, 이상감지 2건이 있었어요.${NOSHOW}`, '2주 전 체크인 3건 완료, 이상 없었어요.'],
-  ['last_month',    `지난달 양호해요 (실패 10건)${NOSHOW}`, `지난달 체크인 3건 완료, 이상감지 2건이 있었어요.${NOSHOW}`, '지난달 체크인 3건 완료, 이상 없었어요.'],
+  ['last_hour',     `지난 1시간 양호해요 (실패 10건)`, `지난 1시간 이벤트 7건이 있었어요.`, '지난 1시간 이벤트 5건이 있었어요.'],
+  ['yesterday',     `어제 양호해요 (실패 10건)`, `어제 체크인 3건, 이상감지 2건이 있었어요.`, '어제 체크인 3건 완료, 이상 없었어요.'],
+  ['days_ago_5',    `5일 전 양호해요 (실패 10건)`, `5일 전 체크인 3건 완료, 이상감지 2건이 있었어요.`, '5일 전 체크인 3건 완료, 이상 없었어요.'],
+  ['last_week',     `지난주 양호해요 (실패 10건)`, `지난주 체크인 3건 완료, 이상감지 2건이 있었어요.`, '지난주 체크인 3건 완료, 이상 없었어요.'],
+  ['weeks_ago_2',   `2주 전 양호해요 (실패 10건)`, `2주 전 체크인 3건 완료, 이상감지 2건이 있었어요.`, '2주 전 체크인 3건 완료, 이상 없었어요.'],
+  ['last_month',    `지난달 양호해요 (실패 10건)`, `지난달 체크인 3건 완료, 이상감지 2건이 있었어요.`, '지난달 체크인 3건 완료, 이상 없었어요.'],
   ['this_week',     '이번 주 양호해요 (실패 10건)', '이번 주 이상감지 2건이 있어요.', '이번 주 체크인 3건, 체크아웃 2건이에요.'],
   ['this_month',    '이번 달 양호해요 (실패 10건)', '이번 달 이상감지 2건이 있어요.', '이번 달 체크인 3건, 체크아웃 2건이에요.'],
   ['next_hour',     '1시간 내 체크인 14건 예정이에요.', '1시간 내 체크인 3건 예정이에요.', '1시간 내 체크인 3건 예정이에요.'],
@@ -262,20 +261,13 @@ describe('C. 요약 문장 — 모든 기간의 정확한 문장', () => {
     assert.equal(generateSummary('bogus', OPS), '');
   });
 
-  test('승인한 공통 규칙: 지난 모든 기간에 같은 노쇼 의심 안내를 한 번 붙인다', () => {
-      for (const period of ['last_hour', 'yesterday', 'days_ago_5', 'last_week', 'weeks_ago_2', 'last_month']) {
-        assert.ok(generateSummary(period, OPS).endsWith(NOSHOW), period);
-        assert.equal(generateSummary(period, OPS).split(NOSHOW).length - 1, 1, period);
-      }
-    });
-
-  test('시제 공통 규칙: 진행 중·미래 기간엔 노쇼 안내가 붙지 않는다', () => {
-    for (const period of ['this_week', 'this_month', 'tomorrow', 'next_week', 'next_month']) {
-      assert.ok(!generateSummary(period, OPS).includes('노쇼'), period);
+  test('DEC-17: 어느 기간에도 노쇼 의심 안내를 붙이지 않는다 — 입실 미감지는 문제 목록·이상 건수에 있다', () => {
+    for (const [period] of SUMMARIES) {
+      for (const stats of [OPS, SHALLOW]) assert.ok(!generateSummary(period, stats).includes('노쇼'), period);
     }
   });
 
-  test('DEMO도 지난 기간 노쇼 안내와 운영 지표 요약의 공통 규칙을 따른다', () => {
+  test('DEMO도 운영과 같은 요약 규칙을 따른다', () => {
     for (const period of ['last_hour', 'yesterday', 'days_ago_5', 'last_week', 'weeks_ago_2', 'last_month', 'this_week']) {
       const demo = getDemoStats(period, { now: NOW });
       assert.equal(demo.summary, generateSummary(period, demo.stats), period);

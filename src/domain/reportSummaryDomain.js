@@ -1,5 +1,3 @@
-import { describePeriod } from './periodDomain.js';
-
 // 요약 배너를 빨간 경고로 띄울 문장 — "이상 없었어요" 같은 정상 문장과 구분하기 위해 구체적 표현만 매칭한다.
 // "이상감지"는 반드시 뒤에 [1-9]로 시작하는 건수가 붙어야 매칭한다 — "이상감지 0건이 있었어요"처럼 0건이
 // 그대로 들어가는 문장이 빨간 배너로 뜨던 버그가 실사용 중 실제로 발견됐다(2026-09-26).
@@ -13,12 +11,4 @@ const URGENT_SUMMARY_PATTERNS = [/이상감지 [1-9]\d*건/, /이상 징후/, /�
 /** 요약 문장을 빨간 경고 배너로 보일지. SummaryBanner가 이 함수 하나를 쓴다. */
 export function isUrgentSummary(text) {
   return typeof text === 'string' && URGENT_SUMMARY_PATTERNS.some(p => p.test(text));
-}
-
-// 2026-11-10 사용자 결정: 지난 모든 기간에 기존 노쇼 안내를 동일하게 표시한다.
-// 지표·집계값은 그대로 두고 운영/명시적 DEMO가 같은 표시 규칙을 사용한다.
-export function appendPastNoShowNotice(period, stats, summary) {
-  if (describePeriod(period)?.tense !== 'past') return summary;
-  const count = stats.noShowSuspected ?? 0;
-  return count > 0 ? `${summary} 노쇼 의심 ${count}건 확인이 필요해요.` : summary;
 }

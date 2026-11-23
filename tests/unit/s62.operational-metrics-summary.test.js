@@ -182,9 +182,9 @@ describe('generateSummary — 운영 지표 데이터가 있으면 새 요약을
     assert.equal(generateSummary('last_week', { checkIns: 3, anomalies: 0 }), '지난주 체크인 3건 완료, 이상 없었어요.');
   });
 
-  test('노쇼 의심 접미사는 새 요약에도 그대로 덧붙는다', () => {
+  test('노쇼 의심 안내는 붙이지 않는다 — 입실 미감지는 문제 목록·이상 건수에 있다 (DEC-17)', () => {
     const s = generateSummary('last_week', { ...EXAMPLE_STATS, checkIns: 5, noShowSuspected: 2 });
-    assert.match(s, /노쇼 의심 2건/);
+    assert.doesNotMatch(s, /노쇼/);
   });
 });
 
