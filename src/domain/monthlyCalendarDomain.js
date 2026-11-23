@@ -29,7 +29,9 @@ const DIRECT_ISSUES = Object.freeze({
   checkin_not_detected:                      { category: 'OCCUPIED',       label: '입실 미감지' },
   // DEC-11: 그 시각에 센서가 꺼져 있거나 감시가 멈춰 확인할 수 없음 — 퇴실이면 청소 단계, 입실이면 체류 단계
   detection_unconfirmable:                   { category: event => (event.data?.phase === 'checkin' ? 'OCCUPIED' : 'CLEANING'),
-                                               label: event => (event.data?.phase === 'checkin' ? '입실 확인 불가' : '퇴실 확인 불가') },
+                                               label: event => ({ checkin: '입실 확인 불가', cleaning: '청소 확인 불가' }[event.data?.phase] ?? '퇴실 확인 불가') },
+  // DEC-17: 배정된 청소 시간 동안 담당자가 보이지 않음
+  cleaning_not_detected:                     { category: 'CLEANING',       label: '청소 미감지' },
   post_checkout_energy_waste_detected:       { category: 'CLEANING',       label: '퇴실 후 청소 전 에너지 낭비' },
   post_checkout_security_breach_detected:    { category: 'CLEANING',       label: '퇴실 후 청소 전 보안 문제' },
   vacant_energy_waste_detected:              { category: 'VACANT',         label: '공실 중 에너지 낭비' },

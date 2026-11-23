@@ -162,6 +162,7 @@ export class OccupancyMonitor {
   get stayEntryConfirmed() { return this._suspicion.stayEntryConfirmed; }
   get hasOpenWait() { return this._suspicion.hasOpenWait; }
   get awaitingArrival() { return this._suspicion.awaitingArrival; }
+  noteManualCleaning(type) { this._suspicion.noteManualCleaning(type); }
 
   /**
    * @param {object} p
@@ -172,7 +173,7 @@ export class OccupancyMonitor {
    * @param {object[]} [p.sensorsOff] - 지금 꺼져 있는 감지 센서(문·움직임) — 그 순간의 퇴실·입실 확인에 쓴다
    * @returns {{ type, subType?, severity?, reason, timestamp }[]}
    */
-  process({ snap, roomState, reservation, now, sensorsOff = [] }) {
+  process({ snap, roomState, reservation, now, sensorsOff = [], cleaning = null }) {
     // 모션·도어는 상태와 무관하게 항상 추적 (에너지낭비·문열림 감지용)
     this._trackMotion(snap.motionDetected, now);
     this._trackDoor(snap.doorOpen, now);
@@ -194,6 +195,7 @@ export class OccupancyMonitor {
       now,
       cfg: SUSPICION_CFG,
       sensorsOff,
+      cleaning,
     });
 
     // All preparation outcomes permit check-in. Sensor optimization has its own
@@ -204,7 +206,7 @@ export class OccupancyMonitor {
 
     // CLEANING: 청소 시작/완료 감지만
     if (main === 'CLEANING') {
-      return occupancyEvents; // cleaning_started, cleaning_finished or []
+      return occupancyEvents; // 청소 일정 전환·실제 청소 기록·담당자 미감지, 또는 (일정 없으면) cleaning_started/finished
     }
 
     // OCCUPIED: 체크아웃(새 로직) + 기존 이벤트 통합

@@ -7,42 +7,37 @@
  */
 
 export const CLEANING_LIMIT_HOURS = 3;
+/** 실제 청소 시작·끝 기록 — 청소시간 준수와 "청소 끝난 뒤" 지표가 쓴다 */
+export const CLEANING_START_TYPES = Object.freeze(['cleaning_started', 'cleaning_activity_started']);
+export const CLEANING_FINISH_TYPES = Object.freeze(['cleaning_finished', 'cleaning_activity_finished']);
 
 /**
  * 청소 시작~완료 시간이 기준(3시간)을 초과한 건 반환.
- * cleaning_started + cleaning_finished를 property_id 기준으로 페어링.
+ * 실제 청소 시작·끝을 property_id 기준으로 페어링 — 일정이 있으면 감지 기록(cleaning_activity_*, DEC-17),
+ * 일정이 없을 때의 감지·운영자 수동·옛 기록은 cleaning_started/finished. 일정 전환(scheduled_cleaning_*)은 쓰지 않는다.
  * started 없는 finished, 또는 finished 없는 started는 무시.
  */
 export function detectCleaningTimeFailures(events) {
-  const starts   = new Map(); // property_id → [device_time, ...]
-  const finishes = new Map();
-
+  // 숙소마다 시간 순서로 "시작 → 그 뒤 첫 끝"을 짝짓는다. 짝 없는 끝(같은 청소의 두 번째 기록 — 감지된 끝 + 운영자 완료)은 버리고,
+  // 끝을 못 본 시작은 다음 시작이 오면 버린다 — 순번으로 짝지으면 기록 하나가 빠지거나 더해질 때 뒤의 짝이 모두 밀린다
+  const byProperty = new Map();
   for (const { type, property_id, device_time } of events) {
-    if (type === "cleaning_started") {
-      if (!starts.has(property_id)) starts.set(property_id, []);
-      starts.get(property_id).push(device_time);
-    } else if (type === "cleaning_finished") {
-      if (!finishes.has(property_id)) finishes.set(property_id, []);
-      finishes.get(property_id).push(device_time);
-    }
+    const kind = CLEANING_START_TYPES.includes(type) ? 'start' : CLEANING_FINISH_TYPES.includes(type) ? 'finish' : null;
+    if (!kind) continue;
+    if (!byProperty.has(property_id)) byProperty.set(property_id, []);
+    byProperty.get(property_id).push({ kind, at: device_time, ms: new Date(device_time).getTime() });
   }
 
   const failures = [];
-
-  for (const [property_id, startTimes] of starts) {
-    const finishTimes = finishes.get(property_id);
-    if (!finishTimes) continue;
-
-    // 시간순 정렬 후 순서대로 페어링
-    const sortedStarts   = [...startTimes].sort((a, b) => a - b);
-    const sortedFinishes = [...finishTimes].sort((a, b) => a - b);
-    const pairCount = Math.min(sortedStarts.length, sortedFinishes.length);
-
-    for (let i = 0; i < pairCount; i++) {
-      const started_at  = sortedStarts[i];
-      const finished_at = sortedFinishes[i];
-      const duration_hours = (finished_at - started_at) / (1000 * 60 * 60);
-
+  for (const [property_id, records] of byProperty) {
+    records.sort((a, b) => a.ms - b.ms || (a.kind === 'start' ? -1 : 1));
+    let open = null;
+    for (const record of records) {
+      if (record.kind === 'start') { open = record; continue; }
+      if (!open) continue;
+      const started_at = open.at, finished_at = record.at;
+      const duration_hours = (record.ms - open.ms) / (1000 * 60 * 60);
+      open = null;
       if (duration_hours > CLEANING_LIMIT_HOURS) {
         failures.push({
           property_id,
@@ -230,5 +225,6 @@ export function detectPostCheckoutFailures(events, eventType) {
 
 /** 청소 완료 후 보안 위반 — 청소 완료로부터 몇 분 뒤였는지 */
 export function detectPostCleaningFailures(events, eventType) {
-  return detectEventFailuresWithContext(events, eventType, { anchorType: "cleaning_finished" });
+  // 청소가 끝나 공실이 된 때 — 일정의 끝, 일정이 없을 때의 감지·운영자 완료, 실제 청소 끝 중 바로 앞의 것
+  return detectEventFailuresWithContext(events, eventType, { anchorType: [...CLEANING_FINISH_TYPES, 'scheduled_cleaning_finished'] });
 }

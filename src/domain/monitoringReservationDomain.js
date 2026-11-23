@@ -56,6 +56,34 @@ export function toMonitoringReservation(reservation) {
 // 빈 값(null)은 읽을 수 없는 시각이다 — new Date(null)은 1970-01-01(0)이 되어 "이미 지난 시각"으로 보인다
 const timeOf = value => (value == null || value === '' ? NaN : new Date(value).getTime());
 
+/**
+ * Pi에 보낼 청소 일정(DEC-17) — 보내는 예약의 퇴실에 딸린 청소, 아직 끝 시각이 지나지 않은 것.
+ * Pi는 처리한 퇴실과 같은 퇴실의 일정만 쓰므로, 다른 퇴실의 청소(날짜가 바뀌어 남은 옛 청소 등)는 보내지 않는다.
+ * 끝 시각이 비어 있으면 숙소의 청소 소요 시간으로 정한다. 배정 완료(담당자 있음)만 담당자 미감지 판정 대상이다.
+ * @param {{ id, checkout_at, cleaning_start_at, cleaning_end_at, status }[]} rows
+ * @param {Date|number} now
+ * @param {number} [durationHours] - 숙소 청소 소요 시간(설정 기본값과 같은 2.5)
+ * @param {string|Date|null} [checkoutAt] - 보내는 예약의 퇴실 시각. 주면 그 퇴실의 청소만
+ * @returns {{ jobId, checkoutAt, startAt, endAt, assigned }|null}
+ */
+export function pickCurrentCleaning(rows, now, durationHours = 2.5, checkoutAt = null) {
+  const wantCheckout = checkoutAt == null ? null : timeOf(checkoutAt);
+  const nowMs = now instanceof Date ? now.getTime() : now;
+  const plans = [];
+  for (const row of rows ?? []) {
+    const startMs = timeOf(row.cleaning_start_at), checkoutMs = timeOf(row.checkout_at);
+    const endMs = Number.isFinite(timeOf(row.cleaning_end_at)) ? timeOf(row.cleaning_end_at) : startMs + Number(durationHours) * 3_600_000;
+    if (!row.id || !Number.isFinite(startMs) || !Number.isFinite(checkoutMs) || !Number.isFinite(endMs) || endMs <= startMs || endMs <= nowMs) continue;
+    if (wantCheckout != null && checkoutMs !== wantCheckout) continue;
+    plans.push({ jobId: String(row.id), checkoutAt: new Date(checkoutMs).toISOString(), startAt: new Date(startMs).toISOString(),
+      endAt: new Date(endMs).toISOString(), assigned: ['ASSIGNED', 'COMPLETED'].includes(row.status), startMs });
+  }
+  plans.sort((a, b) => a.startMs - b.startMs);
+  if (!plans.length) return null;
+  const { startMs, ...plan } = plans[0];
+  return plan;
+}
+
 function sameReservation(a, b) {
   if (!a || !b) return a === b;
   if (a.uid != null && b.uid != null) return String(a.uid) === String(b.uid);

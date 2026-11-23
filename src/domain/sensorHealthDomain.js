@@ -16,7 +16,7 @@ export const PRECHECK_OFFSETS = Object.freeze([
   { key: 'h2', label: '2시간 전', ms: 2 * 3_600_000 },
 ]);
 const OFF_STATE = 'unavailable';
-const PHASE_LABEL = Object.freeze({ checkout: '퇴실', checkin: '입실' });
+const PHASE_LABEL = Object.freeze({ checkout: '퇴실', checkin: '입실', cleaning: '청소' });
 const DONE_KEEP_MS = 3 * 24 * 3_600_000;
 
 const timeOf = value => {
@@ -111,7 +111,7 @@ export function precheckAlertMessage(areaName, check, sensors) {
 export function handoffAlertMessage(areaName, event) {
   const name = areaName ?? '숙소';
   const phase = event.data?.phase;
-  const at = timeOf(event.data?.checkOut ?? event.data?.checkIn ?? event.timestamp);
+  const at = timeOf(event.data?.checkOut ?? event.data?.checkIn ?? event.data?.startAt ?? event.timestamp);
   const when = at != null ? `${kstLabel(at)} ` : '';
   if (event.type === 'late_checkout_detected') {
     return { title: `[PROPOS] ${name} 퇴실 지연`, message: `${when}퇴실이 확인되지 않아 청소 모드(에어컨 끄기·조명·환기)를 켜지 않았어요. 확인 후 직접 켜 주세요.` };
@@ -121,14 +121,18 @@ export function handoffAlertMessage(areaName, event) {
     const until = deadline != null ? `${kstLabel(deadline)}까지` : '기다리는 동안';
     return { title: `[PROPOS] ${name} 입실 미감지`, message: `${when}입실이 ${until} 확인되지 않았어요. 기기 상태(에어컨·조명)를 직접 확인해 주세요.` };
   }
+  if (event.type === 'cleaning_not_detected') {
+    return { title: `[PROPOS] ${name} 청소 미감지`, message: `${when}청소 시간 동안 담당자가 들어온 것이 보이지 않았어요. 공실 기기 제어(끄기·잠금)를 하지 않았어요. 청소가 됐는지 직접 확인해 주세요.` };
+  }
   if (event.type === 'detection_unconfirmable') {
     const what = PHASE_LABEL[phase] ?? '퇴실·입실';
     const cause = {
       sensor_off: `꺼져 있는 센서: ${sensorList(event.data?.sensors ?? [])}`,
       not_entered: '입실이 확인되지 않은 체류였어요',
+      exit_not_seen: '청소 담당자가 나간 것을 보지 못했어요',
     }[event.data?.cause] ?? '그 시각에 감시가 멈춰 있었어요';
-    const devices = phase === 'checkout' ? '청소 모드를 켜지 않았어요' : '체류 기기 제어를 하지 않았어요';
-    return { title: `[PROPOS] ${name} ${what} 확인 불가`, message: `${when}${what}을 확인할 수 없어요(${cause}). ${devices}. 직접 확인하고 처리해 주세요.` };
+    const devices = { checkout: '청소 모드를 켜지 않았어요. ', checkin: '체류 기기 제어를 하지 않았어요. ', cleaning: '공실 기기 제어(끄기·잠금)를 하지 않았어요. ' }[phase] ?? '';
+    return { title: `[PROPOS] ${name} ${what} 확인 불가`, message: `${when}${what}${phase === 'cleaning' ? '를' : '을'} 확인할 수 없어요(${cause}). ${devices}직접 확인하고 처리해 주세요.` };
   }
   return null;
 }

@@ -307,9 +307,11 @@ const SOFT_EVENTS = new Set([
   'early_checkin_suspected',
 ]);
 // 스케줄 안에서 기대한 일이 확인되지 않음 — 상태는 그대로, 운영자에게 넘긴다(DEC-10·11)
-const PROBLEM_EVENTS = new Set(['late_checkout_detected', 'checkin_not_detected', 'detection_unconfirmable']);
+const PROBLEM_EVENTS = new Set(['late_checkout_detected', 'checkin_not_detected', 'detection_unconfirmable', 'cleaning_not_detected']);
 // 전환 뒤 확인 — 그 순간의 기기 제어만 한다(상태 전환 없음, 서버 기록 없음)
-const CONFIRMATION_EVENTS = new Set(['checkout_confirmed', 'checkin_confirmed']);
+const CONFIRMATION_EVENTS = new Set(['checkout_confirmed', 'checkin_confirmed', 'cleaning_vacant_confirmed']);
+// 실제 청소 시작·끝 — 상태를 바꾸지 않고 기록만(청소시간 준수 지표, DEC-17)
+const OBSERVATION_EVENTS = new Set(['cleaning_activity_started', 'cleaning_activity_finished']);
 
 async function handleSoftEvent(event) {
   const entry = {
@@ -341,7 +343,15 @@ function handleProblemEvent(event) {
   reportEventToVercel(event.type, false, { ...event.data, reason: event.reason ?? null }, event.timestamp).catch(() => {});
   console.warn(`[ProblemEvent] ${event.type} — ${event.reason}`);
   const alert = handoffAlertMessage(config?.areaName, event);
-  if (alert) sendOperatorAlert({ ...alert, notificationId: `propos_${event.type}_${event.timestamp}` }).catch(() => {});
+  if (alert) sendOperatorAlert({ ...alert, notificationId: `propos_${event.type}_${event.data?.phase ?? ''}_${event.timestamp}` }).catch(() => {});
+}
+
+// 실제 청소 시각 기록 — 상태는 그대로, 서버에 보낸다(전환 기록이 아니라 상태를 바꾸지 않는 기록에 남긴다)
+function handleObservation(event) {
+  softEventLog.push({ type: event.type, subType: null, reason: event.reason, recipients: [], ts: Date.now(), roomState: { ...roomState } });
+  if (softEventLog.length > 50) softEventLog.shift();
+  reportEventToVercel(event.type, false, { ...event.data, reason: event.reason ?? null }, event.timestamp).catch(() => {});
+  console.log(`[Observation] ${event.type} — ${event.reason}`);
 }
 
 async function runStateActions(mainStatus) {
@@ -364,6 +374,9 @@ async function applyConfirmation(event) {
     if (roomState.mainStatus !== 'OCCUPIED') return;
     await preparation.onLifecycleEvent('check_in_detected', { config, now: Date.now() });
     await runStateActions('OCCUPIED');
+  } else if (event.type === 'cleaning_vacant_confirmed') {
+    if (roomState.mainStatus !== 'VACANT' || roomState.subStatus !== 'CLEANING_FINISHED') return;
+    await runStateActions('VACANT');
   }
   eventLog.push({ ...event, prevState: { ...roomState }, newState: { ...roomState }, ts: Date.now() });
   if (eventLog.length > 100) eventLog.shift();
@@ -429,8 +442,11 @@ async function applyTransition(event) {
 
   // 예정 시각 전환은 퇴실·입실이 확인됐을 때만 그 기기 제어를 한다 — 확인되지 않으면 확인될 때(applyConfirmation)까지
   // 기다리고, 끝내 확인되지 않으면 문제와 함께 운영자에게 넘긴다(DEC-11)
+  // 청소 일정 시작은 기기 제어를 하지 않는다(청소 모드는 퇴실 때 정한다). 끝은 담당자가 나간 것을 봤을 때만 공실 기기 제어(잠금 포함)
   const unconfirmedSchedule = (event.type === 'scheduled_checkout_reached' && !event.data?.exitConfirmed)
-    || (event.type === 'scheduled_checkin_reached' && !event.data?.entryConfirmed);
+    || (event.type === 'scheduled_checkin_reached' && !event.data?.entryConfirmed)
+    || event.type === 'scheduled_cleaning_started'
+    || (event.type === 'scheduled_cleaning_finished' && !event.data?.vacantConfirmed);
   if (event.type === 'scheduled_checkin_reached' && event.data?.entryConfirmed) {
     await preparation.onLifecycleEvent('check_in_detected', { config, now: Date.now() });
   }
@@ -461,13 +477,14 @@ async function processNow(now = Date.now()) {
           throw Object.assign(new Error('Monitoring event already applied'), { status: 409 });
         }
         await applyTransition({ type: request.type, reason: '운영자 수동 처리' });
+        monitor.noteManualCleaning(request.type); // 운영자가 누른 청소 시작·완료는 실제 청소 기록으로 본다
         completedManualEvents.push(request);
       } catch (error) { request.reject(error); }
     }
     const snap        = buildSnapshotFromStates(entityStateMap);
     const reservation = buildReservation();
     const sensorsOff  = offDetectionSensors(entityStateMap);
-    const events      = monitor.process({ snap, roomState, reservation, now, sensorsOff });
+    const events      = monitor.process({ snap, roomState, reservation, now, sensorsOff, cleaning: config?.cleaning ?? null });
 
     for (const event of events) {
       if (SOFT_EVENTS.has(event.type)) {
@@ -476,6 +493,8 @@ async function processNow(now = Date.now()) {
         handleProblemEvent(event);
       } else if (CONFIRMATION_EVENTS.has(event.type)) {
         await applyConfirmation(event);
+      } else if (OBSERVATION_EVENTS.has(event.type)) {
+        handleObservation(event);
       } else {
         await applyTransition(event);
       }

@@ -32,7 +32,7 @@ const NOW = new Date('2026-11-17T06:00:00.000Z'); // 11-17 15:00 KST
 const iso = s => new Date(s).toISOString();
 
 // ── 가짜 DB: 숙소 설정·예약을 숙소 id 별로 돌려주고 받은 쿼리를 기록한다 ──
-function fakeDb({ configs = {}, reservations = {} } = {}) {
+function fakeDb({ configs = {}, reservations = {}, jobs = {} } = {}) {
   const calls = [];
   return {
     calls,
@@ -41,6 +41,7 @@ function fakeDb({ configs = {}, reservations = {} } = {}) {
       const id = params[0];
       if (/FROM property_cleaning_config/.test(text)) return { rows: configs[id] ? [configs[id]] : [] };
       if (/FROM property_reservations/.test(text)) return { rows: reservations[id] ?? [] };
+      if (/FROM cleaning_jobs/.test(text)) return { rows: jobs[id] ?? [] };
       throw new Error(`예상하지 못한 쿼리: ${text}`);
     },
   };
@@ -157,19 +158,37 @@ describe('L2 pushCurrentReservationsToWatchers — DB 최신 예약을 워처 �
     assert.equal(call.init.headers['Content-Type'], 'application/json');
     assert.equal(call.init.headers['x-pi-secret'], 'k'.repeat(32));
     assert.ok(call.init.signal, '응답 없는 워처에 대비한 제한 시간');
-    // 예약 하나만 — 이름(areaName)·기기 설정은 보내지 않는다(워처는 받은 키만 덮어쓴다)
-    assert.deepEqual(call.body, { reservation: { uid: 'next@airbnb', checkIn: NEXT.checkIn, checkOut: NEXT.checkOut } });
+    // 예약 하나와 청소 일정만(없으면 null — 지난 일정이 남지 않게) — 이름(areaName)·기기 설정은 보내지 않는다(워처는 받은 키만 덮어쓴다)
+    assert.deepEqual(call.body, { reservation: { uid: 'next@airbnb', checkIn: NEXT.checkIn, checkOut: NEXT.checkOut }, cleaning: null });
     assert.deepEqual(results.map(r => [r.propertyId, r.sent, r.result, r.httpStatus]), [['파주201', true, '보냄', 200]]);
   });
 
   test('DB 조회는 그 숙소의 실제(REAL) 데이터만', async () => {
     const db = fakeDb({ configs: { 파주201: REAL_CONFIG }, reservations: { 파주201: [NEXT] } });
     await pushCurrentReservationsToWatchers(db, { lookup: oneWatcher(), fetchImpl: fakeFetch().impl, now: NOW, env: {}, log: quiet });
-    assert.equal(db.calls.length, 2);
+    assert.equal(db.calls.length, 3);
     for (const c of db.calls) {
       assert.match(c.text, /data_origin='REAL'/);
-      assert.deepEqual(c.params, ['파주201']);
+      assert.equal(c.params[0], '파주201');
     }
+    assert.match(db.calls[2].text, /checkout_at = \$2::timestamptz/);
+    assert.deepEqual(db.calls[2].params, ['파주201', NEXT.checkOut], '보내는 예약의 퇴실에 딸린 청소만 읽는다');
+  });
+
+  test('청소 일정(DEC-17): 끝나지 않은 청소 중 가장 이른 것 — 퇴실·시작·끝 시각과 배정 여부', async () => {
+    const jobs = [
+      { id: 'job-done', checkout_at: '2026-11-17T02:00:00.000Z', cleaning_start_at: '2026-11-17T02:00:00.000Z', cleaning_end_at: '2026-11-17T05:00:00.000Z', status: 'ASSIGNED' },
+      { id: 'job-later', checkout_at: '2026-11-25T02:00:00.000Z', cleaning_start_at: '2026-11-25T02:00:00.000Z', cleaning_end_at: '2026-11-25T05:00:00.000Z', status: 'PENDING' },
+      { id: 'job-next', checkout_at: '2026-11-23T02:00:00.000Z', cleaning_start_at: '2026-11-23T02:00:00.000Z', cleaning_end_at: null, status: 'ASSIGNED' },
+    ];
+    const db = fakeDb({ configs: { 파주201: { ...REAL_CONFIG, cleaning_duration_hours: 2.5 } }, reservations: { 파주201: [NEXT] }, jobs: { 파주201: jobs } });
+    const f = fakeFetch();
+    await pushCurrentReservationsToWatchers(db, { lookup: oneWatcher(), fetchImpl: f.impl, now: NOW, env: {}, log: quiet });
+    assert.deepEqual(f.calls[0].body.cleaning, {
+      jobId: 'job-next', checkoutAt: '2026-11-23T02:00:00.000Z', startAt: '2026-11-23T02:00:00.000Z',
+      endAt: '2026-11-23T04:30:00.000Z', assigned: true,
+    }, '끝 시각이 비면 숙소의 청소 소요 시간으로');
+    assert.equal(f.calls[0].body.cleaning.jobId, 'job-next', '보내는 예약(11-23 퇴실)의 청소 — 다른 퇴실의 청소는 보내지 않는다');
   });
 
   test('진행 중 예약이 있으면 다음 예약이 아니라 진행 중 예약', async () => {

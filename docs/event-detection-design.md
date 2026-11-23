@@ -154,35 +154,42 @@ OCCUPIED 상태에서:
 - 이미 퇴실 처리한 예약이 늦게 연장돼도 새 입실이 아니다(같은 예약을 두 번 입실로 세지 않는다).
 - 예약에 체크인 시각이 없으면 전환하지 않는다(스케줄이 없다). 옛 `check_in_detected` 기록·화면 경로는 같은 전환·건수로 계속 읽는다. 옛 `no_show_suspected`(soft)는 `checkin_not_detected`로 바뀌었다.
 
-### 4-C. cleaning_started
+### 4-C. 청소 — scheduled_cleaning_started · scheduled_cleaning_finished · cleaning_not_detected (RF-52, DEC-10·17)
+
+서버가 정기 작업 때 예약과 함께 **그 예약의 퇴실에 딸린** 청소 일정을 Pi에 보낸다(`pickCurrentCleaning` — 청소 번호·퇴실 시각·시작·끝(비면 숙소 청소 소요 시간)·배정 완료 여부. 끝난 청소·다른 퇴실의 청소는 보내지 않는다). Pi는 **그 퇴실의 청소 일정일 때만**(일정의 퇴실 시각 = 처리한 퇴실 시각) 일정대로 상태를 바꾼다.
 
 ```
-CLEANING/CLEANING_PENDING 상태에서:
+청소 대기(퇴실 처리 뒤)에서, 그 퇴실의 청소 일정이 있으면:
 
-[ENTRY 감지 시]
-  → CLEANING_START_SUSPECTED 기록
+[시작 시각]  → scheduled_cleaning_started (발생 시각 = 시작 시각) → CLEANING / CLEANING_IN_PROGRESS. 기기 제어 없음(청소 모드는 퇴실 때 정한다)
+[끝 시각]    → scheduled_cleaning_finished (발생 시각 = 끝 시각) → VACANT / CLEANING_FINISHED
+               담당자가 나간 것을 봤으면(data.vacantConfirmed) 공실 기기 제어(전체 끄기·잠금). 아니면 하지 않는다 — 안에 있을 수 있다
+               배정된 청소인데 퇴실 뒤 끝 시각까지 아무도 들어오지 않았으면(운영자가 시작을 누르지도 않음) → cleaning_not_detected (발생 시각 = 시작 시각) + 운영자에게
+               그동안 감지 센서가 한 번이라도 꺼졌으면 → detection_unconfirmable(phase cleaning, sensor_off, 발생 시각 = 끝 시각),
+               감시가 멈춰 있었으면(재시작 뒤 10분 넘게 못 봄, 또는 시작 시각보다 한참 뒤에야 기다리기 시작) not_observed
+[끝 시각 뒤 1시간 안에 담당자가 나감] → cleaning_vacant_confirmed — 그때 공실 기기 제어
+[끝 시각 뒤 1시간 안에 나가는 것을 못 봄] → detection_unconfirmable(phase cleaning, exit_not_seen) — 공실 기기 제어를 하지 않은 채 운영자에게
+[나갔던 담당자가 끝 시각 전에 다시 들어옴] → 아직 안에 있는 것으로 본다(공실 기기 제어 안 함)
 
-[CLEANING_START_SUSPECTED + 모션 CLEANING_SUSTAINED_MIN 이상 지속]
-  → cleaning_started 발생 (30분 활동 = 게스트 복귀와 구분)
-
-[EXIT 감지 시 + 모션 지속 CLEANING_SUSTAINED_MIN 미만]
-  → 의심 취소 (짧은 방문 = 청소팀 아님)
+실제 청소 시각(상태를 바꾸지 않는 기록, 청소시간 준수 지표):
+[ENTRY + 모션 CLEANING_SUSTAINED_MIN 지속] → cleaning_activity_started  (짧은 방문은 취소)
+[그 뒤 EXIT + CLEANING_DONE_QUIET_MIN 조용] → cleaning_activity_finished (재입실은 취소). 끝 시각 뒤 1시간까지 본다
 ```
 
-### 4-D. cleaning_finished
+- 배정되지 않은 청소(요청 중·실패·취소)는 담당자 미감지를 판정하지 않는다 — 서버가 이미 `청소 미배정`으로 남긴다.
+- 운영자가 화면에서 청소 시작·완료를 누르면 그 판단을 따른다: 시작 = 실제 청소 시작으로 본다, 완료 = 공실로 바꾸고 일정 판정을 끝낸다. 정비 등 다른 상태로 바꿔도 판정하지 않는다.
+- 일정 판정(기다림·실제 청소 단계·처리한 청소)은 워처 상태 파일에 저장 — 재시작해도 이어지고, 10분 넘게 못 봤으면 `not_observed`.
+- 청소 중에 담당자가 안에 있는 채 입실 시각이 되면 나가는 것을 본 뒤에 들어온 사람만 손님으로 본다(4-B).
+
+**청소 일정이 없을 때(예전 방식)** — 그 퇴실의 일정이 없거나 읽을 수 없으면 감지로 전환한다:
 
 ```
-CLEANING/CLEANING_IN_PROGRESS 상태에서:
-
-[EXIT 감지 시]
-  → CLEANING_DONE_SUSPECTED 기록
-
-[CLEANING_DONE_SUSPECTED + CLEANING_DONE_QUIET_MIN 이상 모션 없음]
-  → cleaning_finished 발생
-
-[ENTRY 감지 시 + CLEANING_DONE_SUSPECTED]
-  → 의심 취소 (재입실)
+CLEANING_PENDING: [ENTRY + 모션 CLEANING_SUSTAINED_MIN 지속] → cleaning_started → CLEANING_IN_PROGRESS (짧은 방문은 취소)
+CLEANING_IN_PROGRESS: [EXIT + CLEANING_DONE_QUIET_MIN 조용] → cleaning_finished → VACANT (재입실은 취소)
 ```
+
+- 청소시간 준수(3시간)의 초과 건은 실제 청소 시각(`cleaning_activity_*`와 일정 없을 때·운영자 수동·옛 `cleaning_started`/`cleaning_finished`)으로 잰다 — 숙소마다 시간 순서로 "시작 → 그 뒤 첫 끝"을 짝짓고, 짝 없는 끝(같은 청소의 감지된 끝 + 운영자 완료)과 끝을 못 본 시작은 버린다. 일정 전환은 쓰지 않는다.
+- 공실이 된 횟수(청소 완료 수 — 빈방 지표·청소시간 준수의 분모)는 `scheduled_cleaning_finished`와 `cleaning_finished`로 센다. 실제 청소 끝 기록은 같은 청소를 두 번 세지 않게 넣지 않는다.
 
 ### 4-E. 감지 센서 사전 점검 · sensor_precheck_failed (DEC-12)
 
@@ -218,8 +225,9 @@ Pi가 운영자에게 넘기는 것 — `sensor_precheck_failed`·`late_checkout
 | `scheduled_checkin_reached` | 예약 checkIn 시각 도래 (예약당 1회). `data.entryConfirmed` |
 | `scheduled_checkout_reached` | 예약 checkOut 시각 도래 (예약당 1회). `data.exitConfirmed` |
 | `check_in_detected` | 옛 경로(화면·옛 기록) — Pi는 내지 않는다 |
-| `cleaning_started` | ENTRY + 모션 20분 지속 |
-| `cleaning_finished` | EXIT + 10분 조용 |
+| `scheduled_cleaning_started` · `scheduled_cleaning_finished` | 청소 일정의 시작·끝 시각 (그 퇴실의 일정이 있을 때) |
+| `cleaning_started` | ENTRY + 모션 20분 지속 — 청소 일정이 없을 때, 또는 운영자 수동 |
+| `cleaning_finished` | EXIT + 10분 조용 — 청소 일정이 없을 때, 또는 운영자 수동 |
 | `energy_waste_detected/resolved` | 기존 로직 유지 |
 | `complaint_detected/resolved` | 기존 로직 유지 |
 
@@ -228,7 +236,8 @@ Pi가 운영자에게 넘기는 것 — `sensor_precheck_failed`·`late_checkout
 |---|---|
 | `late_checkout_detected` | checkOut + CHECKOUT_GRACE_MIN까지 실제 퇴실 미확인 (예약당 1건) + 운영자에게 |
 | `checkin_not_detected` | 입실 날 자정까지 입실 미확인 (예약당 1건) + 운영자에게 |
-| `detection_unconfirmable` | 퇴실·입실 그 시각에 감지 센서가 꺼져 있거나 감시가 멈춰 있어 확인할 수 없음 + 운영자에게 |
+| `cleaning_not_detected` | 배정된 청소의 끝 시각까지 담당자가 들어온 것이 안 보임 (청소 1건에 1건) + 운영자에게 |
+| `detection_unconfirmable` | 퇴실·입실·청소 그 시각에 감지 센서가 꺼져 있거나 감시가 멈춰 있어 확인할 수 없음 + 운영자에게 |
 | `sensor_offline_detected/resolved` | 옛 기록(RF-28) — 더 내지 않는다 |
 
 ### 확인 이벤트 (상태 변경 없음, 서버에 보내지 않음 — 그 순간의 기기 제어만)
@@ -236,6 +245,13 @@ Pi가 운영자에게 넘기는 것 — `sensor_precheck_failed`·`late_checkout
 |---|---|
 | `checkout_confirmed` | 퇴실 시각 뒤 유예 안에 퇴실 확인 → 청소 모드 기기 제어 |
 | `checkin_confirmed` | 입실 시각 뒤 입실 확인 → 체류 기기 제어 + 입실 준비에 도착 기록 |
+| `cleaning_vacant_confirmed` | 청소 끝 시각 뒤 담당자 퇴장 확인 → 공실 기기 제어 |
+
+### 기록 이벤트 (상태 변경 없음, 서버에 보냄 — 실제 청소 시각, 청소시간 준수 지표)
+| 이벤트 | 의미 |
+|---|---|
+| `cleaning_activity_started` | 실제 청소 시작 (ENTRY + 모션 20분) |
+| `cleaning_activity_finished` | 실제 청소 끝 (EXIT + 10분 조용) |
 
 ### Soft 이벤트 (ConfirmationManager로 라우팅, 상태 변경 없음)
 | 이벤트 | 의미 |

@@ -128,13 +128,15 @@ LIFECYCLE/OPERATIONS는 발생 사실(fact)이므로 resolution 개념 없음. A
 | | `checkin_prep_time_reached` | VACANT/* → PRE_STAY_READY/OPTIMIZING | O | X |
 | | `reservation_cancelled` | VACANT 자기전환 | O | X |
 | **OPERATIONS** | `optimization_finished` | OPTIMIZING → OPTIMIZED | O | X |
-| | `cleaning_started` | CLEANING_PENDING → IN_PROGRESS | O | X |
-| | `cleaning_finished` | IN_PROGRESS → VACANT/CLEANING_FINISHED | O | X |
+| | `scheduled_cleaning_started` · `scheduled_cleaning_finished` | CLEANING_PENDING → IN_PROGRESS → VACANT/CLEANING_FINISHED (청소 일정, DEC-17) | X | X |
+| | `cleaning_activity_started` · `cleaning_activity_finished` | 없음 — 실제 청소 시작·끝(청소시간 준수·청소 후 지표가 쓴다) | O | X |
+| | `cleaning_started` | CLEANING_PENDING → IN_PROGRESS (일정이 없을 때·운영자 수동·옛 기록) | O | X |
+| | `cleaning_finished` | IN_PROGRESS → VACANT/CLEANING_FINISHED (일정이 없을 때·운영자 수동·옛 기록) | O | X |
 | **ANOMALY** | `energy_waste_detected` | → ENERGY_WASTE / ISSUE_AND_ENERGY | O | → 6-1-1 |
 | | `energy_waste_resolved` | → GOOD_CONDITION / ISSUE_COMPLAINT | O | → 6-1-1 |
 | | `complaint_detected` | → ISSUE_COMPLAINT / ISSUE_AND_ENERGY | O (severity별 분리) | → 6-1-1 |
 | | `complaint_resolved` | → GOOD_CONDITION / ENERGY_WASTE | O | → 6-1-1 |
-| | `late_checkout_detected` · `checkin_not_detected` · `detection_unconfirmable` | 없음 — 스케줄 안에서 퇴실·입실이 확인되지 않음(퇴실 지연·입실 미감지·확인 불가), 운영자에게 넘김 | O (이상) | → 6-1-1 |
+| | `late_checkout_detected` · `checkin_not_detected` · `cleaning_not_detected` · `detection_unconfirmable` | 없음 — 스케줄 안에서 퇴실·입실·청소가 확인되지 않음(퇴실 지연·입실 미감지·청소 미감지·확인 불가), 운영자에게 넘김 | O (이상) | → 6-1-1 |
 | **SOFT** | `checkout_confirmation_needed` | 없음 | O | acknowledged Y/N |
 | | `early_checkin_suspected` | 없음 | O | acknowledged Y/N |
 | | `no_show_suspected` | 없음 — 옛 기록(`checkin_not_detected`로 바뀜, DEC-16) | O | acknowledged Y/N |

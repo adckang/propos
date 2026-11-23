@@ -4,7 +4,7 @@
  * 예전엔 대시보드(RoomStateApp)를 브라우저에서 열어 둘 때만 Pi로 예약이 갔다. 아무도 화면을 열지 않으면 Pi 예약이 낡아
  * 입실 준비·입실·퇴실 판단이 지난 예약을 기준으로 돌았다(DEC-04, 2026-11-17). 서버 정기 작업이 iCal 동기화 직후 이 함수를 불러
  * DB의 최신 예약을 그 숙소를 맡은 Pi에 보낸다 — 대시보드가 보내던 것과 같은 경로(`/api/monitoring/config`)·같은 예약 모양.
- * 보내는 것은 예약 하나뿐이다 — 이름(areaName)·기기 설정은 건드리지 않는다(워처는 받은 값만 덮어쓴다).
+ * 보내는 것은 예약 하나와 그 숙소의 다음 청소 일정(DEC-17, 없으면 null)이다 — 이름(areaName)·기기 설정은 건드리지 않는다(워처는 받은 값만 덮어쓴다).
  *
  * 하지 않는 것(사용자 지시): Pi 상태(roomState)를 바꾸지 않는다.
  *  - 보낼 예약이 없으면 보내지 않는다 — 워처는 예약이 있다가 빈 값이 오면 "예약 취소"로 보고 상태를 바꾼다.
@@ -12,7 +12,7 @@
  * 실패해도 던지지 않는다 — 정기 작업의 다른 단계가 계속 돌게 결과만 돌려준다.
  */
 import { createWatcherPropertyLookup, watcherRequestHeaders } from './auth/watcherScope.js';
-import { pickCurrentReservation, toMonitoringReservation, usableReservations } from '../src/domain/monitoringReservationDomain.js';
+import { pickCurrentCleaning, pickCurrentReservation, toMonitoringReservation, usableReservations } from '../src/domain/monitoringReservationDomain.js';
 import { DATA_PROFILE, resolveServerDataProfile } from '../src/config/dataProfile.js';
 
 const PUSH_TIMEOUT_MS = 5_000;
@@ -58,7 +58,7 @@ export async function pushCurrentReservationsToWatchers(db, options = {}) {
     const propertyId = properties[0].id;
     try {
       const { rows: [config] } = await db.query(
-        `SELECT property_id FROM property_cleaning_config WHERE property_id=$1 AND data_origin='REAL'`, [propertyId]);
+        `SELECT property_id, cleaning_duration_hours FROM property_cleaning_config WHERE property_id=$1 AND data_origin='REAL'`, [propertyId]);
       if (!config) return skip(propertyId, watcherUrl, '운영 DB의 실제 숙소가 아님 — 보내지 않음');
 
       const { rows } = await db.query(
@@ -66,11 +66,17 @@ export async function pushCurrentReservationsToWatchers(db, options = {}) {
            FROM property_reservations WHERE property_id=$1 AND data_origin='REAL'`, [propertyId]);
       const reservation = toMonitoringReservation(pickCurrentReservation(usableReservations(rows), now));
       if (!reservation) return skip(propertyId, watcherUrl, '현재·다음 예약 없음 — 빈 예약은 보내지 않음');
+      const { rows: jobs } = await db.query(
+        `SELECT id, checkout_at, cleaning_start_at, cleaning_end_at, status FROM cleaning_jobs
+          WHERE property_id=$1 AND data_origin='REAL' AND checkout_at = $2::timestamptz
+          ORDER BY cleaning_start_at`, [propertyId, reservation.checkOut]);
+      // 보내는 예약의 퇴실에 딸린 청소만. 없으면 null — 지난 일정이 남아 있지 않게(워처는 일정이 없으면 예전처럼 감지로 전환한다)
+      const cleaning = pickCurrentCleaning(jobs, now, config.cleaning_duration_hours ?? 2.5, reservation.checkOut);
 
       const response = await fetchImpl(`${watcherUrl.replace(/\/$/, '')}/api/monitoring/config`, {
         method: 'POST',
         headers: watcherRequestHeaders({ 'Content-Type': 'application/json' }, env),
-        body: JSON.stringify({ reservation }),
+        body: JSON.stringify({ reservation, cleaning }),
         signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
       });
       if (!response.ok) log(`[watcher-reservation] ${propertyId} 예약 전달 실패: HTTP ${response.status}`);

@@ -13,6 +13,12 @@ export const EVENT_TYPES = Object.freeze({
   SENSOR_OFFLINE_RESOLVED: "sensor_offline_resolved",
   CLEANING_STARTED: "cleaning_started",
   CLEANING_FINISHED: "cleaning_finished",
+  // 청소 일정(DEC-17) — 상태는 일정대로, 실제 청소 시각은 따로 기록(청소시간 준수 지표)
+  SCHEDULED_CLEANING_STARTED: "scheduled_cleaning_started",
+  SCHEDULED_CLEANING_FINISHED: "scheduled_cleaning_finished",
+  CLEANING_ACTIVITY_STARTED: "cleaning_activity_started",
+  CLEANING_ACTIVITY_FINISHED: "cleaning_activity_finished",
+  CLEANING_NOT_DETECTED: "cleaning_not_detected", // 배정된 청소 시간 동안 담당자가 보이지 않음 — 운영자에게 넘김
   ENERGY_WASTE_DETECTED: "energy_waste_detected",
   ENERGY_WASTE_RESOLVED: "energy_waste_resolved",
   // VACANT 기간 전용 — OCCUPIED 에너지낭비와 구분
@@ -63,7 +69,8 @@ export const SERVER_PROBLEM_EVENT_TYPES = Object.freeze({
 export const OPERATOR_ALERT_LABELS = Object.freeze({
   late_checkout_detected: "퇴실 지연 — 퇴실이 확인되지 않아 청소 모드를 켜지 않았어요. 확인 후 직접 켜 주세요",
   checkin_not_detected: "입실 미감지 — 입실 시각이 지나도 입실이 확인되지 않았어요. 기기 상태를 직접 확인해 주세요",
-  detection_unconfirmable: "확인 불가 — 감지 센서가 꺼져 있거나 감시가 멈춰 있어 퇴실·입실을 확인할 수 없어요. 직접 확인하고 처리해 주세요",
+  detection_unconfirmable: "확인 불가 — 감지 센서가 꺼져 있거나 감시가 멈춰 있어 퇴실·입실·청소를 확인할 수 없어요. 직접 확인하고 처리해 주세요",
+  cleaning_not_detected: "청소 미감지 — 청소 시간 동안 담당자가 들어온 것이 보이지 않았어요. 청소가 됐는지 직접 확인해 주세요",
   sensor_precheck_failed: "센서 점검 — 퇴실·입실 전에 감지 센서가 꺼져 있어요. 그 전에 확인해 주세요",
 });
 export const OPERATOR_ALERT_EVENT_TYPES = new Set(Object.keys(OPERATOR_ALERT_LABELS));

@@ -121,8 +121,9 @@ describe('운영자에게 넘기는 문구 (DEC-11)', () => {
 });
 
 describe('Pi 입구 — 넘기는 것만 처음 저장될 때 Slack (DEC-16)', () => {
-  test('넘기는 종류는 사전 점검·퇴실 지연·입실 미감지·확인 불가 — 옛 30분 꺼짐은 아니다', () => {
-    assert.deepEqual([...OPERATOR_ALERT_EVENT_TYPES].sort(), ['checkin_not_detected', 'detection_unconfirmable', 'late_checkout_detected', 'sensor_precheck_failed']);
+  test('넘기는 종류는 사전 점검·퇴실 지연·입실 미감지·청소 미감지·확인 불가 — 옛 30분 꺼짐은 아니다', () => {
+    assert.deepEqual([...OPERATOR_ALERT_EVENT_TYPES].sort(),
+      ['checkin_not_detected', 'cleaning_not_detected', 'detection_unconfirmable', 'late_checkout_detected', 'sensor_precheck_failed']);
   });
   for (const type of ['late_checkout_detected', 'checkin_not_detected', 'detection_unconfirmable', 'sensor_precheck_failed']) {
     test(`${type}: 처음 저장될 때 한 번, 재전송(DB 중복)에는 다시 보내지 않는다`, async () => {
@@ -285,6 +286,8 @@ describe('워처 — 확인되지 않으면 기기 제어를 하지 않고 넘�
       const [problem] = ofType(f.outbox(), 'detection_unconfirmable');
       assert.deepEqual([problem.device_time, problem.is_soft, problem.data.phase, problem.data.cause], [checkOut, false, 'checkout', 'sensor_off']);
       await until(() => f.services.some(call => call.service === 'notify/mobile_app_operator' && /퇴실 확인 불가/.test(call.body.title)));
+      const notice = f.services.find(call => call.service === 'persistent_notification/create' && /퇴실 확인 불가/.test(call.body.title));
+      assert.equal(notice.body.notification_id, `propos_detection_unconfirmable_checkout_${checkOut}`, '알림창 항목은 단계별로 — 청소 확인 불가가 퇴실 것을 덮어쓰지 않게');
       assert.deepEqual(deviceCalls(f.services), [], '청소 모드(조명·환기)를 켜지 않는다');
     } finally { f.cleanup(); }
   });

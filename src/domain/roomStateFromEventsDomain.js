@@ -15,7 +15,9 @@ export const ANCHOR_EVENT_STATES = Object.freeze({
   check_out_detected: { mainStatus: "CLEANING", subStatus: "CLEANING_PENDING" },
   scheduled_checkout_reached: { mainStatus: "CLEANING", subStatus: "CLEANING_PENDING" },
   cleaning_started:   { mainStatus: "CLEANING", subStatus: "CLEANING_IN_PROGRESS" },
+  scheduled_cleaning_started: { mainStatus: "CLEANING", subStatus: "CLEANING_IN_PROGRESS" },
   cleaning_finished:  { mainStatus: "VACANT",   subStatus: "CLEANING_FINISHED" },
+  scheduled_cleaning_finished: { mainStatus: "VACANT", subStatus: "CLEANING_FINISHED" },
   maintenance_started:  { mainStatus: "VACANT", subStatus: "MAINTENANCE" },
   maintenance_finished: { mainStatus: "VACANT", subStatus: "CLEANING_FINISHED" },
 });

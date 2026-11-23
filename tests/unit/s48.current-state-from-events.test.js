@@ -122,13 +122,18 @@ describe("deriveRoomState — 규칙에 맞지 않는 기록은 무시", () => {
 describe("이벤트 종류 목록", () => {
   test("입실·퇴실·청소·정비의 주요 이벤트와 세부 이벤트가 겹치지 않는다", () => {
     assert.deepEqual(ANCHOR_EVENT_TYPES, [
-      'check_in_detected', 'scheduled_checkin_reached', 'check_out_detected', 'scheduled_checkout_reached', 'cleaning_started', 'cleaning_finished',
+      'check_in_detected', 'scheduled_checkin_reached', 'check_out_detected', 'scheduled_checkout_reached',
+      'cleaning_started', 'scheduled_cleaning_started', 'cleaning_finished', 'scheduled_cleaning_finished',
       'maintenance_started', 'maintenance_finished',
     ]);
     // RF-29: 예정 시각 전환은 옛 퇴실 감지와 같은 상태로 간다. 퇴실 지연은 상태를 바꾸지 않는다.
     assert.deepEqual(deriveRoomState('scheduled_checkout_reached'), deriveRoomState('check_out_detected'));
     // DEC-10: 예정 입실 전환도 옛 입실 감지와 같은 상태로 간다
     assert.deepEqual(deriveRoomState('scheduled_checkin_reached'), deriveRoomState('check_in_detected'));
+    // DEC-17: 청소 일정 전환도 옛 청소 시작·완료와 같은 상태. 실제 청소 기록(cleaning_activity_*)은 상태를 정하지 않는다
+    assert.deepEqual(deriveRoomState('scheduled_cleaning_started'), deriveRoomState('cleaning_started'));
+    assert.deepEqual(deriveRoomState('scheduled_cleaning_finished'), deriveRoomState('cleaning_finished'));
+    assert.ok(!ANCHOR_EVENT_TYPES.includes('cleaning_activity_started') && !ANCHOR_EVENT_TYPES.includes('cleaning_activity_finished'));
     assert.ok(!ANCHOR_EVENT_TYPES.includes('late_checkout_detected') && !FOLLOW_EVENT_TYPES.includes('late_checkout_detected'));
     assert.equal(FOLLOW_EVENT_TYPES.length, 10);
     assert.ok(FOLLOW_EVENT_TYPES.includes('optimization_failed'));

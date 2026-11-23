@@ -65,6 +65,7 @@ export function countCurrentStats(properties) {
  * 기간 이벤트 목록에서 KPI를 집계한다.
  * anomalies = complaint_detected + energy_waste_detected + late_checkout_detected(퇴실 지연, RF-29)
  *             + checkin_not_detected(입실 미감지, DEC-16) + detection_unconfirmable(확인 불가, DEC-11)
+ *             + cleaning_not_detected(청소 미감지, DEC-17)
  *             + sensor_offline_detected(옛 기록 — 감지 센서 30분 꺼짐, RF-28)
  * checkOuts = check_out_detected(옛 기록) + scheduled_checkout_reached(예정 시각 전환, RF-29)
  * energyWaste = energy_waste_detected만
@@ -93,6 +94,7 @@ export function countPeriodEvents(events) {
     lateCheckouts: 0,
     checkinNotDetected: 0,
     detectionUnconfirmable: 0,
+    cleaningNotDetected: 0,
     sensorOffline: 0,
     energyWaste: 0,
     noShowSuspected: 0,
@@ -144,7 +146,13 @@ export function countPeriodEvents(events) {
     // 7개 운영 지표
     else if (type === "checkin_prep_time_reached") result.preStayAttempts += 1;
     else if (type === "optimization_finished") result.preStayOptimized += 1;
-    else if (type === "cleaning_finished") result.cleaningFinished += 1;
+    // 청소가 끝나 공실이 된 횟수 — 청소 일정의 끝, 일정이 없을 때의 감지·운영자 완료·옛 기록. 실제 청소 끝 기록(cleaning_activity_finished)은
+    // 같은 청소를 두 번 세지 않게 넣지 않는다(청소시간 준수의 초과 건은 실제 시각으로 따로 잰다)
+    else if (type === "cleaning_finished" || type === "scheduled_cleaning_finished") result.cleaningFinished += 1;
+    else if (type === "cleaning_not_detected") {
+      result.cleaningNotDetected += 1;
+      result.anomalies += 1;
+    }
     // HA 센서 기반 (지표 2, 3, 5)
     else if (type === "post_checkout_energy_waste_detected")    result.postCheckoutEnergyWaste += 1;
     else if (type === "post_checkout_security_breach_detected") result.postCheckoutSecurityBreach += 1;

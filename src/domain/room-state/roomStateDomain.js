@@ -102,13 +102,16 @@ const TRANSITIONS = {
     energy_waste_resolved:     { mainStatus: 'OCCUPIED',       subStatus: 'ISSUE_COMPLAINT' },
   },
   // 입실 시각이 되면 청소 완료가 확인되지 않았어도 체류로 — 상태는 스케줄이다(DEC-10)
+  // 청소 일정(DEC-17): 시작 시각에 청소 중, 끝 시각에 공실. cleaning_started/finished는 일정이 없을 때의 감지·운영자 수동
   'CLEANING/CLEANING_PENDING': {
-    cleaning_started:          { mainStatus: 'CLEANING',       subStatus: 'CLEANING_IN_PROGRESS' },
-    scheduled_checkin_reached: { mainStatus: 'OCCUPIED',       subStatus: 'GOOD_CONDITION' },
+    cleaning_started:           { mainStatus: 'CLEANING',       subStatus: 'CLEANING_IN_PROGRESS' },
+    scheduled_cleaning_started: { mainStatus: 'CLEANING',       subStatus: 'CLEANING_IN_PROGRESS' },
+    scheduled_checkin_reached:  { mainStatus: 'OCCUPIED',       subStatus: 'GOOD_CONDITION' },
   },
   'CLEANING/CLEANING_IN_PROGRESS': {
-    cleaning_finished:         { mainStatus: 'VACANT',         subStatus: 'CLEANING_FINISHED' },
-    scheduled_checkin_reached: { mainStatus: 'OCCUPIED',       subStatus: 'GOOD_CONDITION' },
+    cleaning_finished:           { mainStatus: 'VACANT',         subStatus: 'CLEANING_FINISHED' },
+    scheduled_cleaning_finished: { mainStatus: 'VACANT',         subStatus: 'CLEANING_FINISHED' },
+    scheduled_checkin_reached:   { mainStatus: 'OCCUPIED',       subStatus: 'GOOD_CONDITION' },
   },
 };
 
