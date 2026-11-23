@@ -122,8 +122,9 @@ LIFECYCLE/OPERATIONS는 발생 사실(fact)이므로 resolution 개념 없음. A
 
 | 그룹 | 이벤트 | 상태 전환 (From → To) | Count | Resolution |
 |------|--------|----------------------|-------|------------|
-| **LIFECYCLE** | `check_in_detected` | PRE_STAY_READY/OPTIMIZED → OCCUPIED/GOOD | O | X |
-| | `check_out_detected` | OCCUPIED/* → CLEANING/PENDING | O | X |
+| **LIFECYCLE** | `scheduled_checkin_reached` | 공실(정비 제외)·입실 준비·청소 중 → OCCUPIED/GOOD (입실 시각, DEC-10) | O (입실) | X |
+| | `scheduled_checkout_reached` | OCCUPIED/* → CLEANING/PENDING (퇴실 시각, RF-29) | O (퇴실) | X |
+| | `check_in_detected` · `check_out_detected` | 옛 기록 — 같은 전환·건수로 읽는다 | O | X |
 | | `checkin_prep_time_reached` | VACANT/* → PRE_STAY_READY/OPTIMIZING | O | X |
 | | `reservation_cancelled` | VACANT 자기전환 | O | X |
 | **OPERATIONS** | `optimization_finished` | OPTIMIZING → OPTIMIZED | O | X |
@@ -133,9 +134,11 @@ LIFECYCLE/OPERATIONS는 발생 사실(fact)이므로 resolution 개념 없음. A
 | | `energy_waste_resolved` | → GOOD_CONDITION / ISSUE_COMPLAINT | O | → 6-1-1 |
 | | `complaint_detected` | → ISSUE_COMPLAINT / ISSUE_AND_ENERGY | O (severity별 분리) | → 6-1-1 |
 | | `complaint_resolved` | → GOOD_CONDITION / ENERGY_WASTE | O | → 6-1-1 |
+| | `late_checkout_detected` · `checkin_not_detected` · `detection_unconfirmable` | 없음 — 스케줄 안에서 퇴실·입실이 확인되지 않음(퇴실 지연·입실 미감지·확인 불가), 운영자에게 넘김 | O (이상) | → 6-1-1 |
 | **SOFT** | `checkout_confirmation_needed` | 없음 | O | acknowledged Y/N |
 | | `early_checkin_suspected` | 없음 | O | acknowledged Y/N |
-| | `no_show_suspected` | 없음 | O | acknowledged Y/N |
+| | `no_show_suspected` | 없음 — 옛 기록(`checkin_not_detected`로 바뀜, DEC-16) | O | acknowledged Y/N |
+| | `sensor_precheck_failed` | 없음 — 퇴실·입실 하루 전·2시간 전 감지 센서 점검에서 꺼진 센서(미리 알림, 이상 아님, DEC-12) | X | X |
 | **OPERATIONAL ALERT** | `vacant_energy_waste_detected` (빈방 에너지 낭비 · 감지기 없음 — [7절](#vacant-energy-design)) | 없음 (State Machine 외부) | O | → 6-1-1 |
 | **GLOBAL** | `maintenance_required` | VACANT/MAINTENANCE | 전용 집계 예약 | 예약 |
 | | `maintenance_started` | VACANT/MAINTENANCE | 전용 집계 예약 | X |

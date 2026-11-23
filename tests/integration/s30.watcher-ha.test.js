@@ -32,7 +32,7 @@ const TEST_AREA = 'test room';
 const TEST_CONFIG = { areaName: TEST_AREA };
 let fixtureSequence = 0;
 
-function preparationFixture(t, { temperatureAvailable = true } = {}) {
+function preparationFixture(t, { temperatureAvailable = true, detectionSensors = false } = {}) {
   const suffix = ++fixtureSequence;
   const temperatureEntity = `sensor.fixture_temperature_${suffix}`;
   const humidityEntity = `sensor.fixture_humidity_${suffix}`;
@@ -41,6 +41,11 @@ function preparationFixture(t, { temperatureAvailable = true } = {}) {
     [temperatureEntity]: { state: temperatureAvailable ? '29' : 'unavailable', attributes: { unit_of_measurement: '°C' } },
     [humidityEntity]: { state: '48', attributes: { unit_of_measurement: '%' } },
     [climateEntity]: { state: 'off', attributes: { hvac_modes: ['off', 'cool', 'heat'], temperature_unit: '°C' } },
+    // 입실을 확인할 수 있는 숙소(문·움직임 센서) — 확인할 수 없으면 입실 시각 뒤 준비 제어를 하지 않는다(DEC-11)
+    ...(detectionSensors ? {
+      [`binary_sensor.fixture_door_${suffix}`]: { state: 'off', attributes: { device_class: 'door' } },
+      [`binary_sensor.fixture_motion_${suffix}`]: { state: 'off', attributes: { device_class: 'motion' } },
+    } : {}),
   };
   const calls = [], unexpected = [];
   const fetchMock = mock.method(globalThis, 'fetch', async (url, options = {}) => {
@@ -61,7 +66,7 @@ function preparationFixture(t, { temperatureAvailable = true } = {}) {
         return response({});
       }
       if (['/api/services/persistent_notification/create', '/api/services/notify/mobile_app_fixture'].includes(path)) {
-        calls.push({ path });
+        calls.push({ path, data });
         return response({});
       }
     }
@@ -156,16 +161,31 @@ describe('IT-003 캘린더 이벤트 — 예약 유효기간', () => {
     assert.equal(fixture.calls.filter(call => call.path.endsWith('/set_temperature')).length, 0);
   });
 
-  test('입실 시각이 지나도 퇴실 전·도착 미확인인 예약은 센서 준비를 시작한다', async t => {
-    const fixture = preparationFixture(t);
+  test('입실 시각이 지나도 퇴실 전·도착 미확인인 예약은 센서 준비를 시작한다 (손님을 기다리는 중일 때)', async t => {
+    const fixture = preparationFixture(t, { detectionSensors: true });
     await resetWatcher();
     setMonitoringConfig({ ...fixture.config, reservation: {
       uid: 'late-arrival', checkIn: new Date(Date.now() - 2 * 60 * 60_000).toISOString(),
       checkOut: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
     } });
     const state = await waitForWatcherState(s => s.preparation.run?.status === 'PREPARING' && s.preparation.run.preflightPassed);
-    assert.deepEqual(state.roomState, { mainStatus: 'PRE_STAY_READY', subStatus: 'OPTIMIZING' });
+    // DEC-10: 입실 시각이 지났으니 상태는 체류(스케줄). 손님이 아직 안 왔으므로 입실 준비(냉방)는 한다
+    assert.deepEqual(state.roomState, { mainStatus: 'OCCUPIED', subStatus: 'GOOD_CONDITION' });
     assert.equal(state.preparation.run.status, 'PREPARING');
+  });
+
+  test('입실 시각이 지났는데 입실을 확인할 수 없는 숙소(감지 센서 없음)는 준비 제어를 하지 않는다 — 안에 사람이 있을 수 있다', async t => {
+    const fixture = preparationFixture(t);
+    await resetWatcher();
+    setMonitoringConfig({ ...fixture.config, reservation: {
+      uid: 'late-arrival-unconfirmable', checkIn: new Date(Date.now() - 2 * 60 * 60_000).toISOString(),
+      checkOut: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+    } });
+    await waitForWatcherState(s => s.roomState.mainStatus === 'OCCUPIED');
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const state = getMonitoringState();
+    assert.equal(state.preparation.run?.reservationKey?.includes('late-arrival-unconfirmable') ?? false, false);
+    assert.equal(fixture.calls.filter(call => call.path.endsWith('/set_temperature')).length, 0);
   });
 });
 
@@ -198,6 +218,10 @@ describe('IT-004 캘린더 이벤트 — 센서 기반 준비', () => {
     assert.deepEqual(state.roomState, { mainStatus: 'PRE_STAY_READY', subStatus: 'OPTIMIZATION_FAILED' });
     assert.equal(state.preparation.run.reason, 'living:temperature_unavailable_or_stale');
     assert.equal(fixture.calls.filter(call => call.path.endsWith('/set_temperature')).length, 0);
-    assert.equal(fixture.calls.filter(call => call.path.endsWith('/notify/mobile_app_fixture')).length, 1);
+    // 이 숙소 구역엔 문·움직임 센서가 없어 입실을 확인할 수 없다 — 입실 2시간 전 점검이 운영자에게 따로 알린다(DEC-12)
+    const notices = fixture.calls.filter(call => call.path.endsWith('/notify/mobile_app_fixture'));
+    const precheck = notices.filter(call => /감지 센서 점검/.test(call.data?.title ?? ''));
+    assert.equal(precheck.length, 1);
+    assert.equal(notices.length - precheck.length, 1, '입실 준비 안전 실패 알림은 한 번');
   });
 });

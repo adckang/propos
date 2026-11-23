@@ -52,6 +52,16 @@ describe('Sensor preparation — actual controller, no external device writes', 
     assert.ok(deriveOptimizationTargets({ temp: 35, humidity: 90 }).humidity.max < 60);
   });
 
+  test('입실 시각이 지나 체류(스케줄)여도 손님이 아직 안 왔으면 준비한다 — 들어온 것이 확인된 체류에선 시작하지 않는다 (DEC-10)', async () => {
+    for (const [arrivalPending, starts] of [[true, true], [false, false]]) {
+      const f = fixture();
+      f.cfg.reservation.checkIn = new Date(start - 60 * MIN).toISOString();
+      f.cfg.reservation.checkOut = new Date(start + 20 * 60 * MIN).toISOString();
+      await f.controller.tick({ config: f.cfg, roomState: { mainStatus: 'OCCUPIED', subStatus: 'GOOD_CONDITION' }, now: start, arrivalPending });
+      assert.equal(f.controller.snapshot().run?.status === 'PREPARING', starts, `arrivalPending=${arrivalPending}`);
+    }
+  });
+
   test('20 minutes before check-in and successful command acknowledgements do not prove completion', async () => {
     const f = fixture();
     f.cfg.reservation.checkIn = new Date(start + 20 * MIN).toISOString();

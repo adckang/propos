@@ -25,12 +25,18 @@ const DIRECT_ISSUES = Object.freeze({
   energy_waste_detected:                    { category: 'OCCUPIED',       label: '체류 중 에너지 낭비' },
   checkout_confirmation_needed:             { category: 'CLEANING',       label: '체크아웃 확인 필요' },
   late_checkout_detected:                    { category: 'CLEANING',       label: '퇴실 지연' },
+  // DEC-16: 입실 날 자정까지 입실 미확인 — 체류 단계의 문제
+  checkin_not_detected:                      { category: 'OCCUPIED',       label: '입실 미감지' },
+  // DEC-11: 그 시각에 센서가 꺼져 있거나 감시가 멈춰 확인할 수 없음 — 퇴실이면 청소 단계, 입실이면 체류 단계
+  detection_unconfirmable:                   { category: event => (event.data?.phase === 'checkin' ? 'OCCUPIED' : 'CLEANING'),
+                                               label: event => (event.data?.phase === 'checkin' ? '입실 확인 불가' : '퇴실 확인 불가') },
   post_checkout_energy_waste_detected:       { category: 'CLEANING',       label: '퇴실 후 청소 전 에너지 낭비' },
   post_checkout_security_breach_detected:    { category: 'CLEANING',       label: '퇴실 후 청소 전 보안 문제' },
   vacant_energy_waste_detected:              { category: 'VACANT',         label: '공실 중 에너지 낭비' },
   post_cleaning_security_breach_detected:    { category: 'VACANT',         label: '청소 후 공실 보안 문제' },
   maintenance_required:                     { category: 'VACANT',         label: '정비 필요' },
   // 어느 단계에서나 생긴다 — 판정할 때의 객실 상태로 구분한다(감시기가 data.mainStatus로 보낸다)
+  // 옛 기록(RF-28 — 지금은 내지 않음, DEC-12)
   sensor_offline_detected:                  { category: event => phaseCategory(event.data?.mainStatus), label: '감지 센서 연결 끊김' },
   // RF-32: 청소 시작 시 담당자 없음 — 청소 일정 표의 현재 상태로 만드는 배정 문제와 같은 문구. 그 항목이 사라진(나중에 배정된) 청소만 보인다
   cleaning_unassigned_at_start:             { category: 'CLEANING', label: event => cleaningAssignmentIssueLabel(event.data?.status) },

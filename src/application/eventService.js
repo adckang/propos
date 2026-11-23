@@ -61,6 +61,7 @@ export async function processEvent(event, { db, kv, notify }) {
 async function _updateRoomStateCache(kv, event) {
   const STATE_MAP = {
     check_in_detected: { mainStatus: "OCCUPIED", subStatus: "GOOD_CONDITION" },
+    scheduled_checkin_reached: { mainStatus: "OCCUPIED", subStatus: "GOOD_CONDITION" },
     check_out_detected: { mainStatus: "CLEANING", subStatus: "CLEANING_PENDING" },
     scheduled_checkout_reached: { mainStatus: "CLEANING", subStatus: "CLEANING_PENDING" },
     cleaning_started: { mainStatus: "CLEANING", subStatus: "CLEANING_IN_PROGRESS" },

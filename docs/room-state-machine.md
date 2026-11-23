@@ -10,16 +10,16 @@
 
 | 스케줄의 시점 | 기대한 일 | 감지·처리되면 | 안 되면 | 현재 |
 | --- | --- | --- | --- | --- |
-| 퇴실 시각 | 손님 퇴실(EXIT) | 청소 대기로, 청소 모드 기기 제어 자동 | 유예 20분 뒤 `퇴실 지연` 문제. 기기 제어는 하지 않고 운영자에게 넘김 | 전환·문제 구현(`dbf9e17`), 기기 넘김은 구현 중 |
-| 입실 시각 | 손님 입실(ENTRY) | 체류로, 체류 기기 제어 자동 | 입실 미감지 문제. 기기 제어는 운영자에게 넘김 | 구현 중(지금은 감지돼야 체류로 바뀜) |
-| 퇴실·입실 하루 전, 2시간 전 | 감지 센서(문·움직임)가 켜져 있음 | — | 운영자에게 사전 알림 | 구현 중(지금은 30분 꺼짐 알림 — 바뀔 예정) |
-| 퇴실·입실 시각에 센서가 꺼져 있음 | — | — | `확인 불가` 문제. 판정을 운영자에게 넘김(자동으로 지연·미감지라 단정하지 않음) | 구현 중 |
+| 퇴실 시각 | 손님 퇴실(EXIT) | 청소 대기로. 퇴실이 확인되면(그 시각 또는 유예 20분 안) 그때 청소 모드 기기 제어 자동 | 유예 20분 뒤 `퇴실 지연` 문제. 기기 제어는 하지 않고 운영자에게 넘김(Slack + HA 앱) | 구현(`dbf9e17`, 기기 넘김 RF-29·28 Pi 코드). Pi 반영 전 |
+| 입실 시각 | 손님 입실(ENTRY) | 체류로(공실·입실 준비·청소 중 어디서든, 정비 중 제외). 입실이 확인되면 그때 체류 기기 제어 자동. 확인 전엔 체류 중 점검(에너지·환경·소음)을 쉬고 입실 준비(냉방)는 계속 | 그날 자정까지 미확인이면 `입실 미감지` 문제 + 운영자에게(DEC-16) | 구현(RF-29·28 Pi 코드). Pi 반영 전 |
+| 퇴실·입실 하루 전, 2시간 전 | 감지 센서(문·움직임)가 켜져 있음 | — | 운영자에게 사전 알림(Slack + HA 앱). 문제가 아니다 | 구현(30분 꺼짐 알림은 없앰). Pi 반영 전 |
+| 퇴실·입실 시각에 센서가 꺼져 있음 (또는 감시가 멈춰 있었음) | — | — | `확인 불가` 문제. 판정·기기 제어를 운영자에게 넘김(지연·미감지로 단정하지 않음) | 구현. Pi 반영 전 |
 | 청소 시작 시각 | 담당자 배정 | — | `청소 미배정`·`청소 배정 실패` 문제(청소 1건에 1번) | 구현(`7249a9f`) |
 | 청소 취소 | — | — | 배정되지 않은 청소로 남는다 — 퇴실 전엔 미래 레포트의 미배정, 퇴실 뒤엔 `청소 미배정(취소)` 문제 1건. "취소 후속 처리 실패" 같은 별도 문제는 없다(담당자 구글 일정을 못 지우면 운영자 Slack 한 줄) | 구현(`4333e06`) |
 
 - **예외는 사람에게:** 기기 제어·값 변경이 필요한데 기대한 일이 확인되지 않으면(감지 실패·센서 꺼짐) 자동으로 밀어붙이지 않고, 기록과 함께 운영자가 직접 판단·제어하도록 바로 알린다(`CLAUDE.md` 운영 원칙).
 - **알림은 필요할 때:** 센서가 꺼져 있다는 사실을 시간 간격으로 반복해 알리지 않는다. 그 센서가 필요한 일(퇴실·입실) 전에 미리 점검해 알리고, 필요한 순간에 안 되면 문제로 남긴다.
-- 화면 타임라인(`deriveTimeline`)은 이미 예약·청소 기록을 뼈대로 그린다(아래 2절 "예약 기반 타임라인"). Pi 워처의 상태도 같은 스케줄을 따라야 한다 — 퇴실은 바뀌었고(RF-29) 입실은 구현 중이다. 청소 시작·완료는 아직 감지 기반 전환이다(후속 정리 대상).
+- 화면 타임라인(`deriveTimeline`)은 이미 예약·청소 기록을 뼈대로 그린다(아래 2절 "예약 기반 타임라인"). Pi 워처의 상태도 같은 스케줄을 따른다 — 퇴실·입실 모두 시각 기준이다. 청소 시작·완료는 아직 감지 기반 전환이다(RF-52, 후속) — 청소가 끝난 것이 감지되지 않아도 다음 입실 시각에는 체류로 바뀐다.
 
 ---
 
@@ -289,7 +289,8 @@ VACANT / CLEANING_FINISHED
 | 6 | VACANT/MAINTENANCE | maintenance_finished | VACANT/CLEANING_FINISHED | ← (G3으로 커버, 중복 제거) |
 | 7 | VACANT/MAINTENANCE | checkin_prep_time_reached | PRE_STAY_READY/OPTIMIZING | ✓ 운영자 알림 |
 | 5 | PRE_STAY_READY/OPTIMIZING | optimization_finished | PRE_STAY_READY/OPTIMIZED | |
-| 6 | PRE_STAY_READY/OPTIMIZED | check_in_detected | OCCUPIED/GOOD_CONDITION | |
+| 6 | PRE_STAY_READY/OPTIMIZED | check_in_detected | OCCUPIED/GOOD_CONDITION | 옛 경로(화면·옛 기록). Pi는 `scheduled_checkin_reached`를 쓴다 |
+| 6a | 공실(정비 제외)·입실 준비·청소 중 | scheduled_checkin_reached | OCCUPIED/GOOD_CONDITION | 입실 시각(DEC-10). 확인 전 기기 제어 없음 |
 | 7 | OCCUPIED/GOOD_CONDITION | energy_waste_detected | OCCUPIED/ENERGY_WASTE | |
 | 8 | OCCUPIED/GOOD_CONDITION | complaint_detected | OCCUPIED/ISSUE_COMPLAINT | |
 | 9 | OCCUPIED/ENERGY_WASTE | energy_waste_resolved | OCCUPIED/GOOD_CONDITION | |
@@ -515,5 +516,6 @@ getNextRoomState 내부에서 호출하지 않는다.
 | PREP-T03 | PRE_STAY_READY/OPTIMIZING | optimization_failed | PRE_STAY_READY/OPTIMIZATION_FAILED | 환경 장치 안전 정지·운영자 알림 |
 | PREP-T04 | PRE_STAY_READY/OPTIMIZATION_FAILED | check_in_detected | OCCUPIED/GOOD_CONDITION | 입실 때문에 준비 실패 이력을 지우거나 재가동하지 않음 |
 | PREP-T05 | PRE_STAY_READY의 준비 중·완료·실패 | optimization_cancelled | VACANT/CLEANING_FINISHED | 준비 제어 종료·대상 제외. 일반 공실 씬/도어락을 재실행하지 않음 |
+| PREP-T06 | 입실 준비·공실·청소 중 | scheduled_checkin_reached | OCCUPIED/GOOD_CONDITION | 입실 시각. 진행 중 준비는 계속, 손님이 아직 안 왔으면 체류 상태에서도 준비를 시작할 수 있다(상태는 바꾸지 않음). 입실이 확인되면 준비에 도착 기록 |
 
 손님 입실 후 발생한 `optimization_finished`는 제어 회차의 완료 기록으로 저장한다. OCCUPIED를 PRE_STAY_READY로 되돌리지 않는다. 생략·취소·실패·완료는 준비 실행 상태이며 이벤트 수신 파이프라인의 `events.status`와 다르다.

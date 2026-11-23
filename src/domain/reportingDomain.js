@@ -64,7 +64,8 @@ export function countCurrentStats(properties) {
 /**
  * 기간 이벤트 목록에서 KPI를 집계한다.
  * anomalies = complaint_detected + energy_waste_detected + late_checkout_detected(퇴실 지연, RF-29)
- *             + sensor_offline_detected(감지 센서 30분 넘게 꺼짐, RF-28)
+ *             + checkin_not_detected(입실 미감지, DEC-16) + detection_unconfirmable(확인 불가, DEC-11)
+ *             + sensor_offline_detected(옛 기록 — 감지 센서 30분 꺼짐, RF-28)
  * checkOuts = check_out_detected(옛 기록) + scheduled_checkout_reached(예정 시각 전환, RF-29)
  * energyWaste = energy_waste_detected만
  * softEvents = no_show_suspected + early_checkin_suspected + checkout_confirmation_needed
@@ -90,6 +91,8 @@ export function countPeriodEvents(events) {
     checkOuts: 0,
     anomalies: 0,
     lateCheckouts: 0,
+    checkinNotDetected: 0,
+    detectionUnconfirmable: 0,
     sensorOffline: 0,
     energyWaste: 0,
     noShowSuspected: 0,
@@ -111,10 +114,18 @@ export function countPeriodEvents(events) {
   };
 
   for (const { type } of events) {
-    if (type === "check_in_detected") result.checkIns += 1;
+    if (type === "check_in_detected" || type === "scheduled_checkin_reached") result.checkIns += 1;
     else if (type === "check_out_detected" || type === "scheduled_checkout_reached") result.checkOuts += 1;
     else if (type === "late_checkout_detected") {
       result.lateCheckouts += 1;
+      result.anomalies += 1;
+    }
+    else if (type === "checkin_not_detected") {
+      result.checkinNotDetected += 1;
+      result.anomalies += 1;
+    }
+    else if (type === "detection_unconfirmable") {
+      result.detectionUnconfirmable += 1;
       result.anomalies += 1;
     }
     else if (type === "sensor_offline_detected") {

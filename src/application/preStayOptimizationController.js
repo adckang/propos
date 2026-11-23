@@ -82,7 +82,7 @@ export class PreStayOptimizationController {
     this.serial = pending.catch(() => {});
     return pending;
   }
-  async _tick({ config, roomState, now = Date.now() }) {
+  async _tick({ config, roomState, now = Date.now(), arrivalPending = false }) {
     this.operationNow = now;
     let run = this.state.run;
     const key = preparationReservationKey(config);
@@ -104,7 +104,9 @@ export class PreStayOptimizationController {
     if (!key || config?.dataOrigin === 'SIMULATED' || (run?.reservationKey === key && run.status !== 'PREPARING')) return;
     const settings = config.optimization ?? {};
     if (!run || run.reservationKey !== key) {
-      if (roomState.mainStatus !== 'VACANT' || roomState.subStatus === 'MAINTENANCE') return;
+      // 입실 시각이 지나 체류(스케줄)여도 손님을 기다리는 중(arrivalPending)이면 준비한다(DEC-10) — 상태는 바꾸지 않는다
+      const roomReady = roomState.mainStatus === 'VACANT' ? roomState.subStatus !== 'MAINTENANCE' : roomState.mainStatus === 'OCCUPIED' && arrivalPending;
+      if (!roomReady) return;
       const checkIn = Date.parse(config.reservation.checkIn);
       // A missed scheduled time does not prove arrival. If cleaning ended late,
       // a still-current reservation may be prepared until actual entry is seen.

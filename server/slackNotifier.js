@@ -2,7 +2,10 @@
  * Slack Incoming Webhook 발송.
  * PROPOS_SLACK_WEBHOOK 환경변수 없으면 no-op (로컬/테스트 안전).
  * 내용은 담지 않는다 — 링크만 전송. (reporting-feature-design.md 섹션 1)
+ * 운영자에게 넘기는 종류는 무엇이 안 됐고 무엇을 해 달라는지 고정 문구를 앞에 붙인다(기록 내용은 넣지 않음, DEC-11·16).
  */
+import { OPERATOR_ALERT_LABELS } from "../src/config/eventTypes.js";
+
 
 const WEBHOOK_URL = process.env.PROPOS_SLACK_WEBHOOK;
 
@@ -26,7 +29,7 @@ export async function notifyEvent(eventId, propertyId, type, { signal } = {}) {
   if (!WEBHOOK_URL) return { sent: false };
 
   const url = `${getBaseUrl()}/events/${eventId}`;
-  const text = `[${propertyId}] ${type} → ${url}`;
+  const text = `[${propertyId}] ${OPERATOR_ALERT_LABELS[type] ?? type} → ${url}`;
 
   const res = await fetch(WEBHOOK_URL, {
     method: "POST",

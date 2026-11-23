@@ -1,171 +1,134 @@
 /**
- * 감지 필수 센서 오프라인 (RF-28, DEC-08)
+ * 감지 센서 사전 점검 (DEC-12) — 알림은 필요할 때 보낸다.
  *
- * 입실·퇴실 감지(SensorEventGenerator)는 숙소 구역의 문(door)·움직임(motion) 센서만 읽는다. 둘 중 하나라도
- * 꺼지면 감지가 멈추는데 알림이 없었다(파주201 현관 움직임 센서 10-30부터). 그래서 이 두 종류를 감지 필수
- * 센서로 보고, 30분 넘게 꺼져 있으면 문제 이벤트를 한 번 내고 돌아오면 해소 이벤트를 낸다. 객실 상태는 바꾸지 않는다.
+ * 입실·퇴실 확인(SensorEventGenerator)은 숙소 구역의 문(door)·움직임(motion) 센서만 읽는다. 둘 중 하나라도 꺼지면 확인이 멈춘다.
+ * 그래서 시간 간격으로 반복해 알리지 않고, 그 센서가 필요해지기 전에 — 퇴실·입실 **하루 전·2시간 전** — 미리 점검해
+ * 꺼져 있으면 운영자에게 알린다(시작 시각과 무관하게 같은 규칙). 퇴실·입실 그 시각에도 꺼져 있으면 확인 불가 문제로 남기는 것은
+ * SuspicionTracker가 한다.
  *
- * - 꺼짐 = HA 상태 unavailable(기기에 닿지 못함). unknown은 넣지 않는다 — 값이 바뀔 때만 보고하는 센서는 HA 재시작 뒤
- *   한동안 unknown이지만 고장이 아니라서, 빈방에서 30분을 넘겨 거짓 알림이 난다(assessDeviceReadiness는 unknown도 넣지만 화면에 쓰이지 않는다).
- *   한 번 꺼진 뒤 unknown을 거쳐도 이어진 끊김으로 본다(다시 값이 들어와야 복구).
- * - 30분 안에 돌아오면 기록하지 않는다 — 정기 재시작·펌웨어 업데이트는 이상이 아니다(report-architecture 6-1-1).
- * - 발생 시각 = 꺼진 시각 + 30분(기준을 넘은 시각). 같은 끊김은 언제 다시 판정해도 같은 시각이라,
- *   DB의 (숙소, 종류, 발생 시각) 중복 방지가 재전송을 막는다.
- * - 한 숙소의 두 센서가 같은 순간 넘거나 돌아오면 DB가 둘째를 중복으로 버린다. 그래서 센서마다 고정된 0~999ms를
- *   더하고(다시 처리할 때 판정이 나뉘어도 겹치지 않게), 같은 판정 안에서 그래도 겹치면 1ms씩 민다. 고정값이라 재전송 중복 방지는 그대로다.
- * - 알림은 보고(reportedAt)와 따로 기록한다(alertedAt) — 놓친 기록을 다시 처리하는 중엔 알림을 미루고,
- *   그사이 워처가 재시작해도 "보고했지만 아직 안 알림"이 남아 다음 정상 주기에 보낸다.
+ * - 꺼짐 = HA 상태 unavailable(기기에 닿지 못함). unknown은 넣지 않는다 — 값이 바뀔 때만 보고하는 센서는 HA 재시작 뒤 한동안
+ *   unknown이지만 고장이 아니다. 숙소 구역에 문·움직임 센서가 아예 없어도 확인할 수 없으므로 꺼짐으로 본다.
+ * - 점검은 (단계, 시각, 몇 시간 전)마다 한 번. 워처가 꺼져 있다 켜져 두 점검 시각이 모두 지났으면 늦은 쪽(2시간 전)만 한다.
  */
-
 export const DETECTION_SENSOR_CLASSES = Object.freeze({ door: '문 센서', motion: '움직임 센서' });
-export const SENSOR_OFFLINE_THRESHOLD_MS = 30 * 60_000;
-const OFFLINE_STATE = 'unavailable';
-const STILL_OFFLINE_STATES = new Set(['unavailable', 'unknown']); // 추적 중인 끊김을 이어 가는 상태
+export const PRECHECK_OFFSETS = Object.freeze([
+  { key: 'd1', label: '하루 전', ms: 24 * 3_600_000 },
+  { key: 'h2', label: '2시간 전', ms: 2 * 3_600_000 },
+]);
+const OFF_STATE = 'unavailable';
+const PHASE_LABEL = Object.freeze({ checkout: '퇴실', checkin: '입실' });
+const DONE_KEEP_MS = 3 * 24 * 3_600_000;
 
 const timeOf = value => {
-  const ms = typeof value === 'number' ? value : Date.parse(value ?? '');
+  const ms = value instanceof Date ? value.getTime() : typeof value === 'number' ? value : Date.parse(value ?? '');
   return Number.isFinite(ms) ? ms : null;
 };
-const isoOf = ms => (Number.isFinite(ms) ? new Date(ms).toISOString() : null);
 
-/** 센서마다 고정된 0~999ms (FNV-1a) — 같은 순간의 두 센서 이벤트가 DB 중복 방지에 걸리지 않게 */
-export function sensorEventOffsetMs(entityId) {
-  let hash = 2166136261;
-  for (const ch of String(entityId)) { hash ^= ch.codePointAt(0); hash = Math.imul(hash, 16777619); }
-  return (hash >>> 0) % 1000;
-}
-
-/** 저장된 추적 상태 중 쓸 수 있는 항목만 — 깨진 항목 하나가 감시 주기를 멈추지 않게 */
-export function sanitizeSensorTracking(raw) {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-  const clean = {};
-  for (const [entityId, entry] of Object.entries(raw)) {
-    if (!entry || !Number.isFinite(entry.offlineSince)) continue;
-    if (entry.reportedAt != null && !Number.isFinite(entry.reportedAt)) continue;
-    clean[entityId] = {
-      offlineSince: entry.offlineSince, reportedAt: entry.reportedAt ?? null,
-      alertedAt: Number.isFinite(entry.alertedAt) ? entry.alertedAt : null,
-      role: entry.role ?? null, name: entry.name ?? entityId,
-    };
-  }
-  return clean;
-}
-
-/** 숙소 구역 상태 중 감지 필수 센서만 — { entityId, role, roleLabel, name, state, changedAt } */
+/** 숙소 구역 상태 중 감지 센서만 — { entityId, role, roleLabel, name, state } */
 export function detectionSensors(stateMap = {}) {
   const sensors = [];
   for (const [entityId, state] of Object.entries(stateMap ?? {})) {
     if (!state || entityId.split('.')[0] !== 'binary_sensor') continue;
     const role = state.attributes?.device_class;
     if (!Object.hasOwn(DETECTION_SENSOR_CLASSES, role)) continue;
-    sensors.push({
-      entityId,
-      role,
-      roleLabel: DETECTION_SENSOR_CLASSES[role],
-      name: state.attributes?.friendly_name || entityId,
-      state: state.state,
-      changedAt: timeOf(state.last_changed) ?? timeOf(state.last_updated),
-    });
+    sensors.push({ entityId, role, roleLabel: DETECTION_SENSOR_CLASSES[role], name: state.attributes?.friendly_name || entityId, state: state.state });
   }
   return sensors.sort((a, b) => (a.entityId < b.entityId ? -1 : a.entityId > b.entityId ? 1 : 0));
 }
 
 /**
- * @param {object} p
- * @param {object} p.stateMap  — { entityId: HA state } (숙소 구역)
- * @param {object} p.tracked   — 지난 판정의 추적 상태 { entityId: { offlineSince, reportedAt, alertedAt, role, name } }
- * @param {number} p.now
- * @param {string|null} [p.mainStatus] — 판정할 때의 객실 상태(문제 목록의 구분에 쓴다. 늦게 판정하면 꺼진 순간의 상태와 다를 수 있다)
- * @param {Iterable<string>|null} [p.knownEntityIds] — 지금 숙소 구역의 기기 목록. 주어지고 비어 있지 않으면 구역에서 빠진 센서의 추적을 지운다
- * @returns {{ events: object[], tracked: object, changed: boolean, dropped: string[] }} dropped = 구역에서 빠져 추적을 지운 센서
+ * 지금 꺼져 있는 감지 센서. 구역 상태를 아직 못 읽었으면(빈 목록) 판단하지 않고 [] —
+ * 읽었는데 문·움직임 센서가 하나도 없으면 "센서 없음" 한 항목.
  */
-export function evaluateSensorOffline({ stateMap, tracked = {}, now, mainStatus = null, knownEntityIds = null, thresholdMs = SENSOR_OFFLINE_THRESHOLD_MS }) {
-  const next = sanitizeSensorTracking(tracked);
-  let changed = Object.keys(next).length !== Object.keys(tracked ?? {}).length;
-  const events = [];
-  const usedDetectedTimes = new Set(Object.values(next).map(entry => entry.reportedAt).filter(Number.isFinite));
-  const usedResolvedTimes = new Set();
-  const unique = (used, at) => { let t = at; while (used.has(t)) t += 1; used.add(t); return t; };
+export function offDetectionSensors(stateMap = {}) {
+  if (!stateMap || Object.keys(stateMap).length === 0) return [];
+  const sensors = detectionSensors(stateMap);
+  if (sensors.length === 0) return [{ entityId: null, role: null, roleLabel: '감지 센서', name: '문·움직임 센서 없음' }];
+  return sensors.filter(sensor => sensor.state === OFF_STATE).map(({ state, ...sensor }) => sensor);
+}
 
-  for (const sensor of detectionSensors(stateMap)) {
-    const entry = next[sensor.entityId];
-    const offline = entry ? STILL_OFFLINE_STATES.has(sensor.state) : sensor.state === OFFLINE_STATE;
-    if (offline) {
-      // 이미 추적 중이면 처음 꺼진 시각을 유지한다(unavailable↔unknown 전환·HA 재시작으로 시각이 바뀌어도 같은 끊김)
-      const offlineSince = entry?.offlineSince ?? sensor.changedAt ?? now;
-      if (!entry) { next[sensor.entityId] = { offlineSince, reportedAt: null, alertedAt: null, role: sensor.role, name: sensor.name }; changed = true; }
-      const current = next[sensor.entityId];
-      if (current.reportedAt == null && now - offlineSince >= thresholdMs) {
-        const reportedAt = unique(usedDetectedTimes, offlineSince + thresholdMs + sensorEventOffsetMs(sensor.entityId));
-        next[sensor.entityId] = { ...current, reportedAt };
-        changed = true;
-        events.push({
-          type: 'sensor_offline_detected',
-          reason: `${sensor.roleLabel}(${sensor.name}) 연결이 ${Math.round(thresholdMs / 60_000)}분 넘게 끊김 — 입실·퇴실 감지가 정확하지 않을 수 있음`,
-          timestamp: reportedAt,
-          data: {
-            entityId: sensor.entityId, role: sensor.role, name: sensor.name,
-            offlineSince: isoOf(offlineSince),
-            thresholdMinutes: Math.round(thresholdMs / 60_000), mainStatus,
-          },
-        });
-      }
-    } else if (entry) {
-      delete next[sensor.entityId];
-      changed = true;
-      if (entry.reportedAt != null) {
-        const back = Math.max(sensor.changedAt ?? now, entry.reportedAt + 1);
-        events.push({
-          type: 'sensor_offline_resolved',
-          reason: `${sensor.roleLabel}(${sensor.name}) 연결 복구`,
-          timestamp: unique(usedResolvedTimes, back + sensorEventOffsetMs(sensor.entityId)),
-          data: {
-            entityId: sensor.entityId, role: sensor.role, name: sensor.name,
-            offlineSince: isoOf(entry.offlineSince),
-            detectedAt: isoOf(entry.reportedAt), mainStatus,
-          },
-        });
-      }
+/** 앞으로의 퇴실·입실 시각 — 지금 예약과 체류 중 미뤄 둔 다음 예약에서 */
+export function upcomingTimes(reservations, now) {
+  const times = new Map();
+  for (const reservation of reservations) {
+    if (!reservation) continue;
+    for (const [phase, field] of [['checkout', 'checkOut'], ['checkin', 'checkIn']]) {
+      const at = timeOf(reservation[field]);
+      if (at != null && at > now) times.set(`${phase}|${new Date(at).toISOString()}`, { phase, at });
     }
   }
-  // 구역 상태에 안 보이는 센서는 그대로 둔다(상태를 잠깐 못 읽음) — 다시 보일 때 판정한다.
-  // 구역 기기 목록에서 빠졌으면(교체·이동) 추적만 지운다. 복구를 본 게 아니므로 해소 이벤트는 내지 않는다.
-  const known = knownEntityIds ? new Set(knownEntityIds) : null;
-  const dropped = [];
-  if (known?.size) {
-    for (const entityId of Object.keys(next)) {
-      if (!known.has(entityId)) { delete next[entityId]; dropped.push(entityId); changed = true; }
-    }
+  return [...times.values()].sort((a, b) => a.at - b.at);
+}
+
+/**
+ * 지금 해야 할 사전 점검. 같은 시각의 점검이 여럿 지났으면 늦은 것 하나만 돌려주고 나머지는 한 것으로 표시한다.
+ * @returns {{ due: { key, phase, at, offsetLabel }[], done: Record<string, number> }}
+ */
+export function duePrechecks({ times, done = {}, now }) {
+  const nextDone = {};
+  for (const [key, at] of Object.entries(done ?? {})) if (Number.isFinite(at) && now - at < DONE_KEEP_MS) nextDone[key] = at;
+  const due = [];
+  for (const { phase, at } of times) {
+    const reached = PRECHECK_OFFSETS.filter(offset => now >= at - offset.ms && now < at);
+    if (!reached.length) continue;
+    const base = `${phase}|${new Date(at).toISOString()}`;
+    const pending = reached.filter(offset => !Object.hasOwn(nextDone, `${base}|${offset.key}`));
+    if (!pending.length) continue;
+    for (const offset of reached) nextDone[`${base}|${offset.key}`] = at;
+    const latest = pending.at(-1);
+    due.push({ key: `${base}|${latest.key}`, phase, at, offsetLabel: latest.label, checkAt: at - latest.ms });
   }
-  return { events, tracked: next, changed, dropped };
+  return { due, done: nextDone };
 }
 
-/** 보고했지만 아직 운영자에게 알리지 않은 끊김 — 알림 문구에 쓰는 이벤트 모양으로 */
-export function pendingOperatorAlerts(tracked = {}, thresholdMs = SENSOR_OFFLINE_THRESHOLD_MS) {
-  return Object.entries(tracked ?? {})
-    .filter(([, entry]) => entry?.reportedAt != null && entry.alertedAt == null)
-    .map(([entityId, entry]) => ({
-      entityId,
-      data: { entityId, role: entry.role, name: entry.name, offlineSince: isoOf(entry.offlineSince), thresholdMinutes: Math.round(thresholdMs / 60_000) },
-    }));
+/**
+ * 사전 점검 기록의 발생 시각 = 그 점검을 해야 했던 시각(+점검마다 고정된 0~999ms). 같은 주기에 두 점검이 나와도
+ * DB의 (숙소, 종류, 발생 시각) 중복 방지에 걸리지 않고, 다시 보내도 같은 시각이다.
+ */
+export function precheckEventTime(check) {
+  let hash = 2166136261;
+  for (const ch of check.key) { hash ^= ch.codePointAt(0); hash = Math.imul(hash, 16777619); }
+  return check.checkAt + ((hash >>> 0) % 1000);
 }
 
-const KST_PARTS = new Intl.DateTimeFormat('en-US', {
-  timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-});
-// 한국 시각 "10/30 14:12"
-function kstLabel(ms) {
-  const part = Object.fromEntries(KST_PARTS.formatToParts(new Date(ms)).map(p => [p.type, p.value]));
-  return `${part.month}/${part.day} ${part.hour}:${part.minute}`;
-}
+const kstLabel = at => {
+  const kst = new Date(at + 9 * 3_600_000);
+  const p = n => String(n).padStart(2, '0');
+  return `${p(kst.getUTCMonth() + 1)}/${p(kst.getUTCDate())} ${p(kst.getUTCHours())}:${p(kst.getUTCMinutes())}`;
+};
+const sensorList = sensors => sensors.map(s => (s.entityId && s.roleLabel ? `${s.roleLabel}(${s.name})` : s.name)).join(', ');
 
-/** 운영자 알림 문구 — 숙소·센서·꺼진 시각·영향 */
-export function sensorOfflineAlertMessage(propertyId, event) {
-  const { data } = event;
-  const role = DETECTION_SENSOR_CLASSES[data.role] ?? '감지 센서';
-  const since = kstLabel(Date.parse(data.offlineSince));
+/** 사전 점검에서 꺼진 센서를 찾았을 때 운영자 알림 */
+export function precheckAlertMessage(areaName, check, sensors) {
   return {
-    title: `PROPOS ${propertyId ?? ''} 감지 센서 연결 끊김`.trim(),
-    message: `${role} "${data.name}" 연결이 ${since}부터 ${data.thresholdMinutes}분 넘게 끊겼습니다. 복구될 때까지 입실·퇴실 자동 감지가 정확하지 않을 수 있어요. 센서 배터리·연결을 확인해 주세요.`,
+    title: `[PROPOS] ${areaName ?? '숙소'} 감지 센서 점검`,
+    message: `${kstLabel(check.at)} ${PHASE_LABEL[check.phase]} ${check.offsetLabel} 점검 — 꺼져 있는 센서: ${sensorList(sensors)}. `
+      + `그대로면 ${PHASE_LABEL[check.phase]}을 확인할 수 없어요. 그 전에 확인해 주세요.`,
   };
+}
+
+/** 운영자에게 넘기는 문제의 알림 (DEC-11) — 무엇이 안 됐고 무엇을 해 달라는지 */
+export function handoffAlertMessage(areaName, event) {
+  const name = areaName ?? '숙소';
+  const phase = event.data?.phase;
+  const at = timeOf(event.data?.checkOut ?? event.data?.checkIn ?? event.timestamp);
+  const when = at != null ? `${kstLabel(at)} ` : '';
+  if (event.type === 'late_checkout_detected') {
+    return { title: `[PROPOS] ${name} 퇴실 지연`, message: `${when}퇴실이 확인되지 않아 청소 모드(에어컨 끄기·조명·환기)를 켜지 않았어요. 확인 후 직접 켜 주세요.` };
+  }
+  if (event.type === 'checkin_not_detected') {
+    const deadline = timeOf(event.data?.deadline);
+    const until = deadline != null ? `${kstLabel(deadline)}까지` : '기다리는 동안';
+    return { title: `[PROPOS] ${name} 입실 미감지`, message: `${when}입실이 ${until} 확인되지 않았어요. 기기 상태(에어컨·조명)를 직접 확인해 주세요.` };
+  }
+  if (event.type === 'detection_unconfirmable') {
+    const what = PHASE_LABEL[phase] ?? '퇴실·입실';
+    const cause = {
+      sensor_off: `꺼져 있는 센서: ${sensorList(event.data?.sensors ?? [])}`,
+      not_entered: '입실이 확인되지 않은 체류였어요',
+    }[event.data?.cause] ?? '그 시각에 감시가 멈춰 있었어요';
+    const devices = phase === 'checkout' ? '청소 모드를 켜지 않았어요' : '체류 기기 제어를 하지 않았어요';
+    return { title: `[PROPOS] ${name} ${what} 확인 불가`, message: `${when}${what}을 확인할 수 없어요(${cause}). ${devices}. 직접 확인하고 처리해 주세요.` };
+  }
+  return null;
 }

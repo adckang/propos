@@ -11,6 +11,7 @@ import { getNextRoomState, isValidTransition } from "./room-state/roomStateDomai
 /** 큰 상태 변화 이벤트 → 그 직후 상태 */
 export const ANCHOR_EVENT_STATES = Object.freeze({
   check_in_detected:  { mainStatus: "OCCUPIED", subStatus: "GOOD_CONDITION" },
+  scheduled_checkin_reached: { mainStatus: "OCCUPIED", subStatus: "GOOD_CONDITION" },
   check_out_detected: { mainStatus: "CLEANING", subStatus: "CLEANING_PENDING" },
   scheduled_checkout_reached: { mainStatus: "CLEANING", subStatus: "CLEANING_PENDING" },
   cleaning_started:   { mainStatus: "CLEANING", subStatus: "CLEANING_IN_PROGRESS" },

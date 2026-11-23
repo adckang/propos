@@ -34,7 +34,7 @@ import {
   INITIAL_STATE,
 } from '../src/domain/room-state/roomStateDomain.js';
 import { planMonitoringReservationUpdate } from '../src/domain/monitoringReservationDomain.js';
-import { evaluateSensorOffline, pendingOperatorAlerts, sanitizeSensorTracking, sensorOfflineAlertMessage } from '../src/domain/sensorHealthDomain.js';
+import { duePrechecks, handoffAlertMessage, offDetectionSensors, precheckAlertMessage, precheckEventTime, upcomingTimes } from '../src/domain/sensorHealthDomain.js';
 
 const __dir    = dirname(fileURLToPath(import.meta.url));
 // 테스트는 PROPOS_DATA_DIR 로 임시 폴더를 지정해 실제 운영 기록(data/)을 덮어쓰지 않는다
@@ -57,13 +57,15 @@ let roomState = INITIAL_STATE;
 let config    = null;
 const monitor  = new OccupancyMonitor();
 const eventLog     = [];
-const softEventLog = [];  // 상태를 바꾸지 않는 기록: soft 이벤트(checkout_confirmation_needed / early_checkin_suspected / no_show_suspected) + 문제 이벤트(late_checkout_detected)
+const softEventLog = [];  // 상태를 바꾸지 않는 기록: soft 이벤트(checkout_confirmation_needed / early_checkin_suspected / sensor_precheck_failed) + 문제 이벤트(퇴실 지연·입실 미감지·확인 불가)
 const snapshotLog  = [];  // { path, ts, roomState } — CCTV 출입 스냅샷
 let preparationOutbox = [];
 let eventDeliveryRejected = [];
 let flushingPreparationOutbox = false;
 let statePersistenceFailed = false;
-let sensorHealth = {}; // RF-28: 꺼진 감지 필수 센서 추적 { entityId: { offlineSince, reportedAt, alertedAt, role, name } } — 재시작해도 중복·누락 알림이 없게 저장한다
+let lastWaitPersistAt = 0;
+const WAIT_PERSIST_MS = 2 * 60_000;
+let sensorPrechecks = {}; // DEC-12: 이미 한 감지 센서 사전 점검 { '단계|시각|몇 시간 전': 그 시각 } — 재시작해도 같은 점검을 두 번 하지 않게 저장한다
 let lastError   = null;
 let lastEventAt = Date.now(); // 마지막 정상 이벤트 시각 (히스토리 재처리 기준점)
 let snapshotCleanupTimer = null;
@@ -138,7 +140,8 @@ function ensureDataDir() {
 
 function persistState() {
   ensureDataDir();
-  const payload = { roomState, eventLog: eventLog.slice(-100), preparation: preparation.snapshot(), preparationOutbox, eventDeliveryRejected, sensorHealth, updatedAt: Date.now() };
+  const payload = { roomState, eventLog: eventLog.slice(-100), preparation: preparation.snapshot(), preparationOutbox, eventDeliveryRejected,
+    sensorPrechecks, monitor: monitor.snapshot(), updatedAt: Date.now() };
   try {
     writeFileSync(`${STATE_FILE}.tmp`, JSON.stringify(payload, null, 2));
     renameSync(`${STATE_FILE}.tmp`, STATE_FILE);
@@ -153,7 +156,8 @@ function loadPersistedState() {
     const data = JSON.parse(raw);
     preparationOutbox = Array.isArray(data.preparationOutbox) ? data.preparationOutbox : [];
     eventDeliveryRejected = Array.isArray(data.eventDeliveryRejected) ? data.eventDeliveryRejected : [];
-    sensorHealth = sanitizeSensorTracking(data.sensorHealth);
+    sensorPrechecks = data.sensorPrechecks && typeof data.sensorPrechecks === 'object' && !Array.isArray(data.sensorPrechecks) ? data.sensorPrechecks : {};
+    monitor.restore(data.monitor);
     preparation.restore(data.preparation);
     return data.roomState ?? INITIAL_STATE;
   } catch { return INITIAL_STATE; }
@@ -282,17 +286,15 @@ async function sendHaNotification(event, newState) {
   } catch { /* 알림 실패 무시 */ }
 }
 
-// 운영자 알림 (RF-28) — HA 알림창 + 숙소에 설정된 운영자 휴대폰 알림(notify.*, 입실 준비 알림과 같은 설정).
-// Slack은 Vercel이 이 이벤트를 처음 저장할 때 링크로 보낸다(Pi에는 Slack 주소가 없다). 실패해도 감시를 멈추지 않는다.
-const sensorNoticeId = entityId => `propos_sensor_offline_${entityId}`;
+// 운영자 알림 (DEC-11·16) — HA 알림창 + 숙소에 설정된 운영자 휴대폰 알림(notify.*, 입실 준비 알림과 같은 설정).
+// Slack은 Vercel이 이 기록을 처음 저장할 때 보낸다(Pi에는 Slack 주소가 없다). 놓친 기록을 다시 처리하는 중엔 보내지 않는다 —
+// 그 기록의 Slack은 서버가 처음 저장할 때 한 번 간다. 실패해도 감시를 멈추지 않는다.
 const haOptions = () => ({ signal: AbortSignal.timeout(PREPARATION_POLICY.requestTimeoutMs) });
-async function sendOperatorAlert(event) {
-  const { title, message } = sensorOfflineAlertMessage(config?.areaName, event);
+async function sendOperatorAlert({ title, message, notificationId }) {
+  if (isReplaying) return;
   const service = config?.optimization?.operatorNotifyService;
   await Promise.allSettled([
-    callHaService('persistent_notification', 'create', {
-      title, message, notification_id: sensorNoticeId(event.data.entityId),
-    }, haOptions()),
+    callHaService('persistent_notification', 'create', { title, message, notification_id: notificationId }, haOptions()),
     /^notify\.[a-z0-9_]+$/.test(service ?? '')
       ? callHaService('notify', service.slice('notify.'.length), { title, message }, haOptions())
       : Promise.resolve(),
@@ -303,10 +305,11 @@ async function sendOperatorAlert(event) {
 const SOFT_EVENTS = new Set([
   'checkout_confirmation_needed',
   'early_checkin_suspected',
-  'no_show_suspected',
 ]);
-// 감지기가 내는 문제 이벤트(상태 전환 없음). 센서 오프라인(RF-28)은 감지기를 거치지 않고 processNow에서 바로 handleProblemEvent로 간다.
-const PROBLEM_EVENTS = new Set(['late_checkout_detected']);
+// 스케줄 안에서 기대한 일이 확인되지 않음 — 상태는 그대로, 운영자에게 넘긴다(DEC-10·11)
+const PROBLEM_EVENTS = new Set(['late_checkout_detected', 'checkin_not_detected', 'detection_unconfirmable']);
+// 전환 뒤 확인 — 그 순간의 기기 제어만 한다(상태 전환 없음, 서버 기록 없음)
+const CONFIRMATION_EVENTS = new Set(['checkout_confirmed', 'checkin_confirmed']);
 
 async function handleSoftEvent(event) {
   const entry = {
@@ -337,6 +340,35 @@ function handleProblemEvent(event) {
   if (softEventLog.length > 50) softEventLog.shift();
   reportEventToVercel(event.type, false, { ...event.data, reason: event.reason ?? null }, event.timestamp).catch(() => {});
   console.warn(`[ProblemEvent] ${event.type} — ${event.reason}`);
+  const alert = handoffAlertMessage(config?.areaName, event);
+  if (alert) sendOperatorAlert({ ...alert, notificationId: `propos_${event.type}_${event.timestamp}` }).catch(() => {});
+}
+
+async function runStateActions(mainStatus) {
+  if (!config?.devices) return;
+  // Environmental preparation has one owner. Arriving guests never get the legacy fixed cooling command.
+  const skipRoles = ['PRE_STAY_READY', 'OCCUPIED'].includes(mainStatus) ? ['AC_MAIN'] : [];
+  const result = await executeStateActions(mainStatus, config.devices, { skipRoles });
+  if (result.executed.length)
+    console.log(`[Watcher] 기기 제어:`, result.executed.map(e => e.role).join(', '));
+  if (result.skipped.length)
+    console.warn(`[Watcher] 기기 건너뜀:`, result.skipped.map(s => `${s.role}(${s.reason})`).join(', '));
+}
+
+// 전환 뒤에 퇴실·입실이 확인되면 그때 기기 제어를 자동으로 한다(DEC-11). 그사이 상태가 바뀌었으면(청소 시작·퇴실 등) 하지 않는다.
+async function applyConfirmation(event) {
+  if (event.type === 'checkout_confirmed') {
+    if (roomState.mainStatus !== 'CLEANING' || roomState.subStatus !== 'CLEANING_PENDING') return;
+    await runStateActions('CLEANING');
+  } else if (event.type === 'checkin_confirmed') {
+    if (roomState.mainStatus !== 'OCCUPIED') return;
+    await preparation.onLifecycleEvent('check_in_detected', { config, now: Date.now() });
+    await runStateActions('OCCUPIED');
+  }
+  eventLog.push({ ...event, prevState: { ...roomState }, newState: { ...roomState }, ts: Date.now() });
+  if (eventLog.length > 100) eventLog.shift();
+  console.log(`[Watcher] ${event.reason}`);
+  persistState();
 }
 
 // RF-29: 체류 중 퇴실 전환 전에 도착해 대기시킨 예약(null = 예약 없음)을 전환이 끝난 뒤 쓴다.
@@ -347,30 +379,28 @@ function promotePendingReservation() {
   persistConfig(config);
 }
 
-function dismissSensorNotice(entityId) {
-  callHaService('persistent_notification', 'dismiss', { notification_id: sensorNoticeId(entityId) }, haOptions()).catch(() => {});
-}
-
-function checkSensorHealth(now) {
-  const health = evaluateSensorOffline({
-    stateMap: entityStateMap, tracked: sensorHealth, now, mainStatus: roomState.mainStatus, knownEntityIds: areaEntityIds,
-  });
-  if (health.changed) { sensorHealth = health.tracked; persistState(); }
-  for (const event of health.events) {
-    handleProblemEvent(event);
-    if (event.type === 'sensor_offline_resolved') dismissSensorNotice(event.data.entityId); // 복구되면 알림창의 끊김 알림을 지운다
-  }
-  for (const entityId of health.dropped) dismissSensorNotice(entityId); // 구역에서 빠진 센서의 알림도 지운다
-
-  // 보고했지만 아직 알리지 않은 끊김을 알린다. 놓친 기록을 다시 처리하는 중엔 미룬다 — 처리가 끝난 뒤에도 꺼져 있을 때만
-  // 남는다(그사이 돌아오면 추적이 지워진다). 알렸다는 표시를 먼저 저장해 같은 끊김으로 두 번 울리지 않는다.
-  if (isReplaying) return;
-  const due = pendingOperatorAlerts(sensorHealth);
+// DEC-12: 퇴실·입실 하루 전·2시간 전에 감지 센서를 미리 점검한다 — 꺼져 있으면 운영자에게 알린다(Slack + HA 앱).
+// 문제가 아니라 미리 알림이라 상태도 문제 건수도 바꾸지 않는다. 같은 점검은 한 번만(저장한다).
+function runSensorPrechecks(now) {
+  if (isReplaying || Object.keys(entityStateMap).length === 0) return;
+  const times = upcomingTimes([config?.reservation, config?.pendingReservation], now);
+  const { due, done } = duePrechecks({ times, done: sensorPrechecks, now });
+  const changed = JSON.stringify(done) !== JSON.stringify(sensorPrechecks);
+  sensorPrechecks = done;
+  if (changed) persistState();
   if (!due.length) return;
-  sensorHealth = { ...sensorHealth };
-  for (const alert of due) sensorHealth[alert.entityId] = { ...sensorHealth[alert.entityId], alertedAt: now };
-  persistState();
-  for (const alert of due) sendOperatorAlert(alert).catch(() => {});
+  const off = offDetectionSensors(entityStateMap);
+  if (!off.length) return;
+  for (const check of due) {
+    const reason = `${check.phase === 'checkout' ? '퇴실' : '입실'} ${check.offsetLabel} 감지 센서 점검 — 꺼짐: ${off.map(s => s.name).join(', ')}`;
+    const data = { phase: check.phase, at: new Date(check.at).toISOString(), offset: check.key.split('|').pop(),
+      sensors: off.map(s => ({ entityId: s.entityId, roleLabel: s.roleLabel, name: s.name })) };
+    softEventLog.push({ type: 'sensor_precheck_failed', subType: null, reason, recipients: [], ts: now, roomState: { ...roomState } });
+    if (softEventLog.length > 50) softEventLog.shift();
+    reportEventToVercel('sensor_precheck_failed', true, { ...data, reason }, precheckEventTime(check)).catch(() => {});
+    console.warn(`[SensorPrecheck] ${reason}`);
+    sendOperatorAlert({ ...precheckAlertMessage(config?.areaName, check, off), notificationId: `propos_sensor_precheck_${check.key}` }).catch(() => {});
+  }
 }
 
 // ── 상태 전환 적용 ────────────────────────────────────────────────────────────
@@ -397,15 +427,15 @@ async function applyTransition(event) {
 
   await sendHaNotification(event, nextState);
 
-  if (config?.devices && nextState.mainStatus !== 'PRE_STAY_READY' && event.type !== 'optimization_cancelled') {
-    // Environmental preparation has one owner. Neither entering PRE_STAY_READY
-    // nor arriving early may inject the legacy fixed cooling command.
-    const skipRoles = ['PRE_STAY_READY', 'OCCUPIED'].includes(nextState.mainStatus) ? ['AC_MAIN'] : [];
-    const result = await executeStateActions(nextState.mainStatus, config.devices, { skipRoles });
-    if (result.executed.length)
-      console.log(`[Watcher] 기기 제어:`, result.executed.map(e => e.role).join(', '));
-    if (result.skipped.length)
-      console.warn(`[Watcher] 기기 건너뜀:`, result.skipped.map(s => `${s.role}(${s.reason})`).join(', '));
+  // 예정 시각 전환은 퇴실·입실이 확인됐을 때만 그 기기 제어를 한다 — 확인되지 않으면 확인될 때(applyConfirmation)까지
+  // 기다리고, 끝내 확인되지 않으면 문제와 함께 운영자에게 넘긴다(DEC-11)
+  const unconfirmedSchedule = (event.type === 'scheduled_checkout_reached' && !event.data?.exitConfirmed)
+    || (event.type === 'scheduled_checkin_reached' && !event.data?.entryConfirmed);
+  if (event.type === 'scheduled_checkin_reached' && event.data?.entryConfirmed) {
+    await preparation.onLifecycleEvent('check_in_detected', { config, now: Date.now() });
+  }
+  if (nextState.mainStatus !== 'PRE_STAY_READY' && event.type !== 'optimization_cancelled' && !unconfirmedSchedule) {
+    await runStateActions(nextState.mainStatus);
   }
 
   persistState();
@@ -436,23 +466,33 @@ async function processNow(now = Date.now()) {
     }
     const snap        = buildSnapshotFromStates(entityStateMap);
     const reservation = buildReservation();
-    const events      = monitor.process({ snap, roomState, reservation, now });
+    const sensorsOff  = offDetectionSensors(entityStateMap);
+    const events      = monitor.process({ snap, roomState, reservation, now, sensorsOff });
 
     for (const event of events) {
       if (SOFT_EVENTS.has(event.type)) {
         await handleSoftEvent(event);
       } else if (PROBLEM_EVENTS.has(event.type)) {
         handleProblemEvent(event);
+      } else if (CONFIRMATION_EVENTS.has(event.type)) {
+        await applyConfirmation(event);
       } else {
         await applyTransition(event);
       }
     }
+    // 퇴실·입실 확인 대기가 바뀌었을 수 있다 — 재시작해도 이어지게 저장한다. 기다리는 동안엔 2분마다도 저장해
+    // 다시 켜졌을 때 "마지막으로 본 시각"이 실제로 꺼져 있던 시간을 가리키게 한다(10분 넘게 못 봤으면 판정하지 않는다)
+    if (events.length || (monitor.hasOpenWait && now - lastWaitPersistAt >= WAIT_PERSIST_MS)) {
+      persistState();
+      lastWaitPersistAt = now;
+    }
 
-    // RF-28: 감지 필수 센서 30분 오프라인 → 문제 이벤트 + 운영자 알림 / 복구 → 해소 이벤트(알림창 정리). 객실 상태는 그대로.
-    // 여기서 오류가 나도 같은 주기의 입실 준비·이벤트 전송은 계속한다.
-    try { checkSensorHealth(now); } catch (err) { console.error('[Watcher] 감지 센서 점검 오류:', err.message); }
+    // DEC-12: 감지 센서 사전 점검. 여기서 오류가 나도 같은 주기의 입실 준비·이벤트 전송은 계속한다.
+    try { runSensorPrechecks(now); } catch (err) { console.error('[Watcher] 감지 센서 점검 오류:', err.message); }
 
-    if (!isReplaying && !preparationShuttingDown) await preparation.tick({ config, roomState, now });
+    // 체류(스케줄)인데 손님을 기다리는 중일 때만 입실 준비를 시작할 수 있다 — 센서가 꺼져 확인할 수 없는 체류에선
+    // 안에 사람이 있을 수 있어 조명을 끄는 준비 제어를 하지 않는다(DEC-11)
+    if (!isReplaying && !preparationShuttingDown) await preparation.tick({ config, roomState, now, arrivalPending: roomState.mainStatus === 'OCCUPIED' && monitor.awaitingArrival });
     flushPreparationOutbox().catch(() => {});
 
     lastEventAt = now;

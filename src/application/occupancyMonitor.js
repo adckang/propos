@@ -155,15 +155,24 @@ export class OccupancyMonitor {
   _sensorGen = new SensorEventGenerator();
   _suspicion = new SuspicionTracker();
 
+  /** 재시작해도 이어질 퇴실·입실 확인 대기 (워처가 상태 파일에 저장) */
+  snapshot() { return this._suspicion.snapshot(); }
+  restore(raw) { this._suspicion.restore(raw); }
+  /** 지금 체류에서 손님이 들어온 것이 확인됐는가 (입실 시각에 체류로 바뀐 뒤 아직 안 왔으면 false) */
+  get stayEntryConfirmed() { return this._suspicion.stayEntryConfirmed; }
+  get hasOpenWait() { return this._suspicion.hasOpenWait; }
+  get awaitingArrival() { return this._suspicion.awaitingArrival; }
+
   /**
    * @param {object} p
    * @param {object} p.snap           - 센서 스냅샷
    * @param {{ mainStatus, subStatus }} p.roomState
    * @param {object|null} p.reservation - { checkIn?: Date, checkOut?: Date }
    * @param {number} p.now            - Date.now()
+   * @param {object[]} [p.sensorsOff] - 지금 꺼져 있는 감지 센서(문·움직임) — 그 순간의 퇴실·입실 확인에 쓴다
    * @returns {{ type, subType?, severity?, reason, timestamp }[]}
    */
-  process({ snap, roomState, reservation, now }) {
+  process({ snap, roomState, reservation, now, sensorsOff = [] }) {
     // 모션·도어는 상태와 무관하게 항상 추적 (에너지낭비·문열림 감지용)
     this._trackMotion(snap.motionDetected, now);
     this._trackDoor(snap.doorOpen, now);
@@ -184,12 +193,13 @@ export class OccupancyMonitor {
       noiseLevel: snap.noiseLevel ?? null,
       now,
       cfg: SUSPICION_CFG,
+      sensorsOff,
     });
 
     // All preparation outcomes permit check-in. Sensor optimization has its own
     // controller and keeps running when guests arrive before it finishes.
     if (main === 'PRE_STAY_READY' || main === 'VACANT') {
-      return occupancyEvents; // check_in_detected or []
+      return occupancyEvents; // scheduled_checkin_reached, early_checkin_suspected or []
     }
 
     // CLEANING: 청소 시작/완료 감지만
@@ -203,6 +213,14 @@ export class OccupancyMonitor {
       const iTemp = indoorTemp(snap);
       const iHum  = indoorHum(snap);
 
+      // 입실 시각에 체류로 바뀌어도 손님이 들어온 것이 확인되기 전엔 빈방이다 — 입실 준비로 켜 둔 에어컨이
+      // "체류 중 에너지 낭비"로 잡히지 않게, 그동안은 안전 점검(연기·문 열림)만 한다
+      if (!this._suspicion.stayEntryConfirmed) {
+        this.energyWasteStart = null; this.energyNormalStart = null;
+        this.envIssueStart = null; this.envNormalStart = null;
+        this.noiseWindow = []; this.noiseSilentStart = null;
+        return [...occupancyEvents, ...this._smoke(snap, sub, now), ...this._doorOpen(sub, now)];
+      }
       return [
         ...occupancyEvents,   // scheduled_checkout_reached (먼저 배치 — 우선 상태 전환)
         ...this._smoke(snap, sub, now),

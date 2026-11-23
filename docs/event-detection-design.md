@@ -34,9 +34,10 @@ Raw Sensor (30초 폴링)
         ▼
 [Layer 2: SuspicionTracker]
   EXIT/ENTRY + 예약시각 + 현재상태 → 의심 기록 → 확신 이벤트 생성
-        │  scheduled_checkout_reached / late_checkout_detected / check_in_detected /
-        │  cleaning_started / cleaning_finished /
-        │  checkout_confirmation_needed(early_checkout) / early_checkin_suspected / no_show_suspected
+        │  전환: scheduled_checkout_reached / scheduled_checkin_reached / cleaning_started / cleaning_finished
+        │  확인(기기 제어만): checkout_confirmed / checkin_confirmed
+        │  문제: late_checkout_detected / checkin_not_detected / detection_unconfirmable
+        │  soft: checkout_confirmation_needed(early_checkout) / early_checkin_suspected
         ▼
 [Layer 3: OccupancyMonitor.process()]
   기존 이벤트(smoke/noise/energy/environment) + 새 이벤트 통합 반환
@@ -86,7 +87,7 @@ ENTRY 후보 취소: ③ 완료 전 모션이 EXIT_NO_MOTION_MIN 이상 없음 �
 
 ### 4-A. scheduled_checkout_reached · late_checkout_detected (RF-29, DEC-08)
 
-> DEC-11(2026-11-22): 퇴실이 확인되지 않은 전환에서는 청소 모드 기기 제어를 자동으로 하지 않고 운영자에게 넘긴다. 센서가 꺼져 판단할 수 없으면 `퇴실 지연`이 아니라 `확인 불가` — 구현 중.
+> DEC-11(2026-11-22): 퇴실이 확인되지 않은 전환에서는 청소 모드 기기 제어를 자동으로 하지 않고 운영자에게 넘긴다. 센서가 꺼져 판단할 수 없으면 `퇴실 지연`이 아니라 `확인 불가`.
 
 객실 상태는 예약 체크아웃 시각을 기준으로 바꾼다. 실제 퇴실(EXIT) 확인은 전환을 늦추지 않고, 확인되지 않으면 문제로만 남긴다.
 
@@ -102,31 +103,56 @@ OCCUPIED 상태에서:
   확인되지 않았으면 CHECKOUT_GRACE_MIN 동안 EXIT를 더 기다린다 (상태와 무관)
     — EXIT는 문 닫힘 + EXIT_NO_MOTION_MIN 뒤에 확정되므로 정시에 나간 손님도 전환 순간엔 미확인일 수 있다
 
-[유예 안에 EXIT 확인]     → 문제 없음
-[checkOut + GRACE 경과, 미확인] → late_checkout_detected 1건 (발생 시각 = 예약 checkOut, 상태 변경 없음)
-[유예가 지난 뒤 처음 판정]  → 전환만, 지연 판정 안 함 (워처가 꺼져 있던 구간은 보지 못했다)
+[전환 때 이미 퇴실 확인]  → data.exitConfirmed = true — 전환과 함께 청소 모드 기기 제어
+[유예 안에 EXIT 확인]     → checkout_confirmed — 그때 청소 모드 기기 제어 (청소 대기일 때만)
+[checkOut + GRACE 경과, 미확인] → late_checkout_detected 1건 (발생 시각 = 예약 checkOut, 상태 변경 없음) + 운영자에게
+                              ("청소 모드를 켜지 않았어요. 확인 후 직접 켜 주세요", Slack + HA 앱). 기기 제어 없음
+[전환 때·유예 끝에 감지 센서 꺼짐] → detection_unconfirmable(phase checkout, cause sensor_off) — 지연으로 단정하지 않음.
+                              센서가 꺼져 있으면 "움직임 없음"도 퇴실 확인이 아니다
+[유예가 지난 뒤 처음 판정]  → 전환 + detection_unconfirmable(cause not_observed) — 워처가 꺼져 있던 구간은 보지 못했다
+[유예 끝, 입실이 끝내 확인되지 않은 체류] → detection_unconfirmable(cause not_entered) — 노쇼일 수 있어 퇴실 지연이 아니다
 ```
 
 - "같은 퇴실" = 예약 uid + checkOut 시각. 연장으로 checkOut이 바뀌면 새 시각에 다시 전환한다.
-- 판정 상태(유예 대기)는 메모리에만 있다 — 유예 20분 안에 워처가 재시작하면 그 예약의 지연 판정은 빠진다.
+- 판정 상태(유예·입실 기다림, 처리한 예약, 조기 입실, 마지막 판정 시각)는 워처 상태 파일(`monitor`)에 저장한다 — 재시작해도 이어진다. 깨진 값은 버린다.
+- 워처 시작은 HA 기록을 다시 읽지 않는다. 그래서 되살린 기다림이 있는데 마지막 판정에서 10분 넘게 지났으면(또는 그 시각이 저장돼 있지 않으면) 그동안의 퇴실·입실을 놓쳤을 수 있다 — 그 기다림은 끝까지 판정하지 않고 `not_observed` 확인 불가로 넘긴다(그사이 확인되면 그대로 확인).
+- "같은 체류" = 예약 uid + checkIn 시각. 퇴실 처리한 체류는 늦게 연장돼도 다시 입실로 만들지 않는다(uid가 없는 예약도).
 - 체류 중인데 보유 예약의 checkIn이 아직 미래면(전환 전에 예약이 바뀐 경우) 자동으로 바로잡지 않는다 — 체류 중 재시작은 상태·기기를 건드리지 않는다(s103). 운영자가 상태를 바꾸면 대기 중인 예약도 그때 쓴다.
 
 - 예전의 Case A(`checkout_confirmation_needed` / `late_checkout`, 게스트 확인 요청)는 퇴실 지연 문제로 대체했다.
 - Pi가 퇴실 전환 전에 다음 예약이나 "예약 없음"을 받으면 지난 예약을 전환이 끝날 때까지 보존한다(`planMonitoringReservationUpdate`).
 - 옛 `check_out_detected` 기록은 같은 전환·건수로 계속 읽는다.
 
-### 4-B. check_in_detected
+### 4-B. scheduled_checkin_reached · checkin_not_detected (DEC-10·11·16)
+
+객실 상태는 예약 체크인 시각을 기준으로 바꾼다(퇴실과 같은 원칙). 실제 입실(ENTRY)은 "손님이 들어왔는가"만 본다.
 
 ```
-PRE_STAY_READY/OPTIMIZED 상태에서:
+공실(정비 중 제외)·입실 준비·청소 중 상태에서 (체크아웃이 아직 안 지난 예약):
 
-[ENTRY 감지 시]
-  Case 1: checkIn 시각 이후 (또는 시각 정보 없음) → 즉시 check_in_detected
-  Case 2: checkIn 시각 이전                        → early_checkin_suspected (soft event)
+[checkIn 전 ENTRY (입실 준비 중, 또는 2시간 안의 공실)] → early_checkin_suspected (soft). 입실 시각에 확인된 입실로 본다
+                                  (그 체류의 것만 — 다른 예약 때 본 조기 입실은 쓰지 않는다. 그보다 이른 공실 입장은 운영자·청소일 수 있어 세지 않는다)
 
-[checkIn 시각 + NO_SHOW_WINDOW_MIN 경과 + ENTRY 없음]
-  → no_show_suspected (soft event)
+[checkIn 시각 도래 — 예약당 1회]
+  → scheduled_checkin_reached (발생 시각 = 예약 checkIn) → OCCUPIED / GOOD_CONDITION
+  확인된 입실(조기 ENTRY 또는 그 판정의 ENTRY) → data.entryConfirmed = true — 전환과 함께 체류 기기 제어
+  확인되지 않았으면 그날(한국 날짜) 자정까지 ENTRY를 기다린다 (입실 시각 + NO_SHOW_WINDOW가 더 늦으면 그때까지)
+
+[기다리는 중 ENTRY]           → checkin_confirmed — 그때 체류 기기 제어(조명·TV, 에어컨은 입실 준비가 맡음) + 입실 준비에 도착 기록
+[자정까지 미확인]             → checkin_not_detected 1건 (발생 시각 = 예약 checkIn, data.deadline = 기다린 시각) + 운영자에게("기기 상태를 직접 확인해 주세요")
+[입실 시각·자정에 감지 센서 꺼짐] → detection_unconfirmable(phase checkin, cause sensor_off) — 미감지로 단정하지 않음
+[자정이 지난 뒤 처음 판정]     → 전환 + detection_unconfirmable(cause not_observed)
+[기다리는 중 예약 취소·변경]    → 판정하지 않음
 ```
+
+- 입실이 확인되기 전엔 빈방이다 — 체류 중 점검(에너지 낭비·환경·소음)을 하지 않는다(입실 준비로 켠 에어컨이 "체류 중 에너지 낭비"로 잡히지 않게). 연기·장시간 문 열림은 한다.
+- 자정이 지나 늦게 들어오거나 확인 불가 뒤에 들어온 것이 보이면 그때 입실로 확인한다(`checkin_confirmed` — 체류 기기 제어, 체류 중 점검 다시 시작). 이미 남긴 문제 기록은 그대로다.
+- 청소 중(또는 청소 대기인데 누가 들어와 있음)에 입실 시각이 되면 안에 있는 사람은 청소 담당자일 수 있다 — 그 순간의 입장은 세지 않고, 누가 나가는 것(EXIT)을 본 뒤 들어온 것만 손님으로 본다. 아무도 없는 청소 대기면 들어온 사람을 바로 손님으로 본다.
+- 입실 준비(냉방)는 체류로 바뀌어도 계속한다. 손님을 **기다리는 중**(입실 시각에 센서가 정상이었고 아직 안 옴)이면 체류 상태에서도 준비를 시작할 수 있다(상태는 바꾸지 않는다). 센서가 꺼져 확인할 수 없는 체류에선 안에 사람이 있을 수 있어 준비 제어(조명 끄기 포함)를 시작하지 않는다(DEC-11).
+- 기다리는 중에 운영자가 상태를 바꾸면(정비·청소 시작 등) 그 판단을 따른다 — 기다림을 끝내고 자정·유예 끝에 문제를 내지 않는다.
+- 기다리는 동안엔 일이 없어도 2분마다 판정 상태를 저장한다 — 재시작 뒤 "마지막으로 본 시각"이 실제 꺼져 있던 시간을 가리키게.
+- 이미 퇴실 처리한 예약이 늦게 연장돼도 새 입실이 아니다(같은 예약을 두 번 입실로 세지 않는다).
+- 예약에 체크인 시각이 없으면 전환하지 않는다(스케줄이 없다). 옛 `check_in_detected` 기록·화면 경로는 같은 전환·건수로 계속 읽는다. 옛 `no_show_suspected`(soft)는 `checkin_not_detected`로 바뀌었다.
 
 ### 4-C. cleaning_started
 
@@ -158,25 +184,29 @@ CLEANING/CLEANING_IN_PROGRESS 상태에서:
   → 의심 취소 (재입실)
 ```
 
-### 4-E. sensor_offline_detected · sensor_offline_resolved (RF-28, DEC-08)
+### 4-E. 감지 센서 사전 점검 · sensor_precheck_failed (DEC-12)
 
-> ⚠️ **DEC-12(2026-11-22)로 바뀐다 — 구현 중.** 아래 "30분 꺼지면 한 번 알림"은 시간 기준 알림이라 원칙에 맞지 않는다. 바뀐 규칙: 감지 센서를 퇴실·입실 **하루 전·2시간 전**에 미리 점검해 꺼져 있으면 운영자에게 알리고, 그 시각에도 꺼져 있으면 `확인 불가` 문제로 남겨 판정을 운영자에게 넘긴다. Pi에는 아직 반영되지 않았다.
-
-입실·퇴실 감지(Layer 1)가 읽는 센서가 꺼지면 감지가 멈춘다. 그 센서 — 숙소 구역의 `binary_sensor` 중 문(`door`)·움직임(`motion`) — 를 감지 필수 센서로 본다. 판정은 감지기(Layer 2)가 아니라 워처의 매 주기에서 한다(`src/domain/sensorHealthDomain.js`). 객실 상태는 바꾸지 않는다.
+입실·퇴실 확인(Layer 1)이 읽는 센서 — 숙소 구역의 `binary_sensor` 중 문(`door`)·움직임(`motion`) — 가 꺼지면 확인이 멈춘다. 꺼진 것을 시간 간격으로 반복해 알리지 않고, 그 센서가 **필요해지기 전에** 미리 점검한다(`src/domain/sensorHealthDomain.js`, 워처의 매 주기). 객실 상태·문제 건수는 바꾸지 않는다.
 
 ```
-[HA 상태 unavailable]   → 꺼짐 추적 시작 (꺼진 시각 = 그 상태의 last_changed). 그 뒤 unknown을 거쳐도 같은 끊김
-[꺼짐 30분 이상]        → sensor_offline_detected 1건 (발생 시각 = 꺼진 시각 + 30분) + 운영자 알림
-[30분 안에 복구]        → 아무것도 남기지 않음 (정기 재시작·업데이트)
-[알린 뒤 값이 다시 들어옴] → sensor_offline_resolved 1건 (발생 시각 = 복구 시각), HA 알림창의 끊김 알림을 지움
+[퇴실·입실 하루 전, 2시간 전 — 각각 한 번]  지금 예약과 체류 중 미뤄 둔 다음 예약의 앞으로의 퇴실·입실 시각 기준
+  감지 센서 중 unavailable이 있거나 문·움직임 센서가 아예 없음
+    → sensor_precheck_failed (soft) + 운영자 알림 "○○ 2시간 전 점검 — 꺼져 있는 센서: … 그 전에 확인해 주세요"
+  워처가 꺼져 있어 두 점검 시각이 모두 지났으면 늦은 쪽(2시간 전)만 한다
+[퇴실·입실 그 시각에도 꺼져 있음] → detection_unconfirmable (4-A·4-B)
 ```
 
-- `unknown`만으로는 꺼짐이 아니다 — 값이 바뀔 때만 보고하는 센서는 HA 재시작 뒤 한동안 `unknown`이지만 고장이 아니다.
-- 운영자 알림: HA 알림창(`persistent_notification`) + 숙소 설정 `optimization.operatorNotifyService`(`notify.*`, 입실 준비 안전 알림과 같은 값)가 있으면 그 휴대폰 + Slack 링크. Slack은 Vercel의 Pi 입구(`/api/events/write`)가 이 종류(`OPERATOR_ALERT_EVENT_TYPES`)를 **처음 저장할 때만** 한 번 보낸다(재전송은 DB 중복이라 다시 안 감, 5초 제한, 실패는 로그만 — 재시도 없음). Pi에는 Slack 주소가 없다. Pi 입구의 다른 이벤트는 여전히 저장만 한다(RF-06) — 퇴실 지연(RF-29)도 Slack은 가지 않는다.
-- 보고(`reportedAt`)와 알림(`alertedAt`)을 따로 저장한다. 놓친 기록을 다시 처리하는 동안(HA 재연결) 생긴 끊김은 알림을 미뤘다가, 처리가 끝난 뒤에도 꺼져 있을 때만 보낸다 — 이미 끝난 끊김으로 휴대폰을 울리지 않는다. 그사이 워처가 재시작해도 "보고했지만 아직 안 알림"이 남아 다음 정상 주기에 보낸다. 기록(이벤트)은 그대로 남는다.
-- 추적 상태는 워처 상태 파일(`sensorHealth`)에 저장 — 재시작해도 같은 끊김을 다시 알리지 않는다. 깨진 항목은 버린다. 발생 시각에 센서마다 고정된 0~999ms를 더해 같은 순간 넘거나 돌아온 두 센서가 DB 중복 방지(숙소·종류·발생 시각)에 걸리지 않게 하고, 그래도 겹치면 같은 판정 안에서 1ms 민다.
-- 구역 상태를 잠깐 못 읽어 센서가 안 보이면 추적을 유지하고, 구역 기기 목록에서 빠지면(교체·이동) 추적을 지우고 HA 알림창 알림도 지운다(복구를 본 게 아니므로 해소 이벤트 없음 — 달력의 그 문제는 해소되지 않은 채 남는다). 구역 목록이 비어 오면 지우지 않는다(HA가 잠깐 빈 목록을 줄 때 같은 끊김을 다시 알리지 않게).
-- 문제·이상 건수에 1건(복구는 세지 않음). 달력 문제 목록 "감지 센서 연결 끊김" — 구분은 **판정할 때의** 객실 상태(`data.mainStatus`, 배포 직후처럼 늦게 판정하면 꺼진 순간과 다를 수 있다), 해소는 같은 센서(`data.entityId`)의 복구만 짝짓는다.
+- `unknown`만으로는 꺼짐이 아니다 — 값이 바뀔 때만 보고하는 센서는 HA 재시작 뒤 한동안 `unknown`이지만 고장이 아니다. 구역 상태를 아직 못 읽었으면 판단하지 않는다.
+- 한 점검은 워처 상태 파일(`sensorPrechecks`)에 저장 — 재시작해도 다시 하지 않는다(3일 뒤 기록을 버린다). 놓친 기록을 다시 처리하는 중(HA 재연결)엔 점검하지 않는다.
+- 기록의 발생 시각 = 그 점검을 해야 했던 시각 + 점검마다 고정된 0~999ms — 같은 주기에 두 점검이 나와도 DB 중복 방지(숙소·종류·발생 시각)에 걸리지 않는다.
+- 옛 `sensor_offline_detected`·`sensor_offline_resolved`(RF-28, 30분 꺼짐)는 더 내지 않는다. 옛 기록은 달력 "감지 센서 연결 끊김"·이상 건수로 계속 읽는다.
+
+### 4-F. 운영자에게 넘기기 (DEC-11·16)
+
+Pi가 운영자에게 넘기는 것 — `sensor_precheck_failed`·`late_checkout_detected`·`checkin_not_detected`·`detection_unconfirmable` — 은 **Slack + HA 앱** 둘 다 간다.
+- HA 앱: 알림창(`persistent_notification`) + 숙소 설정 `optimization.operatorNotifyService`(`notify.*`, 입실 준비 안전 알림과 같은 값)가 있으면 그 휴대폰. 무엇이 안 됐고 무엇을 해 달라는지 한국 시각과 함께(`handoffAlertMessage`·`precheckAlertMessage`). 놓친 기록을 다시 처리하는 중엔 보내지 않는다.
+- Slack: Pi에는 Slack 주소가 없다. Vercel의 Pi 입구(`/api/events/write`)가 이 종류(`OPERATOR_ALERT_EVENT_TYPES`)를 **처음 저장할 때만** 한 번 보낸다(재전송은 DB 중복이라 다시 안 감, 5초 제한, 실패는 로그만 — 재시도 없음). 한 줄은 `[숙소] 무엇이 안 됐고 무엇을 해 달라는지 → 링크` — 기록 내용은 넣지 않는다(`OPERATOR_ALERT_LABELS`). 그 밖의 Pi 이벤트는 저장만 한다(RF-06).
+- 운영자가 할 수 있는 것: HA 앱·Smart Life로 기기 직접 제어, 화면의 청소 시작·완료·정비 전환.
 
 ---
 
@@ -185,8 +215,9 @@ CLEANING/CLEANING_IN_PROGRESS 상태에서:
 ### 상태 기계 이벤트 (getNextRoomState 호출)
 | 이벤트 | 발생 조건 |
 |---|---|
-| `check_in_detected` | ENTRY + checkIn 시각 이후 |
-| `scheduled_checkout_reached` | 예약 checkOut 시각 도래 (예약당 1회) |
+| `scheduled_checkin_reached` | 예약 checkIn 시각 도래 (예약당 1회). `data.entryConfirmed` |
+| `scheduled_checkout_reached` | 예약 checkOut 시각 도래 (예약당 1회). `data.exitConfirmed` |
+| `check_in_detected` | 옛 경로(화면·옛 기록) — Pi는 내지 않는다 |
 | `cleaning_started` | ENTRY + 모션 20분 지속 |
 | `cleaning_finished` | EXIT + 10분 조용 |
 | `energy_waste_detected/resolved` | 기존 로직 유지 |
@@ -195,16 +226,24 @@ CLEANING/CLEANING_IN_PROGRESS 상태에서:
 ### 문제 이벤트 (상태 변경 없음, 문제·이상 건수에 포함)
 | 이벤트 | 발생 조건 |
 |---|---|
-| `late_checkout_detected` | checkOut + CHECKOUT_GRACE_MIN까지 실제 퇴실 미확인 (예약당 1건) |
-| `sensor_offline_detected` | 감지 필수 센서(문·움직임) unavailable로 30분 넘게(그 뒤 unknown도 이어진 끊김) — 끊김 1회에 1건 + 운영자 알림 |
-| `sensor_offline_resolved` | 알린 센서 복구 (건수에 넣지 않음) |
+| `late_checkout_detected` | checkOut + CHECKOUT_GRACE_MIN까지 실제 퇴실 미확인 (예약당 1건) + 운영자에게 |
+| `checkin_not_detected` | 입실 날 자정까지 입실 미확인 (예약당 1건) + 운영자에게 |
+| `detection_unconfirmable` | 퇴실·입실 그 시각에 감지 센서가 꺼져 있거나 감시가 멈춰 있어 확인할 수 없음 + 운영자에게 |
+| `sensor_offline_detected/resolved` | 옛 기록(RF-28) — 더 내지 않는다 |
+
+### 확인 이벤트 (상태 변경 없음, 서버에 보내지 않음 — 그 순간의 기기 제어만)
+| 이벤트 | 의미 |
+|---|---|
+| `checkout_confirmed` | 퇴실 시각 뒤 유예 안에 퇴실 확인 → 청소 모드 기기 제어 |
+| `checkin_confirmed` | 입실 시각 뒤 입실 확인 → 체류 기기 제어 + 입실 준비에 도착 기록 |
 
 ### Soft 이벤트 (ConfirmationManager로 라우팅, 상태 변경 없음)
 | 이벤트 | 의미 |
 |---|---|
 | `checkout_confirmation_needed` | 조기 퇴실 징후(early_checkout) — 청소 조기 배정 가능 |
 | `early_checkin_suspected` | 조기 체크인 가능성, 운영자 확인 |
-| `no_show_suspected` | No-show 가능성, 운영자 확인 |
+| `sensor_precheck_failed` | 퇴실·입실 하루 전·2시간 전 감지 센서 점검에서 꺼진 센서 — 운영자에게 미리 알림 (건수에 넣지 않음) |
+| `no_show_suspected` | 옛 기록 — `checkin_not_detected`로 바뀜 |
 
 ---
 
@@ -225,7 +264,7 @@ CHECKOUT_GRACE_MIN:     20  // 예정 체크아웃 뒤 실제 퇴실을 기다�
 SUSPICION_EXPIRE_MIN:  120  // (RF-29 이후 퇴실 판정에 쓰지 않음 — 전환 때 의심을 지운다)
 
 // 체크인
-NO_SHOW_WINDOW_MIN:     60  // no_show_suspected 발동 기준
+NO_SHOW_WINDOW_MIN:     60  // 입실 미감지 판정 = max(입실 + 60분, 그날 한국 날짜 자정)
 ```
 
 ---

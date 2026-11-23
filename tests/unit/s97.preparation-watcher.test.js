@@ -67,7 +67,10 @@ test('actual watcher wiring: fresh sensor samples finish preparation after arriv
     const state = getMonitoringState();
     assert.equal(state.preparation.run.status, 'COMPLETED');
     assert.equal(state.roomState.mainStatus, 'OCCUPIED');
-    assert.ok(state.eventLog.some(e => e.type === 'check_in_detected'));
+    // DEC-10: 입실 시각에 체류로 바뀌고, 문+모션으로 입실이 확인된다 (전환 때 이미 확인됐거나 그 뒤 확인)
+    const checkin = state.eventLog.find(e => e.type === 'scheduled_checkin_reached');
+    assert.ok(checkin);
+    assert.ok(checkin.data.entryConfirmed || state.eventLog.some(e => e.type === 'checkin_confirmed'), '입실 확인');
     assert.equal(state.eventLog.filter(e => e.type === 'optimization_finished' && e.data.optimizationRunId === state.preparation.run.id).length, 1);
     assert.equal(calls.filter(c => c.url.endsWith('/climate/set_temperature')).length, 1);
     assert.ok(!calls.some(c => c.url.endsWith('/homeassistant/turn_on')));

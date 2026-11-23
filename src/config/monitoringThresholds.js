@@ -46,7 +46,7 @@ export const THRESHOLDS = {
 
   // ── 의심 → 확신 (SuspicionTracker) ─────────────────────────────────────
   SUSPICION_EXPIRE_MIN:       120, // 사용 안 함(RF-29) — 퇴실 의심은 예정 체크아웃 전환 때 지운다
-  NO_SHOW_WINDOW_MIN:          60, // 체크인 시각 + N분 경과 → no_show 판정
+  NO_SHOW_WINDOW_MIN:          60, // 입실 미감지 판정 = max(체크인 시각 + N분, 그날 한국 날짜 자정) (DEC-16)
   EARLY_CHECKOUT_QUIET_MIN:    20, // Case B: EXIT 후 N분 조용 → 조기 퇴실 확인 메시지
   NOISE_QUIET_DB:              40, // 이 미만이면 조용한 것으로 판단 (소음 부재 지표)
 

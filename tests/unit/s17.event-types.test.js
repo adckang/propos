@@ -59,8 +59,9 @@ describe("EVENT_TYPES — 값 정확성", () => {
 });
 
 describe("SOFT_EVENT_TYPES — Set 구성", () => {
-  test("soft 이벤트 3개를 포함한다", () => {
-    assert.equal(SOFT_EVENT_TYPES.size, 3);
+  test("soft 이벤트 4개를 포함한다", () => {
+    assert.equal(SOFT_EVENT_TYPES.size, 4);
+    assert.ok(SOFT_EVENT_TYPES.has("sensor_precheck_failed"), "센서 사전 점검은 문제가 아니라 미리 알림 (DEC-12)");
     assert.ok(SOFT_EVENT_TYPES.has("checkout_confirmation_needed"));
     assert.ok(SOFT_EVENT_TYPES.has("early_checkin_suspected"));
     assert.ok(SOFT_EVENT_TYPES.has("no_show_suspected"));

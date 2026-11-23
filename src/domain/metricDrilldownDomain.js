@@ -70,7 +70,7 @@ export function detectEventTypeFailures(events, eventType) {
     }));
 }
 
-export const PRE_STAY_EVENT_TYPES = ['checkin_prep_time_reached', 'check_in_detected', 'optimization_finished', 'optimization_failed', 'optimization_cancelled', 'optimization_skipped'];
+export const PRE_STAY_EVENT_TYPES = ['checkin_prep_time_reached', 'check_in_detected', 'scheduled_checkin_reached', 'optimization_finished', 'optimization_failed', 'optimization_cancelled', 'optimization_skipped'];
 
 export function isSensorPreparationEvent(event) {
   return event.data?.preparationPolicy === 'sensor-v1' && typeof event.data.optimizationRunId === 'string' && event.data.optimizationRunId.length > 0;
@@ -116,7 +116,8 @@ export function getPreStayPreparationRounds(events, context = [], before = null)
         active = isSensorPreparationEvent(event) ? null : { event, completedAt: null, closedAt: null };
         if (!active) continue;
         if (tracked) rounds.push(active);
-      } else if (event.type === 'check_in_detected') {
+      } else if (event.type === 'check_in_detected' || event.type === 'scheduled_checkin_reached') {
+        // 입실 시각(스케줄) 또는 옛 기록의 입실 감지 — 그 뒤의 완료는 '입실 전' 완료가 아니다
         if (active) active.closedAt = event.device_time;
         active = null;
       } else if (event.type === 'optimization_finished' && !isSensorPreparationEvent(event) && active && active.completedAt == null) {

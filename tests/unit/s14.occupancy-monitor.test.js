@@ -455,17 +455,18 @@ describe('소음 민원 감지', () => {
 // 새 로직: 도어이벤트(열림→닫힘) + 모션 3분 지속 = ENTRY → check_in_detected
 // ============================================================
 describe('체크인 감지', () => {
-  test('ENTRY 시퀀스 (도어이벤트+모션 3분) → check_in_detected', () => {
+  test('ENTRY 시퀀스 (도어이벤트+모션 3분)가 입실 시각 전이면 조기 입실, 입실 시각에 확인된 입실로 전환 (DEC-10)', () => {
     const m = new OccupancyMonitor();
-    // t=0: 문 열림
-    call(m, snap({ motionDetected: false, doorOpen: true  }), PRE_STAY_OPTIMIZED, null, 0);
-    // t=1min: 문 닫힘 → entryPendingAt=1min
-    call(m, snap({ motionDetected: false, doorOpen: false }), PRE_STAY_OPTIMIZED, null, 1 * MIN);
-    // t=1min+1: 모션 감지 → firstMotionAfterClose
-    call(m, snap({ motionDetected: true,  doorOpen: false }), PRE_STAY_OPTIMIZED, null, 1 * MIN + 1);
-    // t=4min+2: 모션 3분 지속 → ENTRY 확정 → check_in_detected
-    const events = call(m, snap({ motionDetected: true, doorOpen: false }), PRE_STAY_OPTIMIZED, null, 4 * MIN + 2);
-    assert.ok(events.some(e => e.type === 'check_in_detected'), 'check_in_detected 있어야 함');
+    const res = { uid: 'r1', checkIn: new Date(10 * MIN), checkOut: new Date(24 * 60 * MIN) };
+    // t=0: 문 열림 → t=1min: 문 닫힘 → t=1min+1: 모션 → t=4min+2: 모션 3분 지속 → ENTRY 확정
+    call(m, snap({ motionDetected: false, doorOpen: true  }), PRE_STAY_OPTIMIZED, res, 0);
+    call(m, snap({ motionDetected: false, doorOpen: false }), PRE_STAY_OPTIMIZED, res, 1 * MIN);
+    call(m, snap({ motionDetected: true,  doorOpen: false }), PRE_STAY_OPTIMIZED, res, 1 * MIN + 1);
+    const early = call(m, snap({ motionDetected: true, doorOpen: false }), PRE_STAY_OPTIMIZED, res, 4 * MIN + 2);
+    assert.deepEqual(early.map(e => e.type), ['early_checkin_suspected']);
+    const [transition] = call(m, snap({ motionDetected: true, doorOpen: false }), PRE_STAY_OPTIMIZED, res, 10 * MIN);
+    assert.equal(transition.type, 'scheduled_checkin_reached');
+    assert.equal(transition.data.entryConfirmed, true);
   });
 
   test('도어 이벤트 없이 모션만 → check_in_detected 없음 (새 로직)', () => {
@@ -488,13 +489,15 @@ describe('체크인 감지', () => {
     assert.deepEqual(events, []);
   });
 
-  test('최적화 진행 중에도 ENTRY가 확정되면 입실을 기록한다 (환경 준비는 계속)', () => {
+  test('최적화 진행 중에 입실 시각이 되면 체류로 바꾸고(환경 준비는 계속), 그 뒤 ENTRY가 확정되면 입실을 확인한다', () => {
     const m = new OccupancyMonitor();
-    call(m, snap({ motionDetected: false, doorOpen: true  }), PRE_STAY_OPTIMIZING, null, 0);
-    call(m, snap({ motionDetected: false, doorOpen: false }), PRE_STAY_OPTIMIZING, null, 1 * MIN);
-    call(m, snap({ motionDetected: true,  doorOpen: false }), PRE_STAY_OPTIMIZING, null, 1 * MIN + 1);
-    const events = call(m, snap({ motionDetected: true,  doorOpen: false }), PRE_STAY_OPTIMIZING, null, 4 * MIN + 2);
-    assert.deepEqual(events.map(e => e.type), ['check_in_detected']);
+    const res = { uid: 'r1', checkIn: new Date(0), checkOut: new Date(24 * 60 * MIN) };
+    const [transition] = call(m, snap({ motionDetected: false, doorOpen: true }), PRE_STAY_OPTIMIZING, res, 0);
+    assert.deepEqual([transition.type, transition.data.entryConfirmed], ['scheduled_checkin_reached', false]);
+    call(m, snap({ motionDetected: false, doorOpen: false }), GOOD, res, 1 * MIN);
+    call(m, snap({ motionDetected: true,  doorOpen: false }), GOOD, res, 1 * MIN + 1);
+    const events = call(m, snap({ motionDetected: true,  doorOpen: false }), GOOD, res, 4 * MIN + 2);
+    assert.deepEqual(events.map(e => e.type), ['checkin_confirmed']);
   });
 });
 

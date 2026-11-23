@@ -59,10 +59,12 @@ describe('RF-29 체크아웃 시각 기준 전환과 퇴실 지연', () => {
     assert.deepEqual(evaluate(tracker, { now: 31 * MIN }), [], '상태가 체류로 남아 있어도 같은 예약은 다시 전환하지 않는다');
   });
 
-  test('정시에 나가 EXIT 확정이 예정 시각 뒤에 와도(유예 안) 퇴실 지연이 아니다', () => {
+  test('정시에 나가 EXIT 확정이 예정 시각 뒤에 와도(유예 안) 퇴실 지연이 아니고, 그때 청소 모드를 켠다 (DEC-11)', () => {
     const tracker = new SuspicionTracker();
-    assert.deepEqual(types(evaluate(tracker, { now: 1 })), ['scheduled_checkout_reached']);
-    assert.deepEqual(evaluate(tracker, { roomState: CLEANING, sensorResult: exitAt(-MIN), now: 4 * MIN }), []);
+    const [transition] = evaluate(tracker, { now: 1 });
+    assert.equal(transition.type, 'scheduled_checkout_reached');
+    assert.equal(transition.data.exitConfirmed, false, '전환 순간엔 미확인 — 청소 모드는 아직');
+    assert.deepEqual(types(evaluate(tracker, { roomState: CLEANING, sensorResult: exitAt(-MIN), now: 4 * MIN })), ['checkout_confirmed']);
     assert.deepEqual(evaluate(tracker, { roomState: CLEANING, now: 25 * MIN }), []);
   });
 
@@ -94,11 +96,12 @@ describe('RF-29 체크아웃 시각 기준 전환과 퇴실 지연', () => {
     assert.deepEqual(evaluate(tracker, { roomState: CLEANING, now: 25 * MIN }), []);
   });
 
-  test('유예 시간이 지난 뒤 처음 판정하면(워처가 꺼져 있었음) 전환만 하고 퇴실 지연은 판정하지 않는다', () => {
+  test('유예 시간이 지난 뒤 처음 판정하면(워처가 꺼져 있었음) 퇴실 지연으로 단정하지 않고 확인 불가로 운영자에게 넘긴다 (DEC-11)', () => {
     const tracker = new SuspicionTracker();
     const events = evaluate(tracker, { now: 3 * 60 * MIN });
-    assert.deepEqual(types(events), ['scheduled_checkout_reached']);
+    assert.deepEqual(types(events), ['scheduled_checkout_reached', 'detection_unconfirmable']);
     assert.equal(events[0].timestamp, 0);
+    assert.deepEqual([events[1].timestamp, events[1].data.phase, events[1].data.cause], [0, 'checkout', 'not_observed']);
     assert.deepEqual(evaluate(tracker, { roomState: CLEANING, now: 4 * 60 * MIN }), []);
   });
 
@@ -289,14 +292,17 @@ describe('RF-29 워처 — 체류 중 멈춤 재현', () => {
     } finally { f.cleanup(); }
   });
 
-  test('꺼져 있다 켜진 워처는 유예가 지난 퇴실을 전환만 하고 퇴실 지연으로 적지 않는다', async () => {
+  test('꺼져 있다 켜진 워처는 유예가 지난 퇴실을 전환하고, 퇴실 지연으로 적지 않고 확인 불가로 운영자에게 넘긴다 (DEC-11)', async () => {
     const f = await watcherFixture();
     try {
       const checkOutMs = Date.now() - 3 * 60 * MIN;
       f.watcher.setRoomState(OCCUPIED);
       f.watcher.setMonitoringConfig({ areaName: 'fixture-rf29', reservation: stay('stay-1', checkOutMs - 24 * 60 * MIN, checkOutMs) });
       await until(() => f.watcher.getMonitoringState().roomState.mainStatus === 'CLEANING');
+      await until(() => f.outbox().some(event => event.type === 'detection_unconfirmable'));
       assert.deepEqual(ofCheckout(f.outbox()).map(event => event.type), ['scheduled_checkout_reached']);
+      const problem = f.outbox().find(event => event.type === 'detection_unconfirmable');
+      assert.deepEqual([problem.device_time, problem.data.phase, problem.data.cause], [checkOutMs, 'checkout', 'not_observed']);
     } finally { f.cleanup(); }
   });
 
