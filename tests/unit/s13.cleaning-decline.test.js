@@ -171,6 +171,16 @@ describe('actual decline handler — followup boundaries', () => {
   });
 });
 
+describe('actual decline handler — Korean date (RF-49)', () => {
+  test('the all-declined Slack names the Korean date — 08:30 KST on 11-20 is 11-20, not the UTC 11-19', async t => {
+    const early = { ...DECLINE_NOTIF, job_status: 'NOTIFYING_BULK', cleaning_start_at: '2026-11-19T23:30:00.000Z' };
+    const f = await actualDecline(t, { responses: [[early], [], [{ total: '2', declined: '2' }], [{ gone: false }], []] });
+    expectDeclineJson(await f.invoke(), 200, '거절 처리됐습니다. 감사합니다.');
+    assert.equal(f.slackCalls.length, 1);
+    assert.ok(f.slackCalls[0][0].includes('2026-11-20') && !f.slackCalls[0][0].includes('2026-11-19'), f.slackCalls[0][0]);
+  });
+});
+
 describe('actual decline handler — response formats and routing', () => {
   for (const format of [undefined, 'html']) test(`format=${String(format)} returns the actual HTML page`, async t => {
     const f = await actualDecline(t, { responses: [[DECLINE_NOTIF], []] });

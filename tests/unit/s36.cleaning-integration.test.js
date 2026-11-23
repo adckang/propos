@@ -405,7 +405,8 @@ describe('actual morning cron — Gmail Watch renewal by elapsed time', () => {
       ['gmail_last_history_id', '1', { nx: true }]], 'RF-39: the renewal number becomes the start point only if none is remembered');
     assert.deepEqual(named('markRenewed').map(a => a[1]), ['gmail_watch']);
     assert.deepEqual(named('reportTokenSuccess').map(a => a.slice(1, 3)), [['gmail_watch', 'Gmail Watch 갱신']]);
-    assert.ok(named('postSlack').some(a => a[0] === '[PROPOS] 📬 Gmail Watch 자동 갱신 완료 (만료: 2026-11-23)'));
+    // 만료는 화요일 08:00 KST + 7일 = 11-24 08:00 KST(UTC로는 11-23) — 한국 날짜로 알린다(RF-49)
+    assert.ok(named('postSlack').some(a => a[0] === '[PROPOS] 📬 Gmail Watch 자동 갱신 완료 (만료: 2026-11-24)'), JSON.stringify(named('postSlack')));
     assert.equal(res.body.ran.at(-1), 'gmail-watch-renewed');
     assert.deepEqual(named('reportTokenFailure'), []);
   });

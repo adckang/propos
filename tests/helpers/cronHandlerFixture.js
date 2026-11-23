@@ -1,5 +1,6 @@
 import { build } from 'esbuild';
 import { resolve } from 'node:path';
+import { toKstDateKey } from '../../server/cleaning/_dispatch.js';
 
 const root = new URL('../../', import.meta.url).pathname;
 let modulePromise;
@@ -106,7 +107,7 @@ export function installCronIO({ behavior = {}, profile = 'hybrid', silent = true
     notify: async () => ({ ok: true }),
     openCleaningSlot: async () => {},
     requestedCleaningDays: async () => new Set(),
-    toKstDateKey: value => new Date(value).toISOString().slice(0, 10),
+    toKstDateKey, // 실제 함수 — 따로 흉내 내면 한국 날짜 규칙과 어긋난다(예전 흉내는 UTC 날짜였다, RF-49)
     reservationUidOf: () => 'fixture-reservation',
     reportTokenFailure: async () => {},
     reportTokenSuccess: async () => {},

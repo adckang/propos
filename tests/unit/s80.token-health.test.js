@@ -390,7 +390,7 @@ describe('소스 계약 — api/cron/[...slug].js의 Watch 갱신이 kv를 주�
   });
 
   test('(버그 수정 확인) Gmail Watch 성공 메시지가 expiration 없을 때 안전하게 "알 수 없음"으로 폴백한다', () => {
-    assert.match(src, /const expLabel = w\.expiration \? new Date\(Number\(w\.expiration\)\)\.toISOString\(\)\.slice\(0, 10\) : "알 수 없음";/);
+    assert.match(src, /const expLabel = w\.expiration \? toKstDateKey\(Number\(w\.expiration\)\) : "알 수 없음";/);
     assert.doesNotMatch(
       src,
       /만료: \$\{new Date\(Number\(w\.expiration\)\)\.toISOString\(\)\.slice\(0, 10\)\}/,

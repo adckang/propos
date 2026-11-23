@@ -141,6 +141,11 @@ describe("buildSmsRemind", () => {
     const msg = buildSmsRemind(job, "마포 숙소", "RMD001");
     assert.ok(msg.includes("2026-09-10"));
   });
+
+  test("날짜는 한국 날짜 — 한국 시각 9/10 오전 8시 30분 청소는 9/10 (RF-49)", () => {
+    const msg = buildSmsRemind({ ...job, cleaning_start_at: new Date("2026-09-09T23:30:00Z") }, "마포 숙소", "RMD001");
+    assert.ok(msg.includes("2026-09-10") && !msg.includes("2026-09-09"), msg);
+  });
 });
 
 describe("buildSmsComplete", () => {

@@ -331,6 +331,18 @@ describe('actual job cancellation — real blocker creation with fake Google', (
   });
 });
 
+describe('actual job cancellation — Korean date (RF-49, DEC-14)', () => {
+  test('a cleaning at 08:30 KST is cancelled for that Korean day — notice and blocker both say 11-20, not the UTC 11-19', async t => {
+    const early = { ...CANCEL_JOB, cleaning_start_at: '2026-11-19T23:30:00.000Z', google_calendar_id: CANCEL_CALENDAR };
+    const f = await actualCancellation(t, { responses: [[early], [{ id: early.id }], [CANCEL_NOTIF], [{ name: 'Fixture Property' }], [], []],
+      google: [blockerReply()] });
+    assertCancelReply(await f.send(), 'fixture-new-blocker'); assertBlockerPersistence(f);
+    assert.equal(f.notifyCalls[0][2].body, 'Fixture Property 2026-11-20 청소가 취소됐습니다');
+    assert.equal(f.notifyCalls[0][2].smsText, '[PROPOS] Fixture Property 2026-11-20 청소 일정이 취소됐습니다.');
+    assert.deepEqual(JSON.parse(f.calendarRequests[0].options.body).start, { dateTime: '2026-11-20T11:00:00+09:00' });
+  });
+});
+
 describe('actual job cancellation — DB failures stop subsequent work', () => {
   for (const stage of ['job-read', 'cancel-update', 'recipient-read']) test(`500 at ${stage} preserves current API error`, async t => {
     const responses = stage === 'job-read' ? [] : [[CANCEL_JOB]];
@@ -530,6 +542,13 @@ describe('actual cleaning-followup handler — reminder and escalation', () => {
     assert.ok(sql.some(text => /WHERE id=\$1 AND status IN \('NOTIFYING_BULK','BULK_REMINDED'\)[\s\S]*RETURNING id/.test(text)));
     const slack = fixture.calls.find(call => call.name === 'postSlack');
     assert.deepEqual(slack.args, ['[PROPOS] 🚨 fixture-property 2026-11-20 청소 배정 실패. 수동 처리 필요.']);
+  });
+
+  test('the escalation Slack names the Korean date — 08:30 KST on 11-20 is 11-20 (RF-49)', async t => {
+    const job = { id: 'fixture-job', property_id: 'fixture-property',
+      cleaning_start_at: '2026-11-19T23:30:00.000Z', checkout_at: '2026-11-19T23:30:00.000Z', reservation_uid: 'fixture-reservation' };
+    const { fixture } = await actualFollowup(t, { dbQuery: followupDb({ bulkJobs: [job], escalationRows: [{ id: job.id }] }) });
+    assert.deepEqual(fixture.calls.find(call => call.name === 'postSlack').args, ['[PROPOS] 🚨 fixture-property 2026-11-20 청소 배정 실패. 수동 처리 필요.']);
   });
 
   test('does not announce escalation when the conditional update loses a race', async t => {

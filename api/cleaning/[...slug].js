@@ -330,7 +330,7 @@ async function runFollowupChecks() {
     );
     if (!rows.length) continue;
     const cfg = await getPropertyConfig(db, job.property_id).catch(() => null);
-    const date = new Date(job.cleaning_start_at).toISOString().slice(0, 10);
+    const date = toKstDateKey(job.cleaning_start_at);
     await postSlack(
       `[PROPOS] 🚨 ${cfg?.name ?? job.property_id} ${date} 청소 배정 실패. 수동 처리 필요.`
     ).catch(() => {});
@@ -512,7 +512,7 @@ async function handleDecline(req, res, token) {
     // RF-16: 그날 퇴실이 없어졌으면 "배정 실패 — 수동 처리"로 넘기지 않는다(크론의 넘김과 같은 규칙). 운영자 알림은 동기화가 보낸다
     if (parseInt(total) === parseInt(declined) && !(await isCheckoutCancelled(db, notif))) {
       await db.query(`UPDATE cleaning_jobs SET status='ESCALATED',updated_at=NOW() WHERE id=$1`, [notif.job_id]);
-      const date = new Date(notif.cleaning_start_at).toISOString().slice(0, 10);
+      const date = toKstDateKey(notif.cleaning_start_at);
       await postSlack(`[PROPOS] 🚨 ${notif.property_id} ${date} 청소 배정 실패 (전원 거절). 수동 처리 필요.`);
     }
   }
@@ -1011,7 +1011,7 @@ async function cancelJob(req, res, jobId, scope) {
   if (cancelNotifs.length) {
     const cfg = await getPropertyConfig(db, job.property_id);
     const propName = cfg?.name ?? job.property_id;
-    const date = new Date(job.cleaning_start_at).toISOString().slice(0, 10);
+    const date = toKstDateKey(job.cleaning_start_at);
     for (const n of cancelNotifs) {
       await notify(db, { id: n.cleaner_id, fcm_token: n.fcm_token, fcm_status: n.fcm_status, phone: n.phone }, {
         title: "[PROPOS] 청소 일정 취소",
@@ -1048,7 +1048,7 @@ async function cancelJob(req, res, jobId, scope) {
     let eventId = null;
     try {
       const gTok = await getGoogleToken(kv);
-      const date = new Date(job.cleaning_start_at).toISOString().slice(0, 10);
+      const date = toKstDateKey(job.cleaning_start_at);
       eventId = await createBlockerEvent(
         job.google_calendar_id, date,
         job.checkout_hour, job.cleaning_duration_hours,

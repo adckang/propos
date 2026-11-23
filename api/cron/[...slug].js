@@ -410,7 +410,7 @@ async function handleCleaningFollowup(db, res) {
 
     const cfg = await getPropertyConfig(db, job.property_id);
     const propName = cfg?.name ?? job.property_id;
-    const date = new Date(job.cleaning_start_at).toISOString().slice(0, 10);
+    const date = toKstDateKey(job.cleaning_start_at);
     await postSlack(
       `[PROPOS] 🚨 ${propName} ${date} 청소 배정 실패. 수동 처리 필요.`
     );
@@ -551,7 +551,7 @@ export default async function handler(req, res) {
             // 갱신 자체(API 응답 ok)는 성공했으므로, 이후 메시지 포맷팅이 실패해도 markRenewed는 지킨다.
             await markRenewed(kv, "gmail_watch");
             await reportTokenSuccess(kv, "gmail_watch", "Gmail Watch 갱신");
-            const expLabel = w.expiration ? new Date(Number(w.expiration)).toISOString().slice(0, 10) : "알 수 없음";
+            const expLabel = w.expiration ? toKstDateKey(Number(w.expiration)) : "알 수 없음"; // 한국 날짜(RF-49)
             await postSlack(`[PROPOS] 📬 Gmail Watch 자동 갱신 완료 (만료: ${expLabel})`);
             ran.push("gmail-watch-renewed");
           }

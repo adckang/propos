@@ -56,7 +56,7 @@ export function buildSmsBulk(job, propertyName, token) {
 }
 
 export function buildSmsRemind(job, propertyName, token) {
-  const date = new Date(job.cleaning_start_at).toISOString().slice(0, 10);
+  const date = toKstDateKey(job.cleaning_start_at);
   return (
     `[PROPOS] 재안내 드립니다\n` +
     `${propertyName} ${date} 청소 아직 미확정입니다\n` +
