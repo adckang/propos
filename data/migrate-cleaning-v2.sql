@@ -26,10 +26,15 @@ ALTER TABLE cleaning_jobs ADD CONSTRAINT cleaning_jobs_status_check
 ALTER TABLE cleaners
   ADD COLUMN IF NOT EXISTS fcm_token       TEXT,
   ADD COLUMN IF NOT EXISTS fcm_token_at    TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS fcm_status      TEXT NOT NULL DEFAULT 'uninstalled'
-    CHECK (fcm_status IN ('active','inactive','uninstalled','invalid','unregistered')),
+  -- 비워 둘 수 있다(운영 DB와 같게, RF-50)
+  ADD COLUMN IF NOT EXISTS fcm_status      TEXT DEFAULT 'uninstalled'
+    CHECK (fcm_status IS NULL OR fcm_status IN ('uninstalled','active','inactive','invalid','unregistered')),
   ADD COLUMN IF NOT EXISTS app_installed_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS last_seen_at    TIMESTAMPTZ;
+
+-- 운영 DB에 있는 앱 상태 조회용 색인(scripts/migrate-workers.js가 만든 것과 같게, RF-50)
+CREATE INDEX IF NOT EXISTS idx_cleaners_fcm_status ON cleaners(fcm_status);
+CREATE INDEX IF NOT EXISTS idx_cleaners_last_seen ON cleaners(last_seen_at);
 
 -- property_cleaning_config: host_phone + ical_url 컬럼
 ALTER TABLE property_cleaning_config

@@ -379,7 +379,10 @@ describe('서버 — 청소 담당자 이름 (cleaner_name)', () => {
 
   test('스키마에 cleaners.name, cleaning_jobs.assigned_cleaner_id 가 실제로 있다', () => {
     const schema = read('data/schema-cleaning.sql');
-    assert.match(schema, /CREATE TABLE IF NOT EXISTS cleaners[\s\S]*?name\s+TEXT NOT NULL/);
+    // 이름은 비어 있을 수 있다(운영 DB와 같게, RF-50 — 앱 등록은 이름 없이 담당자를 만든다)
+    const nameLine = schema.match(/CREATE TABLE IF NOT EXISTS cleaners \([\s\S]*?\n(\s+name\s+TEXT\b[^\n]*)/)?.[1];
+    assert.ok(nameLine, 'cleaners.name 칸이 있다');
+    assert.doesNotMatch(nameLine.split('--')[0], /NOT NULL/, '이름은 필수가 아니다');
     assert.match(schema, /assigned_cleaner_id\s+UUID REFERENCES cleaners\(id\)/);
   });
 

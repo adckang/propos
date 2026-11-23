@@ -69,6 +69,11 @@ test('SQL: property list — DEMO rows carry every production field except the d
 
 test('SQL: cleaning stats — the totals and every item list match in fields and kinds', { skip: !enabled }, async t => {
   const sql = await database(t);
+  // 데모 청소의 상태는 날짜로 정해져, 다음 주에 배정 실패가 0건인 날도 있다 — 칸 모양은 기간과 무관하므로 다른 기간의 데모 줄로도 비교한다
+  const demoSamples = [];
+  for (const period of ['next_week', 'next_month', 'this_month', 'weeks_ahead_2', 'weeks_ahead_3']) {
+    demoSamples.push((await call(t, 'demo', `/api/cleaning/stats?period=${period}&items=true`, sql)).body);
+  }
   for (const url of ['/api/cleaning/stats?period=next_week', '/api/cleaning/stats?period=next_week&items=true']) {
     const prod = await call(t, 'hybrid', url, sql);
     const demo = await call(t, 'demo', url, sql);
@@ -76,8 +81,9 @@ test('SQL: cleaning stats — the totals and every item list match in fields and
     assert.deepEqual(mismatches(prod.body, demo.body), [], url);
     for (const list of ['items', 'failedItems', 'needsRequestItems']) {
       if (!prod.body[list]) continue;
-      assert.ok(prod.body[list].length > 0 && demo.body[list].length > 0, `${list} has rows on both sides to compare`);
-      assert.deepEqual(mismatches(prod.body[list][0], demo.body[list][0]), [], `${url} ${list}`);
+      const demoRow = demo.body[list][0] ?? demoSamples.find(body => body[list]?.length)?.[list][0];
+      assert.ok(prod.body[list].length > 0 && demoRow, `${list} has rows on both sides to compare`);
+      assert.deepEqual(mismatches(prod.body[list][0], demoRow), [], `${url} ${list}`);
     }
   }
 });

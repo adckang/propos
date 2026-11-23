@@ -162,13 +162,13 @@ CREATE TABLE cleaners (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name             TEXT,
   phone            TEXT NOT NULL UNIQUE,
-  email            TEXT UNIQUE,                -- 구글 예약 캘린더 매핑 키
+  email            TEXT NOT NULL UNIQUE,       -- 구글 예약 캘린더 매핑 키
   tier             TEXT NOT NULL CHECK (tier IN ('VIP_1','VIP_2','VIP_3','BULK')),
   active           BOOLEAN NOT NULL DEFAULT true,
   fcm_token        TEXT,
   fcm_token_at     TIMESTAMPTZ,
   fcm_status       TEXT DEFAULT 'uninstalled'
-                     CHECK (fcm_status IN ('uninstalled','active','inactive','invalid','unregistered')),
+                     CHECK (fcm_status IS NULL OR fcm_status IN ('uninstalled','active','inactive','invalid','unregistered')),
   app_installed_at TIMESTAMPTZ,
   last_seen_at     TIMESTAMPTZ,
   notes            TEXT,

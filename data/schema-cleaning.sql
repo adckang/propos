@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS property_reservations (
 -- 청소자 목록
 CREATE TABLE IF NOT EXISTS cleaners (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name       TEXT NOT NULL,
+  name       TEXT,  -- 비워 둘 수 있다(운영 DB와 같게, RF-50): 담당자 앱 등록은 이름 없이 만들고 관리자가 나중에 정한다
   phone      TEXT NOT NULL UNIQUE,
   email      TEXT NOT NULL UNIQUE,
   tier       TEXT NOT NULL

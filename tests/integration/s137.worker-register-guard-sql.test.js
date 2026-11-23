@@ -2,8 +2,7 @@
 //
 // D-033 남은 노출(DEC-08) — 담당자 앱 등록이 이미 있는 번호의 살아 있는 푸시 토큰·이메일을 덮어쓰지 않는지, 실제 핸들러의 SQL을
 // 격리 DB(PGlite 또는 격리 로컬 DB)에서 그대로 실행해 확인한다. 운영 DB·외부 요청 없음.
-// 저장소 스키마는 cleaners.name 이 필수(NOT NULL)인데 운영은 비워 둘 수 있다(RF-50). 이름 없는 등록 SQL은 번호가 겹치는지 보기 전에
-// NOT NULL 검사에 걸리므로, 운영과 같게 그 제약만 풀고 실행한다.
+// 담당자 이름은 비워 둘 수 있다(운영과 같게, RF-50) — 앱 등록은 이름 없이 담당자를 만든다.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -32,7 +31,6 @@ const cases = [
 test('SQL: a new number is inserted as a pending BULK worker with the given email', { skip: !enabled }, async t => {
   const sql = await createCleaningSqlFixture();
   t.after(() => sql.close());
-  await sql.pool.query('ALTER TABLE cleaners ALTER COLUMN name DROP NOT NULL'); // 운영과 같게(RF-50)
   const { rows } = await sql.pool.query(await registerSql(), [PHONE, 'new@example.invalid', 'new-token']);
   assert.equal(rows.length, 1);
   assert.equal(Object.hasOwn(rows[0], 'email'), false, '저장된 이메일은 돌려주지 않는다');
@@ -44,7 +42,6 @@ for (const [label, token, status, accepted] of cases) {
   test(`SQL: existing number with ${label} → ${accepted ? 'takes the new token' : 'unchanged'}, email never changes`, { skip: !enabled }, async t => {
     const sql = await createCleaningSqlFixture();
     t.after(() => sql.close());
-    await sql.pool.query('ALTER TABLE cleaners ALTER COLUMN name DROP NOT NULL'); // 운영과 같게(RF-50)
     await sql.pool.query(
       `INSERT INTO cleaners (name, phone, email, tier, active, fcm_token, fcm_status)
        VALUES ('Owner', $1, 'owner@example.invalid', 'VIP_1', true, $2, $3)`, [PHONE, token, status]);
@@ -59,3 +56,17 @@ for (const [label, token, status, accepted] of cases) {
     assert.equal(after.fcm_status, accepted && token !== 'new-token' ? 'active' : status);
   });
 }
+
+test('SQL: the schema files build the worker table like production (name and app status may be empty — RF-50)', { skip: !enabled }, async t => {
+  const sql = await createCleaningSqlFixture();
+  t.after(() => sql.close());
+  const { rows } = await sql.pool.query(`SELECT column_name, is_nullable, column_default FROM information_schema.columns
+    WHERE table_schema = current_schema() AND table_name = 'cleaners' AND column_name IN ('name', 'fcm_status') ORDER BY column_name`);
+  assert.deepEqual(rows.map(r => [r.column_name, r.is_nullable]), [['fcm_status', 'YES'], ['name', 'YES']]);
+  assert.match(rows[0].column_default, /'uninstalled'/);
+  await sql.pool.query(`INSERT INTO cleaners (phone, email, tier, fcm_status) VALUES ('010-0000-0001', 'a@example.invalid', 'BULK', NULL)`);
+  await assert.rejects(sql.pool.query(`INSERT INTO cleaners (phone, email, tier, fcm_status) VALUES ('010-0000-0002', 'b@example.invalid', 'BULK', 'bogus')`));
+  const { rows: indexes } = await sql.pool.query(`SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND tablename = 'cleaners'
+    AND indexname IN ('idx_cleaners_fcm_status', 'idx_cleaners_last_seen') ORDER BY indexname`);
+  assert.deepEqual(indexes.map(r => r.indexname), ['idx_cleaners_fcm_status', 'idx_cleaners_last_seen'], '운영 DB와 같은 앱 상태 색인');
+});
