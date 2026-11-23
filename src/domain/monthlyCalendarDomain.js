@@ -39,7 +39,7 @@ const DIRECT_ISSUES = Object.freeze({
 /** 배정되지 않은 청소의 문제 문구 — 청소 일정 표에서 만드는 항목과 시작 시 기록(RF-32)이 같이 쓴다 */
 export function cleaningAssignmentIssueLabel(status) {
   if (status === 'ESCALATED') return '청소 배정 실패';
-  if (status === 'CANCELLED') return '청소 미할당(취소)'; // DEC-14: 청소 취소는 이 문제 1건
+  if (status === 'CANCELLED') return '청소 미배정(취소)'; // DEC-14·15: 청소 취소는 이 문제 1건
   return '청소 미배정';
 }
 

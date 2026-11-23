@@ -1022,23 +1022,28 @@ async function cancelJob(req, res, jobId, scope) {
     }
   }
 
-  // 취소된 청소는 배정되지 않은 청소로 남는다 — 퇴실 전에는 미래 레포트의 미배정, 퇴실 뒤에는 "청소 미할당(취소)" 문제 1건(DEC-14).
-  // 아래 외부 작업이 실패해도 취소는 그대로 두고 서버 로그만 남긴다.
+  // 취소된 청소는 배정되지 않은 청소로 남는다 — 퇴실 전에는 미래 레포트의 미배정, 퇴실 뒤에는 "청소 미배정(취소)" 문제 1건(DEC-14·15).
+  // 아래 외부 작업이 실패해도 취소는 그대로 둔다.
 
   // ASSIGNED 상태 취소 시 청소자 구글 캘린더 이벤트 삭제 (GAP-003 fix)
   if (job.status === "ASSIGNED" && job.google_event_id && job.google_calendar_id) {
+    let deleted = false;
     try {
       const gTok = await getGoogleToken(kv);
-      const deleted = await fetch(
+      const response = await fetch(
         `${CALENDAR_API}/calendars/${encodeURIComponent(job.google_calendar_id)}/events/${job.google_event_id}`,
         { method: "DELETE", headers: { Authorization: `Bearer ${gTok}` } }
       );
       // fetch는 거절(권한·서버 오류)에도 예외를 던지지 않는다. 404·410은 이미 지워진 것
-      if (!deleted.ok && ![404, 410].includes(deleted.status)) {
-        console.error(`[cancelJob] 캘린더 이벤트 삭제 실패 (${jobId}):`, `HTTP ${deleted.status}`);
-      }
+      deleted = response.ok || [404, 410].includes(response.status);
+      if (!deleted) console.error(`[cancelJob] 캘린더 이벤트 삭제 실패 (${jobId}):`, `HTTP ${response.status}`);
     } catch (e) {
       console.error(`[cancelJob] 캘린더 이벤트 삭제 실패 (${jobId}):`, e.message);
+    }
+    // 담당자 달력에 청소가 남아 그 사람이 올 수 있다 — 운영자에게 한 줄로 넘긴다(DEC-15, 새 문제 종류는 두지 않음)
+    if (!deleted) {
+      await postSlack(`[PROPOS] ⚠️ ${job.property_id} ${toKstDateKey(job.cleaning_start_at)} 청소 취소 — 담당자 구글 일정을 지우지 못했어요. 담당자에게 직접 알려 주세요.`)
+        .catch(() => {});
     }
   }
 

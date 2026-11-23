@@ -1,7 +1,7 @@
 /**
  * RF-32 (DEC-08) — 청소 상태는 되돌리지 않고 문제로 남긴다.
  *  청소 시작 예정 시각에 담당자가 없음 → cleaning_unassigned_at_start, 청소 1건에 1번.
- *  청소 취소는 그 자체가 "청소 미할당(취소)" 문제 1건이다(DEC-14) — 취소 뒤 구글 작업 실패를 따로 기록하지 않는다(취소 API 계약은 s30)
+ *  청소 취소는 그 자체가 "청소 미배정(취소)" 문제 1건이다(DEC-14) — 취소 뒤 구글 작업 실패를 따로 기록하지 않는다(취소 API 계약은 s30)
  */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -115,7 +115,7 @@ describe('RF-32 달력 문제 목록', () => {
     assert.deepEqual(items.map(item => [item.type, item.label, item.detail.jobId]), [
       ['cleaning_unassigned_at_start', '청소 미배정', 'j9'],
       ['cleaning_assignment_issue', '청소 배정 실패', 'j1'],
-      ['cleaning_assignment_issue', '청소 미할당(취소)', 'j2'],
+      ['cleaning_assignment_issue', '청소 미배정(취소)', 'j2'],
     ]);
     assert.ok(items.every(item => item.category === 'CLEANING'));
   });
@@ -128,14 +128,14 @@ describe('RF-32 달력 문제 목록', () => {
 
   test('시작 시 기록의 문구는 기록할 때의 상태로 정한다', () => {
     const [item] = buildIssueItems([{ property_id: '파주201', type: 'cleaning_unassigned_at_start', device_time: '2026-11-19T02:00:00.000Z', data: { jobId: 'j9', status: 'CANCELLED' } }]);
-    assert.equal(item.label, '청소 미할당(취소)');
+    assert.equal(item.label, '청소 미배정(취소)');
   });
 
-  test('청소 취소는 "청소 미할당(취소)" 1건 — 같은 청소를 두 번 세지 않는다 (DEC-14)', () => {
+  test('청소 취소는 "청소 미배정(취소)" 1건 — 같은 청소를 두 번 세지 않는다 (DEC-14)', () => {
     const items = buildIssueItems([
       { property_id: '파주201', type: 'cleaning_unassigned_at_start', device_time: '2026-11-21T02:00:00.000Z', data: { jobId: 'j2', status: 'CANCELLED' } },
     ], [derived('j2', 'CANCELLED')]);
-    assert.deepEqual(items.map(item => [item.category, item.label]), [['CLEANING', '청소 미할당(취소)']]);
+    assert.deepEqual(items.map(item => [item.category, item.label]), [['CLEANING', '청소 미배정(취소)']]);
   });
 
   test('"취소 후속 처리 실패"라는 문제는 없다 — 예전 종류의 기록이 있어도 문제 목록에 넣지 않는다', () => {
@@ -145,7 +145,7 @@ describe('RF-32 달력 문제 목록', () => {
 
   test('배정 문제 문구는 한 곳에서 정한다', () => {
     assert.equal(cleaningAssignmentIssueLabel('ESCALATED'), '청소 배정 실패');
-    assert.equal(cleaningAssignmentIssueLabel('CANCELLED'), '청소 미할당(취소)');
+    assert.equal(cleaningAssignmentIssueLabel('CANCELLED'), '청소 미배정(취소)');
     assert.equal(cleaningAssignmentIssueLabel('PENDING'), '청소 미배정');
   });
 });

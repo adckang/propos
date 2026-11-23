@@ -24,7 +24,7 @@ function cancellationCookie(role = 'admin') {
   return 'propos_session=' + createSessionToken(process.env, Date.now(), role === 'operator'
     ? { role, sub: 'fixture-operator', ph: passwordFingerprint(CANCEL_OPERATOR.password_hash) } : { role });
 }
-async function actualCancellation(t, { responses = [], google = [], expectedErrors = 0, calendar = {}, notify, ...options } = {}) {
+async function actualCancellation(t, { responses = [], google = [], expectedErrors = 0, expectedSlack = [], calendar = {}, notify, ...options } = {}) {
   const pendingGoogle = [...google], unexpectedGoogle = [];
   const f = await cleaningDeclineFixture({ ...options, responses, notify: notify ?? (async () => ({ ok: true, channel: 'FCM' })),
     calendar: { ...calendar, methods: ['POST', 'DELETE'], async fetch(url, request) {
@@ -44,7 +44,7 @@ async function actualCancellation(t, { responses = [], google = [], expectedErro
       assert.equal(f.errors.length, expectedErrors, 'only planned failures logged');
       assert.deepEqual(f.blocked, [], 'no unmocked external I/O');
       assert.deepEqual(f.advances, [], 'cancellation does not redispatch');
-      assert.deepEqual(f.slackCalls, [], 'cancellation handler does not call assignment Slack');
+      assert.deepEqual(f.slackCalls, expectedSlack, 'only the planned operator Slack (DEC-15: Google delete failed)');
       assert.deepEqual(f.completionCalls, [], 'cancellation does not send assignment completion');
       assert.deepEqual(f.kvCalls, [], 'OAuth boundary is fake');
       assert.deepEqual(globalThis.__productionFetchTrap?.calls ?? [], [], 'no production requests');
@@ -276,36 +276,41 @@ describe('actual job cancellation — real blocker creation with fake Google', (
     assertCancelReply(await f.send(), 'fixture-new-blocker');
     assert.deepEqual(order, ['cancel-update', 'notification', 'google-create']); assertBlockerPersistence(f);
   });
-  // DEC-14: 청소 취소는 그 자체가 "청소 미할당(취소)" 문제 1건이다. 뒤따르는 구글 작업이 실패해도 취소는 그대로, 서버 로그만 남기고
-  // 따로 문제를 기록하거나 응답에 칸을 덧붙이지 않는다
+  // DEC-14·15: 청소 취소는 그 자체가 "청소 미배정(취소)" 문제 1건이다. 뒤따르는 구글 작업이 실패해도 취소는 그대로, 따로 문제를 기록하거나
+  // 응답에 칸을 덧붙이지 않는다. 담당자 구글 일정을 못 지우면(그 사람이 올 수 있다) 운영자 Slack 한 줄만 보낸다
   const ASSIGNED_JOB = { ...CANCEL_JOB, status: 'ASSIGNED', google_calendar_id: CANCEL_CALENDAR, google_event_id: 'fixture-event',
     checkout_at: '2026-11-20T02:00:00.000Z' };
   const assertNoProblemRecord = f => assert.equal(f.queries.filter(q => /INSERT INTO events/.test(q.sql)).length, 0, '취소 말고 다른 문제를 기록하지 않는다');
+  const DELETE_FAILED_SLACK = [['[PROPOS] ⚠️ fixture-cancel-property 2026-11-20 청소 취소 — 담당자 구글 일정을 지우지 못했어요. 담당자에게 직접 알려 주세요.']];
 
   test('DELETE transport failure is logged while blocker recreation still runs', async t => {
     const f = await actualCancellation(t, { responses: [[ASSIGNED_JOB], [{ id: CANCEL_JOB.id }], [], [], []],
-      google: [new Error('fixture DELETE unavailable'), blockerReply()], expectedErrors: 1 });
+      google: [new Error('fixture DELETE unavailable'), blockerReply()], expectedErrors: 1, expectedSlack: DELETE_FAILED_SLACK });
     assertCancelReply(await f.send(), 'fixture-new-blocker'); assertBlockerPersistence(f); assertNoProblemRecord(f);
     assert.match(f.errors[0][0], /캘린더 이벤트 삭제 실패/);
     assert.equal(f.errors[0][1], 'fixture DELETE unavailable');
+    assert.deepEqual(f.slackCalls, DELETE_FAILED_SLACK);
   });
   for (const status of [403, 500]) test(`DELETE HTTP ${status} is not silently ignored — it is logged`, async t => {
     const f = await actualCancellation(t, { responses: [[ASSIGNED_JOB], [{ id: CANCEL_JOB.id }], [], [], []],
-      google: [new Response('fixture denied', { status }), blockerReply()], expectedErrors: 1 });
+      google: [new Response('fixture denied', { status }), blockerReply()], expectedErrors: 1, expectedSlack: DELETE_FAILED_SLACK });
     assertCancelReply(await f.send(), 'fixture-new-blocker'); assertBlockerPersistence(f); assertNoProblemRecord(f);
     assert.deepEqual(f.calendarRequests.map(r => r.options.method), ['DELETE', 'POST']);
     assert.match(f.errors[0][0], /캘린더 이벤트 삭제 실패/); assert.equal(f.errors[0][1], `HTTP ${status}`);
+    assert.deepEqual(f.slackCalls, DELETE_FAILED_SLACK, '담당자에게 직접 알려 달라고 운영자에게 한 줄');
   });
   for (const status of [404, 410]) test(`DELETE HTTP ${status} means already gone — nothing logged`, async t => {
     const f = await actualCancellation(t, { responses: [[ASSIGNED_JOB], [{ id: CANCEL_JOB.id }], [], [], []],
       google: [new Response(null, { status }), blockerReply()] });
     assertCancelReply(await f.send(), 'fixture-new-blocker'); assertBlockerPersistence(f); assertNoProblemRecord(f);
+    assert.deepEqual(f.slackCalls, [], '이미 지워졌으면 알릴 것이 없다');
   });
   test('blocker OAuth failure keeps the cancellation and is logged', async t => {
     const f = await actualCancellation(t, { responses: [[{ ...CANCEL_JOB, google_calendar_id: CANCEL_CALENDAR }], [{ id: CANCEL_JOB.id }], []],
       expectedErrors: 1, calendar: { getToken: async () => { throw new Error('fixture OAuth unavailable'); } } });
     assertCancelReply(await f.send()); assertCancelWrite(f); assert.deepEqual(f.calendarRequests, []); assertNoProblemRecord(f);
     assert.match(f.errors[0][0], /블로커 재생성 실패/);
+    assert.deepEqual(f.slackCalls, [], '막힘 일정 실패는 로그만');
   });
   for (const response of [new Error('fixture POST unavailable'), new Response('fixture rejected', { status: 403 })]) {
     test(`blocker creation failure is logged (${response instanceof Error ? 'transport' : 'HTTP 403'})`, async t => {
@@ -326,8 +331,20 @@ describe('actual job cancellation — real blocker creation with fake Google', (
   });
   test('both steps failing still answers 200 with the cancellation kept, both logged', async t => {
     const f = await actualCancellation(t, { responses: [[ASSIGNED_JOB], [{ id: CANCEL_JOB.id }], []],
-      google: [new Response('fixture denied', { status: 403 }), new Response('fixture rejected', { status: 403 })], expectedErrors: 2 });
+      google: [new Response('fixture denied', { status: 403 }), new Response('fixture rejected', { status: 403 })], expectedErrors: 2, expectedSlack: DELETE_FAILED_SLACK });
     assertCancelReply(await f.send()); assertCancelWrite(f); assertNoProblemRecord(f);
+    assert.deepEqual(f.slackCalls, DELETE_FAILED_SLACK);
+  });
+  test('a Slack failure does not change the cancellation answer', async t => {
+    const f = await actualCancellation(t, { responses: [[ASSIGNED_JOB], [{ id: CANCEL_JOB.id }], [], [], []],
+      google: [new Response('fixture denied', { status: 403 }), blockerReply()], expectedErrors: 1, expectedSlack: DELETE_FAILED_SLACK,
+      slack: async () => { throw new Error('fixture Slack down'); } });
+    assertCancelReply(await f.send(), 'fixture-new-blocker');
+  });
+  test('a successful delete sends no Slack', async t => {
+    const f = await actualCancellation(t, { responses: [[ASSIGNED_JOB], [{ id: CANCEL_JOB.id }], [], [], []],
+      google: [new Response(null, { status: 204 }), blockerReply()] });
+    assertCancelReply(await f.send(), 'fixture-new-blocker'); assert.deepEqual(f.slackCalls, []);
   });
 });
 
