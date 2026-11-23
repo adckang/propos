@@ -22,6 +22,7 @@ import { syncAllPropertiesIcal } from "../../server/cleaning/_icalSync.js";
 import { pushCurrentReservationsToWatchers } from "../../server/watcherReservationSync.js";
 import { isCheckoutCancelled, reservationUidOf } from "../../server/cleaning/_reservationSync.js";
 import { recordUnassignedAtStart } from "../../server/cleaning/_problems.js";
+import { remindTomorrowCleanings } from "../../server/cleaning/_dayBeforeReminder.js";
 import { parseVEvents, airbnbEventsToReservations } from "../../src/domain/room-state/icalParser.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 import {
@@ -628,6 +629,12 @@ export default async function handler(req, res) {
       try { logWatcherReservationPush("evening", await pushCurrentReservationsToWatchers(db)); }
       catch (e) { console.error("[evening] watcher-reservation 실패:", e.message); }
       await handleCleaningFollowup(db, nullRes);
+      // ACT-18 (DEC-13): 내일 배정된 청소를 담당자에게 하루 전 알림 — 실패해도 결산은 그대로, 운영자에게 알린다
+      try { await remindTomorrowCleanings(db, { kv }); }
+      catch (e) {
+        console.error("[evening] day-before 실패:", e.message);
+        await postSlack("[PROPOS] ⚠️ 내일 청소 담당자 알림을 확인하지 못했어요. 내일 청소 담당자에게 직접 연락해 주세요.").catch(() => {});
+      }
       return await handleDailyResult(db, res);
     }
 
