@@ -1031,7 +1031,7 @@ async function cancelJob(req, res, jobId, scope) {
     try {
       const gTok = await getGoogleToken(kv);
       const response = await fetch(
-        `${CALENDAR_API}/calendars/${encodeURIComponent(job.google_calendar_id)}/events/${job.google_event_id}`,
+        `${CALENDAR_API}/calendars/${encodeURIComponent(job.google_calendar_id)}/events/${encodeURIComponent(job.google_event_id)}`,
         { method: "DELETE", headers: { Authorization: `Bearer ${gTok}` } }
       );
       // fetch는 거절(권한·서버 오류)에도 예외를 던지지 않는다. 404·410은 이미 지워진 것

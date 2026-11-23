@@ -168,22 +168,21 @@ async function getAvailableVip(db, job, tier) {
   );
   if (!cleaner) return null;
 
-  const checkoutDate = new Date(job.checkout_at).toISOString().slice(0, 10);
+  // "같은 날"은 한국 날짜로 — 양쪽을 DB가 같은 규칙으로 계산한다(RF-51)
   const { rows } = await db.query(
     `SELECT 1 FROM cleaning_jobs j
      JOIN cleaning_notifs n ON n.job_id = j.id
      WHERE n.cleaner_id = $1
-       AND j.checkout_at::date = $2
+       AND to_char(j.checkout_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD') = to_char($2::timestamptz AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD')
        AND j.status NOT IN ('ASSIGNED','COMPLETED','ESCALATED','CANCELLED')
        AND j.id != $3
      LIMIT 1`,
-    [cleaner.id, checkoutDate, job.id]
+    [cleaner.id, job.checkout_at, job.id]
   );
   return rows.length ? null : cleaner;
 }
 
 async function dispatchBulk(db, job, propertyName, propCfg) {
-  const checkoutDate = new Date(job.checkout_at).toISOString().slice(0, 10);
   const calendarUrl = propCfg?.google_calendar_booking_url ?? `${BASE_URL}/c/${job.property_id}`;
   const dt = fmtDate(job.cleaning_start_at);
 
@@ -197,11 +196,11 @@ async function dispatchBulk(db, job, propertyName, propCfg) {
          SELECT 1 FROM cleaning_notifs n2
          JOIN cleaning_jobs j2 ON j2.id = n2.job_id
          WHERE n2.cleaner_id = c.id
-           AND j2.checkout_at::date = $1
+           AND to_char(j2.checkout_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD') = to_char($1::timestamptz AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD')
            AND j2.status NOT IN ('ASSIGNED','COMPLETED','ESCALATED','CANCELLED')
            AND j2.id != $2
        )`,
-    [checkoutDate, job.id]
+    [job.checkout_at, job.id]
   );
 
   for (const cleaner of cleaners) {

@@ -104,9 +104,9 @@ export async function prepareInitialDelivery(pool, { job, cleaner, nextStatus, p
     }
     const { rows: busy } = await client.query(
       `SELECT 1 FROM cleaning_jobs j JOIN cleaning_notifs n ON n.job_id=j.id
-       WHERE n.cleaner_id=$1 AND j.checkout_at::date=$2::date
+       WHERE n.cleaner_id=$1 AND to_char(j.checkout_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD') = to_char($2::timestamptz AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD')
        AND j.status NOT IN ('ASSIGNED','COMPLETED','ESCALATED','CANCELLED') AND j.id!=$3 LIMIT 1`,
-    [cleaner.id, new Date(current.checkout_at).toISOString().slice(0,10), current.id]);
+    [cleaner.id, current.checkout_at, current.id]); // 같은 날은 한국 날짜(RF-51)
     if (busy.length) return stopped('FAILED', 'RECIPIENT_UNAVAILABLE');
     const snapshot = { kind: 'INITIAL_REQUEST', expectedStatus: current.status, nextStatus,
       propertyId: current.property_id, checkoutAt: current.checkout_at, cleaningStartAt: current.cleaning_start_at,
