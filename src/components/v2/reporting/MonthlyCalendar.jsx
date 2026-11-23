@@ -89,11 +89,11 @@ function segmentBarsForDay(segments, cell) {
   });
 }
 
-function IssueRow({ item, properties, onSelectProperty, showProperty }) {
+function IssueRow({ item, properties, onSelectProperty, showProperty, dayKey }) {
   const property = properties.find(candidate => candidate.id === item.property_id);
   return (
     <button
-      onClick={() => property && onSelectProperty?.(property)}
+      onClick={() => property && onSelectProperty?.(property, dayKey ? kstDayOffsetFromToday(dayKey) : null)}
       style={{
         width: '100%', display: 'flex', alignItems: 'center', gap: 10,
         padding: '11px 16px', background: '#fff', border: 'none', borderBottom: '1px solid #f1f5f9',
@@ -319,10 +319,11 @@ export default function MonthlyCalendar({
     : [];
   const popupOrphanRows = futurePopup?.kind === 'orphan' ? buildOrphanCleaningRows(popupCleaning.orphan) : [];
 
-  // 팝업 안에서 숙소 ID로 그 숙소를 선택 (없는 ID면 아무 일도 안 함 — 목업 데이터 불일치 방어)
-  const selectPropertyById = (propertyId) => {
+  // 팝업 안에서 숙소 ID로 그 숙소를 선택 (없는 ID면 아무 일도 안 함 — 목업 데이터 불일치 방어).
+  // dayKey(팝업을 연 칸의 날짜)를 주면 상세가 오늘이 아니라 그 날짜로 열린다(D-028과 같은 방식).
+  const selectPropertyById = (propertyId, dayKey) => {
     const property = properties.find(p => p.id === propertyId);
-    if (property) onSelectProperty?.(property);
+    if (property) onSelectProperty?.(property, dayKey ? kstDayOffsetFromToday(dayKey) : null);
   };
 
   if (noSelection) {
@@ -485,6 +486,7 @@ export default function MonthlyCalendar({
               properties={properties}
               onSelectProperty={onSelectProperty}
               showProperty={!singleProperty}
+              dayKey={selectedDay}
             />
           )}
         />
@@ -499,7 +501,7 @@ export default function MonthlyCalendar({
             <SimpleListRow
               key={propertyId}
               name={resolvePropertyName(properties, propertyId)}
-              onClick={() => { setFuturePopup(null); selectPropertyById(propertyId); }}
+              onClick={() => { setFuturePopup(null); selectPropertyById(propertyId, futurePopup.day); }}
             />
           )}
           emptyMessage="입실 예정 없음"
@@ -515,7 +517,7 @@ export default function MonthlyCalendar({
             <SimpleListRow
               key={propertyId}
               name={resolvePropertyName(properties, propertyId)}
-              onClick={() => { setFuturePopup(null); selectPropertyById(propertyId); }}
+              onClick={() => { setFuturePopup(null); selectPropertyById(propertyId, futurePopup.day); }}
             />
           )}
           emptyMessage="퇴실 예정 없음"
@@ -532,7 +534,7 @@ export default function MonthlyCalendar({
               key={`${item.property_id}-${item.checkout_at}`}
               name={resolvePropertyName(properties, item.property_id, item.property_name)}
               cleanerName={item.cleaner_name}
-              onClick={() => { setFuturePopup(null); selectPropertyById(item.property_id); }}
+              onClick={() => { setFuturePopup(null); selectPropertyById(item.property_id, futurePopup.day); }}
             />
           )}
           emptyMessage="배정완료 없음"
@@ -571,7 +573,7 @@ export default function MonthlyCalendar({
               key={propertyId}
               name={resolvePropertyName(properties, propertyId)}
               sub="청소 잡 미생성"
-              onClick={() => { setFuturePopup(null); selectPropertyById(propertyId); }}
+              onClick={() => { setFuturePopup(null); selectPropertyById(propertyId, futurePopup.day); }}
             />
           )}
           emptyMessage="해당 건 없음"
@@ -589,7 +591,7 @@ export default function MonthlyCalendar({
               name={resolvePropertyName(properties, item.property_id, item.property_name)}
               view={view}
               dateLabel={view.when}
-              onClick={() => { setFuturePopup(null); selectPropertyById(item.property_id); }}
+              onClick={() => { setFuturePopup(null); selectPropertyById(item.property_id, futurePopup.day); }}
             />
           )}
           emptyMessage="해당 건 없음"
@@ -607,7 +609,7 @@ export default function MonthlyCalendar({
               name={resolvePropertyName(properties, item.property_id, item.property_name)}
               view={view}
               dateLabel={view.when}
-              onClick={() => { setFuturePopup(null); selectPropertyById(item.property_id); }}
+              onClick={() => { setFuturePopup(null); selectPropertyById(item.property_id, futurePopup.day); }}
             />
           )}
           emptyMessage="해당 건 없음"
@@ -625,7 +627,7 @@ export default function MonthlyCalendar({
               name={resolvePropertyName(properties, item.property_id, item.property_name)}
               view={view}
               dateLabel={view.when}
-              onClick={() => { setFuturePopup(null); selectPropertyById(item.property_id); }}
+              onClick={() => { setFuturePopup(null); selectPropertyById(item.property_id, futurePopup.day); }}
             />
           )}
           emptyMessage="해당 건 없음"

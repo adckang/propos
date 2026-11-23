@@ -230,7 +230,7 @@ function CleanersPanel() {
                     flexShrink: 0,
                   }}>{TIER_LABELS[c.tier] ?? c.tier}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: '#1a202c' }}>{c.name}</div>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#1a202c' }}>{c.name || '이름 없음'}</div>
                     <div style={{
                       fontSize: 12, color: '#6b7280', fontFamily: "'DM Mono', monospace",
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -1009,7 +1009,7 @@ const TABS = [
   { key: 'test',     label: '🧪 절차 점검' },
 ];
 
-export default function CleaningManager({ syncConfig, onBack, onDataChanged }) {
+export default function CleaningManager({ syncConfig, onBack, onDataChanged, demo = false }) {
   const [tab, setTab] = useState('cleaners');
   // 절차 점검은 관리자 전용(숙소 설정·캘린더·발송 권한) — 운영자 계정에는 탭을 보이지 않는다
   const [isOperator, setIsOperator] = useState(false);
@@ -1060,7 +1060,7 @@ export default function CleaningManager({ syncConfig, onBack, onDataChanged }) {
         {tab === 'cleaners' && <CleanersPanel />}
         {tab === 'property' && <PropertyPanel syncConfig={syncConfig} onDataChanged={onDataChanged} />}
         {tab === 'jobs'     && <JobsPanel />}
-        {tab === 'test' && !isOperator && <CleaningProcessCheck apiFetch={apiFetch} />}
+        {tab === 'test' && !isOperator && <CleaningProcessCheck apiFetch={apiFetch} demo={demo} />}
       </div>
     </div>
   );

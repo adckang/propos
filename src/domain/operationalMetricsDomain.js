@@ -165,12 +165,27 @@ export function describeSafetyIndexBasis({ measurable, excluded = 0, noTarget, n
 // 5단계 등급 — measurable 지표의 평균 점수(= 표 하단 "안심지수", computeSafetyIndex) 기준.
 // "완벽해요"는 평균이 아니라 실패 총건수 0으로 직접 판정한다 — 평균은 반올림되므로 실패가
 // 있어도 100으로 반올림될 여지가 있고, 그러면 "완벽해요 (실패 1건)" 같은 모순 문장이 나온다.
+const SAFETY_GOOD_MIN = 90; // 이 점수 이상이면 "양호해요"
+const SAFETY_FAIR_MIN = 75; // 이 점수 미만이면 "불안정해요" — 요약 배너가 빨개지는 기준(isUrgentSummary)
 const TIER_BY_MIN_SCORE = [
-  { min: 90, label: '양호해요' },
-  { min: 75, label: '보통이에요' },
+  { min: SAFETY_GOOD_MIN, label: '양호해요' },
+  { min: SAFETY_FAIR_MIN, label: '보통이에요' },
   { min: 50, label: '조금 불안정해요' },
   { min: 0,  label: '아주 불안정해요' },
 ];
+
+/**
+ * 표 하단 안심지수 칸의 색 단계 — 요약 등급과 같은 경계를 쓴다(화면 기준 결정 2026-11-23).
+ * 지표별 행 색(metricRowDomain.pctColor, 90/70)을 빌려 쓰면 72점에 칸은 주황, 요약 배너는 빨강이 된다.
+ * @param {number|null} score — computeSafetyIndex().score
+ * @returns {'good'|'fair'|'poor'|null}
+ */
+export function safetyIndexTone(score) {
+  if (score == null) return null;
+  if (score >= SAFETY_GOOD_MIN) return 'good';
+  if (score >= SAFETY_FAIR_MIN) return 'fair';
+  return 'poor';
+}
 
 function tierLabel(avgScore, totalFails) {
   if (totalFails === 0) return '완벽해요';

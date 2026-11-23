@@ -181,7 +181,7 @@ describe('④ 화면 — 원래 절차만 쓰고, 실제 요청은 확인 체크
 
   test('옛 테스트 플로우(가짜 일정·취소·담당자 비활성화·상태 초기화)는 없다', () => {
     assert.ok(!/function TestFlowPanel/.test(manager));
-    assert.match(manager, /\{tab === 'test' && !isOperator && <CleaningProcessCheck apiFetch=\{apiFetch\} \/>\}/);
+    assert.match(manager, /\{tab === 'test' && !isOperator && <CleaningProcessCheck apiFetch=\{apiFetch\} demo=\{demo\} \/>\}/); // 데모 안내(s145)
     assert.match(manager, /const visibleTabs = TABS\.filter\(t => !\(isOperator && t\.key === 'test'\)\);/, '운영자에겐 탭 자체를 숨김');
     assert.match(manager, /\{visibleTabs\.map\(t => \{/);
     assert.match(manager, /label: '🧪 절차 점검'/);

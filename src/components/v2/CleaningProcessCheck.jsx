@@ -70,7 +70,7 @@ function Line({ level = 'ok', title, detail, right }) {
   );
 }
 
-export default function CleaningProcessCheck({ apiFetch }) {
+export default function CleaningProcessCheck({ apiFetch, demo = false }) {
   const [adminOnly, setAdminOnly] = useState(false); // 운영자 계정이면 이 점검은 관리자 전용 안내만
   const [properties, setProperties] = useState([]);
   const [propertyId, setPropertyId] = useState('');
@@ -95,6 +95,7 @@ export default function CleaningProcessCheck({ apiFetch }) {
 
   useEffect(() => {
     (async () => {
+      if (demo) return; // 데모 API는 일정·칸 조회를 막아 둔다 — 부르지 않고 안내만 보인다
       const me = await apiFetch('/api/auth/me').catch(() => null);
       if (me?.required && me?.role === 'operator') { setAdminOnly(true); return; }
       try {
@@ -106,7 +107,7 @@ export default function CleaningProcessCheck({ apiFetch }) {
         else setMessage({ level: 'bad', text: `숙소를 불러오지 못했어요: ${e.message}` });
       }
     })();
-  }, [apiFetch]);
+  }, [apiFetch, demo]);
 
   async function reload(target = propertyId, { keepMessage = false } = {}) {
     if (!target) return;
@@ -193,6 +194,10 @@ export default function CleaningProcessCheck({ apiFetch }) {
     } catch (e) {
       setMessage({ level: 'bad', text: `캘린더 확인 실패: ${e.message}` });
     } finally { setBusy(false); }
+  }
+
+  if (demo) {
+    return <Line level="info" title="데모에서는 절차 점검을 쓸 수 없어요" detail="실제 청소 일정과 캘린더로만 확인할 수 있어요" />;
   }
 
   if (adminOnly) {

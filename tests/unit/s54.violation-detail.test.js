@@ -605,7 +605,7 @@ describe('화면 배선 — 숙소 이름 · 구어체 한 줄 · 시간, 심각
     assert.match(panel, /buildManualCleaningRows\(/);
     assert.match(panel, /<ViolationRow/);
     assert.match(panel, /dateLabel=\{view\.when\}/);
-    assert.match(panel, /onSelectRoom\?\.\(item\.property_id\)/);
+    assert.match(panel, /onSelectRoom\?\.\(item\.property_id, item\.checkout_at\)/); // 그 퇴실 날짜로 상세(s145)
     assert.match(panel, /isMobile = false, onSelectRoom \}/);
     assert.ok(!/function CleaningItem/.test(panel), '옛 한 줄 컴포넌트가 남아 있음');
   });

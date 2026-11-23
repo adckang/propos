@@ -254,7 +254,7 @@ describe('MonthlyCalendar — 체류/공실 → ListView 날짜 이동, 입실/�
     assert.match(block, /staticItems=\{popupCleaning\.noJob\}/);
     assert.match(block, /<SimpleListRow/);
     assert.match(block, /sub="청소 잡 미생성"/);
-    assert.match(block, /selectPropertyById\(propertyId\)/);
+    assert.match(block, /selectPropertyById\(propertyId, futurePopup\.day\)/); // 그 칸 날짜로 상세(s145)
   });
 
   test('배정완료 배지를 누르면 assigned 팝업, 미배정 배지를 누르면 unassigned 팝업', () => {
@@ -297,8 +297,8 @@ describe('MonthlyCalendar — 체류/공실 → ListView 날짜 이동, 입실/�
   });
 
   test('팝업에서 항목을 누르면 팝업을 닫고 그 숙소를 선택한다 (존재하지 않는 ID는 안전하게 무시)', () => {
-    assert.match(src, /const selectPropertyById = \(propertyId\) => \{/);
-    assert.match(src, /if \(property\) onSelectProperty\?\.\(property\);/);
+    assert.match(src, /const selectPropertyById = \(propertyId, dayKey\) => \{/);
+    assert.match(src, /if \(property\) onSelectProperty\?\.\(property, dayKey \? kstDayOffsetFromToday\(dayKey\) : null\);/);
   });
 
   test('과거·이번달의 "문제" 팝업은 그대로 유지된다 (회귀 없음)', () => {

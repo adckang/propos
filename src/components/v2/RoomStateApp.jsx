@@ -849,6 +849,7 @@ export default function RoomStateApp({ onBack }) {
     currentView = (
       <CleaningManager
         syncConfig={syncConfig}
+        demo={USE_DEMO_DATA}
         onBack={() => setView('dashboard')}
         onDataChanged={refreshDbProperties}
       />

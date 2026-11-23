@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import DrilldownSheet from './DrilldownSheet';
 import SharedMetricRow, { ROW_GRID_TEMPLATE, ROW_GRID_TEMPLATE_MOBILE } from './SharedMetricRow';
-import { pctColor } from '../../../domain/metricRowDomain.js';
-import { computeOperationalMetrics, computeSafetyIndex, describeSafetyIndexBasis, RATE_ELIGIBILITY } from '../../../domain/operationalMetricsDomain.js';
+import { computeOperationalMetrics, computeSafetyIndex, describeSafetyIndexBasis, RATE_ELIGIBILITY, safetyIndexTone } from '../../../domain/operationalMetricsDomain.js';
 
 /**
  * Template-P — 7개 운영 지표 (건수 / 성공률)
@@ -16,6 +15,14 @@ import { computeOperationalMetrics, computeSafetyIndex, describeSafetyIndexBasis
 
 
 const MetricRow = SharedMetricRow;
+
+// 안심지수 칸 색 — safetyIndexTone 단계별 (none = 측정 가능한 지표 없음)
+const SAFETY_TONE_STYLE = {
+  good: { color: '#059669', bg: '#f0fdf4', border: '#bbf7d0' },
+  fair: { color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+  poor: { color: '#dc2626', bg: '#fef2f2', border: '#fca5a5' },
+  none: { color: '#94a3b8', bg: '#f8fafc', border: '#e2e8f0' },
+};
 
 // 지표 key → drilldown metric 키 매핑 (없으면 드릴다운 없음)
 const DRILLDOWN_METRIC = {
@@ -38,13 +45,8 @@ export default function EventMatrixPanel({ stats, period, isMobile = false, onSe
   const safety   = computeSafetyIndex(stats);
   const avgScore = safety.score;
 
-  const scoreColor = avgScore != null ? pctColor(avgScore) : '#94a3b8';
-  const scoreBg    = avgScore != null
-    ? (avgScore >= 90 ? '#f0fdf4' : avgScore >= 70 ? '#fffbeb' : '#fef2f2')
-    : '#f8fafc';
-  const scoreBorder = avgScore != null
-    ? (avgScore >= 90 ? '#bbf7d0' : avgScore >= 70 ? '#fde68a' : '#fca5a5')
-    : '#e2e8f0';
+  // 칸 색은 요약 등급과 같은 경계(90/75) — 행 색(pctColor, 90/70)과 따로 둔다
+  const { color: scoreColor, bg: scoreBg, border: scoreBorder } = SAFETY_TONE_STYLE[safetyIndexTone(avgScore) ?? 'none'];
 
   return (
     <div style={{ padding: isMobile ? '10px 4px' : '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>

@@ -365,7 +365,7 @@ export default function FutureMatrixPanel({ stats, period, properties = [], prop
               dateLabel={view.when}
               onClick={() => {
                 setManualOpen(false);
-                onSelectRoom?.(item.property_id);
+                onSelectRoom?.(item.property_id, item.checkout_at);
               }}
             />
           )}
@@ -388,7 +388,7 @@ export default function FutureMatrixPanel({ stats, period, properties = [], prop
               dateLabel={view.when}
               onClick={() => {
                 setRequestingOpen(false);
-                onSelectRoom?.(item.property_id);
+                onSelectRoom?.(item.property_id, item.checkout_at);
               }}
             />
           )}
@@ -411,7 +411,7 @@ export default function FutureMatrixPanel({ stats, period, properties = [], prop
               dateLabel={view.when}
               onClick={() => {
                 setNoJobOpen(false);
-                onSelectRoom?.(item.property_id);
+                onSelectRoom?.(item.property_id, item.checkout_at);
               }}
             />
           )}
@@ -434,7 +434,7 @@ export default function FutureMatrixPanel({ stats, period, properties = [], prop
               dateLabel={view.when}
               onClick={() => {
                 setOrphanOpen(false);
-                onSelectRoom?.(item.property_id);
+                onSelectRoom?.(item.property_id, item.checkout_at);
               }}
             />
           )}
