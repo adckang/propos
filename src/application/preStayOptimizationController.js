@@ -39,11 +39,86 @@ export class PreStayOptimizationController {
     const run = this.state.run;
     if (run.alerted) return;
     try {
-      await this.deps.alert({ runId: run.id, reason: run.reason, stopUnconfirmed: run.pendingOff.length > 0,
+      await this.deps.alert({ runId: run.id, reason: run.reason, stopUnconfirmed: run.pendingOff.length > 0 || this._hasUnconfirmedToggle(run),
         propertyId: run.propertyId, operatorNotifyService: run.operatorNotifyService });
       run.alerted = true;
     } catch { run.alerted = false; }
     this._save();
+  }
+  _hasUnconfirmedToggle(run = this.state.run) {
+    return Object.values(run?.toggleCooling ?? {}).some(control => !['BASELINE', 'OFF_CONFIRMED'].includes(control.phase));
+  }
+  async _sendToggle(control, phase, reading, now) {
+    control.phase = phase === 'STOP_OBSERVE' ? 'STOP_COMMAND_SENT_UNCONFIRMED' : 'START_COMMAND_SENT_UNCONFIRMED';
+    if (!this._save()) { control.phase = 'UNKNOWN'; return 'state_persistence_failed'; }
+    try { await this.deps.callService('scene', 'turn_on', { entity_id: control.entity }); }
+    catch { control.phase = 'UNKNOWN'; this._save(); return phase === 'STOP_OBSERVE' ? 'toggle_shutdown_command_failed' : 'environment_control_command_failed'; }
+    control.phase = phase;
+    control.baselineTemperature = reading.temperature;
+    control.observedFrom = now;
+    this._save();
+    return null;
+  }
+  async _advanceToggleCooling(assessment, now) {
+    const run = this.state.run;
+    run.toggleCooling ??= {};
+    const desired = new Map(assessment.commands.filter(command => command.feedback?.type === 'temperature_feedback_toggle')
+      .map(command => [command.data.entity_id, command]));
+    for (const [entity, command] of desired) {
+      if (run.toggleCooling[entity]) continue;
+      const reading = assessment.readings.find(item => item.roomId === command.feedback.roomId);
+      if (!reading) return 'toggle_feedback_sensor_missing';
+      run.toggleCooling[entity] = { entity, ...command.feedback, phase: 'BASELINE', baselineTemperature: reading.temperature, observedFrom: now };
+    }
+    for (const [entity, control] of Object.entries(run.toggleCooling)) {
+      const command = desired.get(entity);
+      const reading = assessment.readings.find(item => item.roomId === control.roomId);
+      if (!reading) return 'toggle_feedback_sensor_missing';
+      const elapsed = now - control.observedFrom;
+      const drop = control.baselineTemperature - reading.temperature;
+      if (control.phase === 'BASELINE') {
+        if (!command && drop >= control.minimumDropC) {
+          control.phase = 'ON_CONFIRMED'; run.noControlNeeded = false;
+        } else if (!command) {
+          delete run.toggleCooling[entity];
+          continue;
+        } else if (elapsed >= control.observationMs) {
+          control.preToggleCooling = drop >= control.minimumDropC;
+          run.noControlNeeded = false;
+          const fault = await this._sendToggle(control, 'START_OBSERVE', reading, now);
+          if (fault) return fault;
+          continue;
+        }
+      }
+      if (control.phase === 'START_OBSERVE') {
+        if (drop >= control.minimumDropC) control.phase = 'ON_CONFIRMED';
+        else if (elapsed >= control.observationMs && control.preToggleCooling && !control.recoveryToggleSent) {
+          control.recoveryToggleSent = true;
+          const fault = await this._sendToggle(control, 'RECOVERY_OBSERVE', reading, now);
+          if (fault) return fault;
+          continue;
+        } else if (elapsed >= control.observationMs) { control.phase = 'UNKNOWN'; this._save(); return 'toggle_cooling_response_unconfirmed'; }
+      }
+      if (control.phase === 'RECOVERY_OBSERVE') {
+        if (drop >= control.minimumDropC) control.phase = 'ON_CONFIRMED';
+        else if (elapsed >= control.observationMs) { control.phase = 'UNKNOWN'; this._save(); return 'toggle_cooling_response_unconfirmed'; }
+      }
+      if (control.phase === 'ON_CONFIRMED' && !command) {
+        const fault = await this._sendToggle(control, 'STOP_OBSERVE', reading, now);
+        if (fault) return fault;
+      }
+      if (control.phase === 'STOP_OBSERVE' && now - control.observedFrom >= control.observationMs) {
+        if (control.baselineTemperature - reading.temperature >= control.minimumDropC) {
+          control.phase = 'STOP_UNCONFIRMED'; this._save(); return 'toggle_shutdown_unconfirmed';
+        }
+        control.phase = 'OFF_CONFIRMED';
+        delete run.toggleCooling[entity];
+      }
+      if (['START_COMMAND_SENT_UNCONFIRMED', 'STOP_COMMAND_SENT_UNCONFIRMED', 'UNKNOWN', 'STOP_UNCONFIRMED'].includes(control.phase)) {
+        return 'toggle_state_unconfirmed';
+      }
+    }
+    return null;
   }
   async _stop() {
     const run = this.state.run;
@@ -56,8 +131,18 @@ export class PreStayOptimizationController {
       run.pendingOff = run.pendingOff.filter(entity => states[entity]?.state !== 'off');
     } catch { /* retain uncertain state; retry on every watchdog tick */ }
     run.controlled = run.controlled.filter(entity => run.pendingOff.includes(entity));
+    run.toggleCooling ??= {};
+    for (const [entity, control] of Object.entries(run.toggleCooling)) {
+      if (['BASELINE', 'OFF_CONFIRMED'].includes(control.phase)) { delete run.toggleCooling[entity]; continue; }
+      if (control.phase === 'ON_CONFIRMED') {
+        control.phase = 'STOP_COMMAND_SENT_UNCONFIRMED';
+        if (!this._save()) { control.phase = 'UNKNOWN'; continue; }
+        try { await this.deps.callService('scene', 'turn_on', { entity_id: entity }); control.phase = 'STOP_UNCONFIRMED'; }
+        catch { control.phase = 'UNKNOWN'; }
+      } else if (!['UNKNOWN', 'STOP_UNCONFIRMED'].includes(control.phase)) control.phase = 'UNKNOWN';
+    }
     this._save();
-    return run.pendingOff.length === 0;
+    return run.pendingOff.length === 0 && !this._hasUnconfirmedToggle(run);
   }
   async _end(status, reason) {
     const run = this.state.run;
@@ -124,7 +209,7 @@ export class PreStayOptimizationController {
         id: this.deps.createId(), propertyId: config.areaName, reservationKey: key, checkIn, status: 'PREPARING', startedAt: now,
         targets, settings: structuredClone(settings), allowedEntities: scope.allowed, operatorNotifyService: settings.operatorNotifyService,
         controlled: [], pendingOff: [], lastCommands: {}, holdSince: null, lastObservedAt: null,
-        progressAt: now, bestScore: assessment.score, readings: [], noControlNeeded: true,
+        progressAt: now, bestScore: assessment.score, readings: [], noControlNeeded: true, toggleCooling: {},
       };
       if (!this._save()) return this._end('FAILED', 'state_persistence_failed');
       await this._event('checkin_prep_time_reached');
@@ -157,10 +242,14 @@ export class PreStayOptimizationController {
     if (run.lastObservedAt == null || now - run.lastObservedAt > POLICY.maxObservationGapMs || now < run.lastObservedAt) run.holdSince = null;
     run.lastObservedAt = now;
     if (assessment.score < run.bestScore - 0.2) { run.bestScore = assessment.score; run.progressAt = now; }
-    if (!assessment.inTarget && now - run.progressAt >= POLICY.noProgressMs) return this._end('FAILED', 'environment_not_improving');
-    const desiredEntities = new Set(assessment.commands.map(c => c.data.entity_id));
+    const toggleFault = await this._advanceToggleCooling(assessment, now);
+    if (toggleFault) return this._end('FAILED', toggleFault);
+    const toggleFeedbackPending = Object.values(run.toggleCooling).some(control => ['BASELINE', 'START_OBSERVE', 'RECOVERY_OBSERVE'].includes(control.phase));
+    if (!assessment.inTarget && !toggleFeedbackPending && now - run.progressAt >= POLICY.noProgressMs) return this._end('FAILED', 'environment_not_improving');
+    const directCommands = assessment.commands.filter(command => command.feedback?.type !== 'temperature_feedback_toggle');
+    const desiredEntities = new Set(directCommands.map(c => c.data.entity_id));
     // End unnecessary demand as each room reaches its band, while monitoring
-    // every room for the full stable interval. No fixed cooling or area scenes.
+    // every room for the full stable interval. No fixed cooling or broad area scenes.
     for (const entity of [...run.controlled]) {
       if (desiredEntities.has(entity)) continue;
       try {
@@ -171,9 +260,9 @@ export class PreStayOptimizationController {
         run.controlled = run.controlled.filter(id => id !== entity); delete run.lastCommands[entity];
       } catch { return this._end('FAILED', 'device_shutdown_failed'); }
     }
-    for (const command of assessment.commands) {
+    for (const command of directCommands) {
       const entity = command.data.entity_id;
-      const signature = JSON.stringify(assessment.commands.filter(c => c.data.entity_id === entity));
+      const signature = JSON.stringify(directCommands.filter(c => c.data.entity_id === entity));
       if (run.lastCommands[entity] === signature) continue;
       if (run.lastCommands[entity] && command.domain === 'climate') {
         try {
@@ -189,7 +278,7 @@ export class PreStayOptimizationController {
       run.noControlNeeded = false;
       if (!this._save()) return this._end('FAILED', 'state_persistence_failed');
       try {
-        for (const action of assessment.commands.filter(c => c.data.entity_id === entity)) await this.deps.callService(action.domain, action.service, action.data);
+        for (const action of directCommands.filter(c => c.data.entity_id === entity)) await this.deps.callService(action.domain, action.service, action.data);
         run.lastCommands[entity] = signature;
       } catch { return this._end('FAILED', 'environment_control_command_failed'); }
     }
@@ -202,7 +291,7 @@ export class PreStayOptimizationController {
     if (assessment.inTarget) {
       if (run.holdSince == null) run.holdSince = now;
       const currentSamples = run.readings.every(reading => now - reading.temperatureAt <= POLICY.maxObservationGapMs && now - reading.humidityAt <= POLICY.maxObservationGapMs);
-      if (now - run.holdSince >= POLICY.stableMs && currentSamples) {
+      if (now - run.holdSince >= POLICY.stableMs && currentSamples && Object.keys(run.toggleCooling).length === 0) {
         if (!await this._stop()) return this._end('FAILED', 'completion_shutdown_unconfirmed');
         run.status = 'COMPLETED'; run.finishedAt = now;
         if (!this._save()) return this._end('FAILED', 'state_persistence_failed');

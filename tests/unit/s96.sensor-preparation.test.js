@@ -17,6 +17,7 @@ function fixture({ temperature = 29, humidity = 48, outdoor = 28, rooms = [room]
       put(r.temperatureEntity, temp, { unit_of_measurement: '°C' });
       put(r.humidityEntity, hum, { unit_of_measurement: '%' });
       if (r.climateEntity) put(r.climateEntity, 'off', { hvac_modes: ['off', 'cool', 'heat'], min_temp: 16, max_temp: 30, temperature_unit: '°C' });
+      if (r.coolingToggleEntity) put(r.coolingToggleEntity, 'unknown');
       if (r.dehumidifierEntity) put(r.dehumidifierEntity, 'off', { device_class: 'dehumidifier' });
     }
   };
@@ -356,5 +357,90 @@ describe('Sensor preparation — actual controller, no external device writes', 
     assert.equal(f.calls.filter(c => c.service === 'set_temperature').length, started);
     await f.tick(6, 27);
     assert.equal(f.calls.filter(c => c.service === 'set_temperature').length, started + 1);
+  });
+
+  test('IR power toggle is inferred on from living-room temperature, then toggled once to stop before completion', async () => {
+    const toggleRoom = { id: 'living', temperatureEntity: 'sensor.living_temperature', humidityEntity: 'sensor.living_humidity',
+      coolingToggleEntity: 'scene.ac_power_toggle', coolingFeedback: { observationMs: 5 * MIN, minimumDropC: 0.3 } };
+    const f = fixture({ rooms: [toggleRoom] });
+    await f.tick(0, 29);
+    await f.tick(5, 29);
+    assert.equal(f.calls.filter(c => c.domain === 'scene' && c.service === 'turn_on').length, 1, 'no cooling trend starts one toggle probe');
+    assert.equal(f.controller.snapshot().run.status, 'PREPARING');
+    await f.tick(10, 28.5);
+    await f.tick(11, 25);
+    assert.equal(f.calls.filter(c => c.domain === 'scene' && c.service === 'turn_on').length, 2, 'confirmed-on AC gets one stop toggle');
+    for (let minute = 12; minute <= 16; minute++) await f.tick(minute, 25);
+    assert.equal(f.controller.snapshot().run.status, 'COMPLETED');
+    assert.equal(f.events.filter(e => e.type === 'optimization_finished').length, 1);
+  });
+
+  test('a toggle that stops an existing cooling trend is restored once and confirmed by a new drop', async () => {
+    const toggleRoom = { id: 'living', temperatureEntity: 'sensor.living_temperature', humidityEntity: 'sensor.living_humidity',
+      coolingToggleEntity: 'scene.ac_power_toggle', coolingFeedback: { observationMs: 5 * MIN, minimumDropC: 0.3 } };
+    const f = fixture({ rooms: [toggleRoom] });
+    await f.tick(0, 29);
+    await f.tick(5, 28.5);
+    assert.equal(f.calls.filter(c => c.domain === 'scene').length, 1, 'compare the temperature trend after the first toggle');
+    await f.tick(10, 28.5);
+    assert.equal(f.calls.filter(c => c.domain === 'scene').length, 2, 'only evidence that cooling stopped permits one recovery toggle');
+    await f.tick(15, 28);
+    assert.equal(f.controller.snapshot().run.status, 'PREPARING');
+    await f.tick(16, 25);
+    assert.equal(f.calls.filter(c => c.domain === 'scene' && c.service === 'turn_on').length, 3, 'confirmed-on AC gets one stop toggle');
+    for (let minute = 17; minute <= 21; minute++) await f.tick(minute, 25);
+    assert.equal(f.controller.snapshot().run.status, 'COMPLETED');
+  });
+
+  test('IR toggle with no measured cooling response fails without blind repeated toggles', async () => {
+    const toggleRoom = { id: 'living', temperatureEntity: 'sensor.living_temperature', humidityEntity: 'sensor.living_humidity',
+      coolingToggleEntity: 'scene.ac_power_toggle', coolingFeedback: { observationMs: 5 * MIN, minimumDropC: 0.3 } };
+    const f = fixture({ rooms: [toggleRoom] });
+    await f.tick(0, 29);
+    await f.tick(5, 29);
+    assert.equal(f.controller.snapshot().run.status, 'PREPARING');
+    await f.tick(10, 29);
+    assert.equal(f.controller.snapshot().run.status, 'FAILED');
+    assert.match(f.controller.snapshot().run.reason, /toggle_cooling_response_unconfirmed/);
+    assert.equal(f.calls.filter(c => c.domain === 'scene' && c.service === 'turn_on').length, 1);
+    assert.equal(f.alerts.length, 1);
+    assert.equal(f.alerts[0].stopUnconfirmed, true);
+  });
+
+  test('IR toggle configuration is bounded and invalid settings fail before a scene command', async () => {
+    const toggleRoom = { id: 'living', temperatureEntity: 'sensor.living_temperature', humidityEntity: 'sensor.living_humidity',
+      coolingToggleEntity: 'scene.ac_power_toggle', coolingFeedback: { observationMs: MIN, minimumDropC: 0.3 } };
+    const f = fixture({ rooms: [toggleRoom] });
+    await f.tick(0, 29);
+    assert.equal(f.controller.snapshot().run.status, 'FAILED');
+    assert.match(f.controller.snapshot().run.reason, /cooling_toggle_configuration_invalid/);
+    assert.equal(f.calls.filter(c => c.domain === 'scene').length, 0);
+  });
+
+  test('restart after an IR toggle never repeats the ambiguous power command', async () => {
+    const toggleRoom = { id: 'living', temperatureEntity: 'sensor.living_temperature', humidityEntity: 'sensor.living_humidity',
+      coolingToggleEntity: 'scene.ac_power_toggle', coolingFeedback: { observationMs: 5 * MIN, minimumDropC: 0.3 } };
+    const first = fixture({ rooms: [toggleRoom] });
+    await first.tick(0, 29); await first.tick(5, 29);
+    assert.equal(first.calls.filter(c => c.domain === 'scene').length, 1);
+    const restored = fixture({ rooms: [toggleRoom], restored: first.controller.snapshot() });
+    await restored.tick(6, 29);
+    assert.equal(restored.controller.snapshot().run.status, 'FAILED');
+    assert.equal(restored.calls.filter(c => c.domain === 'scene').length, 0);
+    assert.equal(restored.alerts[0].stopUnconfirmed, true);
+  });
+
+  test('continued cooling after a stop toggle is not reported as completed or toggled again', async () => {
+    const toggleRoom = { id: 'living', temperatureEntity: 'sensor.living_temperature', humidityEntity: 'sensor.living_humidity',
+      coolingToggleEntity: 'scene.ac_power_toggle', coolingFeedback: { observationMs: 5 * MIN, minimumDropC: 0.3 } };
+    const f = fixture({ rooms: [toggleRoom] });
+    await f.tick(0, 29); await f.tick(5, 29); await f.tick(10, 28.5); await f.tick(11, 25);
+    assert.equal(f.calls.filter(c => c.domain === 'scene').length, 2);
+    await f.tick(16, 24.5);
+    assert.equal(f.controller.snapshot().run.status, 'FAILED');
+    assert.match(f.controller.snapshot().run.reason, /toggle_shutdown_unconfirmed/);
+    assert.equal(f.calls.filter(c => c.domain === 'scene').length, 2);
+    assert.equal(f.events.filter(e => e.type === 'optimization_finished').length, 0);
+    assert.equal(f.alerts[0].stopUnconfirmed, true);
   });
 });

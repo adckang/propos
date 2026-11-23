@@ -21,7 +21,7 @@ export function deriveOptimizationTargets(weather) {
 
 export function preparationEntityIds(settings = {}) {
   return [...new Set((Array.isArray(settings.rooms) ? settings.rooms : []).flatMap(r =>
-    [r.temperatureEntity, r.humidityEntity, r.climateEntity, r.humidifierEntity, r.dehumidifierEntity]).filter(Boolean))];
+    [r.temperatureEntity, r.humidityEntity, r.climateEntity, r.humidifierEntity, r.dehumidifierEntity, r.coolingToggleEntity]).filter(Boolean))];
 }
 
 function validRooms(settings) {
@@ -29,7 +29,18 @@ function validRooms(settings) {
   if (!Array.isArray(rooms) || !rooms.length) return false;
   return rooms.every(r => r && typeof r.id === 'string' && r.id && /^sensor\./.test(r.temperatureEntity) && /^sensor\./.test(r.humidityEntity))
     && new Set(rooms.map(r => r.id)).size === rooms.length
-    && new Set(rooms.flatMap(r => [r.temperatureEntity, r.humidityEntity])).size === rooms.length * 2;
+    && new Set(rooms.flatMap(r => [r.temperatureEntity, r.humidityEntity])).size === rooms.length * 2
+    && new Set(rooms.map(r => r.coolingToggleEntity).filter(Boolean)).size === rooms.filter(r => r.coolingToggleEntity).length;
+}
+
+function coolingToggleFeedback(room) {
+  if (!room.coolingToggleEntity) return null;
+  const observationMs = room.coolingFeedback?.observationMs ?? 20 * 60_000;
+  const minimumDropC = room.coolingFeedback?.minimumDropC ?? 0.3;
+  if (!/^scene\.[a-z0-9_]+$/.test(room.coolingToggleEntity)
+    || !Number.isFinite(observationMs) || observationMs < 5 * 60_000 || observationMs > 30 * 60_000
+    || !Number.isFinite(minimumDropC) || minimumDropC < 0.1 || minimumDropC > 2) return false;
+  return { type: 'temperature_feedback_toggle', roomId: room.id, observationMs, minimumDropC };
 }
 
 function available(state) {
@@ -70,7 +81,12 @@ export function evaluatePreparationEnvironment(settings, states, targets, now) {
     const mode = t < targets.temperature.min ? 'heat' : t > targets.temperature.max ? 'cool' : null;
     if (mode) {
       const entity = room.climateEntity, climate = states[entity];
-      if (!/^climate\./.test(entity) || !available(climate) || !climate.attributes?.hvac_modes?.includes(mode)) {
+      const toggleFeedback = mode === 'cool' ? coolingToggleFeedback(room) : null;
+      if (toggleFeedback === false) {
+        faults.push(`${room.id}:cooling_toggle_configuration_invalid`);
+      } else if (toggleFeedback) {
+        commands.push({ domain: 'scene', service: 'turn_on', data: { entity_id: room.coolingToggleEntity }, feedback: toggleFeedback });
+      } else if (!/^climate\./.test(entity) || !available(climate) || !climate.attributes?.hvac_modes?.includes(mode)) {
         faults.push(`${room.id}:${mode}_device_unavailable_or_unsupported`);
       } else {
         const unit = climate.attributes.temperature_unit ?? room.climateTemperatureUnit;
