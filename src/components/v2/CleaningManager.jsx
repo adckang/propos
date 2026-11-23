@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import Toast from '../../utils/toast';
-import CleaningProcessCheck from './CleaningProcessCheck.jsx';
+import CleaningProcessCheck, { Line } from './CleaningProcessCheck.jsx';
 
 // ── 상수 ──────────────────────────────────────────────────────────────────────
 
@@ -1001,6 +1001,10 @@ function WorkerApprovalPanel() {
 // ── 절차 점검 (RF-18) — 옛 "테스트 플로우"(가짜 일정 만들기·취소·담당자 비활성화)는 실제 절차와 달라 걷어냈다.
 // 실제 절차를 순서대로 확인하는 화면은 CleaningProcessCheck.jsx
 
+// 데모 API가 담당자·일정 조회를 막아 둔 탭 — 데모에서는 불러오지 않고 안내 줄만 보인다(RF-54, DEC-20 ③과 같은 방식).
+// 숙소 설정은 데모에서도 동작하고, 절차 점검은 자체 안내가 있다.
+const DEMO_BLOCKED_TABS = new Set(['approval', 'cleaners', 'jobs']);
+
 const TABS = [
   { key: 'approval', label: '직원 승인' },
   { key: 'cleaners', label: '청소자' },
@@ -1056,11 +1060,15 @@ export default function CleaningManager({ syncConfig, onBack, onDataChanged, dem
 
       {/* 콘텐츠 */}
       <div style={{ padding: '24px 20px', maxWidth: 800, margin: '0 auto' }}>
-        {tab === 'approval' && <WorkerApprovalPanel />}
-        {tab === 'cleaners' && <CleanersPanel />}
-        {tab === 'property' && <PropertyPanel syncConfig={syncConfig} onDataChanged={onDataChanged} />}
-        {tab === 'jobs'     && <JobsPanel />}
-        {tab === 'test' && !isOperator && <CleaningProcessCheck apiFetch={apiFetch} demo={demo} />}
+        {demo && DEMO_BLOCKED_TABS.has(tab) ? (
+          <Line level="info" title="데모에서는 이 화면을 쓸 수 없어요" detail="실제 담당자·청소 일정이 있어야 볼 수 있어요" />
+        ) : (<>
+          {tab === 'approval' && <WorkerApprovalPanel />}
+          {tab === 'cleaners' && <CleanersPanel />}
+          {tab === 'property' && <PropertyPanel syncConfig={syncConfig} onDataChanged={onDataChanged} />}
+          {tab === 'jobs'     && <JobsPanel />}
+          {tab === 'test' && !isOperator && <CleaningProcessCheck apiFetch={apiFetch} demo={demo} />}
+        </>)}
       </div>
     </div>
   );

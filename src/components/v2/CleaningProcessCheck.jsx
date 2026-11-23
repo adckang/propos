@@ -56,7 +56,7 @@ function Step({ step, open, onToggle, children }) {
   );
 }
 
-function Line({ level = 'ok', title, detail, right }) {
+export function Line({ level = 'ok', title, detail, right }) {
   const style = LEVEL_STYLE[level];
   return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '9px 12px', marginTop: 6, borderRadius: 8,

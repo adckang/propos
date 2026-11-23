@@ -82,7 +82,7 @@ export async function cleaningApprovalFixture({ replies = [], panel = 'WorkerApp
       export const jsx=(type,props,key)=>ui.element(type,props,key);
       export const jsxs=jsx;`,
     '../../utils/toast': `export default {show:(...args)=>globalThis[${JSON.stringify(key)}].toasts.push(args)};`,
-    './CleaningProcessCheck.jsx': `export default function CleaningProcessCheck(){return null;}`,
+    './CleaningProcessCheck.jsx': `export default function CleaningProcessCheck(){return null;} export function Line(){return null;}`,
   };
   try {
     const bundle = await build({ entryPoints: [entry], bundle: true, write: false, platform: 'node', format: 'esm',
