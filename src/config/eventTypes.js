@@ -48,7 +48,6 @@ export const SOFT_EVENT_TYPES = new Set([
 // 청소 운영 문제 — 서버(청소 API·후속 처리)가 직접 events 표에 남긴다, 상태 변경 없음 (RF-32).
 // EVENT_TYPES(= Pi 입구가 받는 종류)에 넣지 않는다 — Pi 키로 가짜 문제를 넣거나 서버 기록 자리를 먼저 차지하지 못하게
 export const SERVER_PROBLEM_EVENT_TYPES = Object.freeze({
-  CLEANING_CANCEL_FOLLOWUP_FAILED: "cleaning_cancel_followup_failed",
   CLEANING_UNASSIGNED_AT_START: "cleaning_unassigned_at_start",
 });
 

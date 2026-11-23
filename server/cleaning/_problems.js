@@ -1,8 +1,7 @@
 /**
  * 청소 운영 문제 기록 (RF-32, DEC-08) — 상태를 되돌리지 않고 문제 이벤트로 남긴다.
  *
- * - cleaning_cancel_followup_failed: 청소 취소는 저장됐지만 뒤따르는 외부 작업(담당자 구글 일정 삭제·막힘 일정 만들기/저장)이 실패
- * - cleaning_unassigned_at_start:    청소 시작 예정 시각이 됐는데 담당자가 없음 (청소 1건에 1번)
+ * - cleaning_unassigned_at_start: 청소 시작 예정 시각이 됐는데 담당자가 없음 (청소 1건에 1번). 취소된 청소도 여기에 든다(DEC-14)
  *
  * events 표의 (숙소, 종류, 발생 시각) 중복 방지를 그대로 쓴다. 기록 실패는 로그만 — 이 기록 때문에 원래 처리가 실패하지 않게.
  */
@@ -11,8 +10,8 @@ import { insertEvent } from "../../src/infrastructure/eventRepository.js";
 import { isCheckoutCancelled } from "./_reservationSync.js";
 import { SERVER_PROBLEM_EVENT_TYPES } from "../../src/config/eventTypes.js";
 
-const { CLEANING_CANCEL_FOLLOWUP_FAILED, CLEANING_UNASSIGNED_AT_START } = SERVER_PROBLEM_EVENT_TYPES;
-export { CLEANING_CANCEL_FOLLOWUP_FAILED, CLEANING_UNASSIGNED_AT_START };
+const { CLEANING_UNASSIGNED_AT_START } = SERVER_PROBLEM_EVENT_TYPES;
+export { CLEANING_UNASSIGNED_AT_START };
 
 export const CLEANING_PROBLEM_SOURCE = "PROPOS_CLEANING";
 

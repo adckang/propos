@@ -34,13 +34,12 @@ const DIRECT_ISSUES = Object.freeze({
   sensor_offline_detected:                  { category: event => phaseCategory(event.data?.mainStatus), label: '감지 센서 연결 끊김' },
   // RF-32: 청소 시작 시 담당자 없음 — 청소 일정 표의 현재 상태로 만드는 배정 문제와 같은 문구. 그 항목이 사라진(나중에 배정된) 청소만 보인다
   cleaning_unassigned_at_start:             { category: 'CLEANING', label: event => cleaningAssignmentIssueLabel(event.data?.status) },
-  cleaning_cancel_followup_failed:          { category: 'CLEANING', label: '청소 취소 후속 처리 실패' },
 });
 
 /** 배정되지 않은 청소의 문제 문구 — 청소 일정 표에서 만드는 항목과 시작 시 기록(RF-32)이 같이 쓴다 */
 export function cleaningAssignmentIssueLabel(status) {
   if (status === 'ESCALATED') return '청소 배정 실패';
-  if (status === 'CANCELLED') return '청소 재배정 필요';
+  if (status === 'CANCELLED') return '청소 미할당(취소)'; // DEC-14: 청소 취소는 이 문제 1건
   return '청소 미배정';
 }
 
