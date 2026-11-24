@@ -104,6 +104,7 @@ export async function createCleaningSqlFixture({ propertyOrigin = 'REAL', jobOri
   await engine.exec(await readFile(new URL('../../data/schema-cleaning.sql', import.meta.url), 'utf8'));
   await engine.exec(await readFile(new URL('../../data/migrate-cleaning-v2.sql', import.meta.url), 'utf8'));
   await engine.exec(await readFile(new URL('../../data/migrate-cleaning-initial-delivery.sql', import.meta.url), 'utf8'));
+  await engine.exec(await readFile(new URL('../../data/migrate-automation-anomalies.sql', import.meta.url), 'utf8'));
   const jobId = randomUUID(), cleanerId = randomUUID();
   await pool.query(`INSERT INTO property_cleaning_config(property_id,name,data_origin) VALUES('fixture-property','Fixture Property',$1)`, [propertyOrigin]);
   await pool.query(`INSERT INTO cleaners(id,name,phone,email,tier,active,fcm_status,fcm_token)

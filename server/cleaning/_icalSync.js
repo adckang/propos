@@ -13,6 +13,7 @@
  */
 import { openCleaningSlot } from './_calendar.js';
 import { advanceJob, calcCleaningTimes, planJobDispatch, postSlack, toKstDateKey } from './_dispatch.js';
+import { saveReservationIdentity } from './_reservationIdentity.js';
 import { alertGoneCheckouts, isCompleteCalendar, reservationUidOf, retireAfterSync } from './_reservationSync.js';
 import { airbnbEventsToReservations, parseVEvents } from '../../src/domain/room-state/icalParser.js';
 
@@ -63,23 +64,21 @@ async function syncOneProperty(db, { prop, kv, now, syncStartedAt, goneAlertDeps
     );
     const checkouts = parsedReservations.filter(r => r.checkOut.getTime() >= now);
 
+    const identities = new Map();
     for (const reservation of parsedReservations) {
-      await db.query(
-        `INSERT INTO property_reservations
-           (property_id,reservation_uid,guest_name,platform,check_in,check_out,status,source_system,source_ref,raw_data,data_origin,last_seen_at,updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,'ACTIVE','AIRBNB_ICAL',$7,$8,'REAL',NOW(),NOW())
-         ON CONFLICT (property_id,reservation_uid) DO UPDATE SET
-           guest_name=EXCLUDED.guest_name,
-           check_in=EXCLUDED.check_in,
-           check_out=EXCLUDED.check_out,
-           status='ACTIVE',
-           source_ref=EXCLUDED.source_ref,
-           raw_data=EXCLUDED.raw_data,
-           last_seen_at=NOW(),
-           updated_at=NOW()`,
-        [prop.property_id, reservationUidOf(prop.property_id, reservation), reservation.guestName, reservation.platform,
-         reservation.checkIn.toISOString(), reservation.checkOut.toISOString(), prop.ical_url, reservation],
-      );
+      const reservationUid = reservationUidOf(prop.property_id, reservation);
+      const identity = await saveReservationIdentity(db, {
+        propertyId: prop.property_id,
+        reservationUid,
+        guestName: reservation.guestName,
+        platform: reservation.platform,
+        checkIn: reservation.checkIn,
+        checkOut: reservation.checkOut,
+        sourceRef: prop.ical_url,
+        rawData: reservation,
+        dataOrigin: 'REAL',
+      });
+      identities.set(reservationUid, identity);
     }
 
     // RF-16: 피드에서 사라진 미래 예약(취소·새 번호로 재발행)을 취소로 표시하고, 퇴실이 없어진 날(취소·같은 번호의 날짜 변경)의
@@ -104,6 +103,9 @@ async function syncOneProperty(db, { prop, kv, now, syncStartedAt, goneAlertDeps
 
     for (const reservation of checkouts) {
       const { uid } = reservation;
+      const reservationUid = reservationUidOf(prop.property_id, reservation);
+      const identity = identities.get(reservationUid);
+      if (!identity?.cleaningObligationId) throw new Error(`청소 의무 없음 (${prop.property_id}/${reservationUid})`);
       const date = toKstDateKey(reservation.checkOut);
       if (!date) {
         console.error(`[syncAllIcal] 잘못된 체크아웃 날짜 (${prop.property_id}/${uid ?? 'unknown'})`);
@@ -117,13 +119,26 @@ async function syncOneProperty(db, { prop, kv, now, syncStartedAt, goneAlertDeps
 
       const { rowCount } = await db.query(
         `INSERT INTO cleaning_jobs
-           (property_id,reservation_uid,checkout_at,cleaning_start_at,cleaning_end_at,source,source_ref,data_origin,dispatch_after)
-         VALUES ($1,$2,$3,$4,$5,$6,$2,'REAL',$7)
+           (property_id,reservation_uid,cleaning_obligation_id,checkout_at,cleaning_start_at,cleaning_end_at,source,source_ref,data_origin,dispatch_after)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$2,'REAL',$8)
          ON CONFLICT (property_id,checkout_at) DO NOTHING`,
         // 예약 행과 같은 번호 규칙(RF-16) — 번호 없는 피드 예약도 저장된 예약을 가리키게
-        [prop.property_id, reservationUidOf(prop.property_id, reservation), cleaning_start_at.toISOString(),
+        [prop.property_id, reservationUid, identity.cleaningObligationId, cleaning_start_at.toISOString(),
          cleaning_start_at.toISOString(), cleaning_end_at.toISOString(), source, dispatchAfter.toISOString()]
       );
+
+      // A→B→A로 퇴실이 돌아오면 같은 시각의 기존 실행 작업을 재사용하되, 끝난 옛 의무가 아니라 새 현재 의무를 가리킨다.
+      if (rowCount === 0) {
+        await db.query(
+          `UPDATE cleaning_jobs j SET cleaning_obligation_id=$3,reservation_uid=$2,updated_at=NOW()
+            WHERE j.property_id=$1 AND j.checkout_at=$4
+              AND (j.cleaning_obligation_id IS NULL OR EXISTS (
+                SELECT 1 FROM cleaning_obligations o
+                 WHERE o.id=j.cleaning_obligation_id AND o.status='TARGET_REMOVED'
+              ))`,
+          [prop.property_id, reservationUid, identity.cleaningObligationId, cleaning_start_at.toISOString()],
+        );
+      }
 
       if (rowCount > 0 && source === "SHORT_NOTICE") {
         // 새로 생긴 2주 안 일정 — 지금 칸을 열고 바로 요청한다(칸은 요청 날 연다, DEC-07). 이미 있던 일정은 여기서 열지 않는다:

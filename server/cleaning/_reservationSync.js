@@ -80,9 +80,18 @@ export async function retireVanishedReservations(db, { propertyId, seenUids, fee
   if (vanished >= MASS_VANISH_MIN && vanished * 2 > Number(counts?.future_active ?? 0)) return { retired: [], skipped: 'MASS_VANISH' };
   if (vanished === 0) return { retired: [], skipped: null };
   const { rows: retired } = await db.query(
-    `UPDATE property_reservations SET status='CANCELLED', updated_at=NOW()
-      WHERE ${vanishedWhere}
-      RETURNING reservation_uid, check_in, check_out`,
+    `WITH retired AS (
+       UPDATE property_reservations SET status='CANCELLED', updated_at=NOW()
+        WHERE ${vanishedWhere}
+        RETURNING reservation_uid,check_in,check_out,stay_id
+     ), ended_obligations AS (
+       UPDATE cleaning_obligations o
+          SET status='TARGET_REMOVED',ended_at=NOW(),end_reason='RESERVATION_CANCELLED'
+         FROM retired r
+        WHERE o.stay_id=r.stay_id AND o.status='ACTIVE'
+        RETURNING o.id
+     )
+     SELECT reservation_uid,check_in,check_out FROM retired`,
     params,
   );
   return { retired, skipped: null };

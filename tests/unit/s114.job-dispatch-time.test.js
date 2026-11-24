@@ -167,6 +167,7 @@ describe('iCal 동기화 — 실제 핸들러 실행(같은 규칙을 쓰는지)
         if (sql.includes('SELECT NOW()')) return { rows: [{ now: new Date() }] };
         if (sql.includes('INSERT INTO property_reservations')) return { rowCount: 1, rows: [] };
         if (sql.includes('INSERT INTO cleaning_jobs')) { inserts.push({ sql, params }); return { rowCount: 0, rows: [] }; }
+        if (sql.includes('UPDATE cleaning_jobs j SET cleaning_obligation_id')) return { rowCount: 1, rows: [] };
         if (sql.includes('DELETE FROM property_calendar_blockers')) return { rows: [] };
         throw new Error(`예상하지 못한 쿼리: ${sql.slice(0, 60)}`);
       } },
@@ -174,6 +175,7 @@ describe('iCal 동기화 — 실제 핸들러 실행(같은 규칙을 쓰는지)
       fetch: async () => ({ ok: true, text: async () => 'BEGIN:VCALENDAR\nEND:VCALENDAR' }),
       parseVEvents: () => [], airbnbEventsToReservations: () => reservations,
       reservationUidOf, retireAfterSync: async () => ({}), isCompleteCalendar: () => true,
+      saveReservationIdentity: async () => ({ stayId: 'stay-fixture', cleaningObligationId: 'obligation-fixture' }),
       alertGoneCheckouts: async () => {},
       toKstDateKey, calcCleaningTimes, planJobDispatch,
       advanceJob: async () => {}, postSlack: async () => true,
@@ -198,11 +200,16 @@ describe('iCal 동기화 — 실제 핸들러 실행(같은 규칙을 쓰는지)
         return { rowCount: 1, rows: [] };
       }
       if (sql.includes('INSERT INTO cleaning_jobs')) { jobs.push(params[0]); return { rowCount: 0, rows: [] }; }
+      if (sql.includes('UPDATE cleaning_jobs j SET cleaning_obligation_id')) return { rowCount: 1, rows: [] };
       throw new Error(`예상하지 못한 쿼리: ${sql.slice(0, 60)}`);
     } };
     const deps = {
       openCleaningSlot: async () => true, fetch: async () => ({ ok: true, text: async () => 'BEGIN:VCALENDAR\nEND:VCALENDAR' }),
       parseVEvents: () => [], airbnbEventsToReservations: () => reservations,
+      saveReservationIdentity: async (_db, input) => {
+        if (input.propertyId === 'A숙소') throw Object.assign(new Error('저장 거절'), { code: '23514' });
+        return { stayId: 'stay-fixture', cleaningObligationId: 'obligation-fixture' };
+      },
       reservationUidOf, retireAfterSync: async () => ({}), isCompleteCalendar: () => true, alertGoneCheckouts: async () => {},
       toKstDateKey, calcCleaningTimes, planJobDispatch, advanceJob: async () => {}, postSlack: async () => true,
       console: { error: (...a) => errors.push(a.join(' ')) },

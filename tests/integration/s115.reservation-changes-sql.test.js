@@ -51,6 +51,12 @@ async function harness() {
     async reservation(uid) {
       return (await f.pool.query('SELECT status, check_out FROM property_reservations WHERE property_id=$1 AND reservation_uid=$2', [PROPERTY, uid])).rows[0];
     },
+    async obligation(uid) {
+      return (await f.pool.query(`SELECT o.status,o.end_reason
+        FROM property_reservations r JOIN cleaning_obligations o ON o.stay_id=r.stay_id
+        WHERE r.property_id=$1 AND r.reservation_uid=$2
+        ORDER BY o.created_at DESC,o.id DESC LIMIT 1`, [PROPERTY, uid])).rows[0];
+    },
     async jobOn(days) {
       return (await f.pool.query(`SELECT * FROM cleaning_jobs WHERE property_id=$1 AND (checkout_at AT TIME ZONE 'Asia/Seoul')::date = $2::date`,
         [PROPERTY, kstDate(days)])).rows[0];
@@ -166,6 +172,8 @@ test('취소 — 요청이 이미 나간 퇴실이 취소되면: 두 번 연속 
     await h.later();
     await h.run([keep]);
     assert.equal((await h.reservation('cancel@airbnb')).status, 'CANCELLED');
+    assert.deepEqual(await h.obligation('cancel@airbnb'),
+      { status: 'TARGET_REMOVED', end_reason: 'RESERVATION_CANCELLED' }, '예약 취소와 같은 SQL에서 현재 의무 종료');
     const job = await h.jobOn(5);
     assert.ok(h.slackTexts().some(text => text.includes('퇴실')), '운영자 알림');
     const next = await dispatch.advanceJob(h.f.pool, job);

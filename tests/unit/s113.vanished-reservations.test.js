@@ -17,6 +17,7 @@ const api = readFileSync(new URL('../../api/cleaning/[...slug].js', import.meta.
 const cron = readFileSync(new URL('../../api/cron/[...slug].js', import.meta.url), 'utf8');
 // 예약 가져오기는 화면 API·정기 작업이 같이 쓰도록 공용 모듈로 옮겼다(RF-20)
 const icalSync = readFileSync(new URL('../../server/cleaning/_icalSync.js', import.meta.url), 'utf8');
+const reservationIdentity = readFileSync(new URL('../../server/cleaning/_reservationIdentity.js', import.meta.url), 'utf8');
 const syncBlock = icalSync.slice(icalSync.indexOf('export async function syncAllPropertiesIcal')); // 전체 + 숙소 하나(syncOneProperty)
 
 describe('동기화 연결', () => {
@@ -24,7 +25,7 @@ describe('동기화 연결', () => {
     const checkIn = new Date('2026-12-19T06:00:00Z');
     assert.equal(reservationUidOf('파주201', { uid: 'abc@airbnb.com', checkIn }), 'abc@airbnb.com');
     assert.equal(reservationUidOf('파주201', { uid: '', checkIn }), '파주201:2026-12-19T06:00:00.000Z');
-    assert.match(syncBlock, /\[prop\.property_id, reservationUidOf\(prop\.property_id, reservation\),/);
+    assert.match(syncBlock, /const reservationUid = reservationUidOf\(prop\.property_id, reservation\);[\s\S]*reservationUid,/);
     assert.match(syncBlock, /seenUids: parsedReservations\.map\(reservation => reservationUidOf\(prop\.property_id, reservation\)\)/);
     assert.ok(!/reservation\.uid \|\| `\$\{prop\.property_id\}:/.test(syncBlock), '번호 규칙 사본이 남아 있음');
   });
@@ -77,7 +78,7 @@ describe('동기화 연결', () => {
   });
 
   test('다시 나타난 예약은 기존 저장이 "예약됨"으로 되돌린다 (취소 표시가 굳지 않는다)', () => {
-    assert.match(syncBlock, /ON CONFLICT \(property_id,reservation_uid\) DO UPDATE SET[\s\S]*?status='ACTIVE'/);
+    assert.match(reservationIdentity, /ON CONFLICT \(property_id,reservation_uid\) DO UPDATE SET[\s\S]*?status='ACTIVE'/);
   });
 
   test('정리·알림이 실패해도 새 예약·청소 생성은 계속되고, 알림 기록은 숙소마다 하나(바뀌었을 때만 저장)', () => {
@@ -89,7 +90,7 @@ describe('동기화 연결', () => {
   });
 
   test('새 청소 작업도 예약과 같은 번호 규칙으로 저장한다 (번호 없는 피드 예약도 저장된 예약을 가리킴)', () => {
-    assert.match(syncBlock, /\[prop\.property_id, reservationUidOf\(prop\.property_id, reservation\), cleaning_start_at\.toISOString\(\),/);
+    assert.match(syncBlock, /\[prop\.property_id, reservationUid, identity\.cleaningObligationId, cleaning_start_at\.toISOString\(\),/);
     assert.ok(!/\[prop\.property_id, uid \?\? null, cleaning_start_at/.test(syncBlock));
   });
 });
