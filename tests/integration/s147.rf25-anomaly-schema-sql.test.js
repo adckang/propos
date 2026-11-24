@@ -75,6 +75,22 @@ test('RF-25 SQL: 정책·내부 신원 백필과 중복 방지 제약이 재실�
     error => error.code === '23505',
   );
 
+  const firstAt = (await db.query(`SELECT id FROM cleaning_obligations
+    WHERE stay_id=$1 AND checkout_at='2026-12-03T02:00Z'`, [stayId])).rows[0].id;
+  await db.query(`UPDATE cleaning_obligations
+    SET status='TARGET_REMOVED',ended_at='2026-11-28T00:00Z',end_reason='CHECKOUT_CHANGED'
+    WHERE id=$1`, [firstAt]);
+  const middle = (await db.query(`INSERT INTO cleaning_obligations
+      (property_id,stay_id,checkout_at,status,data_origin)
+    VALUES('P1',$1,'2026-12-04T02:00Z','ACTIVE','REAL') RETURNING id`, [stayId])).rows[0].id;
+  await db.query(`UPDATE cleaning_obligations
+    SET status='TARGET_REMOVED',ended_at='2026-11-29T00:00Z',end_reason='CHECKOUT_CHANGED'
+    WHERE id=$1`, [middle]);
+  const returned = (await db.query(`INSERT INTO cleaning_obligations
+      (property_id,stay_id,checkout_at,status,data_origin)
+    VALUES('P1',$1,'2026-12-03T02:00Z','ACTIVE','REAL') RETURNING id`, [stayId])).rows[0].id;
+  assert.notEqual(returned, firstAt, 'A→B→A면 끝난 A를 열지 않고 새 의무를 발급');
+
   const anomalyA = (await db.query(`INSERT INTO automation_anomalies
       (property_id,anomaly_type,incident_key,stay_id,source_type,source_ref,
        master_policy_version_id,stabilization_minutes,occurred_at)

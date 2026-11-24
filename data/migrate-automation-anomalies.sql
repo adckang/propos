@@ -93,12 +93,16 @@ CREATE TABLE IF NOT EXISTS cleaning_obligations (
   data_origin TEXT NOT NULL CHECK (data_origin IN ('REAL','SIMULATED')),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (property_id,id),
-  UNIQUE (stay_id,checkout_at),
   CONSTRAINT cleaning_obligations_stay_fk FOREIGN KEY (property_id,stay_id)
     REFERENCES property_stays(property_id,id) ON UPDATE CASCADE,
   CHECK ((status='ACTIVE' AND ended_at IS NULL AND end_reason IS NULL)
       OR (status='TARGET_REMOVED' AND ended_at IS NOT NULL AND end_reason IS NOT NULL))
 );
+
+-- 같은 숙박이 A→B→A로 다시 바뀌면 끝난 A를 다시 열지 않고 새 의무를 만든다.
+-- 초기 확장판에 있던 시각 유일 제약은 그 재발을 막으므로 제거하고, 현재 ACTIVE 하나만 아래 인덱스로 보장한다.
+ALTER TABLE cleaning_obligations
+  DROP CONSTRAINT IF EXISTS cleaning_obligations_stay_id_checkout_at_key;
 
 CREATE UNIQUE INDEX IF NOT EXISTS cleaning_obligations_one_active_per_stay
   ON cleaning_obligations(stay_id) WHERE status='ACTIVE';
@@ -106,17 +110,23 @@ CREATE UNIQUE INDEX IF NOT EXISTS cleaning_obligations_one_active_per_stay
 ALTER TABLE cleaning_jobs ADD COLUMN IF NOT EXISTS cleaning_obligation_id UUID;
 
 -- 기존 예약에는 신원만 백필한다. 이 백필로 과거 이상/해결을 만들거나 지표에 넣지 않는다.
+WITH grouped AS (
+  SELECT r.property_id,r.stay_id,r.check_out,
+         CASE WHEN BOOL_OR(r.status='ACTIVE') THEN 'ACTIVE' ELSE 'TARGET_REMOVED' END AS status,
+         CASE WHEN BOOL_OR(r.status='ACTIVE') THEN NULL ELSE MAX(r.updated_at) END AS ended_at,
+         CASE WHEN BOOL_OR(r.status='ACTIVE') THEN NULL ELSE 'RESERVATION_CANCELLED' END AS end_reason,
+         CASE WHEN BOOL_OR(r.data_origin='REAL') THEN 'REAL' ELSE 'SIMULATED' END AS data_origin,
+         MIN(r.created_at) AS created_at
+    FROM property_reservations r
+   WHERE r.stay_id IS NOT NULL
+   GROUP BY r.property_id,r.stay_id,r.check_out
+)
 INSERT INTO cleaning_obligations(property_id,stay_id,checkout_at,status,ended_at,end_reason,data_origin,created_at)
-SELECT r.property_id,r.stay_id,r.check_out,
-       CASE WHEN BOOL_OR(r.status='ACTIVE') THEN 'ACTIVE' ELSE 'TARGET_REMOVED' END,
-       CASE WHEN BOOL_OR(r.status='ACTIVE') THEN NULL ELSE MAX(r.updated_at) END,
-       CASE WHEN BOOL_OR(r.status='ACTIVE') THEN NULL ELSE 'RESERVATION_CANCELLED' END,
-       CASE WHEN BOOL_OR(r.data_origin='REAL') THEN 'REAL' ELSE 'SIMULATED' END,
-       MIN(r.created_at)
-  FROM property_reservations r
- WHERE r.stay_id IS NOT NULL
- GROUP BY r.property_id,r.stay_id,r.check_out
-ON CONFLICT (stay_id,checkout_at) DO NOTHING;
+SELECT g.property_id,g.stay_id,g.check_out,g.status,g.ended_at,g.end_reason,g.data_origin,g.created_at
+  FROM grouped g
+ WHERE NOT EXISTS (
+   SELECT 1 FROM cleaning_obligations o WHERE o.stay_id=g.stay_id AND o.checkout_at=g.check_out
+ );
 
 -- 같은 UID의 날짜 변경으로 남은 옛 작업도 해당 숙박의 끝난 의무로만 연결한다.
 INSERT INTO cleaning_obligations(property_id,stay_id,checkout_at,status,ended_at,end_reason,data_origin,created_at)
@@ -125,7 +135,9 @@ SELECT DISTINCT r.property_id,r.stay_id,j.checkout_at,'TARGET_REMOVED',j.updated
   JOIN property_reservations r
     ON r.property_id=j.property_id AND r.reservation_uid=j.reservation_uid
  WHERE r.stay_id IS NOT NULL AND r.check_out<>j.checkout_at
-ON CONFLICT (stay_id,checkout_at) DO NOTHING;
+   AND NOT EXISTS (
+     SELECT 1 FROM cleaning_obligations o WHERE o.stay_id=r.stay_id AND o.checkout_at=j.checkout_at
+   );
 
 UPDATE cleaning_jobs j
    SET cleaning_obligation_id=o.id
