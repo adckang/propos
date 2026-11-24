@@ -14,7 +14,9 @@
  *   alertUnregisteredCleaner = 같은 예약 일정의 미등록 담당자 경고를 하루 한 번만 보내는 운영자 알림
  * @returns {Promise<Array<{ eventDate: string, attendeeEmail: string, cleaner?: string, result: string }>>}
  */
-export async function assignFromCalendarEvents(db, { property, events, onlyDate = null }, deps) {
+export async function assignFromCalendarEvents(db, {
+  property, events, onlyDate = null, actorType = 'CLEANER', changeReason = 'CALENDAR_ASSIGNMENT',
+}, deps) {
   const { calendarCleaningTimes, resolveCalendarCleaner, sendCompletionSmsToRest, postAssignmentSlack, alertUnregisteredCleaner, goneAlertDeps } = deps;
   const results = [];
   for (const evt of events ?? []) {
@@ -50,15 +52,24 @@ export async function assignFromCalendarEvents(db, { property, events, onlyDate 
     if (job.status === 'ASSIGNED' && job.assigned_cleaner_id
         && (job.assigned_cleaner_id !== cleaner.id || job.google_event_id !== evt.id)) continue;
     const { rows: updated } = await db.query(
-      `UPDATE cleaning_jobs SET status='ASSIGNED',assigned_cleaner_id=$1,google_event_id=$2,
-         cleaning_start_at=$4,cleaning_end_at=$5,updated_at=NOW()
-       WHERE id=$3 AND data_origin='REAL' AND status=$6
-         AND (status!='ASSIGNED' OR assigned_cleaner_id IS NULL OR (assigned_cleaner_id=$1 AND google_event_id=$2))
-         AND checkout_at <= $4::timestamptz
-         AND (status!='ASSIGNED' OR assigned_cleaner_id IS DISTINCT FROM $1 OR google_event_id IS DISTINCT FROM $2
-              OR cleaning_start_at IS DISTINCT FROM $4::timestamptz OR cleaning_end_at IS DISTINCT FROM $5::timestamptz)
-       RETURNING id`,
-      [cleaner.id, evt.id, job.id, times.cleaning_start_at, times.cleaning_end_at, job.status]
+      `WITH updated AS (
+         UPDATE cleaning_jobs SET status='ASSIGNED',assigned_cleaner_id=$1,google_event_id=$2,
+            cleaning_start_at=$4,cleaning_end_at=$5,updated_at=NOW()
+          WHERE id=$3 AND data_origin='REAL' AND status=$6
+            AND (status!='ASSIGNED' OR assigned_cleaner_id IS NULL OR (assigned_cleaner_id=$1 AND google_event_id=$2))
+            AND checkout_at <= $4::timestamptz
+            AND (status!='ASSIGNED' OR assigned_cleaner_id IS DISTINCT FROM $1 OR google_event_id IS DISTINCT FROM $2
+                 OR cleaning_start_at IS DISTINCT FROM $4::timestamptz OR cleaning_end_at IS DISTINCT FROM $5::timestamptz)
+          RETURNING id,property_id,cleaning_obligation_id,assigned_cleaner_id,updated_at
+       )
+       SELECT u.id,record_cleaning_assignment_history(
+         u.property_id,u.cleaning_obligation_id,u.id,'ASSIGNED',u.assigned_cleaner_id,$7,$8,
+         $9||':'||u.updated_at::text,
+         u.updated_at,jsonb_build_object('calendarEventId',$2)
+       ) AS assignment_history_recorded
+         FROM updated u`,
+      [cleaner.id, evt.id, job.id, times.cleaning_start_at, times.cleaning_end_at, job.status,
+       actorType, changeReason, `calendar:${evt.id}:job:${job.id}:assigned`]
     );
     if (!updated.length) { results.push({ eventDate, attendeeEmail, result: "이미 ASSIGNED" }); continue; }
     results.push({ eventDate, attendeeEmail, cleaner: cleaner.name, result: "ASSIGNED" });

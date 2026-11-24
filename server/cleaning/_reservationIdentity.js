@@ -88,12 +88,21 @@ export async function saveReservationIdentity(pool, input) {
       [stayId],
     );
     if (active && new Date(active.checkout_at).getTime() !== Date.parse(checkOutIso)) {
-      await db.query(
+      const { rows: [ended] } = await db.query(
         `UPDATE cleaning_obligations
             SET status='TARGET_REMOVED',ended_at=NOW(),end_reason='CHECKOUT_CHANGED'
-          WHERE id=$1 AND status='ACTIVE'`,
+          WHERE id=$1 AND status='ACTIVE'
+          RETURNING id,property_id,ended_at`,
         [active.id],
       );
+      if (ended) {
+        await db.query(
+          `SELECT record_cleaning_assignment_history(
+             $1,$2,NULL,'TARGET_REMOVED',NULL,'SYSTEM','CHECKOUT_CHANGED',$3,$4,$5::jsonb)`,
+          [propertyId, active.id, `obligation:${active.id}:checkout-changed`, ended.ended_at,
+           JSON.stringify({ checkOut: checkOutIso })],
+        );
+      }
     }
 
     let cleaningObligationId = active && new Date(active.checkout_at).getTime() === Date.parse(checkOutIso)
@@ -105,13 +114,18 @@ export async function saveReservationIdentity(pool, input) {
          VALUES($1,$2,$3,'ACTIVE',$4)
          ON CONFLICT (stay_id) WHERE status='ACTIVE'
          DO UPDATE SET stay_id=EXCLUDED.stay_id
-         RETURNING id,checkout_at`,
+         RETURNING id,checkout_at,created_at`,
         [propertyId, stayId, checkOutIso, dataOrigin],
       );
       if (new Date(obligation.checkout_at).getTime() !== Date.parse(checkOutIso)) {
         throw new Error('동시에 저장된 다른 퇴실 의무가 있습니다');
       }
       cleaningObligationId = obligation.id;
+      await db.query(
+        `SELECT record_cleaning_assignment_history(
+           $1,$2,NULL,'UNASSIGNED',NULL,'SYSTEM','OBLIGATION_CREATED',$3,$4,'{}'::jsonb)`,
+        [propertyId, obligation.id, `obligation:${obligation.id}:created`, obligation.created_at],
+      );
     }
 
     return { stayId, cleaningObligationId };

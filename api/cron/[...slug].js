@@ -22,6 +22,7 @@ import { syncAllPropertiesIcal } from "../../server/cleaning/_icalSync.js";
 import { pushCurrentReservationsToWatchers } from "../../server/watcherReservationSync.js";
 import { isCheckoutCancelled, reservationUidOf } from "../../server/cleaning/_reservationSync.js";
 import { recordUnassignedAtStart } from "../../server/cleaning/_problems.js";
+import { reconcileCleaningUnassignedAnomalies } from "../../server/cleaning/_unassignedAnomalies.js";
 import { remindTomorrowCleanings } from "../../server/cleaning/_dayBeforeReminder.js";
 import { parseVEvents, airbnbEventsToReservations } from "../../src/domain/room-state/icalParser.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
@@ -284,6 +285,18 @@ async function handleMonthlyClean(db, res) {
 // ── 후속 처리 (아침·저녁 정기 작업 안에서) ─────────────────
 
 async function handleCleaningFollowup(db, res) {
+  // RF-25: 다음 체크인 12시간 전부터의 미배정 구간을 배정 이력으로 재생한다.
+  // 관련 알림에는 이 사건에 실제 적용된 해결 기준도 함께 보낸다.
+  try {
+    // 이상 생명주기 저장은 여러 쿼리를 한 연결의 트랜잭션으로 묶어야 한다. 이 핸들러의 운영 입력은 pg.Pool이다.
+    if (typeof db.connect === 'function') {
+      const anomalies = await reconcileCleaningUnassignedAnomalies(db, { sendAlert: postSlack });
+      if (anomalies.opened || anomalies.resumed || anomalies.ended) {
+        console.log(`[followup] 체크인 임박 청소 미배정: 발생 ${anomalies.opened} · 재발 ${anomalies.resumed} · 종료 ${anomalies.ended}`);
+      }
+    }
+  } catch (e) { console.error("[followup] 체크인 임박 미배정 감지 실패:", e.message); }
+
   // RF-32: 청소 시작 예정 시각에 담당자가 없는 청소를 문제로 남긴다(청소 1건에 1번). 맨 앞에서 따로 — 뒤 단계가 실패해도 기록은 되고,
   // 이 기록이 실패해도 후속 처리는 그대로(응답 모양도 그대로)
   try {

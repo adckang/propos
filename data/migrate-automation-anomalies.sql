@@ -160,6 +160,104 @@ BEGIN
   END IF;
 END $$;
 
+-- 청소 의무의 배정 상태 이력. 기존 행에는 과거 배정 시각을 추정하지 않고 이 마이그레이션을
+-- 적용한 시점의 현재 상태만 기준점으로 남긴다. 이후 변경은 업무 UPDATE와 같은 트랜잭션에서
+-- record_cleaning_assignment_history를 호출한다.
+CREATE TABLE IF NOT EXISTS cleaning_assignment_history (
+  id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  property_id            TEXT NOT NULL REFERENCES property_cleaning_config(property_id) ON UPDATE CASCADE,
+  cleaning_obligation_id UUID NOT NULL,
+  cleaning_job_id        UUID REFERENCES cleaning_jobs(id),
+  assignment_state       TEXT NOT NULL CHECK (assignment_state IN ('UNASSIGNED','ASSIGNED','TARGET_REMOVED')),
+  assigned_cleaner_id    UUID REFERENCES cleaners(id),
+  actor_type             TEXT NOT NULL CHECK (actor_type IN ('SYSTEM','ADMIN','OPERATOR','CLEANER')),
+  change_reason          TEXT NOT NULL,
+  source_event_key       TEXT NOT NULL UNIQUE,
+  occurred_at            TIMESTAMPTZ NOT NULL,
+  recorded_at            TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  details                JSONB NOT NULL DEFAULT '{}'::jsonb,
+  CONSTRAINT cleaning_assignment_history_obligation_fk
+    FOREIGN KEY (property_id,cleaning_obligation_id)
+    REFERENCES cleaning_obligations(property_id,id) ON UPDATE CASCADE,
+  CHECK ((assignment_state='ASSIGNED' AND assigned_cleaner_id IS NOT NULL)
+      OR (assignment_state<>'ASSIGNED' AND assigned_cleaner_id IS NULL))
+);
+
+CREATE INDEX IF NOT EXISTS cleaning_assignment_history_obligation_time
+  ON cleaning_assignment_history(cleaning_obligation_id,occurred_at,recorded_at);
+
+ALTER TABLE cleaning_assignment_history
+  ALTER COLUMN recorded_at SET DEFAULT clock_timestamp();
+
+CREATE OR REPLACE FUNCTION record_cleaning_assignment_history(
+  p_property_id TEXT,
+  p_cleaning_obligation_id UUID,
+  p_cleaning_job_id UUID,
+  p_assignment_state TEXT,
+  p_assigned_cleaner_id UUID,
+  p_actor_type TEXT,
+  p_change_reason TEXT,
+  p_source_event_key TEXT,
+  p_occurred_at TIMESTAMPTZ DEFAULT NOW(),
+  p_details JSONB DEFAULT '{}'::jsonb
+) RETURNS BOOLEAN
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  previous cleaning_assignment_history%ROWTYPE;
+  inserted_id UUID;
+BEGIN
+  IF p_cleaning_obligation_id IS NULL THEN RETURN FALSE; END IF;
+
+  SELECT * INTO previous
+    FROM cleaning_assignment_history
+   WHERE cleaning_obligation_id=p_cleaning_obligation_id
+   ORDER BY occurred_at DESC,recorded_at DESC,id DESC
+   LIMIT 1;
+
+  IF FOUND AND previous.assignment_state=p_assignment_state
+     AND previous.assigned_cleaner_id IS NOT DISTINCT FROM p_assigned_cleaner_id THEN
+    RETURN FALSE;
+  END IF;
+
+  INSERT INTO cleaning_assignment_history(
+    property_id,cleaning_obligation_id,cleaning_job_id,assignment_state,assigned_cleaner_id,
+    actor_type,change_reason,source_event_key,occurred_at,details
+  ) VALUES(
+    p_property_id,p_cleaning_obligation_id,p_cleaning_job_id,p_assignment_state,p_assigned_cleaner_id,
+    p_actor_type,p_change_reason,
+    COALESCE(NULLIF(p_source_event_key,''),'assignment:'||gen_random_uuid()::text),
+    p_occurred_at,COALESCE(p_details,'{}'::jsonb)
+  )
+  ON CONFLICT (source_event_key) DO NOTHING
+  RETURNING id INTO inserted_id;
+
+  RETURN inserted_id IS NOT NULL;
+END $$;
+
+INSERT INTO cleaning_assignment_history(
+  property_id,cleaning_obligation_id,cleaning_job_id,assignment_state,assigned_cleaner_id,
+  actor_type,change_reason,source_event_key,occurred_at,details
+)
+SELECT o.property_id,o.id,j.id,
+       CASE
+         WHEN o.status='TARGET_REMOVED' THEN 'TARGET_REMOVED'
+         WHEN j.status IN ('ASSIGNED','COMPLETED') AND j.assigned_cleaner_id IS NOT NULL THEN 'ASSIGNED'
+         ELSE 'UNASSIGNED'
+       END,
+       CASE
+         WHEN o.status='ACTIVE' AND j.status IN ('ASSIGNED','COMPLETED') THEN j.assigned_cleaner_id
+         ELSE NULL
+       END,
+       'SYSTEM','MIGRATION_BASELINE','assignment-baseline:'||o.id::text,NOW(),
+       jsonb_build_object('baseline',true)
+  FROM cleaning_obligations o
+  LEFT JOIN cleaning_jobs j ON j.cleaning_obligation_id=o.id
+ WHERE NOT EXISTS (
+   SELECT 1 FROM cleaning_assignment_history h WHERE h.cleaning_obligation_id=o.id
+ )
+ON CONFLICT (source_event_key) DO NOTHING;
+
 -- 이상 본체는 한 번 쓰고 고치지 않는다. 현재 열린 사건의 유일성은 아래 매핑 테이블이 맡는다.
 CREATE TABLE IF NOT EXISTS automation_anomalies (
   id                         UUID PRIMARY KEY DEFAULT gen_random_uuid(),

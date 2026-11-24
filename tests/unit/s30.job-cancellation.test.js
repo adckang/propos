@@ -64,9 +64,11 @@ function assertCancelWrite(f, id = CANCEL_JOB.id) {
   const write = f.queries.find(q => /UPDATE cleaning_jobs SET status='CANCELLED'/.test(q.sql));
   assert.ok(write, 'actual CANCELLED update must execute');
   // 읽어 둔 상태일 때만 취소한다 — 그사이 배정되면(구글 일정이 생김) 0행 → 409, 담당자 일정을 남긴 채 취소하지 않는다
-  assert.match(write.sql, /updated_at=NOW\(\) WHERE id=\$1 AND status=\$2 RETURNING id/);
+  assert.match(write.sql, /updated_at=NOW\(\) WHERE id=\$1 AND status=\$2\s+RETURNING id/);
+  assert.match(write.sql, /record_cleaning_assignment_history/);
   assert.equal(write.params[0], id);
   assert.equal(typeof write.params[1], 'string');
+  assert.match(write.params[2], /^(?:ADMIN|OPERATOR)$/);
   const recipients = f.queries.find(q => /SELECT n\.\*, c\.phone/.test(q.sql));
   assert.ok(recipients); assert.match(recipients.sql, /JOIN cleaners c ON c.id = n.cleaner_id/);
   assert.match(recipients.sql, /n.job_id = \$1 AND n.response IS NULL/);
@@ -201,7 +203,7 @@ describe('actual job cancellation — state and retry results', () => {
     const read = { ...CANCEL_JOB, status: 'NOTIFYING_BULK' };
     const f = await actualCancellation(t, { responses: [[read], []] }); const r = await f.send();
     const write = f.queries.find(q => /UPDATE cleaning_jobs SET status='CANCELLED'/.test(q.sql));
-    assert.deepEqual(write.params, [CANCEL_JOB.id, 'NOTIFYING_BULK']);
+    assert.deepEqual(write.params, [CANCEL_JOB.id, 'NOTIFYING_BULK', 'ADMIN']);
     assert.equal(r.code, 409); assert.deepEqual(f.notifyCalls, []); assert.deepEqual(f.tokenCalls, []); assert.deepEqual(f.calendarRequests, []);
   });
   test('a sequential retry sees CANCELLED and does not notify or update again', async t => {

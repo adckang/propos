@@ -44,10 +44,10 @@ test('Calendar 예약 시각 — 실제 SQL, 반복 실행, 완료 상태 경쟁
       db: { query: async (sql, params) => {
         if (sql.includes('FROM property_cleaning_config')) return { rows: [{ property_id: 'fixture-property', google_calendar_id: 's89-calendar' }] };
         if (sql.includes('FROM cleaners')) return { rows: [cleaner] };
-        assert.ok(/^\s*(SELECT|UPDATE)\b/i.test(sql) && /\bcleaning_jobs\b/.test(sql), '예상하지 못한 쿼리');
+        assert.ok(/^\s*(SELECT|UPDATE|WITH)\b/i.test(sql) && /\bcleaning_jobs\b/.test(sql), '예상하지 못한 쿼리');
         // 실제 API의 SQL을 격리 저장소에서 그대로 실행한다.
         const result = await db.query(sql, params);
-        if (/^\s*UPDATE/.test(sql)) writes += result.rowCount;
+        if (/\bUPDATE cleaning_jobs\b/.test(sql)) writes += /^\s*WITH\b/i.test(sql) ? result.rows.length : result.rowCount;
         if (/^\s*SELECT/.test(sql) && readBarrier && result.rows.length) {
           const barrier = readBarrier;
           if (++barrier.reads === 2) { readBarrier = null; barrier.release(); }

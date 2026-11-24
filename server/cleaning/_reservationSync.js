@@ -89,9 +89,17 @@ export async function retireVanishedReservations(db, { propertyId, seenUids, fee
           SET status='TARGET_REMOVED',ended_at=NOW(),end_reason='RESERVATION_CANCELLED'
          FROM retired r
         WHERE o.stay_id=r.stay_id AND o.status='ACTIVE'
-        RETURNING o.id
+        RETURNING o.id,o.property_id,o.ended_at
+     ), assignment_history AS (
+       SELECT record_cleaning_assignment_history(
+         o.property_id,o.id,NULL,'TARGET_REMOVED',NULL,'SYSTEM','RESERVATION_CANCELLED',
+         'obligation:'||o.id::text||':reservation-cancelled',o.ended_at,'{}'::jsonb
+       ) AS recorded
+         FROM ended_obligations o
      )
-     SELECT reservation_uid,check_in,check_out FROM retired`,
+     SELECT reservation_uid,check_in,check_out,
+            (SELECT COUNT(*) FROM assignment_history) AS assignment_history_count
+       FROM retired`,
     params,
   );
   return { retired, skipped: null };

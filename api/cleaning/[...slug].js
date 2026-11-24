@@ -844,17 +844,26 @@ async function repairCalendarAssignments(propertyId) {
     if (job.assigned_cleaner_id === cleaner.id && job.google_event_id === event.id
         && new Date(job.cleaning_start_at).getTime() === Date.parse(times.cleaning_start_at)
         && new Date(job.cleaning_end_at).getTime() === Date.parse(times.cleaning_end_at)) continue;
-    const { rowCount } = await db.query(
-      `UPDATE cleaning_jobs
-          SET assigned_cleaner_id=$1, google_event_id=$2, cleaning_start_at=$4, cleaning_end_at=$5, updated_at=NOW()
-        WHERE id=$3 AND data_origin='REAL' AND status='ASSIGNED'
-          AND (assigned_cleaner_id IS NULL OR (assigned_cleaner_id=$1 AND google_event_id=$2))
-          AND checkout_at <= $4::timestamptz
-          AND (assigned_cleaner_id IS DISTINCT FROM $1 OR google_event_id IS DISTINCT FROM $2
-               OR cleaning_start_at IS DISTINCT FROM $4::timestamptz OR cleaning_end_at IS DISTINCT FROM $5::timestamptz)`,
+    const updateResult = await db.query(
+      `WITH updated AS (
+         UPDATE cleaning_jobs
+            SET assigned_cleaner_id=$1, google_event_id=$2, cleaning_start_at=$4, cleaning_end_at=$5, updated_at=NOW()
+          WHERE id=$3 AND data_origin='REAL' AND status='ASSIGNED'
+            AND (assigned_cleaner_id IS NULL OR (assigned_cleaner_id=$1 AND google_event_id=$2))
+            AND checkout_at <= $4::timestamptz
+            AND (assigned_cleaner_id IS DISTINCT FROM $1 OR google_event_id IS DISTINCT FROM $2
+                 OR cleaning_start_at IS DISTINCT FROM $4::timestamptz OR cleaning_end_at IS DISTINCT FROM $5::timestamptz)
+          RETURNING id,property_id,cleaning_obligation_id,assigned_cleaner_id,updated_at
+       )
+       SELECT u.id,record_cleaning_assignment_history(
+         u.property_id,u.cleaning_obligation_id,u.id,'ASSIGNED',u.assigned_cleaner_id,
+         'SYSTEM','CALENDAR_REPAIR',
+         'calendar-repair:'||u.id::text||':'||$2||':'||u.updated_at::text,u.updated_at,
+         jsonb_build_object('calendarEventId',$2)
+       ) AS assignment_history_recorded FROM updated u`,
       [cleaner.id, event.id, job.id, times.cleaning_start_at, times.cleaning_end_at],
     );
-    repaired += rowCount;
+    repaired += Array.isArray(updateResult.rows) ? updateResult.rows.length : (updateResult.rowCount ?? 0);
   }
   return { scanned: items.length, repaired };
 }
@@ -1023,8 +1032,17 @@ async function cancelJob(req, res, jobId, scope) {
 
   // 읽어 둔 상태일 때만 취소한다 — 그사이 배정되면(담당자 구글 일정이 생김) 0행이라 409로 끝나고, 일정을 남긴 채 취소하지 않는다
   const { rows: updated } = await db.query(
-    `UPDATE cleaning_jobs SET status='CANCELLED', updated_at=NOW() WHERE id=$1 AND status=$2 RETURNING id`,
-    [jobId, job.status]
+    `WITH updated AS (
+       UPDATE cleaning_jobs SET status='CANCELLED', updated_at=NOW() WHERE id=$1 AND status=$2
+        RETURNING id,property_id,cleaning_obligation_id,updated_at
+     )
+     SELECT u.id,record_cleaning_assignment_history(
+       u.property_id,u.cleaning_obligation_id,u.id,'UNASSIGNED',NULL,$3,'JOB_CANCELLED',
+       'job:'||u.id::text||':cancel:'||u.updated_at::text,u.updated_at,
+       jsonb_build_object('previousStatus',$2)
+     ) AS assignment_history_recorded
+       FROM updated u`,
+    [jobId, job.status, isAdminScope(scope) ? 'ADMIN' : 'OPERATOR']
   );
   if (!updated.length) return sendJson(res, 409, { error: "업데이트 실패" });
 
@@ -1238,7 +1256,9 @@ async function handleCalendarScan(req, res) {
     `SELECT * FROM property_cleaning_config WHERE google_calendar_id=$1 AND data_origin='REAL'`, [calendar_id]
   );
   if (!propCfg) return sendJson(res, 404, { error: "숙소 미등록" });
-  const results = await assignFromCalendarEvents(db, { property: propCfg, events: items, onlyDate: date ?? null }, calendarAssignDeps);
+  const results = await assignFromCalendarEvents(db, { property: propCfg, events: items, onlyDate: date ?? null,
+    actorType: 'ADMIN', changeReason: 'CALENDAR_RECHECK',
+  }, calendarAssignDeps);
   return sendJson(res, 200, { ok: true, results });
 }
 
@@ -1392,8 +1412,17 @@ export default async function handler(req, res) {
         if (!cleaner) return sendJson(res, 400, { error: "없는 담당자예요", code: "CLEANER_NOT_FOUND" });
         if (!cleaner.active) return sendJson(res, 400, { error: "활동하지 않는 담당자예요", code: "CLEANER_INACTIVE" });
         const { rows } = await db.query(
-          `UPDATE cleaning_jobs SET status='ASSIGNED', assigned_cleaner_id=$1, google_event_id=$2, updated_at=NOW()
-           WHERE id=$3 AND data_origin='REAL' AND status!='ASSIGNED' RETURNING id, status`,
+          `WITH updated AS (
+             UPDATE cleaning_jobs SET status='ASSIGNED', assigned_cleaner_id=$1, google_event_id=$2, updated_at=NOW()
+              WHERE id=$3 AND data_origin='REAL' AND status!='ASSIGNED'
+              RETURNING id,status,property_id,cleaning_obligation_id,assigned_cleaner_id,updated_at
+           )
+           SELECT u.id,u.status,record_cleaning_assignment_history(
+             u.property_id,u.cleaning_obligation_id,u.id,'ASSIGNED',u.assigned_cleaner_id,
+             'ADMIN','MANUAL_ASSIGNMENT','job:'||u.id::text||':manual-assignment:'||u.updated_at::text,
+             u.updated_at,jsonb_build_object('googleEventId',$2)
+           ) AS assignment_history_recorded
+             FROM updated u`,
           [cleanerId, b.google_event_id ?? null, id]
         );
         if (!rows.length) return sendJson(res, 409, { error: "이미 ASSIGNED 상태" });
@@ -1410,10 +1439,19 @@ export default async function handler(req, res) {
         // 테스트 전용: 잡을 PENDING으로 초기화 + 발송 내역 삭제
         await db.query(`DELETE FROM cleaning_notifs WHERE job_id=$1`, [id]);
         const { rows } = await db.query(
-          `UPDATE cleaning_jobs
-           SET status='PENDING', assigned_cleaner_id=NULL,
-               dispatch_after=NOW(), updated_at=NOW()
-           WHERE id=$1 RETURNING id, status`,
+          `WITH updated AS (
+             UPDATE cleaning_jobs
+                SET status='PENDING',assigned_cleaner_id=NULL,
+                    dispatch_after=NOW(),updated_at=NOW()
+              WHERE id=$1
+              RETURNING id,status,property_id,cleaning_obligation_id,updated_at
+           )
+           SELECT u.id,u.status,record_cleaning_assignment_history(
+             u.property_id,u.cleaning_obligation_id,u.id,'UNASSIGNED',NULL,
+             'SYSTEM','TEST_RESET','job:'||u.id::text||':test-reset:'||u.updated_at::text,
+             u.updated_at,'{}'::jsonb
+           ) AS assignment_history_recorded
+             FROM updated u`,
           [id]
         );
         if (!rows.length) return sendJson(res, 404, { error: "잡 없음" });

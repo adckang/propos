@@ -60,8 +60,11 @@ function assertWebhookEmpty(res, code = 200) {
 function assertCalendarAssignment(f, priorStatus) {
   const update = f.queries.find(q => /UPDATE cleaning_jobs SET status='ASSIGNED'/.test(q.sql));
   assert.ok(update, 'actual assignment UPDATE must run');
-  assert.deepEqual(update.params, [CAL_CLEANER.id, CAL_EVENT.id, CAL_JOB.id, '2026-11-20T03:00:00.000Z', '2026-11-20T06:00:00.000Z', priorStatus]);
+  assert.deepEqual(update.params, [CAL_CLEANER.id, CAL_EVENT.id, CAL_JOB.id,
+    '2026-11-20T03:00:00.000Z', '2026-11-20T06:00:00.000Z', priorStatus,
+    'CLEANER', 'CALENDAR_ASSIGNMENT', `calendar:${CAL_EVENT.id}:job:${CAL_JOB.id}:assigned`]);
   assert.match(update.sql, /data_origin='REAL' AND status=\$6/);
+  assert.match(update.sql, /record_cleaning_assignment_history/);
   assert.match(update.sql, /checkout_at <= \$4::timestamptz/);
   assert.match(update.sql, /IS DISTINCT FROM/);
   assert.doesNotMatch(update.sql, /\b(?:checkout_at|google_blocker_event_id)\s*=/);

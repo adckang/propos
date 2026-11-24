@@ -130,12 +130,23 @@ async function syncOneProperty(db, { prop, kv, now, syncStartedAt, goneAlertDeps
       // A→B→A로 퇴실이 돌아오면 같은 시각의 기존 실행 작업을 재사용하되, 끝난 옛 의무가 아니라 새 현재 의무를 가리킨다.
       if (rowCount === 0) {
         await db.query(
-          `UPDATE cleaning_jobs j SET cleaning_obligation_id=$3,reservation_uid=$2,updated_at=NOW()
-            WHERE j.property_id=$1 AND j.checkout_at=$4
-              AND (j.cleaning_obligation_id IS NULL OR EXISTS (
-                SELECT 1 FROM cleaning_obligations o
-                 WHERE o.id=j.cleaning_obligation_id AND o.status='TARGET_REMOVED'
-              ))`,
+          `WITH updated AS (
+             UPDATE cleaning_jobs j SET cleaning_obligation_id=$3,reservation_uid=$2,updated_at=NOW()
+              WHERE j.property_id=$1 AND j.checkout_at=$4
+                AND (j.cleaning_obligation_id IS NULL OR EXISTS (
+                  SELECT 1 FROM cleaning_obligations o
+                   WHERE o.id=j.cleaning_obligation_id AND o.status='TARGET_REMOVED'
+                ))
+              RETURNING j.id,j.property_id,j.cleaning_obligation_id,j.status,j.assigned_cleaner_id,j.updated_at
+           )
+           SELECT u.id,record_cleaning_assignment_history(
+             u.property_id,u.cleaning_obligation_id,u.id,
+             CASE WHEN u.status IN ('ASSIGNED','COMPLETED') AND u.assigned_cleaner_id IS NOT NULL
+                  THEN 'ASSIGNED' ELSE 'UNASSIGNED' END,
+             CASE WHEN u.status IN ('ASSIGNED','COMPLETED') THEN u.assigned_cleaner_id ELSE NULL END,
+             'SYSTEM','JOB_REBOUND','job:'||u.id::text||':obligation-rebound:'||u.cleaning_obligation_id::text,
+             u.updated_at,'{}'::jsonb
+           ) AS assignment_history_recorded FROM updated u`,
           [prop.property_id, reservationUid, identity.cleaningObligationId, cleaning_start_at.toISOString()],
         );
       }
