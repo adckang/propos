@@ -262,7 +262,8 @@ describe('기본 거부와 계정 관리', () => {
     const cases = [
       ['POST', 'properties'], ['POST', 'cleaners'], ['PATCH', 'cleaners', 'x'], ['DELETE', 'cleaners', 'x'], ['POST', 'jobs'],
       ['GET', 'operators'], ['POST', 'operators'], ['PATCH', 'operators', 'x'], ['POST', 'bootstrap'], ['POST', 'gmail-watch'],
-      ['POST', 'calendar-watch'], ['POST', 'blocker-cleanup'], ['POST', 'calendar-scan'], ['GET', 'brand-new-route'],
+      ['POST', 'calendar-watch'], ['POST', 'blocker-cleanup'], ['POST', 'calendar-scan'],
+      ['GET', 'anomaly-policy'], ['POST', 'anomaly-policy'], ['GET', 'brand-new-route'],
     ];
     for (const [method, resource, id] of cases) {
       const res = await call({ method, resource, id, body: {}, cookie: opCookie() });

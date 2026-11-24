@@ -37,6 +37,7 @@ import { renamePropertyId, PropertyRenameError } from "../../src/infrastructure/
 import { attendeeEmailsForCleaner, matchCleanerAttendee, calendarCleaningTimes } from "../../src/domain/calendarAssignmentDomain.js";
 import { getDemoCleaningStats, getDemoPropertyConfigs } from "../../src/application/demoReportingService.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
+import { getAnomalyPolicySettings, saveAnomalyPolicySettings } from "../../server/anomalyPolicySettings.js";
 
 import { requireAdminSession, requireScope } from "../../server/auth/operatorAuth.js";
 import { createOperator, listOperators, updateOperator } from "../../server/auth/operatorAdmin.js";
@@ -300,6 +301,32 @@ async function upsertProperty(req, res) {
     throw err;
   }
   return sendJson(res, 200, migration && !migration.alreadyMigrated ? { ...rows[0], migrated: migration.moved } : rows[0]);
+}
+
+async function handleAnomalyPolicy(req, res) {
+  const body = req.method === "POST" ? await readBody(req) : null;
+  const propertyId = req.method === "GET" ? req.query?.property_id : body?.property_id;
+  if (typeof propertyId !== "string" || !propertyId.trim()) {
+    return sendJson(res, 400, { error: "property_id 필수" });
+  }
+  try {
+    if (req.method === "GET") {
+      return sendJson(res, 200, await getAnomalyPolicySettings(db, { propertyId }));
+    }
+    if (req.method === "POST") {
+      return sendJson(res, 200, await saveAnomalyPolicySettings(db, {
+        propertyId,
+        masterValues: body.master_values,
+        propertyValues: body.property_values,
+      }));
+    }
+    return sendJson(res, 405, { error: "Method Not Allowed" });
+  } catch (error) {
+    if (error.status === 404) return sendJson(res, 404, { error: error.message });
+    // 입력 검증 오류는 저장 전에 발생한다. PostgreSQL 오류는 운영 원인을 숨기지 않고 바깥 공통 처리로 보낸다.
+    if (!error.code) return sendJson(res, 400, { error: error.message });
+    throw error;
+  }
 }
 
 async function runFollowupChecks() {
@@ -1329,6 +1356,7 @@ export default async function handler(req, res) {
       if (req.method === "GET")  return await listProperties(res, scope, req);
       if (req.method === "POST") return await upsertProperty(req, res);
     }
+    if (resource === "anomaly-policy") return await handleAnomalyPolicy(req, res);
     if (resource === "jobs") {
       if (!id) {
         if (req.method === "GET")  return await listJobs(req, res, scope);

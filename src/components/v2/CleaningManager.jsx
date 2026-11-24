@@ -55,6 +55,14 @@ const cancelBtnStyle = {
   cursor: 'pointer', fontFamily: 'inherit',
 };
 
+const ANOMALY_POLICY_FIELDS = [
+  { type: 'noise', label: '소음' },
+  { type: 'vacant_energy_waste', label: '빈방 에너지 낭비' },
+  { type: 'guest_complaint_sensor', label: '게스트 불만 + 센서' },
+  { type: 'cleaning_unassigned', label: '청소 미배정' },
+  { type: 'device_offline', label: '기기 오프라인' },
+];
+
 // ── API 헬퍼 ──────────────────────────────────────────────────────────────────
 
 async function apiFetch(path, opts = {}) {
@@ -258,7 +266,126 @@ function CleanersPanel() {
 
 // ── PropertyPanel ─────────────────────────────────────────────────────────────
 
-function PropertyPanel({ syncConfig, onDataChanged }) {
+function AnomalyPolicySettings({ propertyId }) {
+  const [form, setForm] = useState({ master: {}, property: {} });
+  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setForm({ master: {}, property: {} });
+    setLoaded(false);
+  }, [propertyId]);
+
+  const applyPolicy = data => {
+    setForm({
+      master: Object.fromEntries(ANOMALY_POLICY_FIELDS.map(({ type }) => [type, String(data.master.values[type])])),
+      property: Object.fromEntries(ANOMALY_POLICY_FIELDS.map(({ type }) => [type,
+        Object.hasOwn(data.property?.values ?? {}, type) ? String(data.property.values[type]) : ''])),
+    });
+    setLoaded(true);
+  };
+
+  async function loadPolicy() {
+    if (!propertyId || loaded || loading) return;
+    setLoading(true);
+    try {
+      applyPolicy(await apiFetch(`/api/cleaning/anomaly-policy?property_id=${encodeURIComponent(propertyId)}`));
+    } catch (error) {
+      Toast.show('이상 해결 기준 불러오기 실패: ' + error.message, 'e');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const setMinutes = (scope, type, value) => setForm(current => ({
+    ...current,
+    [scope]: { ...current[scope], [type]: value },
+  }));
+
+  function parseMinutes(raw, label, { optional = false } = {}) {
+    const value = String(raw ?? '').trim();
+    if (optional && value === '') return null;
+    const number = Number(value);
+    if (value === '' || !Number.isInteger(number) || number < 0) throw new Error(`${label}은 0 이상의 분 단위 정수여야 해요`);
+    return number;
+  }
+
+  async function savePolicy() {
+    setSaving(true);
+    try {
+      const masterValues = {};
+      const propertyValues = {};
+      for (const { type, label } of ANOMALY_POLICY_FIELDS) {
+        masterValues[type] = parseMinutes(form.master[type], `${label} 공통값`);
+        const override = parseMinutes(form.property[type], `${label} 숙소값`, { optional: true });
+        if (override != null) propertyValues[type] = override;
+      }
+      const savedPolicy = await apiFetch('/api/cleaning/anomaly-policy', {
+        method: 'POST',
+        body: JSON.stringify({
+          property_id: propertyId,
+          master_values: masterValues,
+          property_values: propertyValues,
+        }),
+      });
+      applyPolicy(savedPolicy);
+      Toast.show('이상 해결 기준 저장 완료', 's');
+    } catch (error) {
+      Toast.show('기준 저장 실패: ' + error.message, 'e');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <details onToggle={event => { if (event.currentTarget.open) loadPolicy(); }} style={{
+      background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden',
+    }}>
+      <summary style={{
+        padding: '16px 20px', cursor: 'pointer', fontSize: 14, fontWeight: 700, color: '#1a202c',
+      }}>
+        이상 해결 기준 <span style={{ fontSize: 12, fontWeight: 400, color: '#9ca3af' }}>(정상 유지 · 분)</span>
+      </summary>
+      <div style={{ padding: '0 20px 20px' }}>
+        {loading && <div style={{ fontSize: 12, color: '#6b7280' }}>불러오는 중...</div>}
+        {loaded && (<>
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'minmax(82px, 1fr) minmax(72px, 90px) minmax(72px, 90px)', gap: 8,
+            alignItems: 'center', fontSize: 11, color: '#6b7280', marginBottom: 6,
+          }}>
+            <span />
+            <span>전체 숙소 공통</span>
+            <span>이 숙소</span>
+          </div>
+          {ANOMALY_POLICY_FIELDS.map(({ type, label }) => (
+            <div key={type} style={{
+              display: 'grid', gridTemplateColumns: 'minmax(82px, 1fr) minmax(72px, 90px) minmax(72px, 90px)', gap: 8,
+              alignItems: 'center', marginBottom: 8,
+            }}>
+              <span style={{ fontSize: 12, color: '#4a5568' }}>{label}</span>
+              <input type="number" min="0" step="1" value={form.master[type] ?? ''}
+                onChange={event => setMinutes('master', type, event.target.value)} style={inputStyle} />
+              <input type="number" min="0" step="1" value={form.property[type] ?? ''}
+                placeholder="공통"
+                onChange={event => setMinutes('property', type, event.target.value)} style={inputStyle} />
+            </div>
+          ))}
+          <div style={{ fontSize: 11, color: '#9ca3af', margin: '2px 0 12px' }}>
+            이 숙소 값을 비워 두면 전체 숙소 공통값을 적용합니다.
+          </div>
+          <button onClick={savePolicy} disabled={saving} style={{
+            border: '1.5px solid #2563eb', borderRadius: 8, background: saving ? '#93c5fd' : '#2563eb',
+            color: '#fff', padding: '8px 18px', fontSize: 12, fontWeight: 700,
+            cursor: saving ? 'wait' : 'pointer', fontFamily: 'inherit',
+          }}>{saving ? '저장 중...' : '기준 저장'}</button>
+        </>)}
+      </div>
+    </details>
+  );
+}
+
+function PropertyPanel({ syncConfig, onDataChanged, isOperator = false, demo = false }) {
   const propertyId = syncConfig?.id ?? null;
   const [form, setForm] = useState({
     property_id: propertyId ?? '',
@@ -593,6 +720,8 @@ function PropertyPanel({ syncConfig, onDataChanged }) {
           cursor: loading ? 'wait' : 'pointer', fontFamily: 'inherit',
         }}>{loading ? '저장 중...' : '설정 저장'}</button>
       </div>
+
+      {!demo && !isOperator && <AnomalyPolicySettings propertyId={propertyId} />}
 
       {/* iCal 동기화 */}
       <div style={{ background: '#fff', borderRadius: 12, padding: 20, border: '1px solid #e2e8f0' }}>
@@ -1065,7 +1194,7 @@ export default function CleaningManager({ syncConfig, onBack, onDataChanged, dem
         ) : (<>
           {tab === 'approval' && <WorkerApprovalPanel />}
           {tab === 'cleaners' && <CleanersPanel />}
-          {tab === 'property' && <PropertyPanel syncConfig={syncConfig} onDataChanged={onDataChanged} />}
+          {tab === 'property' && <PropertyPanel syncConfig={syncConfig} onDataChanged={onDataChanged} isOperator={isOperator} demo={demo} />}
           {tab === 'jobs'     && <JobsPanel />}
           {tab === 'test' && !isOperator && <CleaningProcessCheck apiFetch={apiFetch} demo={demo} />}
         </>)}
