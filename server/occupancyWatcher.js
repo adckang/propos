@@ -34,7 +34,10 @@ import {
   INITIAL_STATE,
 } from '../src/domain/room-state/roomStateDomain.js';
 import { planMonitoringReservationUpdate } from '../src/domain/monitoringReservationDomain.js';
-import { NOISE_ANOMALY_EVENT_TYPES } from '../src/config/eventTypes.js';
+import {
+  NOISE_ANOMALY_EVENT_TYPES,
+  VACANT_ENERGY_SIGNAL_EVENT_TYPES,
+} from '../src/config/eventTypes.js';
 import { duePrechecks, handoffAlertMessage, latestPresenceEvidence, offDetectionSensors, offEntryDetectionSensors,
   precheckAlertMessage, precheckEventTime, upcomingTimes } from '../src/domain/sensorHealthDomain.js';
 
@@ -264,6 +267,34 @@ function buildSnapshotFromStates(stateMap, now = Date.now()) {
   }
   snap.presenceEvidence = latestPresenceEvidence(stateMap, now);
   return snap;
+}
+
+// 공실 절전 액션의 대상과 같은 매핑만 본다. 전체 전력에는 냉장고 같은 상시
+// 부하가 섞일 수 있으므로 임의의 W 기준으로 빈방 낭비를 만들지 않는다.
+function buildVacantEnergySources(stateMap, deviceMap) {
+  if (!deviceMap || typeof deviceMap !== 'object') return null;
+  const mapped = Object.entries(deviceMap)
+    .filter(([role]) => role !== 'LOCK_ENTRANCE')
+    .flatMap(([role, value]) => (Array.isArray(value) ? value : [value])
+      .filter(entityId => typeof entityId === 'string' && entityId.trim())
+      .map(entityId => ({ role, entityId })));
+  if (!mapped.length) return null;
+
+  const active = [];
+  let unknown = false;
+  for (const { role, entityId } of mapped) {
+    const state = stateMap[entityId];
+    const value = state?.state;
+    if (!state || value == null || ['unavailable', 'unknown'].includes(value)) {
+      unknown = true;
+      continue;
+    }
+    if (!['off', 'standby'].includes(value)) {
+      active.push(state.attributes?.friendly_name || role);
+    }
+  }
+  if (active.length) return [...new Set(active)].sort();
+  return unknown ? null : [];
 }
 
 // ── 예약 헬퍼 ─────────────────────────────────────────────────────────────────
@@ -498,10 +529,15 @@ async function processNow(now = Date.now()) {
       } catch (error) { request.reject(error); }
     }
     const snap        = buildSnapshotFromStates(entityStateMap, now);
+    const vacantEnergySources = buildVacantEnergySources(entityStateMap, config?.devices);
     const reservation = buildReservation();
     const sensorsOff  = offDetectionSensors(entityStateMap);
     const entrySensorsOff = offEntryDetectionSensors(entityStateMap);
-    const events      = monitor.process({ snap, roomState, reservation, now, sensorsOff, entrySensorsOff, cleaning: config?.cleaning ?? null });
+    const events      = monitor.process({
+      snap, roomState, reservation, now, sensorsOff, entrySensorsOff,
+      cleaning: config?.cleaning ?? null,
+      vacantEnergySources,
+    });
 
     for (const event of events) {
       if (SOFT_EVENTS.has(event.type)) {
@@ -513,6 +549,11 @@ async function processNow(now = Date.now()) {
       } else if (OBSERVATION_EVENTS.has(event.type)) {
         handleObservation(event);
       } else if (NOISE_ANOMALY_EVENT_TYPES.has(event.type)) {
+        handleAnomalySignal(event);
+      } else if (VACANT_ENERGY_SIGNAL_EVENT_TYPES.has(event.type)) {
+        handleAnomalySignal(event);
+      } else if (event.type === 'vacant_energy_waste_resolved' && !isValidTransition(roomState, event.type)) {
+        // 입실 준비 등으로 객실 상태가 먼저 바뀌었어도 서버의 해결 기록은 잃지 않는다.
         handleAnomalySignal(event);
       } else {
         await applyTransition(event);
@@ -603,6 +644,25 @@ async function flushPreparationOutbox() {
           normalStartedAt: Date.parse(payload.data?.normalStartedAt),
           complete: anomaly.complete,
           eligibleAt: anomaly.eligibleAt,
+        });
+      } else if (payload.type === 'vacant_energy_waste_detected') {
+        const anomaly = acknowledgement.anomaly;
+        if (typeof anomaly?.targetRef !== 'string' || !anomaly.targetRef) return;
+        monitor.acknowledgeVacantEnergyDetected({ targetRef: anomaly.targetRef });
+      } else if (payload.type === 'vacant_energy_waste_normal') {
+        const anomaly = acknowledgement.anomaly;
+        if (typeof anomaly?.complete !== 'boolean' || typeof anomaly?.targetRef !== 'string') return;
+        if (!anomaly.complete && !Number.isFinite(Date.parse(anomaly.eligibleAt))) return;
+        monitor.acknowledgeVacantEnergyNormal({
+          targetRef: anomaly.targetRef,
+          normalStartedAt: Date.parse(payload.data?.normalStartedAt),
+          complete: anomaly.complete,
+          eligibleAt: anomaly.eligibleAt,
+          resolvedAt: anomaly.resolvedAt,
+          confirmedAt: typeof payload.device_time === 'number'
+            ? payload.device_time
+            : Date.parse(payload.device_time),
+          abandon: anomaly.abandon === true,
         });
       }
       // Retrying the original occurrence timestamp preserves the existing DB

@@ -24,6 +24,9 @@ export const EVENT_TYPES = Object.freeze({
   // VACANT 기간 전용 — OCCUPIED 에너지낭비와 구분
   VACANT_ENERGY_WASTE_DETECTED: "vacant_energy_waste_detected",
   VACANT_ENERGY_WASTE_RESOLVED: "vacant_energy_waste_resolved",
+  VACANT_ENERGY_WASTE_RECURRED: "vacant_energy_waste_recurred",
+  VACANT_ENERGY_WASTE_NORMAL: "vacant_energy_waste_normal",
+  VACANT_ENERGY_TRACKING_ENDED: "vacant_energy_tracking_ended",
   // 퇴실 직후 (CLEANING 전) — HA 센서 기반 감지
   POST_CHECKOUT_ENERGY_WASTE_DETECTED:    "post_checkout_energy_waste_detected",    // 퇴실 후 조명/냉난방 켜진 상태 감지
   POST_CHECKOUT_SECURITY_BREACH_DETECTED: "post_checkout_security_breach_detected", // 퇴실 후 문/창문/재실센서 감지
@@ -59,6 +62,20 @@ export const NOISE_ANOMALY_EVENT_TYPES = new Set([
   "noise_threshold_sustained",
   "noise_threshold_normal",
   "noise_tracking_ended",
+]);
+
+export const VACANT_ENERGY_ANOMALY_EVENT_TYPES = new Set([
+  "vacant_energy_waste_detected",
+  "vacant_energy_waste_recurred",
+  "vacant_energy_waste_normal",
+  "vacant_energy_tracking_ended",
+  "vacant_energy_waste_resolved",
+]);
+
+export const VACANT_ENERGY_SIGNAL_EVENT_TYPES = new Set([
+  "vacant_energy_waste_recurred",
+  "vacant_energy_waste_normal",
+  "vacant_energy_tracking_ended",
 ]);
 
 export const SOFT_EVENT_TYPES = new Set([

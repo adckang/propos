@@ -7,7 +7,11 @@ import * as validation from '../../src/domain/eventValidation.js';
 import { insertEvent } from '../../src/infrastructure/eventRepository.js';
 import { processEvent } from '../../src/application/eventService.js';
 import { DATA_PROFILE } from '../../src/config/dataProfile.js';
-import { NOISE_ANOMALY_EVENT_TYPES, OPERATOR_ALERT_EVENT_TYPES } from '../../src/config/eventTypes.js';
+import {
+  NOISE_ANOMALY_EVENT_TYPES,
+  OPERATOR_ALERT_EVENT_TYPES,
+  VACANT_ENERGY_ANOMALY_EVENT_TYPES,
+} from '../../src/config/eventTypes.js';
 import { hasWatcherSecret } from '../../server/watcherAuth.js';
 
 const source = readFileSync(new URL('../../api/events/[...slug].js', import.meta.url), 'utf8');
@@ -23,8 +27,8 @@ export const event = {
   type: 'check_in_detected', device_time: '2026-11-09T03:00:00.000Z',
 };
 export async function request(action, body, { duplicate = false, secret = 'fixture-key', serverSecret = 'fixture-key', demo = false, raw, notifyFails = false,
-  noiseResult = null } = {}) {
-  const calls = [], notices = [], cache = [], noiseSignals = [];
+  noiseResult = null, vacantEnergyResult = null } = {}) {
+  const calls = [], notices = [], cache = [], noiseSignals = [], vacantEnergySignals = [];
   let allocations = 0;
   const db = {
     async query(sql, params) {
@@ -44,11 +48,16 @@ export async function request(action, body, { duplicate = false, secret = 'fixtu
     readBody: actual('readBody'), sendJson: actual('sendJson'), ensureTable: actual('ensureTable'),
     randomUUID, ...validation, insertEvent, processEvent, hasWatcherSecret, OPERATOR_ALERT_EVENT_TYPES,
     kv: { async set(...args) { cache.push(args); }, async del(...args) { cache.push(args); } },
-    NOISE_ANOMALY_EVENT_TYPES,
+    NOISE_ANOMALY_EVENT_TYPES, VACANT_ENERGY_ANOMALY_EVENT_TYPES,
     reconcileNoiseSignal: async (...args) => {
       noiseSignals.push(args);
       if (!noiseResult) throw new Error('Unexpected noise anomaly signal');
       return noiseResult;
+    },
+    reconcileVacantEnergySignal: async (...args) => {
+      vacantEnergySignals.push(args);
+      if (!vacantEnergyResult) throw new Error('Unexpected vacant energy anomaly signal');
+      return vacantEnergyResult;
     },
     notifyEvent: async (...args) => { notices.push(args); if (notifyFails) throw new Error('fixture Slack down'); return { sent: true }; },
     requireScope: () => { throw new Error('Pi writes cannot depend on a browser session'); },
@@ -59,6 +68,6 @@ export async function request(action, body, { duplicate = false, secret = 'fixtu
   const res = { status(code) { this.code = code; return this; }, json(value) { this.body = value; } };
   await handler(req, res);
   if (allocations) assert.equal(db.ended, true);
-  return { res, calls, notices, cache, noiseSignals, allocations };
+  return { res, calls, notices, cache, noiseSignals, vacantEnergySignals, allocations };
 }
 
