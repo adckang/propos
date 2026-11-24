@@ -34,6 +34,7 @@ import {
   INITIAL_STATE,
 } from '../src/domain/room-state/roomStateDomain.js';
 import { planMonitoringReservationUpdate } from '../src/domain/monitoringReservationDomain.js';
+import { NOISE_ANOMALY_EVENT_TYPES } from '../src/config/eventTypes.js';
 import { duePrechecks, handoffAlertMessage, latestPresenceEvidence, offDetectionSensors, offEntryDetectionSensors,
   precheckAlertMessage, precheckEventTime, upcomingTimes } from '../src/domain/sensorHealthDomain.js';
 
@@ -146,6 +147,7 @@ function persistState() {
   try {
     writeFileSync(`${STATE_FILE}.tmp`, JSON.stringify(payload, null, 2));
     renameSync(`${STATE_FILE}.tmp`, STATE_FILE);
+    monitor.markPersisted();
     statePersistenceFailed = false;
     return true;
   } catch { statePersistenceFailed = true; return false; }
@@ -269,6 +271,7 @@ function buildReservation() {
   if (!config?.reservation) return null;
   return {
     uid: config.reservation.uid ?? null,
+    ...(config.reservation.stayId ? { stayId: config.reservation.stayId } : {}),
     checkOut: new Date(config.reservation.checkOut),
     ...(config.reservation.checkIn ? { checkIn: new Date(config.reservation.checkIn) } : {}),
   };
@@ -355,6 +358,14 @@ function handleObservation(event) {
   if (softEventLog.length > 50) softEventLog.shift();
   reportEventToVercel(event.type, false, { ...event.data, reason: event.reason ?? null }, event.timestamp).catch(() => {});
   console.log(`[Observation] ${event.type} — ${event.reason}`);
+}
+
+// RF-25 정본 이상 신호 — 객실 상태는 바꾸지 않고 서버의 이상 생명주기에만 전달한다.
+function handleAnomalySignal(event) {
+  softEventLog.push({ type: event.type, subType: null, reason: event.reason, recipients: [], ts: Date.now(), roomState: { ...roomState } });
+  if (softEventLog.length > 50) softEventLog.shift();
+  reportEventToVercel(event.type, false, { ...event.data, reason: event.reason ?? null }, event.timestamp).catch(() => {});
+  console.log(`[AnomalySignal] ${event.type} — ${event.reason}`);
 }
 
 async function runStateActions(mainStatus) {
@@ -501,13 +512,15 @@ async function processNow(now = Date.now()) {
         await applyConfirmation(event);
       } else if (OBSERVATION_EVENTS.has(event.type)) {
         handleObservation(event);
+      } else if (NOISE_ANOMALY_EVENT_TYPES.has(event.type)) {
+        handleAnomalySignal(event);
       } else {
         await applyTransition(event);
       }
     }
     // 퇴실·입실 확인 대기가 바뀌었을 수 있다 — 재시작해도 이어지게 저장한다. 기다리는 동안엔 2분마다도 저장해
     // 다시 켜졌을 때 "마지막으로 본 시각"이 실제로 꺼져 있던 시간을 가리키게 한다(10분 넘게 못 봤으면 판정하지 않는다)
-    if (events.length || (monitor.hasOpenWait && now - lastWaitPersistAt >= WAIT_PERSIST_MS)) {
+    if (events.length || monitor.needsPersistence || (monitor.hasOpenWait && now - lastWaitPersistAt >= WAIT_PERSIST_MS)) {
       persistState();
       lastWaitPersistAt = now;
     }
@@ -581,6 +594,17 @@ async function flushPreparationOutbox() {
       }
       const acknowledgement = await response.json();
       if (typeof acknowledgement?.inserted !== 'boolean') return;
+      if (payload.type === 'noise_threshold_normal') {
+        const anomaly = acknowledgement.anomaly;
+        if (typeof anomaly?.complete !== 'boolean') return;
+        if (!anomaly.complete && !Number.isFinite(Date.parse(anomaly.eligibleAt))) return;
+        monitor.acknowledgeNoiseNormal({
+          stayId: payload.data?.stayId,
+          normalStartedAt: Date.parse(payload.data?.normalStartedAt),
+          complete: anomaly.complete,
+          eligibleAt: anomaly.eligibleAt,
+        });
+      }
       // Retrying the original occurrence timestamp preserves the existing DB
       // UNIQUE(property_id,type,device_time) duplicate protection after a crash.
       preparationOutbox.shift();

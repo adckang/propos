@@ -123,6 +123,9 @@ describe('L1 monitoringReservationDomain — 대시보드와 서버가 같은 "�
 
   test('toMonitoringReservation: 워처 설정 모양(uid·입실·퇴실 ISO), 예약 없으면 null', () => {
     assert.deepEqual(toMonitoringReservation(toDates(NEXT)), { uid: 'next@airbnb', checkIn: NEXT.checkIn, checkOut: NEXT.checkOut });
+    assert.deepEqual(toMonitoringReservation(toDates({ ...NEXT, stayId: 'internal-stay-id' })), {
+      uid: 'next@airbnb', stayId: 'internal-stay-id', checkIn: NEXT.checkIn, checkOut: NEXT.checkOut,
+    });
     assert.deepEqual(toMonitoringReservation({ checkIn: new Date(NEXT.checkIn), checkOut: new Date(NEXT.checkOut) }).uid, null);
     assert.equal(toMonitoringReservation(null), null);
   });

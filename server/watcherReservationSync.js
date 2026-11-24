@@ -62,7 +62,7 @@ export async function pushCurrentReservationsToWatchers(db, options = {}) {
       if (!config) return skip(propertyId, watcherUrl, '운영 DB의 실제 숙소가 아님 — 보내지 않음');
 
       const { rows } = await db.query(
-        `SELECT reservation_uid AS uid, check_in AS "checkIn", check_out AS "checkOut", status
+        `SELECT reservation_uid AS uid, stay_id AS "stayId", check_in AS "checkIn", check_out AS "checkOut", status
            FROM property_reservations WHERE property_id=$1 AND data_origin='REAL'`, [propertyId]);
       const reservation = toMonitoringReservation(pickCurrentReservation(usableReservations(rows), now));
       if (!reservation) return skip(propertyId, watcherUrl, '현재·다음 예약 없음 — 빈 예약은 보내지 않음');

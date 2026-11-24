@@ -18,7 +18,8 @@ import { processEvent } from "../../src/application/eventService.js";
 import { notifyEvent } from "../../server/slackNotifier.js";
 import { hasWatcherSecret } from "../../server/watcherAuth.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
-import { OPERATOR_ALERT_EVENT_TYPES } from "../../src/config/eventTypes.js";
+import { NOISE_ANOMALY_EVENT_TYPES, OPERATOR_ALERT_EVENT_TYPES } from "../../src/config/eventTypes.js";
+import { reconcileNoiseSignal } from "../../server/noiseAnomalies.js";
 
 import { requireScope } from "../../server/auth/operatorAuth.js";
 import { canAccessProperty, scopeQueryIds } from "../../server/auth/operatorAccounts.js";
@@ -112,6 +113,34 @@ export default async function handler(req, res) {
         source_ref,
       };
       const result = await insertEvent(db, event, is_soft ?? false);
+      let noiseAnomaly = null;
+      let storedEventId = result.id;
+      if (NOISE_ANOMALY_EVENT_TYPES.has(type)) {
+        if (!storedEventId) {
+          const { rows: [stored] } = await db.query(
+            "SELECT id FROM events WHERE property_id=$1 AND type=$2 AND device_time=$3",
+            [property_id, type, event.device_time],
+          );
+          storedEventId = stored?.id ?? null;
+        }
+        if (!storedEventId) throw new Error("저장된 소음 이상 신호를 찾을 수 없습니다");
+        noiseAnomaly = await reconcileNoiseSignal(db, {
+          eventId: storedEventId,
+          propertyId: property_id,
+          type,
+          occurredAt: event.device_time,
+          data,
+        });
+        if (noiseAnomaly.alertLabel) {
+          try {
+            const { sent } = await notifyEvent(storedEventId, property_id, type, {
+              signal: AbortSignal.timeout(5_000),
+              label: noiseAnomaly.alertLabel,
+            });
+            if (!sent) console.error("[events/write] 소음 이상 Slack 알림이 전달되지 않음:", type, storedEventId);
+          } catch (err) { console.error("[events/write] 소음 이상 Slack 알림 실패:", type, storedEventId, err?.message ?? err); }
+        }
+      }
       // RF-28: 운영자 알림이 필요한 문제는 처음 저장될 때 한 번 Slack 링크 — 재전송은 DB 중복(inserted=false)이라 다시 보내지 않는다
       // 한 번만 시도한다(재전송은 중복이라 다시 오지 않는다) — 실패는 로그로 남긴다. 5초 제한: Pi의 요청 제한(10초) 안에 응답한다
       if (result.inserted && OPERATOR_ALERT_EVENT_TYPES.has(type)) {
@@ -120,7 +149,7 @@ export default async function handler(req, res) {
           if (!sent) console.error("[events/write] 운영자 Slack 알림이 전달되지 않음:", type, result.id);
         } catch (err) { console.error("[events/write] 운영자 Slack 알림 실패:", type, result.id, err?.message ?? err); }
       }
-      return sendJson(res, 200, result);
+      return sendJson(res, 200, noiseAnomaly ? { ...result, anomaly: noiseAnomaly } : result);
     }
 
     // GET only beyond this point

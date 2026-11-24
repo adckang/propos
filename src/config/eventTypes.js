@@ -31,6 +31,10 @@ export const EVENT_TYPES = Object.freeze({
   POST_CLEANING_SECURITY_BREACH_DETECTED: "post_cleaning_security_breach_detected", // 청소 완료 후 보안 침해 감지
   COMPLAINT_DETECTED: "complaint_detected",
   COMPLAINT_RESOLVED: "complaint_resolved",
+  // RF-25 소음 이상 정본 신호 — 기존 10분 누적 민원 상태 전환과 별도
+  NOISE_THRESHOLD_SUSTAINED: "noise_threshold_sustained",
+  NOISE_THRESHOLD_NORMAL: "noise_threshold_normal",
+  NOISE_TRACKING_ENDED: "noise_tracking_ended",
   CHECKIN_PREP_TIME_REACHED: "checkin_prep_time_reached",
   OPTIMIZATION_FINISHED: "optimization_finished",
   OPTIMIZATION_FAILED: "optimization_failed",
@@ -50,6 +54,12 @@ export const EVENT_TYPES = Object.freeze({
   // 퇴실·입실 하루 전·2시간 전 감지 센서 사전 점검에서 꺼진 센서 발견 — 문제가 아니라 미리 알림 (DEC-12)
   SENSOR_PRECHECK_FAILED: "sensor_precheck_failed",
 });
+
+export const NOISE_ANOMALY_EVENT_TYPES = new Set([
+  "noise_threshold_sustained",
+  "noise_threshold_normal",
+  "noise_tracking_ended",
+]);
 
 export const SOFT_EVENT_TYPES = new Set([
   "checkout_confirmation_needed",

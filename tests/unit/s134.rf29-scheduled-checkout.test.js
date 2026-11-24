@@ -148,6 +148,8 @@ describe('RF-29 예약 교체 보존', () => {
 
   test('보존 중에 지금 예약과 같은 예약이 다시 와도 대기 중인 다음 예약을 지우지 않는다', () => {
     assert.equal(planMonitoringReservationUpdate(current, { ...current }, OCCUPIED, new Date(MIN)).keepPending, true);
+    assert.equal(planMonitoringReservationUpdate({ ...current, stayId: 'internal-stay' }, { ...current }, OCCUPIED, new Date(MIN)).reservation.stayId,
+      'internal-stay', '같은 예약의 브라우저 갱신이 서버가 준 내부 숙박 ID를 지우지 않는다');
     assert.equal(planMonitoringReservationUpdate(current, next, CLEANING, new Date(MIN)).keepPending, false);
   });
 

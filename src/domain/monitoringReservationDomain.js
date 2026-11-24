@@ -43,11 +43,12 @@ export function usableReservations(rows) {
     .filter(row => Number.isFinite(row.checkIn.getTime()) && Number.isFinite(row.checkOut.getTime()));
 }
 
-/** 워처 설정(`reservation`)에 넣는 모양 — 대시보드가 보내던 것과 같다(uid·입실·퇴실 ISO 시각). 예약이 없으면 null. */
+/** 워처 설정(`reservation`)에 넣는 모양. 서버 행에 내부 숙박 ID가 있으면 RF-25 감지용으로 함께 보낸다. */
 export function toMonitoringReservation(reservation) {
   if (!reservation) return null;
   return {
     uid: reservation.uid ?? null,
+    ...(reservation.stayId ? { stayId: reservation.stayId } : {}),
     checkIn: reservation.checkIn?.toISOString?.() ?? null,
     checkOut: reservation.checkOut?.toISOString?.() ?? null,
   };
@@ -108,6 +109,8 @@ export function planMonitoringReservationUpdate(currentReservation, incomingRese
     && Number.isFinite(currentCheckOut)
     && currentCheckOut <= nowMs;
   const incomingCheckIn = timeOf(incomingReservation?.checkIn);
+  const sameIncomingStay = Boolean(currentReservation && incomingReservation
+    && sameReservation(currentReservation, incomingReservation));
   // 입실 시각을 읽을 수 없는 다른 예약도 보존 쪽으로 — 지난 예약의 퇴실 전환을 잃는 것보다 한 주기 늦게 쓰는 게 낫다
   const replacesWithLaterOrNone = incomingReservation == null
     || (!sameReservation(currentReservation, incomingReservation)
@@ -117,9 +120,11 @@ export function planMonitoringReservationUpdate(currentReservation, incomingRese
     return { reservation: currentReservation, pendingReservation: incomingReservation ?? null, deferred: true, keepPending: false };
   }
   return {
-    reservation: incomingReservation,
+    reservation: sameIncomingStay && currentReservation.stayId && !incomingReservation.stayId
+      ? { ...incomingReservation, stayId: currentReservation.stayId }
+      : incomingReservation,
     pendingReservation: null,
     deferred: false,
-    keepPending: Boolean(currentReservation && incomingReservation && sameReservation(currentReservation, incomingReservation)),
+    keepPending: sameIncomingStay,
   };
 }

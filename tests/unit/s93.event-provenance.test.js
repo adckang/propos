@@ -9,7 +9,7 @@ import { insertEvent } from '../../src/infrastructure/eventRepository.js';
 import { processEvent } from '../../src/application/eventService.js';
 import { DATA_PROFILE } from '../../src/config/dataProfile.js';
 import { hasWatcherSecret } from '../../server/watcherAuth.js';
-import { OPERATOR_ALERT_EVENT_TYPES } from '../../src/config/eventTypes.js';
+import { NOISE_ANOMALY_EVENT_TYPES, OPERATOR_ALERT_EVENT_TYPES } from '../../src/config/eventTypes.js';
 
 const event = {
   id: '123e4567-e89b-12d3-a456-426614174000',
@@ -64,7 +64,9 @@ async function request(action, body, { duplicate = false, authorized = true } = 
     process: { env: { PROPOS_PI_SECRET: 'test-secret' } },
     DATA_PROFILE, resolveServerDataProfile: () => DATA_PROFILE.HYBRID,
     readBody: load('readBody'), sendJson: load('sendJson'), ensureTable: load('ensureTable'),
-    randomUUID, validateEvent, validateWriteEvent, processEvent, insertEvent, hasWatcherSecret, OPERATOR_ALERT_EVENT_TYPES, kv: {},
+    randomUUID, validateEvent, validateWriteEvent, processEvent, insertEvent, hasWatcherSecret,
+    NOISE_ANOMALY_EVENT_TYPES, OPERATOR_ALERT_EVENT_TYPES, kv: {},
+    reconcileNoiseSignal: () => { throw new Error('Unexpected noise anomaly signal'); },
     notifyEvent: async (...args) => { notices.push(args); return { sent: false }; },
     requireScope: () => { throw new Error('POST must retain its existing Pi authentication path'); },
   });

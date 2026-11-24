@@ -244,7 +244,23 @@ export async function markAnomalyConditionCleared(pool, input) {
     if (Date.parse(occurredAt) < new Date(current.occurred_at).getTime()) {
       return { found: true, resolved: false, ignored: 'OUT_OF_ORDER' };
     }
-    if (current.state === 'STABILIZING') return { found: true, resolved: false, alreadyStabilizing: true };
+    if (current.state === 'STABILIZING') {
+      if (input?.restartStabilization !== true) {
+        return { found: true, resolved: false, alreadyStabilizing: true,
+          stabilizationMinutes: Number(anomaly.stabilization_minutes) };
+      }
+      const saved = await appendHistory(db, {
+        anomalyId: anomaly.id,
+        historyType: 'STATE_CHANGE',
+        state: 'STABILIZING',
+        actorType: 'SYSTEM',
+        sourceEventKey,
+        occurredAt,
+        details: { conditionClearedAt: occurredAt, reason: 'NORMAL_OBSERVATION_RESTARTED' },
+      });
+      return { found: true, resolved: false, stabilizationRestarted: saved.inserted,
+        stabilizationMinutes: Number(anomaly.stabilization_minutes) };
+    }
     if (current.state !== 'IN_PROGRESS') throw new Error(`열린 이상의 현재 상태가 올바르지 않습니다 (${current.state})`);
     await appendHistory(db, {
       anomalyId: anomaly.id,

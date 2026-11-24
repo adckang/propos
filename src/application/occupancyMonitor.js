@@ -15,6 +15,7 @@
 import { THRESHOLDS as CFG } from '../config/monitoringThresholds.js';
 import { SensorEventGenerator } from './sensorEventGenerator.js';
 import { SuspicionTracker }     from './suspicionTracker.js';
+import { NoiseAnomalyDetector } from './noiseAnomalyDetector.js';
 
 const MIN = 60_000;
 
@@ -154,13 +155,17 @@ export class OccupancyMonitor {
   // Layer 1/2 — 새 아키텍처
   _sensorGen = new SensorEventGenerator();
   _suspicion = new SuspicionTracker();
+  _noiseAnomaly = new NoiseAnomalyDetector();
 
   /** 재시작해도 이어질 퇴실·입실 확인 대기 (워처가 상태 파일에 저장) */
-  snapshot() { return this._suspicion.snapshot(); }
-  restore(raw) { this._suspicion.restore(raw); }
+  snapshot() { return { ...this._suspicion.snapshot(), noiseAnomaly: this._noiseAnomaly.snapshot() }; }
+  restore(raw) { this._suspicion.restore(raw); this._noiseAnomaly.restore(raw?.noiseAnomaly); }
+  markPersisted() { this._noiseAnomaly.markPersisted(); }
+  acknowledgeNoiseNormal(result) { return this._noiseAnomaly.acknowledgeNormal(result); }
   /** 지금 체류에서 손님이 들어온 것이 확인됐는가 (입실 시각에 체류로 바뀐 뒤 아직 안 왔으면 false) */
   get stayEntryConfirmed() { return this._suspicion.stayEntryConfirmed; }
-  get hasOpenWait() { return this._suspicion.hasOpenWait; }
+  get hasOpenWait() { return this._suspicion.hasOpenWait || this._noiseAnomaly.hasPendingTracking; }
+  get needsPersistence() { return this._noiseAnomaly.needsPersistence; }
   get awaitingArrival() { return this._suspicion.awaitingArrival; }
   noteManualCleaning(type) { this._suspicion.noteManualCleaning(type); }
 
@@ -200,16 +205,22 @@ export class OccupancyMonitor {
       presenceEvidence: snap.presenceEvidence ?? null,
       cleaning,
     });
+    const noiseAnomalyEvents = this._noiseAnomaly.evaluate({
+      noiseLevel: snap.noiseLevel,
+      stayId: reservation?.stayId ?? null,
+      eligible: main === 'OCCUPIED' && this._suspicion.stayEntryConfirmed,
+      now,
+    });
 
     // All preparation outcomes permit check-in. Sensor optimization has its own
     // controller and keeps running when guests arrive before it finishes.
     if (main === 'PRE_STAY_READY' || main === 'VACANT') {
-      return occupancyEvents; // scheduled_checkin_reached, early_checkin_suspected or []
+      return [...occupancyEvents, ...noiseAnomalyEvents]; // scheduled_checkin_reached, early_checkin_suspected or []
     }
 
     // CLEANING: 청소 시작/완료 감지만
     if (main === 'CLEANING') {
-      return occupancyEvents; // 청소 일정 전환·실제 청소 기록·담당자 미감지, 또는 (일정 없으면) cleaning_started/finished
+      return [...occupancyEvents, ...noiseAnomalyEvents]; // 청소 일정 전환·실제 청소 기록·담당자 미감지, 또는 (일정 없으면) cleaning_started/finished
     }
 
     // OCCUPIED: 체크아웃(새 로직) + 기존 이벤트 통합
@@ -224,10 +235,11 @@ export class OccupancyMonitor {
         this.energyWasteStart = null; this.energyNormalStart = null;
         this.envIssueStart = null; this.envNormalStart = null;
         this.noiseWindow = []; this.noiseSilentStart = null;
-        return [...occupancyEvents, ...this._smoke(snap, sub, now), ...this._doorOpen(sub, now)];
+        return [...occupancyEvents, ...noiseAnomalyEvents, ...this._smoke(snap, sub, now), ...this._doorOpen(sub, now)];
       }
       return [
         ...occupancyEvents,   // scheduled_checkout_reached (먼저 배치 — 우선 상태 전환)
+        ...noiseAnomalyEvents,
         ...this._smoke(snap, sub, now),
         ...this._noise(snap, sub, now),
         ...this._environment(seas, iTemp, iHum, sub, now),
@@ -236,7 +248,7 @@ export class OccupancyMonitor {
       ];
     }
 
-    return [];
+    return noiseAnomalyEvents;
   }
 
   // ── 1. 연기 감지 ─────────────────────────────────────────────────────────

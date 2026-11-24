@@ -22,14 +22,14 @@ function getBaseUrl() {
  * @param {string} eventId - Postgres events.id (UUID)
  * @param {string} propertyId
  * @param {string} type - 이벤트 타입
- * @param {{ signal?: AbortSignal }} [options] - 호출부가 응답을 오래 붙잡지 않게 제한 시간을 줄 수 있다
+ * @param {{ signal?: AbortSignal, label?: string }} [options] - 제한 시간과 이상 사건의 실제 기준 문구
  * @returns {Promise<{ sent: boolean }>}
  */
-export async function notifyEvent(eventId, propertyId, type, { signal } = {}) {
+export async function notifyEvent(eventId, propertyId, type, { signal, label } = {}) {
   if (!WEBHOOK_URL) return { sent: false };
 
   const url = `${getBaseUrl()}/events/${eventId}`;
-  const text = `[${propertyId}] ${OPERATOR_ALERT_LABELS[type] ?? type} → ${url}`;
+  const text = `[${propertyId}] ${label ?? OPERATOR_ALERT_LABELS[type] ?? type} → ${url}`;
 
   const res = await fetch(WEBHOOK_URL, {
     method: "POST",
