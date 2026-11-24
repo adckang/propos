@@ -261,8 +261,8 @@ LIFECYCLE/OPERATIONS는 발생 사실(fact)이므로 resolution 개념 없음. A
 
 ─────────────────────────────────────────
 안심지수: N%   (측정 가능한 운영 지표 평균)
-자동화 개선율: —    (측정 중 1/5)
-수동개입: —        (측정 중 1/5)
+자동화 개선율: —    (측정 중 2/5)
+수동개입: —        (측정 중 2/5)
 ```
 
 측정 범위가 생긴 뒤 형식 (향후 예시 — 계산은 [6-1-1](#automation-rate)):
@@ -282,7 +282,7 @@ LIFECYCLE/OPERATIONS는 발생 사실(fact)이므로 resolution 개념 없음. A
   14:07  cleaning_started       홍대 원룸 A
   14:31  energy_waste_detected  이태원 테라스    (WARN)
   14:52  energy_waste_resolved  이태원 테라스
-이벤트 4건  |  자동화 개선율 — (측정 중 1/5)
+이벤트 4건  |  자동화 개선율 — (측정 중 2/5)
 ```
 
 ---
@@ -334,7 +334,7 @@ Template-A는 **[완료]** + **[예정]** 두 섹션으로만 구성한다.
 [완료] 이번 주 {요일}까지 처리된 이벤트 (Postgres)
   체크아웃 N건  |  체크인 N건  |  청소완료 N건
   이상감지 N건 (상태 표시용 — 자동화 개선율의 분모 아님)
-  현재까지 안심지수: N%  ·  자동화 개선율: — (측정 중 1/5)
+  현재까지 안심지수: N%  ·  자동화 개선율: — (측정 중 2/5)
 
 [예정] 이번 주 남은 일정 (iCal + cleaning_jobs)
   {요일} {HH:mm}  {숙소명}  체크인/아웃   청소 ✅/⚠
@@ -539,13 +539,13 @@ iCal 마지막 동기화: N분 전 ✅ / ⚠ N시간 전 (오래된 경우 강�
 
 <a id="automation-rate-scope"></a>
 
-#### 측정 범위: 1 / 5 (2026-11-24)
+#### 측정 범위: 2 / 5 (2026-11-24)
 
-체크인 12시간 이내 청소 미배정 감지기 하나가 정본 상태·이력 계약에 연결됐다. 비슷한 기록도 기준이 다르면 정본 항목에 대응시키지 않는다. 정본 기준을 충족하는 감지기가 생길 때마다 하나씩 측정 범위에 넣는다. 레포트에는 "측정 중 N / 5"를 함께 보인다.
+체크인 12시간 이내 청소 미배정과 소음 3분 지속 감지기가 정본 상태·이력 계약에 연결됐다. 비슷한 기록도 기준이 다르면 정본 항목에 대응시키지 않는다. 정본 기준을 충족하는 감지기가 생길 때마다 하나씩 측정 범위에 넣는다. 레포트에는 "측정 중 N / 5"를 함께 보인다.
 
 | 정본 항목 | 정본 기준 감지기 | 근거·기존 비슷한 기록 |
 | --- | --- | --- |
-| 소음 3분 이상 지속 | 없음 | Pi 불만 기록(소음) — 10분 누적 점수 8점 이상([`_noise`](../src/application/occupancyMonitor.js#L237)) |
+| 소음 3분 이상 지속 | [`NoiseAnomalyDetector`](../src/application/noiseAnomalyDetector.js) → [`reconcileNoiseSignal`](../server/noiseAnomalies.js) | 체류 중 65dB 초과가 연속 3분일 때 내부 숙박에 묶어 발생시킨다. Pi 재시작에도 초과 시작·정상 확인 대기를 보존하고, 센서값 공백은 연속 시간에서 제외한다. 정상 시작 뒤 서버가 해당 사건에 저장된 안정화 완료 시각을 응답하면 그 시각에 다시 확인해 해결한다. 기존 Pi 불만 기록의 10분 누적 점수 상태 전환([`_noise`](../src/application/occupancyMonitor.js))은 바꾸지 않는다. 알림에는 `65dB 초과 · 기준: 3분 이상`과 실제 해결 기준을 함께 표시한다 |
 | 빈방 에너지 낭비 30분 이상 | 없음 | Pi 에너지 낭비 기록 — 체류 중(부재·고전력) 3분 기준([`_energyWaste`](../src/application/occupancyMonitor.js#L304), [기준값](../src/config/monitoringThresholds.js#L29)). 빈방용 이름 `vacant_energy_waste_detected`(재사용하기로 결정, [7절](#vacant-energy-design))는 만드는 코드가 없다 |
 | 게스트 불만 키워드 + 센서 이상 | 없음 | 게스트 메시지 키워드는 답장 초안용([`messageDomain`](../src/domain/messageDomain.js#L129))으로만 쓰인다 |
 | 체크인 12시간 이내 청소 미배정 | [`reconcileCleaningUnassignedAnomalies`](../server/cleaning/_unassignedAnomalies.js) | 청소 의무별 추가 전용 배정 상태 이력으로 중간 배정·취소를 재생한다. 캘린더 자동 배정은 자동 해결, 관리자 직접 배정·"캘린더 다시 확인"은 개입으로 기록한다. 다음 체크인이 취소·변경되면 앞 사건을 대상 사라짐으로 끝내고 새 기준의 사건을 연다. 알림에는 `기준: 체크인 12시간 이내`와 실제 해결 기준을 함께 표시한다 |
@@ -777,7 +777,7 @@ Slack 레포트의 텍스트 포맷은 `reporting-feature-design.md` 섹션 11�
 
 | 네비게이션 | Tense | KPI Tiles 역할 | 펼쳐지는 Template 섹션 |
 |---|---|---|---|
-| 지난주 | PAST | 지난주 이벤트 카운트 (체크인N / 이상N / 자동화 개선율 — (측정 중 1/5)) | Template-P: [결과] only |
+| 지난주 | PAST | 지난주 이벤트 카운트 (체크인N / 이상N / 자동화 개선율 — (측정 중 2/5)) | Template-P: [결과] only |
 | 이번주 | ACTIVE | **실시간 상태 카운트** (체류중N / 입실전N / 청소중N / 공실N) | Template-A: [완료 so far] + [예정 remaining] |
 | 다음주 | FUTURE | 다음주 예정 카운트 (체크인N / 체크아웃N / 청소배정N) | Template-F: [계획] only |
 
@@ -822,7 +822,7 @@ All-Properties (ListView) KPI Tile 4개 기준:
 
 | 기간 위치 | Tile 1 | Tile 2 | Tile 3 | Tile 4 |
 |---|---|---|---|---|
-| PAST (지난주/전날) | 체크인 N건 | 이상감지 N건 | 자동해결 — | 자동화 개선율 — (측정 중 1/5) |
+| PAST (지난주/전날) | 체크인 N건 | 이상감지 N건 | 자동해결 — | 자동화 개선율 — (측정 중 2/5) |
 | ACTIVE (이번주/오늘) | 체류중 N | 입실전 N | 청소중 N | 공실 N |
 | FUTURE (다음주/내일) | 체크인 예정 N | 체크아웃 예정 N | 청소배정 N/N | - |
 
