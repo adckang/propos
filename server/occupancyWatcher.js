@@ -36,6 +36,7 @@ import {
 import { planMonitoringReservationUpdate } from '../src/domain/monitoringReservationDomain.js';
 import {
   DEVICE_OFFLINE_ANOMALY_EVENT_TYPES,
+  GUEST_COMPLAINT_SENSOR_EVENT_TYPES,
   NOISE_ANOMALY_EVENT_TYPES,
   VACANT_ENERGY_SIGNAL_EVENT_TYPES,
 } from '../src/config/eventTypes.js';
@@ -560,6 +561,8 @@ async function processNow(now = Date.now()) {
         handleAnomalySignal(event);
       } else if (DEVICE_OFFLINE_ANOMALY_EVENT_TYPES.has(event.type)) {
         handleAnomalySignal(event);
+      } else if (GUEST_COMPLAINT_SENSOR_EVENT_TYPES.has(event.type)) {
+        handleAnomalySignal(event);
       } else if (event.type === 'vacant_energy_waste_resolved' && !isValidTransition(roomState, event.type)) {
         // 입실 준비 등으로 객실 상태가 먼저 바뀌었어도 서버의 해결 기록은 잃지 않는다.
         handleAnomalySignal(event);
@@ -681,6 +684,14 @@ async function flushPreparationOutbox() {
           normalStartedAt: Date.parse(payload.data?.normalStartedAt),
           complete: anomaly.complete,
           eligibleAt: anomaly.eligibleAt,
+        });
+      } else if (payload.type === 'environment_sensor_normal') {
+        const anomaly = acknowledgement.anomaly;
+        if (!anomaly?.results || typeof anomaly.results !== 'object') return;
+        monitor.acknowledgeEnvironmentNormal({
+          stayId: payload.data?.stayId,
+          normalStartedAtByTopic: payload.data?.normalStartedAtByTopic,
+          results: anomaly.results,
         });
       }
       // Retrying the original occurrence timestamp preserves the existing DB

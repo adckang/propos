@@ -25,7 +25,7 @@ const LOCK = 'gmail_history_lock';
 const RESERVATION_SLACK = '[PROPOS] 📬 에어비앤비 신규 예약 이메일 감지. iCal 재폴링 트리거.';
 
 /** 가짜 Gmail. pages: history.list 응답을 차례로(시작 번호·쪽 표시는 실제 요청 주소로 확인한다) */
-function gmailApi({ pages = [{ history: [], historyId: '0' }], subjects = {}, status = 200, fail = false, watch, current = '0' } = {}) {
+function gmailApi({ pages = [{ history: [], historyId: '0' }], subjects = {}, froms = {}, fullMessages = {}, status = 200, fail = false, watch, current = '0' } = {}) {
   let page = 0;
   return async (url, options = {}) => {
     if (fail) throw new Error('fixture gmail outage');
@@ -37,7 +37,11 @@ function gmailApi({ pages = [{ history: [], historyId: '0' }], subjects = {}, st
       return { ok: true, status: 200, json: async () => pages[Math.min(page++, pages.length - 1)] };
     }
     const id = u.pathname.split('/').pop();
-    return { ok: true, status: 200, json: async () => ({ payload: { headers: [{ name: 'Subject', value: subjects[id] ?? '' }] } }) };
+    if (u.searchParams.get('format') === 'full') return { ok: true, status: 200, json: async () => fullMessages[id] };
+    return { ok: true, status: 200, json: async () => ({ payload: { headers: [
+      { name: 'Subject', value: subjects[id] ?? '' },
+      ...(froms[id] ? [{ name: 'From', value: froms[id] }] : []),
+    ] } }) };
   };
 }
 
@@ -57,8 +61,8 @@ function memoryKv(initial = {}) {
   };
 }
 
-async function gmailWebhook(t, { api = gmailApi(), kv = memoryKv(), expectErrors = false, methods = ['GET'] } = {}) {
-  const f = await cleaningDeclineFixture({ icalSync: async () => ({}), calendar: { fetch: api, methods, kv } });
+async function gmailWebhook(t, { api = gmailApi(), kv = memoryKv(), expectErrors = false, methods = ['GET'], guestComplaint } = {}) {
+  const f = await cleaningDeclineFixture({ icalSync: async () => ({}), guestComplaint, calendar: { fetch: api, methods, kv } });
   t.after(() => {
     try {
       assert.equal(f.pendingResponses, 0, 'all scripted DB results consumed');
@@ -128,8 +132,9 @@ describe('actual gmail-webhook — Pub/Sub new-mail notice', () => {
     assert.equal(res.code, 200);
     assert.deepEqual(f.calendarRequests.map(r => r.url), [
       'https://gmail.googleapis.com/gmail/v1/users/me/history?startHistoryId=100&historyTypes=messageAdded',
-      'https://gmail.googleapis.com/gmail/v1/users/me/messages/m1?format=metadata&metadataHeaders=Subject',
-      'https://gmail.googleapis.com/gmail/v1/users/me/messages/m2?format=metadata&metadataHeaders=Subject',
+      'https://gmail.googleapis.com/gmail/v1/users/me/messages/m1?format=metadata&metadataHeaders=Subject&metadataHeaders=From',
+      'https://gmail.googleapis.com/gmail/v1/users/me/messages/m2?format=metadata&metadataHeaders=Subject&metadataHeaders=From',
+      'https://gmail.googleapis.com/gmail/v1/users/me/messages/m3?format=metadata&metadataHeaders=Subject&metadataHeaders=From',
     ]);
     assert.ok(f.calendarRequests.every(r => r.options.headers.Authorization === 'Bearer fixture-gmail-token'));
     assert.deepEqual(f.slackCalls, [[RESERVATION_SLACK]]);
@@ -153,6 +158,37 @@ describe('actual gmail-webhook — Pub/Sub new-mail notice', () => {
     ]);
     assert.equal(f.icalSyncCalls.length, 1);
     assert.equal(kv.store.get(LAST), '110');
+  });
+
+  test('an Airbnb reply reads the full message once, stores only classified complaint topics and alerts with the criterion', async t => {
+    const text = [
+      '%recipient.first_name%', 'https://www.airbnb.co.kr/', 'Fixture 예약(11월 20일~23일)', '',
+      'Guest', '오후 3:20', '방이 너무 덥고 습해요', '',
+      '답장 보내기', 'https://www.airbnb.co.kr/hosting/thread/987654321', '',
+      'https://www.airbnb.co.kr/rooms/123456789',
+    ].join('\n');
+    const full = { id: 'm1', threadId: 't1', internalDate: String(Date.parse('2026-11-25T10:00:00Z')),
+      payload: { headers: [{ name: 'Subject', value: 'Re: Fixture' }, { name: 'From', value: 'Airbnb <automated@airbnb.com>' }],
+        parts: [{ mimeType: 'text/plain', body: { data: Buffer.from(text).toString('base64url') } }] } };
+    const kv = memoryKv({ [LAST]: '6' });
+    const api = gmailApi({
+      pages: [{ historyId: '7', history: [{ messagesAdded: [{ message: { id: 'm1' } }] }] }],
+      subjects: { m1: 'Re: Fixture' }, froms: { m1: 'Airbnb <automated@airbnb.com>' }, fullMessages: { m1: full },
+    });
+    const label = '게스트 온도 불만 + 온습도 이상 · 기준: 메시지 전후 60분 이내 · 정상 10분 유지 시 해결';
+    const f = await gmailWebhook(t, { kv, api, guestComplaint: async () => ({
+      propertyId: 'fixture-property', recorded: 2, paired: 1, alerts: [label],
+    }) });
+    const res = await f.send({ data: b64({ historyId: '7' }) });
+    assert.equal(res.code, 200);
+    assert.equal(f.guestComplaintCalls.length, 1);
+    assert.equal(f.guestComplaintCalls[0][0], f.db);
+    assert.deepEqual(f.guestComplaintCalls[0][1], {
+      gmailMessageId: 'm1', gmailThreadId: 't1', airbnbRoomId: '123456789', airbnbThreadId: '987654321',
+      occurredAt: '2026-11-25T10:00:00.000Z', topics: ['temperature', 'humidity'],
+    });
+    assert.deepEqual(f.slackCalls, [[`[PROPOS] ⚠️ fixture-property ${label}`]]);
+    assert.ok(f.calendarRequests.some(request => request.url.endsWith('/messages/m1?format=full')));
   });
 
   test('no reservation email: nothing is sent, but the number still moves forward', async t => {

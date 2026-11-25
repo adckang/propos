@@ -18,6 +18,7 @@ import { SuspicionTracker }     from './suspicionTracker.js';
 import { NoiseAnomalyDetector } from './noiseAnomalyDetector.js';
 import { VacantEnergyAnomalyDetector } from './vacantEnergyAnomalyDetector.js';
 import { DeviceOfflineAnomalyDetector } from './deviceOfflineAnomalyDetector.js';
+import { EnvironmentSensorAnomalyDetector } from './environmentSensorAnomalyDetector.js';
 
 const MIN = 60_000;
 
@@ -106,6 +107,18 @@ function winterReasons(iTemp, iHum) {
   return r;
 }
 
+function environmentIssueTopics(seas, iTemp, iHum) {
+  const topics = [];
+  if (seas === 'summer') {
+    if (iTemp > T.SUM_TEMP_MAX) topics.push('temperature');
+    if (iHum !== null && iHum > T.SUM_HUM_MAX) topics.push('humidity');
+  } else if (seas === 'winter') {
+    if (iTemp < T.WIN_TEMP_MIN) topics.push('temperature');
+    if (iHum !== null && iHum < T.WIN_HUM_MIN) topics.push('humidity');
+  }
+  return topics;
+}
+
 // ── 소음 가중치 (스펙 섹션 9) ────────────────────────────────────────────────
 // CRITICAL(>85dB)×8 / HIGH(>75dB)×3 / WARN(>65dB)×1 / 이하 0
 function noiseWeight(dB) {
@@ -160,24 +173,27 @@ export class OccupancyMonitor {
   _noiseAnomaly = new NoiseAnomalyDetector();
   _vacantEnergyAnomaly = new VacantEnergyAnomalyDetector();
   _deviceOfflineAnomaly = new DeviceOfflineAnomalyDetector();
+  _environmentSensorAnomaly = new EnvironmentSensorAnomalyDetector();
 
   /** 재시작해도 이어질 퇴실·입실 확인 대기 (워처가 상태 파일에 저장) */
-  snapshot() { return { ...this._suspicion.snapshot(), noiseAnomaly: this._noiseAnomaly.snapshot(), vacantEnergyAnomaly: this._vacantEnergyAnomaly.snapshot(), deviceOfflineAnomaly: this._deviceOfflineAnomaly.snapshot() }; }
+  snapshot() { return { ...this._suspicion.snapshot(), noiseAnomaly: this._noiseAnomaly.snapshot(), vacantEnergyAnomaly: this._vacantEnergyAnomaly.snapshot(), deviceOfflineAnomaly: this._deviceOfflineAnomaly.snapshot(), environmentSensorAnomaly: this._environmentSensorAnomaly.snapshot() }; }
   restore(raw) {
     this._suspicion.restore(raw);
     this._noiseAnomaly.restore(raw?.noiseAnomaly);
     this._vacantEnergyAnomaly.restore(raw?.vacantEnergyAnomaly);
     this._deviceOfflineAnomaly.restore(raw?.deviceOfflineAnomaly);
+    this._environmentSensorAnomaly.restore(raw?.environmentSensorAnomaly);
   }
-  markPersisted() { this._noiseAnomaly.markPersisted(); this._vacantEnergyAnomaly.markPersisted(); this._deviceOfflineAnomaly.markPersisted(); }
+  markPersisted() { this._noiseAnomaly.markPersisted(); this._vacantEnergyAnomaly.markPersisted(); this._deviceOfflineAnomaly.markPersisted(); this._environmentSensorAnomaly.markPersisted(); }
   acknowledgeNoiseNormal(result) { return this._noiseAnomaly.acknowledgeNormal(result); }
   acknowledgeVacantEnergyDetected(result) { return this._vacantEnergyAnomaly.acknowledgeDetected(result); }
   acknowledgeVacantEnergyNormal(result) { return this._vacantEnergyAnomaly.acknowledgeNormal(result); }
   acknowledgeDeviceOnline(result) { return this._deviceOfflineAnomaly.acknowledgeNormal(result); }
+  acknowledgeEnvironmentNormal(result) { return this._environmentSensorAnomaly.acknowledgeNormal(result); }
   /** 지금 체류에서 손님이 들어온 것이 확인됐는가 (입실 시각에 체류로 바뀐 뒤 아직 안 왔으면 false) */
   get stayEntryConfirmed() { return this._suspicion.stayEntryConfirmed; }
-  get hasOpenWait() { return this._suspicion.hasOpenWait || this._noiseAnomaly.hasPendingTracking || this._vacantEnergyAnomaly.hasPendingTracking || this._deviceOfflineAnomaly.hasPendingTracking; }
-  get needsPersistence() { return this._noiseAnomaly.needsPersistence || this._vacantEnergyAnomaly.needsPersistence || this._deviceOfflineAnomaly.needsPersistence; }
+  get hasOpenWait() { return this._suspicion.hasOpenWait || this._noiseAnomaly.hasPendingTracking || this._vacantEnergyAnomaly.hasPendingTracking || this._deviceOfflineAnomaly.hasPendingTracking || this._environmentSensorAnomaly.hasPendingTracking; }
+  get needsPersistence() { return this._noiseAnomaly.needsPersistence || this._vacantEnergyAnomaly.needsPersistence || this._deviceOfflineAnomaly.needsPersistence || this._environmentSensorAnomaly.needsPersistence; }
   get awaitingArrival() { return this._suspicion.awaitingArrival; }
   noteManualCleaning(type) { this._suspicion.noteManualCleaning(type); }
 
@@ -231,37 +247,44 @@ export class OccupancyMonitor {
       now,
     });
     const deviceOfflineEvents = this._deviceOfflineAnomaly.evaluate({ devices: deviceAvailability, now });
+    const seas = season(snap.outdoorTemp);
+    const iTemp = indoorTemp(snap);
+    const iHum = indoorHum(snap);
+    const environmentSensorEvents = this._environmentSensorAnomaly.evaluate({
+      issueTopics: environmentIssueTopics(seas, iTemp, iHum),
+      stayId: reservation?.stayId ?? null,
+      eligible: main === 'OCCUPIED' && this._suspicion.stayEntryConfirmed,
+      observed: iTemp !== null && seas !== 'unknown',
+      now,
+    });
 
     // All preparation outcomes permit check-in. Sensor optimization has its own
     // controller and keeps running when guests arrive before it finishes.
     if (main === 'PRE_STAY_READY' || main === 'VACANT') {
-      return [...occupancyEvents, ...noiseAnomalyEvents, ...vacantEnergyEvents, ...deviceOfflineEvents]; // scheduled_checkin_reached, early_checkin_suspected or []
+      return [...occupancyEvents, ...noiseAnomalyEvents, ...vacantEnergyEvents, ...deviceOfflineEvents, ...environmentSensorEvents]; // scheduled_checkin_reached, early_checkin_suspected or []
     }
 
     // CLEANING: 청소 시작/완료 감지만
     if (main === 'CLEANING') {
-      return [...occupancyEvents, ...noiseAnomalyEvents, ...vacantEnergyEvents, ...deviceOfflineEvents]; // 청소 일정 전환·실제 청소 기록·담당자 미감지, 또는 (일정 없으면) cleaning_started/finished
+      return [...occupancyEvents, ...noiseAnomalyEvents, ...vacantEnergyEvents, ...deviceOfflineEvents, ...environmentSensorEvents]; // 청소 일정 전환·실제 청소 기록·담당자 미감지, 또는 (일정 없으면) cleaning_started/finished
     }
 
     // OCCUPIED: 체크아웃(새 로직) + 기존 이벤트 통합
     if (main === 'OCCUPIED') {
-      const seas  = season(snap.outdoorTemp);
-      const iTemp = indoorTemp(snap);
-      const iHum  = indoorHum(snap);
-
       // 입실 시각에 체류로 바뀌어도 손님이 들어온 것이 확인되기 전엔 빈방이다 — 입실 준비로 켜 둔 에어컨이
       // "체류 중 에너지 낭비"로 잡히지 않게, 그동안은 안전 점검(연기·문 열림)만 한다
       if (!this._suspicion.stayEntryConfirmed) {
         this.energyWasteStart = null; this.energyNormalStart = null;
         this.envIssueStart = null; this.envNormalStart = null;
         this.noiseWindow = []; this.noiseSilentStart = null;
-        return [...occupancyEvents, ...noiseAnomalyEvents, ...vacantEnergyEvents, ...deviceOfflineEvents, ...this._smoke(snap, sub, now), ...this._doorOpen(sub, now)];
+        return [...occupancyEvents, ...noiseAnomalyEvents, ...vacantEnergyEvents, ...deviceOfflineEvents, ...environmentSensorEvents, ...this._smoke(snap, sub, now), ...this._doorOpen(sub, now)];
       }
       return [
         ...occupancyEvents,   // scheduled_checkout_reached (먼저 배치 — 우선 상태 전환)
         ...noiseAnomalyEvents,
         ...vacantEnergyEvents,
         ...deviceOfflineEvents,
+        ...environmentSensorEvents,
         ...this._smoke(snap, sub, now),
         ...this._noise(snap, sub, now),
         ...this._environment(seas, iTemp, iHum, sub, now),
@@ -270,7 +293,7 @@ export class OccupancyMonitor {
       ];
     }
 
-    return [...noiseAnomalyEvents, ...vacantEnergyEvents, ...deviceOfflineEvents];
+    return [...noiseAnomalyEvents, ...vacantEnergyEvents, ...deviceOfflineEvents, ...environmentSensorEvents];
   }
 
   // ── 1. 연기 감지 ─────────────────────────────────────────────────────────

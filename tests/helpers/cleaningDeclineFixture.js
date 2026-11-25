@@ -6,11 +6,12 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const root = new URL('../../', import.meta.url).pathname;
-export async function cleaningDeclineFixture({ responses = [], advance, slack, notify, icalSync, profile = 'hybrid', calendar, environment = {} } = {}) {
+export async function cleaningDeclineFixture({ responses = [], advance, slack, notify, icalSync, guestComplaint, profile = 'hybrid', calendar, environment = {} } = {}) {
   const key = '__declineFixture_' + randomUUID().replaceAll('-', '');
   const pending = [...responses];
   const queries = [], advances = [], slackCalls = [], blocked = [], errors = [], unexpectedQueries = [], icalSyncCalls = [];
   const tokenCalls = [], calendarRequests = [], completionCalls = [], kvCalls = [], notifyCalls = [];
+  const guestComplaintCalls = [];
   const previousFetch = globalThis.fetch;
   const env = { PROPOS_DATA_PROFILE: profile, PROPOS_AUTH_MODE: 'enforce',
     PROPOS_ADMIN_PASSWORD: 'fixture-admin-password', PROPOS_SESSION_SECRET: 'fixture-session-secret-not-a-real-key',
@@ -32,6 +33,7 @@ export async function cleaningDeclineFixture({ responses = [], advance, slack, n
     async complete(...args) { completionCalls.push(args); return calendar.complete?.(...args); },
     async notify(...args) { notifyCalls.push(args); return notify(...args); },
     async icalSync(...args) { icalSyncCalls.push(args); return icalSync(...args); },
+    async guestComplaint(...args) { guestComplaintCalls.push(args); return guestComplaint(...args); },
     kv: new Proxy({}, { get: (_target, name) => async (...args) => {
       if (calendar?.kv?.[name]) {
         kvCalls.push({ method: name, args });
@@ -76,6 +78,7 @@ export async function cleaningDeclineFixture({ responses = [], advance, slack, n
       export const getGmailToken=(...args)=>globalThis.${key}.gmailToken(...args);` }),
     ...(notify && { '../../server/cleaning/_notify.js': `export const notify=(...args)=>globalThis.${key}.notify(...args);` }),
     ...(icalSync && { '../../server/cleaning/_icalSync.js': `export const syncAllPropertiesIcal=(...args)=>globalThis.${key}.icalSync(...args);` }),
+    ...(guestComplaint && { '../../server/guestComplaintAnomalies.js': `export const recordGuestComplaintEmail=(...args)=>globalThis.${key}.guestComplaint(...args);` }),
     'firebase-admin/app': `export const getApps=()=>[{}]; export const cert=()=>globalThis.${key}.fail('FCM'); export const initializeApp=()=>globalThis.${key}.fail('FCM');`,
     'firebase-admin/messaging': `export const getMessaging=()=>globalThis.${key}.fail('FCM');`,
   };
@@ -121,7 +124,7 @@ export async function cleaningDeclineFixture({ responses = [], advance, slack, n
       return res;
     }
     return { invoke, db, queries, advances, slackCalls, blocked, errors, unexpectedQueries,
-      tokenCalls, calendarRequests, completionCalls, kvCalls, notifyCalls, icalSyncCalls, kv: io.kv,
+      tokenCalls, calendarRequests, completionCalls, kvCalls, notifyCalls, icalSyncCalls, guestComplaintCalls, kv: io.kv,
       get pendingResponses() { return pending.length; }, restore };
   } catch (error) { restore(); throw error; }
 }

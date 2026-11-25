@@ -38,6 +38,8 @@ import { attendeeEmailsForCleaner, matchCleanerAttendee, calendarCleaningTimes }
 import { getDemoCleaningStats, getDemoPropertyConfigs } from "../../src/application/demoReportingService.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 import { getAnomalyPolicySettings, saveAnomalyPolicySettings } from "../../server/anomalyPolicySettings.js";
+import { extractAirbnbGuestComplaint } from "../../src/domain/guestComplaintEmailDomain.js";
+import { recordGuestComplaintEmail } from "../../server/guestComplaintAnomalies.js";
 
 import { requireAdminSession, requireScope } from "../../server/auth/operatorAuth.js";
 import { createOperator, listOperators, updateOperator } from "../../server/auth/operatorAdmin.js";
@@ -708,6 +710,7 @@ async function handleGmailWebhook(req, res) {
   try {
     const token = await getGmailToken(kv);
     const auth = { headers: { Authorization: `Bearer ${token}` } };
+    const messageMetadata = new Map();
     const resync = () => syncAllPropertiesIcal(db, { kv }).catch((e) => console.error("[gmail-webhook] iCal 재폴링 실패:", e.message));
     outcome = await handleGmailNotification(historyId, {
       kv,
@@ -716,14 +719,28 @@ async function handleGmailWebhook(req, res) {
         return { status: r.status, body: r.ok ? await r.json() : null };
       },
       getSubject: async (id) => {
-        const msg = await (await fetch(`${GMAIL_API}/users/me/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=Subject`, auth)).json();
-        return (msg.payload?.headers ?? []).find((hdr) => hdr.name === "Subject")?.value ?? "";
+        const msg = await (await fetch(`${GMAIL_API}/users/me/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`, auth)).json();
+        const headers = Object.fromEntries((msg.payload?.headers ?? []).map(hdr => [hdr.name.toLowerCase(), hdr.value]));
+        messageMetadata.set(id, headers);
+        return headers.subject ?? "";
       },
       getCurrentHistoryId: async () => (await (await fetch(`${GMAIL_API}/users/me/profile`, auth)).json())?.historyId ?? null,
       isReservation: (subject) => RESERVATION_SUBJECTS.some((s) => subject.toLowerCase().includes(s)),
       onReservation: async () => {
         await postSlack("[PROPOS] 📬 에어비앤비 신규 예약 이메일 감지. iCal 재폴링 트리거.");
         await resync();
+      },
+      onMessage: async (id, { subject }) => {
+        const metadata = messageMetadata.get(id) ?? {};
+        if (!/^\s*re\s*:/i.test(subject) || !/airbnb/i.test(metadata.from ?? "")) return;
+        const response = await fetch(`${GMAIL_API}/users/me/messages/${encodeURIComponent(id)}?format=full`, auth);
+        if (!response.ok) throw new Error(`Gmail message API ${response.status}`);
+        const complaint = extractAirbnbGuestComplaint(await response.json());
+        if (!complaint) return;
+        const recorded = await recordGuestComplaintEmail(db, complaint);
+        for (const label of recorded.alerts ?? []) {
+          await postSlack(`[PROPOS] ⚠️ ${recorded.propertyId} ${label}`);
+        }
       },
       onCatchUp: resync, // 놓쳤을 수 있을 때(처음·번호 만료) — 예약 동기화는 같은 예약을 두 번 만들지 않는다
     });

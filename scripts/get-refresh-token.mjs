@@ -2,7 +2,7 @@
  * Google OAuth Refresh Token 발급 스크립트
  * 실행: node scripts/get-refresh-token.mjs           — 캘린더 계정(bnb.paju) → GOOGLE_CALENDAR_REFRESH_TOKEN
  *       node scripts/get-refresh-token.mjs --gmail   — 예약 메일을 받는 Gmail 계정 → GOOGLE_REFRESH_TOKEN
- *         (계정 선택 화면에서 고른다. 권한은 메일 머리글 읽기(gmail.metadata)만 — 구독·변경 기록·제목·현재 번호에 충분.
+ *         (계정 선택 화면에서 고른다. 권한은 메일 읽기(gmail.readonly) — Airbnb 게스트 메시지 본문 판별에 필요.
  *          토큰은 화면에 출력하지 않고 .env.local 의 GOOGLE_REFRESH_TOKEN 줄에 바로 쓴다. RF-40)
  *
  * 다른 기기(휴대폰 등)에서 승인할 때 — 승인 뒤 localhost 주소로 돌아가 "페이지 없음"이 떠도 주소창에 code 가 있다:
@@ -33,7 +33,7 @@ const CLIENT_ID     = envVars.GOOGLE_CLIENT_ID     || process.env.GOOGLE_CLIENT_
 const CLIENT_SECRET = envVars.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
 const REDIRECT_URI  = "http://localhost:9876/callback";
 const SCOPES        = (GMAIL_MODE
-  ? ["https://www.googleapis.com/auth/gmail.metadata"]
+  ? ["https://www.googleapis.com/auth/gmail.readonly"]
   : ["https://www.googleapis.com/auth/calendar"]
 ).join(" ");
 

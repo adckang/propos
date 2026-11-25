@@ -50,6 +50,7 @@ async function restartFromGmail(kv, deps) {
  * @param {(messageId: string) => Promise<string>} deps.getSubject
  * @param {() => Promise<string|null>} deps.getCurrentHistoryId      Gmail이 알려 주는 메일함의 지금 번호(프로필)
  * @param {(subject: string) => boolean} deps.isReservation
+ * @param {(messageId: string, metadata: {subject: string}) => Promise<void>} [deps.onMessage]
  * @param {() => Promise<void>} deps.onReservation                예약 메일을 찾았을 때(Slack + 동기화)
  * @param {(reason: 'start'|'expired') => Promise<void>} deps.onCatchUp  놓쳤을 수 있을 때(동기화만)
  * @returns {Promise<{result: 'ignored'|'busy'|'started'|'stale'|'reset'|'failed'|'checked', found?: boolean}>}
@@ -91,7 +92,10 @@ export async function handleGmailNotification(notifiedId, deps) {
 
     let found = false;
     for (const id of messageIds) {
-      if (deps.isReservation(await deps.getSubject(id))) { found = true; break; }
+      const subject = await deps.getSubject(id);
+      if (deps.isReservation(subject)) found = true;
+      if (deps.onMessage) await deps.onMessage(id, { subject });
+      else if (found) break;
     }
     if (found) await deps.onReservation();
     if (newer(newest, stored)) await kv.set(GMAIL_LAST_HISTORY_KEY, newest);

@@ -295,6 +295,23 @@ CREATE INDEX IF NOT EXISTS automation_anomalies_property_occurred
 CREATE INDEX IF NOT EXISTS automation_anomalies_type_occurred
   ON automation_anomalies(anomaly_type,occurred_at DESC);
 
+-- Gmail 원문은 저장하지 않는다. Airbnb 답장 한 건에서 확인된 주제만 추가 전용으로 남긴다.
+CREATE TABLE IF NOT EXISTS guest_complaint_signals (
+  gmail_message_id TEXT NOT NULL,
+  topic            TEXT NOT NULL CHECK (topic IN ('temperature','humidity')),
+  property_id      TEXT NOT NULL REFERENCES property_cleaning_config(property_id) ON UPDATE CASCADE,
+  stay_id          UUID,
+  airbnb_room_id   TEXT NOT NULL,
+  airbnb_thread_id TEXT NOT NULL,
+  occurred_at      TIMESTAMPTZ NOT NULL,
+  recorded_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (gmail_message_id,topic),
+  CONSTRAINT guest_complaint_signals_stay_fk FOREIGN KEY (property_id,stay_id)
+    REFERENCES property_stays(property_id,id) ON UPDATE CASCADE
+);
+CREATE INDEX IF NOT EXISTS guest_complaint_signals_pairing
+  ON guest_complaint_signals(property_id,topic,occurred_at DESC);
+
 CREATE TABLE IF NOT EXISTS automation_open_incidents (
   incident_key TEXT PRIMARY KEY,
   anomaly_id   UUID NOT NULL UNIQUE REFERENCES automation_anomalies(id) ON DELETE CASCADE,

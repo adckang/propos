@@ -38,6 +38,10 @@ export const EVENT_TYPES = Object.freeze({
   NOISE_THRESHOLD_SUSTAINED: "noise_threshold_sustained",
   NOISE_THRESHOLD_NORMAL: "noise_threshold_normal",
   NOISE_TRACKING_ENDED: "noise_tracking_ended",
+  // RF-25 게스트 온습도 불만과 60분 안에 교차 확인할 센서 신호
+  ENVIRONMENT_SENSOR_ANOMALY: "environment_sensor_anomaly",
+  ENVIRONMENT_SENSOR_NORMAL: "environment_sensor_normal",
+  ENVIRONMENT_SENSOR_TRACKING_ENDED: "environment_sensor_tracking_ended",
   // RF-25 기기 오프라인 정본 신호 — 옛 감지 센서 사전 점검과 별도
   DEVICE_OFFLINE_DETECTED: "device_offline_detected",
   DEVICE_OFFLINE_RECURRED: "device_offline_recurred",
@@ -67,6 +71,12 @@ export const NOISE_ANOMALY_EVENT_TYPES = new Set([
   "noise_threshold_sustained",
   "noise_threshold_normal",
   "noise_tracking_ended",
+]);
+
+export const GUEST_COMPLAINT_SENSOR_EVENT_TYPES = new Set([
+  "environment_sensor_anomaly",
+  "environment_sensor_normal",
+  "environment_sensor_tracking_ended",
 ]);
 
 export const VACANT_ENERGY_ANOMALY_EVENT_TYPES = new Set([

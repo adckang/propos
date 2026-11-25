@@ -9,6 +9,7 @@ import { processEvent } from '../../src/application/eventService.js';
 import { DATA_PROFILE } from '../../src/config/dataProfile.js';
 import {
   DEVICE_OFFLINE_ANOMALY_EVENT_TYPES,
+  GUEST_COMPLAINT_SENSOR_EVENT_TYPES,
   NOISE_ANOMALY_EVENT_TYPES,
   OPERATOR_ALERT_EVENT_TYPES,
   VACANT_ENERGY_ANOMALY_EVENT_TYPES,
@@ -28,8 +29,8 @@ export const event = {
   type: 'check_in_detected', device_time: '2026-11-09T03:00:00.000Z',
 };
 export async function request(action, body, { duplicate = false, secret = 'fixture-key', serverSecret = 'fixture-key', demo = false, raw, notifyFails = false,
-  noiseResult = null, vacantEnergyResult = null, deviceOfflineResult = null } = {}) {
-  const calls = [], notices = [], cache = [], noiseSignals = [], vacantEnergySignals = [], deviceOfflineSignals = [];
+  noiseResult = null, vacantEnergyResult = null, deviceOfflineResult = null, guestComplaintResult = null } = {}) {
+  const calls = [], notices = [], cache = [], noiseSignals = [], vacantEnergySignals = [], deviceOfflineSignals = [], guestComplaintSignals = [];
   let allocations = 0;
   const db = {
     async query(sql, params) {
@@ -49,7 +50,7 @@ export async function request(action, body, { duplicate = false, secret = 'fixtu
     readBody: actual('readBody'), sendJson: actual('sendJson'), ensureTable: actual('ensureTable'),
     randomUUID, ...validation, insertEvent, processEvent, hasWatcherSecret, OPERATOR_ALERT_EVENT_TYPES,
     kv: { async set(...args) { cache.push(args); }, async del(...args) { cache.push(args); } },
-    NOISE_ANOMALY_EVENT_TYPES, VACANT_ENERGY_ANOMALY_EVENT_TYPES, DEVICE_OFFLINE_ANOMALY_EVENT_TYPES,
+    NOISE_ANOMALY_EVENT_TYPES, VACANT_ENERGY_ANOMALY_EVENT_TYPES, DEVICE_OFFLINE_ANOMALY_EVENT_TYPES, GUEST_COMPLAINT_SENSOR_EVENT_TYPES,
     reconcileNoiseSignal: async (...args) => {
       noiseSignals.push(args);
       if (!noiseResult) throw new Error('Unexpected noise anomaly signal');
@@ -65,6 +66,11 @@ export async function request(action, body, { duplicate = false, secret = 'fixtu
       if (!deviceOfflineResult) throw new Error('Unexpected device offline anomaly signal');
       return deviceOfflineResult;
     },
+    reconcileGuestComplaintSensorSignal: async (...args) => {
+      guestComplaintSignals.push(args);
+      if (!guestComplaintResult) throw new Error('Unexpected guest complaint sensor signal');
+      return guestComplaintResult;
+    },
     notifyEvent: async (...args) => { notices.push(args); if (notifyFails) throw new Error('fixture Slack down'); return { sent: true }; },
     requireScope: () => { throw new Error('Pi writes cannot depend on a browser session'); },
     console: { error() {} },
@@ -74,6 +80,6 @@ export async function request(action, body, { duplicate = false, secret = 'fixtu
   const res = { status(code) { this.code = code; return this; }, json(value) { this.body = value; } };
   await handler(req, res);
   if (allocations) assert.equal(db.ended, true);
-  return { res, calls, notices, cache, noiseSignals, vacantEnergySignals, deviceOfflineSignals, allocations };
+  return { res, calls, notices, cache, noiseSignals, vacantEnergySignals, deviceOfflineSignals, guestComplaintSignals, allocations };
 }
 
