@@ -36,16 +36,16 @@
 
 | ID | 문서 | 고칠 것 | 근거 | 상태 |
 | --- | --- | --- | --- | --- |
-| SM-10 | refactoring_mdfile MD-R05 | 결정 필요 → 종결. 구현 설명을 "판정 기록 없는 4개 지표 제외"로, 자동화 개선율은 별도 | DEC-02 `e6b214a` · RF-26 `a9c1d52` · RF-25 | 할 일 |
-| SM-11 | MD-R26 · actor_ui LIMIT-01 · runtime IF-L01 · traceability TR-06·4절 | 인증 강제 "운영 확인 필요" → 운영 관측: 로그인 없는 보고서·청소 API·이벤트 조회가 401(11-10·11-12·11-14) | `git show ca41eb4:docs/refactoring.md` · event-ingestion-audit 10절 | 할 일 |
-| SM-12 | MD-R07 · runtime IF-EXT07 · error 4.2 FCM 줄 | 알림 채널 "용어 분리" → 정책 확정(앱 푸시만, 문자 안 씀), 코드(`_notify.js`)는 아직 문자를 고를 수 있음 = 정책-코드 불일치 | ACT-11 규칙 | 할 일 |
-| SM-13 | refactoring_mdfile MD-R12·14·15·19·22 | R12 종결, R14 거의 종결, R19·R22는 refactoring.md 206줄로 축소(report-architecture는 오히려 커짐), R15는 refactoring.md 7절 3단계 표시와 맞출지 | `36a2153` `5f132f3` | 할 일 |
-| SM-14 | refactoring_mdfile 머리말·남은 MD-R | "기존 분야별 Markdown은 수정하지 않았다" → QA-01 1~4차에서 정정함. R02·03·04·06·08·09·10·11·13·16·21·25는 11-26 확인 결과 그대로 남음으로 표시 | `5f132f3` `36a2153` `43497b7` `1390a3e` | 할 일 |
-| SM-15 | refactoring_TC 머리말·4.1·8·11절 | TC-R01·02 해결, TC-R03 부분(설명 정정·허락 없이 안 돎, 읽기/쓰기 분리는 아직), "테스트 리팩터링 미실행" → ACT-08이 복사 테스트 12개·소스 글자 검사 8개를 실제 코드 시험으로 바꿈. 남은 결정은 2~4번만 | RF-42 `c58fbdd` · RF-43 `86afce1` · ACT-08 | 할 일 |
-| SM-16 | refactoring_TC 3.2·3.3 | `test:e2e`의 "live 파일과 충돌" 삭제, `test:connectivity`(명시적 허락) 줄 추가, 데모 전용 e2e 서버 안전장치 추가 | RF-42·43 | 할 일 |
-| SM-17 | runtime SEQ-06·IF-L05 | "s34는 자기 재구현 한계" 삭제 — s34는 실제 정기 작업 핸들러를 실행 | ACT-08 | 할 일 |
-| SM-18 | doc_plan 3절 | 수정 가능 목록에 `refactoring_TC.md`·이 파일 추가, "분야별 문서 수정 금지"를 실제(QA-01로 정정됨)에 맞게 | — | 할 일 |
-| SM-19 | traceability TR-05·4절 | 정책 근거 D-026 → DEC-02·RF-26, 우선 갭 2번(안심지수) 정리 | DEC-02 | 할 일 |
+| SM-10 | refactoring_mdfile MD-R05 | 결정 필요 → 종결. 구현 설명을 "판정 기록 없는 4개 지표 제외"로, 자동화 개선율은 별도 | DEC-02 `e6b214a` · RF-26 `a9c1d52` · RF-25 | 완료 · `61914d1` |
+| SM-11 | MD-R26 · actor_ui LIMIT-01 · runtime IF-L01 · traceability TR-06·4절 | 인증 강제 "운영 확인 필요" → 운영 관측: 로그인 없는 보고서·청소 API·이벤트 조회가 401(11-10·11-12·11-14) | `git show ca41eb4:docs/refactoring.md` · event-ingestion-audit 10절 | 완료 · `61914d1` |
+| SM-12 | MD-R07 · runtime IF-EXT07 · error 4.2 FCM 줄 | 알림 채널 "용어 분리" → 정책 확정(앱 푸시만, 문자 안 씀), 코드(`_notify.js`)는 아직 문자를 고를 수 있음 = 정책-코드 불일치 | ACT-11 규칙 | 완료 · `61914d1` |
+| SM-13 | refactoring_mdfile MD-R12·14·15·19·22 | R12 종결, R14 거의 종결, R19·R22는 refactoring.md 206줄로 축소(report-architecture는 오히려 커짐), R15는 refactoring.md 7절 3단계 표시와 맞출지 | `36a2153` `5f132f3` | 완료 · `61914d1` |
+| SM-14 | refactoring_mdfile 머리말·남은 MD-R | "기존 분야별 Markdown은 수정하지 않았다" → QA-01 1~4차에서 정정함. R02·03·04·06·08·09·10·11·13·16·21·25는 11-26 확인 결과 그대로 남음으로 표시 | `5f132f3` `36a2153` `43497b7` `1390a3e` | 완료 · `61914d1` |
+| SM-15 | refactoring_TC 머리말·4.1·8·11절 | TC-R01·02 해결, TC-R03 부분(설명 정정·허락 없이 안 돎, 읽기/쓰기 분리는 아직), "테스트 리팩터링 미실행" → ACT-08이 복사 테스트 12개·소스 글자 검사 8개를 실제 코드 시험으로 바꿈. 남은 결정은 2~4번과 s37 파일 위치. 9절 규칙 2개 추가(안전 결함은 RF로, 테스트는 실제 코드 실행) | RF-42 `c58fbdd` · RF-43 `86afce1` · ACT-08 | 완료 · `61914d1` |
+| SM-16 | refactoring_TC 3.2·3.3 | `test:e2e`의 "live 파일과 충돌" 삭제, `test:connectivity`(명시적 허락) 줄 추가, 데모 전용 e2e 서버 안전장치 추가 | RF-42·43 | 완료 · `61914d1` |
+| SM-17 | runtime SEQ-06·IF-L05 | "s34는 자기 재구현 한계" 삭제 — s34는 실제 정기 작업 핸들러를 실행 | ACT-08 | 완료 · `61914d1` |
+| SM-18 | doc_plan 3절 | 수정 가능 목록에 `refactoring_TC.md`·이 파일 추가, "분야별 문서 수정 금지"를 실제(QA-01로 정정됨)에 맞게 | — | 완료 · `61914d1` |
+| SM-19 | traceability TR-05·4절 | 정책 근거 D-026 → DEC-02·RF-26, 우선 갭 2번(안심지수) 정리 | DEC-02 | 완료 · `61914d1` |
 
 ## 단계 3 · 빠진 큰 흐름 추가 (상세는 design_overview·runtime에만, 나머지는 링크)
 
