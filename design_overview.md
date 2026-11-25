@@ -310,6 +310,7 @@ worker-app/
 ```
 
 - Worker App은 FCM 알림, 청소 예약 링크, 거절 API, 토큰 갱신을 처리한다.
+- 최초 연결은 관리자가 미리 저장한 전화번호·이메일이 둘 다 맞는 기존 담당자에만 된다. 문자 인증은 없고 앱이 담당자를 새로 만들지 않는다(`4ea6801`).
 - 최종 `ASSIGNED` 확정은 Google Calendar 예약과 서버 webhook 경로를 따른다.
 
 ### 4.6 테스트
@@ -347,18 +348,18 @@ flowchart LR
     Google --> Cleaning
     Pi --> Events
     Worker --> Cleaning
-    Reservation --> Room
+    Reservation -- 상태 일정 --> Room
     Reservation --> Report
-    Cleaning --> Room
+    Cleaning -- 상태 일정 --> Room
     Cleaning --> Report
     Cleaning --> CleanUI
-    Events --> Room
+    Events -. 문제·감지 기록 .-> Room
     Events --> Report
     Access --> Room
     Cleaning --> Alert
 ```
 
-Pi의 watcher 상태·snapshot과 HA live sensor는 화면에 합쳐질 수 있지만 예약·청소 원장과 같은 데이터는 아니다. 상세 데이터 협업은 [런타임 데이터 흐름](runtime_interfaces_and_collaboration.md#data-collaboration), 테이블 관계는 [요약 ERD](myPlantUML/PROPOS_DB_ERD_summary.png)를 본다.
+숙소 상태(공실·입실전·체류중·청소대기·청소중)는 예약·청소 일정이 정한다. 이벤트는 그 일정 구간에서 기대한 일이 실제로 일어났는지와, 일어나지 않았을 때의 문제를 보여줄 뿐 상태를 바꾸지 않는다(DEC-10, [room-state-machine.md 0절](docs/room-state-machine.md)). Pi의 watcher 상태·snapshot과 HA live sensor는 화면에 합쳐질 수 있지만 예약·청소 원장과 같은 데이터는 아니다. 상세 데이터 협업은 [런타임 데이터 흐름](runtime_interfaces_and_collaboration.md#data-collaboration), 테이블 관계는 [요약 ERD](myPlantUML/PROPOS_DB_ERD_summary.png)를 본다.
 
 ### 5.1 상세 흐름의 소유 문서
 
@@ -529,6 +530,8 @@ S01~S05는 기존 단계별 제품·데모 시나리오다. 세부 경로·서�
 | `TR-01`~`TR-12` | 정책·문서·코드·데이터·테스트 추적 |
 | `MD-R01`~`MD-R29` | 문서 충돌·중복·형식 검토 항목 |
 | `SCN-01`~`SCN-07` | 현재 액터·UI·시스템 사용 시나리오 |
+| `AC-01`~`AC-05` / `AC-S01`~`AC-S08` | 사람 액터 / 시스템 액터 ([actor_ui_scenarios.md](actor_ui_scenarios.md#actor-catalog)). `ACT-`는 `docs/refactoring.md`의 실행 작업 번호 |
+| `T0`~`T6` | TC 계획의 시험 수준 ([refactoring_TC.md](refactoring_TC.md)). 테스트 파일의 `L0`~`L3`은 기존 뜻 |
 | `IF-` | API·외부 인터페이스 계약 |
 | `ERR-` | 현재 오류·업무 실패·관측 패턴 |
 | `TC-R` / `TCR-` | TC 구조 문제 / TC 리팩터링 실행 단계 |

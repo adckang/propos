@@ -7,7 +7,7 @@
 > 저장소 기준: [doc_plan.md의 최신 검증 기준점](doc_plan.md#validation)  
 > 사실 범위: 현재 저장소 구현을 설명한다. 배포·환경·실기 상태는 날짜가 붙은 운영 근거 없이는 확정하지 않는다.  
 > 상위 문서: [design_overview.md](design_overview.md) · 계획: [doc_plan.md](doc_plan.md)  
-> 검색 키워드: `[ACT-]` `[UI-]` `[SCN-]` `[MAP-]` `[CURRENT]` `[LIMIT]`
+> 검색 키워드: `[AC-]` `[UI-]` `[SCN-]` `[MAP-]` `[CURRENT]` `[LIMIT]`
 
 ---
 
@@ -120,11 +120,11 @@ flowchart TD
 
 | ID | 액터 | 목표 | 주 진입점 | 현재 구현 권한·행동 | 성공 기준 |
 | --- | --- | --- | --- | --- | --- |
-| ACT-01 | ADMIN | 전체 숙소와 운영 계정을 통제 | 운영 웹 로그인 | 전체 scope 조회, 운영자 추가·정지·복구·비밀번호 변경·숙소 배정 | 필요한 숙소와 계정을 제한 없이 관리 |
-| ACT-02 | OPERATOR | 맡은 숙소의 상태와 예외를 처리 | 운영 웹 로그인 | 배정 숙소 조회·업무 처리, 관리자 전용 기능 제외 | 자기 scope 밖 데이터를 보지 않고 맡은 업무 완료 |
-| ACT-03 | host | 예약·숙소·청소 운영을 책임지고 현장과 협의 | 조직에 따라 운영 웹 또는 연락 채널 | 별도 세션 role 없음; 청소 요청 payload의 연락처로 협의 대상이 됨 | 예약과 현장 작업 사이의 정책·협의 완료 |
-| ACT-04 | 청소 담당자 | 요청을 확인하고 수락·거절·협의 | Worker App | 전화번호 OTP, 이메일 등록, FCM 수신, Google Calendar 예약 화면, 거절 API, SMS 협의 | 작업 배정 여부가 명확해지고 현장 일정 반영 |
-| ACT-05 | 게스트 | 예약한 숙소에 입실·체류·퇴실 | Airbnb·숙소 현장 | 운영 UI 직접 사용은 확인되지 않음; 예약·도어·센서 이벤트의 업무 대상 | 예약 일정과 실제 체류 상태가 운영 흐름에 반영 |
+| AC-01 | ADMIN | 전체 숙소와 운영 계정을 통제 | 운영 웹 로그인 | 전체 scope 조회, 운영자 추가·정지·복구·비밀번호 변경·숙소 배정 | 필요한 숙소와 계정을 제한 없이 관리 |
+| AC-02 | OPERATOR | 맡은 숙소의 상태와 예외를 처리 | 운영 웹 로그인 | 배정 숙소 조회·업무 처리, 관리자 전용 기능 제외 | 자기 scope 밖 데이터를 보지 않고 맡은 업무 완료 |
+| AC-03 | host | 예약·숙소·청소 운영을 책임지고 현장과 협의 | 조직에 따라 운영 웹 또는 연락 채널 | 별도 세션 role 없음; 청소 요청 payload의 연락처로 협의 대상이 됨 | 예약과 현장 작업 사이의 정책·협의 완료 |
+| AC-04 | 청소 담당자 | 요청을 확인하고 수락·거절·협의 | Worker App | 관리자가 미리 저장한 전화번호·이메일로 앱 연결(문자 인증 없음), FCM 수신, Google Calendar 예약 화면, 거절 API, host와 문자 협의 | 작업 배정 여부가 명확해지고 현장 일정 반영 |
+| AC-05 | 게스트 | 예약한 숙소에 입실·체류·퇴실 | Airbnb·숙소 현장 | 운영 UI 직접 사용은 확인되지 않음; 예약·도어·센서 이벤트의 업무 대상 | 예약 일정과 실제 체류 상태가 운영 흐름에 반영 |
 
 <a id="system-actors"></a>
 
@@ -132,14 +132,14 @@ flowchart TD
 
 | ID | 시스템 액터 | PROPOS에 주는 것 | PROPOS가 요청하는 것 | 현재 책임 경계 |
 | --- | --- | --- | --- | --- |
-| ACT-S01 | Airbnb iCal | 예약 일정 원천 | iCal 동기화 요청 | 브라우저가 직접 원천을 읽지 않고 서버 동기화 후 Postgres를 읽음 |
-| ACT-S02 | Google Calendar/Gmail | 청소 일정·참석자·예약 페이지·메일 연계 | 일정 생성·배정 확인·변경 | 외부 일정과 내부 청소 작업을 연결 |
-| ACT-S03 | Home Assistant | 센서·기기 상태 | area 조회·서비스 제어 | Pi/서버·브라우저 client를 통해 숙소 상태와 제어에 사용 |
-| ACT-S04 | Pi watcher | 숙소 watcher 상태·측정·스냅샷 | watcher 설정·이벤트 요청 | 예약 원장이 아니라 현장 HA watcher 메타데이터·측정 책임 |
-| ACT-S05 | Vercel cron | 시간 기반 실행 신호 | morning/evening 및 하위 작업 실행 | 사람 없이 예약 동기화·청소·상태 점검을 시작 |
-| ACT-S06 | Firebase/FCM | 앱 토큰·푸시 전달 채널 | 청소 요청·토큰 갱신 | 접수 성공과 실제 사용자 확인은 구분해야 함 |
-| ACT-S07 | Slack | 운영 알림 수신 채널 | 실패·보류·상태 알림 | 업무 원장이나 상세 로그의 대체물이 아님 |
-| ACT-S08 | Postgres | 숙소·예약·청소·인증·운영 기록 | 조회·갱신·감사 근거 | 외부 원천을 복사한 캐시가 아니라 내부 업무 판단의 원장 |
+| AC-S01 | Airbnb iCal | 예약 일정 원천 | iCal 동기화 요청 | 브라우저가 직접 원천을 읽지 않고 서버 동기화 후 Postgres를 읽음 |
+| AC-S02 | Google Calendar/Gmail | 청소 일정·참석자·예약 페이지·메일 연계 | 일정 생성·배정 확인·변경 | 외부 일정과 내부 청소 작업을 연결 |
+| AC-S03 | Home Assistant | 센서·기기 상태 | area 조회·서비스 제어 | Pi/서버·브라우저 client를 통해 숙소 상태와 제어에 사용 |
+| AC-S04 | Pi watcher | 숙소 watcher 상태·측정·스냅샷 | watcher 설정·이벤트 요청 | 예약 원장이 아니라 현장 HA watcher 메타데이터·측정 책임 |
+| AC-S05 | Vercel cron | 시간 기반 실행 신호 | morning/evening 및 하위 작업 실행 | 사람 없이 예약 동기화·청소·상태 점검을 시작 |
+| AC-S06 | Firebase/FCM | 앱 토큰·푸시 전달 채널 | 청소 요청·토큰 갱신 | 접수 성공과 실제 사용자 확인은 구분해야 함 |
+| AC-S07 | Slack | 운영 알림 수신 채널 | 실패·보류·상태 알림 | 업무 원장이나 상세 로그의 대체물이 아님 |
+| AC-S08 | Postgres | 숙소·예약·청소·인증·운영 기록 | 조회·갱신·감사 근거 | 외부 원천을 복사한 캐시가 아니라 내부 업무 판단의 원장 |
 
 ---
 
@@ -228,11 +228,9 @@ AuthGate의 open 상태 보조 UI
 ```text
 Worker App 시작
 ├─ 등록 상태 확인 중 → ActivityIndicator
-├─ 미등록 → PhoneAuthScreen
-│  ├─ phone → Firebase 전화번호 OTP 요청
-│  ├─ otp → 인증번호 확인
-│  └─ email → Google Calendar용 이메일 입력
-│     └─ FCM token + 전화번호 + 이메일 등록 → Home
+├─ 미등록 → PhoneAuthScreen (한 화면)
+│  └─ 전화번호 + 이메일 입력 (관리자가 PROPOS에 미리 저장한 값)
+│     └─ FCM token과 함께 등록 → 둘 다 맞으면 Home, 하나라도 다르면 연결하지 않음
 └─ 등록됨 → Navigation
    ├─ HomeScreen
    │  ├─ heartbeat 전송
@@ -294,7 +292,7 @@ flowchart TD
 | 숙소 목록 | `usePropertySelection`, 로컬 Gantt window | 통계는 `PeriodReport` 하위 hook 사용 | 여러 숙소의 상태·예약 시간축 | [PropertyListView.jsx](src/components/v2/PropertyListView.jsx) |
 | 숙소 상세 | `useMonthlyCalendar`, local timeline·operation callbacks | 상위 `RoomStateApp`의 monitoring event, 하위 보고 API | 단일 숙소 센서·기기·체류·청소·보고 | [PropertyDetailView.jsx](src/components/v2/PropertyDetailView.jsx) |
 | 청소 관리 | `CleaningManager` local state·`apiFetch` | `/api/cleaning/*` | 담당자·작업·숙소·배정·처리 상태 | [CleaningManager.jsx](src/components/v2/CleaningManager.jsx) |
-| Worker 등록 | `PhoneAuthScreen`, Firebase Auth, FCM service | `/api/workers/register` | 전화번호·이메일·FCM 등록 | [Worker API client](worker-app/src/services/api.ts) |
+| Worker 등록 | `PhoneAuthScreen`, FCM service | `/api/workers/register` | 관리자가 저장한 전화번호·이메일 확인 후 FCM 기기 연결 | [Worker API client](worker-app/src/services/api.ts) |
 | Worker 대기 | `HomeScreen`, FCM listener | `/api/workers/heartbeat` | 앱 활동·푸시 수신 대기 | [HomeScreen](worker-app/src/screens/HomeScreen.tsx) |
 | Worker 작업 | `JobScreen` | `/api/cleaning/d?token=…&format=api`, Google Calendar URL | 거절 처리·외부 예약·host 협의 | [JobScreen](worker-app/src/screens/JobScreen.tsx) |
 
@@ -372,11 +370,12 @@ flowchart LR
 
 | 구분 | 내용 |
 | --- | --- |
-| 액터·목표 | 청소 담당자 · 알림을 받을 기기와 Calendar 이메일을 등록한다 |
-| 정상 흐름 | 전화번호 입력 → Firebase OTP 확인 → 이메일 입력 → FCM 토큰 획득 → `/api/workers/register` → 등록 상태 저장 → Home |
+| 액터·목표 | 청소 담당자 · 관리자가 미리 만들어 둔 자기 담당자 정보에 알림 받을 기기를 연결한다 |
+| 선행 조건 | 관리자가 PROPOS에 담당자의 이름·전화번호·이메일을 먼저 저장한다. 앱 등록으로 새 담당자가 생기지 않는다 |
+| 정상 흐름 | 전화번호·이메일 입력 → FCM 토큰 획득 → `/api/workers/register` → 서버가 두 값이 모두 맞는 기존 담당자를 확인하고 기기 연결 → 등록 상태 저장 → Home |
 | 성공 기준 | 서버 등록 성공 뒤 로컬 `registered`가 저장되고 token refresh 감시가 시작됨 |
-| 예외 흐름 | 잘못된 번호·OTP 실패·FCM token 없음·register 오류 → 등록 완료로 전환하지 않음 |
-| 현재 한계 | 앱 등록과 실제 업무 승인 `active`는 같은 의미가 아님 |
+| 예외 흐름 | 번호 형식 오류·두 값 중 하나 불일치·이미 다른 기기에 연결된 번호·FCM token 없음 → 등록 완료로 전환하지 않음 |
+| 현재 한계 | 문자 인증이 없어 두 값을 아는 사람이 대신 연결할 수 있다(사용자가 감수하기로 함). 앱 연결과 실제 업무 승인 `active`는 같은 의미가 아님. 설치용 앱(APK)에는 아직 반영되지 않음 — [docs/refactoring.md 3절](docs/refactoring.md) |
 | 구현 근거 | [Worker App](worker-app/App.tsx), [PhoneAuthScreen](worker-app/src/screens/PhoneAuthScreen.tsx), [Worker API](api/workers/%5B...slug%5D.js) |
 
 ### SCN-05 · 청소 담당자가 요청을 수락·거절·협의한다
@@ -399,12 +398,12 @@ flowchart LR
 | --- | --- | --- | --- |
 | 예약 | Airbnb에서 예약 | iCal 동기화 후 내부 예약 원장 반영 | S01 준비 입력 |
 | 입실 전 | 체크인 예정 | D-1 준비, PIN·메시지·HA 준비 모델 | S01 |
-| 입실 | 도어·현장 이벤트 | 체크인 상태·씬·채널 처리 모델 | S02 |
+| 입실 | 입실 시각 도래·실제 입장 | 입실 시각에 체류로 바뀐다. 입장이 확인되면 체류 기기 제어, 그날 자정까지 확인되지 않으면 `입실 미감지` 문제와 운영자 알림 | S02 |
 | 체류 | 센서·메시지·기기 사용 | 이상·에너지·민원 관측과 운영자 대응 | S03 |
-| 퇴실 | 도어·예약 종료 | PIN 만료·청소 작업·다음 예약 준비 | S04 |
+| 퇴실 | 퇴실 시각 도래·실제 퇴장 | 퇴실 시각에 청소대기로 바뀐다. 퇴장이 확인되면 청소 모드 기기 제어, 20분 안에 확인되지 않으면 `퇴실 지연`, 센서가 꺼져 있으면 `확인 불가` — 기기 제어는 운영자에게 넘긴다. 청소는 일정의 시작 시각에 청소중, 끝 시각에 공실 | S04 |
 | 사후 | 매출·운영 결과 | 기간 리포트·정산 모델 | S05 |
 
-이 표는 기존 S01~S05의 제품 시나리오를 현재 UI·데이터 구조에 연결하기 위한 상위 설명이다. 실제 운영에서 모든 단계가 자동 실행된다는 증거는 아니다.
+상태는 예약·청소 일정이 정하고, 센서 감지는 그 구간에서 기대한 일이 일어났는지 확인해 안 되면 문제로 남기는 데 쓴다(DEC-10·16·17, [room-state-machine.md 0절](docs/room-state-machine.md)). 이 표는 기존 S01~S05의 제품 시나리오를 현재 UI·데이터 구조에 연결하기 위한 상위 설명이다. 실제 운영에서 모든 단계가 자동 실행된다는 증거는 아니다.
 
 <a id="system-scenarios"></a>
 
@@ -413,7 +412,7 @@ flowchart LR
 | 트리거 | 시스템 행동 | 사람이 확인하는 곳 | 실패 시 책임 |
 | --- | --- | --- | --- |
 | Vercel cron | morning/evening 및 하위 청소·동기화·헬스체크 action 호출 | 운영 웹, DB 상태, Slack | 작업별 로그·알림·운영자 개입 |
-| Pi watcher | 센서·HA 상태를 관측하고 room state·snapshot 제공 | 숙소 상세 | watcher·HA 연결 상태 확인 |
+| Pi watcher | 서버가 보낸 예약·청소 일정대로 숙소 상태를 바꾸고, 센서·HA로 기대한 일이 일어났는지 확인·snapshot 제공 | 숙소 상세, Slack, HA 앱 | 확인하지 못하면 기기 제어 없이 운영자에게 넘김(DEC-11·16); watcher·HA 연결 상태 확인 |
 | FCM | 청소 요청을 앱으로 전달 | Worker JobScreen | 전달 실패 분류·fallback·운영 알림 |
 | Google 연계 | 일정·참석자 변화로 청소 담당자 연결 | 청소 관리·Room State | webhook·동기화·담당자 매칭 확인 |
 

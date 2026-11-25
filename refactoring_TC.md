@@ -133,7 +133,7 @@ TC를 다음 순서로 추적할 수 있게 만든다.
 | --- | ---: | --- |
 | [s54.violation-detail.test.js](tests/unit/s54.violation-detail.test.js) | 약 680 | 상세 계산·표현 계약 다수 |
 | [s79.operator-device-scope.test.js](tests/unit/s79.operator-device-scope.test.js) | 약 680 | auth·HA·watcher·camera scope 혼재 |
-| [s36.cleaning-integration.test.js](tests/integration/s36.cleaning-integration.test.js) | 약 630 | 청소 API·DB 계약이 넓음 |
+| [s36.cleaning-integration.test.js](tests/unit/s36.cleaning-integration.test.js) (11-18 integration → unit 이동) | 약 630 | 청소 API·DB 계약이 넓음 |
 | [s44.future-week-report.test.js](tests/unit/s44.future-week-report.test.js) | 약 580 | 미래 기간·레포트 계약 다수 |
 | [s29.gmail-ical-repoll.test.js](tests/unit/s29.gmail-ical-repoll.test.js) | 약 560 | Gmail·iCal·재조회 흐름 혼재 |
 
@@ -178,16 +178,25 @@ TC를 다음 순서로 추적할 수 있게 만든다.
 ### 5.2 테스트 수준
 
 ```text
-L0 Static Contract   파일·export·schema·금지 패턴·문서 연결
-L1 Unit              순수 domain/application 계산과 상태 전이
-L2 Handler Contract  HTTP handler + fake I/O/DB의 auth·body·status·side effect
-L3 Integration       실제 schema/PGlite/test DB와 격리된 외부 adapter
-L4 Browser Smoke     fixture API로 핵심 화면 부팅·탐색
-L5 Browser E2E       로컬 dev server와 격리 backend의 사용자 흐름
-L6 Live Probe        명시적 선택으로 실제 DB·HA·Google·배포 상태 확인
+T0 Static Contract   파일·export·schema·금지 패턴·문서 연결
+T1 Unit              순수 domain/application 계산과 상태 전이
+T2 Handler Contract  HTTP handler + fake I/O/DB의 auth·body·status·side effect
+T3 Integration       실제 schema/PGlite/test DB와 격리된 외부 adapter
+T4 Browser Smoke     fixture API로 핵심 화면 부팅·탐색
+T5 Browser E2E       로컬 dev server와 격리 backend의 사용자 흐름
+T6 Live Probe        명시적 선택으로 실제 DB·HA·Google·배포 상태 확인
 ```
 
-L0 검사는 L1~L6의 대체물이 아니다. 예를 들어 SQL 문자열 존재는 실제 transaction 동작을 증명하지 않고, 버튼 문구 존재는 사용 시나리오 성공을 증명하지 않는다.
+T0 검사는 T1~T6의 대체물이 아니다. 예를 들어 SQL 문자열 존재는 실제 transaction 동작을 증명하지 않고, 버튼 문구 존재는 사용 시나리오 성공을 증명하지 않는다.
+
+**기존 L 표기와의 관계.** 테스트 파일 주석과 `.claude/rules/decisions.md`는 이미 L0~L3을 다른 뜻으로 쓴다. 이 계획의 수준은 그것과 섞이지 않도록 `T`로 부른다. 테스트 파일의 `L` 표기는 바꾸지 않는다.
+
+| 기존 표기 | 뜻 | 이 계획의 수준 |
+| --- | --- | --- |
+| L0 | 자기 자신만 검증하는 금지 패턴(상수 단언, 테스트 파일 안의 SQL 문자열 검사, 로직 재구현) | 해당 없음 — 만들지 않는다 |
+| L1 | 실제 함수를 불러 순수 로직 검증 | T1 |
+| L2 | 실제 모듈·핸들러를 가짜 fetch·DB로 실행해 경계 검증. 예전의 소스 글자 검사도 이 이름을 썼다 | T2 (소스 글자 검사는 T0 — ACT-08부터 실제 실행 시험으로 교체 중) |
+| L3 | 실제 DB·브라우저·외부 연결 | T3~T6 |
 
 ### 5.3 권장 디렉터리
 
@@ -195,15 +204,15 @@ L0 검사는 L1~L6의 대체물이 아니다. 예를 들어 SQL 문자열 존재
 
 ```text
 tests/
-├─ contract/             L0 · source/schema/document 계약
-├─ unit/                 L1 · 순수 업무 규칙
-├─ handler/              L2 · API handler + fake I/O
+├─ contract/             T0 · source/schema/document 계약
+├─ unit/                 T1 · 순수 업무 규칙
+├─ handler/              T2 · API handler + fake I/O
 ├─ functional/           액터·업무 시나리오
-├─ integration/          L3 · 격리 DB·adapter
+├─ integration/          T3 · 격리 DB·adapter
 ├─ browser/
-│  ├─ smoke/             L4
-│  └─ e2e/               L5
-├─ live/                 L6 · 기본 discovery 제외
+│  ├─ smoke/             T4
+│  └─ e2e/               T5
+├─ live/                 T6 · 기본 discovery 제외
 ├─ fixtures/             불변 입력과 response fixture
 └─ helpers/              env/network/time/DB/browser sandbox
 ```
@@ -262,7 +271,7 @@ TCR-02에서 별도 승인을 받아 machine-readable registry를 만든다. 이
 
 | Gate | 포함 | 외부 네트워크 | 실패 의미 |
 | --- | --- | --- | --- |
-| `verify:pr` | L0~L2 + functional + browser smoke | deny | PR 차단 |
+| `verify:pr` | T0~T2 + functional + browser smoke | deny | PR 차단 |
 | `verify:full` | PR 범위 + 모든 격리 integration + local browser E2E | deny | main/nightly 차단 |
 | `verify:live:read` | 승인된 read-only live probe | allowlist | 운영 연결 점검 실패 |
 | `verify:live:write` | KV·Slack·webhook·실기 제어 | 명시 승인·대상 제한 | 별도 운영 점검 실패 |
@@ -349,11 +358,11 @@ TCR-02에서 별도 승인을 받아 machine-readable registry를 만든다. 이
 
 작업:
 
-1. unit의 source text 검사를 L0 contract 후보로 표시한다.
-2. handler+fake DB 검사를 L2로 표시한다.
-3. 실제 schema/PGlite/test DB 검사를 L3로 묶는다.
+1. unit의 source text 검사를 T0 contract 후보로 표시한다.
+2. handler+fake DB 검사를 T2로 표시한다.
+3. 실제 schema/PGlite/test DB 검사를 T3로 묶는다.
 4. browser smoke와 browser E2E를 분리한다.
-5. live probe를 L6로 격리한다.
+5. live probe를 T6로 격리한다.
 6. 이동 전·후 파일 매핑과 호환 명령을 유지한다.
 
 완료 조건:

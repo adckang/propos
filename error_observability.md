@@ -178,7 +178,7 @@ binary body                   camera snapshot 성공
 | RoomStateApp | sync·설정·monitor operation을 Toast로 표시 | 사용자가 즉시 확인 | `error.message` 직접 노출 경로 존재 |
 | CleaningManager | `apiFetch`가 body error/text를 Error로 만들고 Toast | 화면 코드가 단순 | API별 body 차이가 그대로 UI 차이가 됨 |
 | reporting hooks | loading/data/error state | 비동기 화면에 적합 | status·code를 잃고 message만 남기는 경로 있음 |
-| Worker App | 입력·OTP·거절 결과를 Alert | 모바일 맥락에 명확 | register·heartbeat·token recovery 일부 실패가 화면에 직접 드러나지 않음 |
+| Worker App | 입력·등록·거절 결과를 Alert | 모바일 맥락에 명확 | register·heartbeat·token recovery 일부 실패가 화면에 직접 드러나지 않음 |
 
 ---
 

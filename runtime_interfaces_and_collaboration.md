@@ -73,7 +73,7 @@ flowchart LR
   Worker[Worker App] --> WorkersAPI["/api/workers/*"]
   Worker --> Decline["/api/cleaning/d"]
 
-  Pi[Pi watcher] --> EventsAPI["/api/events · /write"]
+  Pi[Pi watcher] --> EventsAPI["/api/events/write"]
   MonitoringAPI <--> Pi
   PropertiesAPI <--> Pi
   CameraAPI <--> Pi
@@ -111,9 +111,9 @@ flowchart LR
 | 운영 웹 세션 | `propos_session` HttpOnly·SameSite=Strict 쿠키 | `admin` 또는 `operator` role, 12시간 TTL |
 | ADMIN | 환경변수 관리자 비밀번호로 로그인 | 전체 숙소 scope |
 | OPERATOR | DB 이메일·비밀번호 | 요청마다 계정 상태·비밀번호 지문·숙소 배정을 다시 확인 |
-| Pi event ingest | `x-pi-secret` | `/api/events`와 `/api/events/write` POST에 사용 |
+| Pi event ingest | `x-pi-secret` | `/api/events/write` POST에 사용(기본 주소 `/api/events`는 운영에서 404). 받는 쪽은 해시·상수 시간 비교(RF-44) |
 | Cron | `Authorization: Bearer <CRON_SECRET>` | `CRON_SECRET`이 설정돼 있을 때 검사 |
-| Worker App | FCM token·전화번호 OTP 등록 | 운영 웹 세션과 별도; 일부 endpoint가 token을 body/query/Bearer로 식별 |
+| Worker App | 관리자가 미리 저장한 전화번호·이메일 일치 + FCM token | 운영 웹 세션과 별도; 문자 인증 없음; 연결 뒤 일부 endpoint가 token을 body/query/Bearer로 식별 |
 | Google webhook | channel token 또는 query secret | secret 불일치는 상세 오류 대신 200으로 무시하는 경로가 있음 |
 | Pi proxy | 운영 웹 session scope + Vercel→watcher 인증 header | watcher 주소와 숙소 배정을 함께 검사 |
 
@@ -194,10 +194,10 @@ API마다 오류 body가 완전히 통일돼 있지 않다. 현재 계약에는 
 
 | Method · Path | 호출자 | 인증 | 핵심 요청 → 성공 응답 | 오류·멱등성 |
 | --- | --- | --- | --- | --- | --- |
-| `POST /api/events` | Pi watcher | `x-pi-secret` | 검증된 event → `201 {status,id}` | 검증 400, 중복 409 · `(property_id,type,device_time)` unique 기반 조건부 멱등 |
 | `POST /api/events/write` | Pi watcher | `x-pi-secret` | 상태전환 event → repository 결과 | 필수값 400, 검증 400, 500 · repository 중복 규칙에 의존 |
+| `POST /api/events` (기본 주소) | 현재 사용하는 곳 없음 | — | 운영에서 404 — catch-all 진입점이 기본 주소를 받지 않는다. 코드에는 옛 수신 분기가 남아 있다 | 다시 쓸 일이 생길 때만 복구(RF-06.4) |
 
-DEMO profile에서는 두 쓰기 모두 403이다. ingest 성공은 DB 저장·처리 결과를 의미하며, Slack 등 후속 전달 성공 범위는 event service의 결과와 별도로 확인해야 한다.
+Pi는 환경파일에 적은 전체 `/api/events/write` 주소로만 보낸다. 코드 기본값은 없다(RF-55). DEMO profile에서는 쓰기가 403이다. ingest 성공은 DB 저장·처리 결과를 의미하며, Slack 등 후속 전달 성공 범위는 event service의 결과와 별도로 확인해야 한다.
 
 <a id="cleaning-api"></a>
 
@@ -250,7 +250,7 @@ DEMO profile에서는 두 쓰기 모두 403이다. ingest 성공은 DB 저장·�
 
 | Method · Path | 요청 식별 | 핵심 요청 → 성공 응답 | 오류·멱등성 | 데이터 |
 | --- | --- | --- | --- | --- |
-| `POST /api/workers/register` | 전화번호 OTP는 앱/Firebase에서 선행; API는 body 신뢰 | `{phone,email,fcm_token}` → worker·승인 상태 | phone upsert · 조건부 멱등; 신규는 Slack 알림 | `cleaners` |
+| `POST /api/workers/register` | body의 전화번호·이메일이 관리자가 미리 저장한 담당자와 둘 다 일치(문자 인증 없음) | `{phone,email,fcm_token}` → worker·승인 상태 | 불일치 404, 이미 다른 기기가 쓰는 번호·다른 번호에 붙은 기기 409. 새 담당자를 만들지 않고 이메일·승인·등급을 바꾸지 않는다. 살아 있는 토큰은 덮어쓰지 않는다(DEC-09). 같은 토큰 재시도는 조건부 멱등; 첫 연결은 Slack 알림 | `cleaners` |
 | `POST /api/workers/heartbeat` | `fcm_token` | last_seen·inactive 복구 → `{ok,fcm_status}` | 반복 안전; 미등록 404 | `cleaners` |
 | `GET /api/workers/token` | `Bearer <current token>` | token 소유자 → `{ok,worker_id}` | 읽기; 401·404·409 | `cleaners` |
 | `POST /api/workers/token` | old/new token + 선택 `worker_id` | token 교체 또는 lost-ACK 확인 → `{ok:true}` | advisory lock·row lock·소유권 검사 · 조건부 멱등 | `cleaners` |
@@ -430,17 +430,18 @@ sequenceDiagram
 sequenceDiagram
   actor Cleaner as 청소 담당자
   participant App as Worker App
-  participant Firebase as Firebase Auth/FCM
+  participant Firebase as Firebase FCM
   participant WorkerAPI as /api/workers/*
   participant DB as cleaners
   participant CleanAPI as /api/cleaning/d
   participant Dispatch as dispatch
 
-  Cleaner->>App: 전화번호·OTP·이메일
-  App->>Firebase: phone auth + FCM token
-  Firebase-->>App: verified + token
+  Cleaner->>App: 관리자가 저장한 전화번호·이메일 입력
+  App->>Firebase: FCM token 요청
+  Firebase-->>App: token
   App->>WorkerAPI: POST register
-  WorkerAPI->>DB: phone upsert·token 저장
+  WorkerAPI->>DB: 전화번호·이메일 둘 다 맞는 기존 담당자 확인
+  WorkerAPI->>DB: 쓸 수 있는 토큰이 없을 때만 token 연결
   WorkerAPI-->>App: worker·active 상태
   App->>WorkerAPI: heartbeat
 
@@ -460,7 +461,8 @@ sequenceDiagram
   end
 ```
 
-- 보여주는 것: 앱 등록과 업무 승인 상태가 분리되고, token 갱신이 lost-ACK 복구를 포함하는 구조.
+- 보여주는 것: 앱은 관리자가 먼저 만든 담당자에게만 연결되고(문자 인증 없음, `4ea6801`), 앱 연결과 업무 승인 상태가 분리되며, token 갱신이 lost-ACK 복구를 포함하는 구조.
+- 실물 반영: 설치용 앱(APK)에는 아직 반영되지 않았다 — [docs/refactoring.md 3절](docs/refactoring.md).
 - 관련 테스트: [s31 worker flow](tests/unit/s31.worker-app-flow.test.js), [s33 worker API](tests/unit/s33.worker-api.test.js), [s110 token recovery](tests/unit/s110.worker-token-recovery.test.js), [s111 token SQL](tests/integration/s111.worker-token-sql.test.js).
 
 <a id="seq-ha"></a>

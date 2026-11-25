@@ -84,7 +84,7 @@ flowchart LR
 | 정책·설계 | [cleaning-automation-design.md](docs/cleaning-automation-design.md), [cleaning-scenario-matrix.md](docs/cleaning-scenario-matrix.md), [data-architecture-and-simulator.md](docs/data-architecture-and-simulator.md) |
 | 실행 코드 | [cleaning API](api/cleaning/[...slug].js), [_icalSync.js](server/cleaning/_icalSync.js), [_dispatch.js](server/cleaning/_dispatch.js), [_calendar.js](server/cleaning/_calendar.js) |
 | 데이터·외부 | Airbnb iCal → `property_reservations` → `cleaning_jobs` → Google Calendar |
-| 검증 | [s36.cleaning-integration.test.js](tests/integration/s36.cleaning-integration.test.js), [s115.daily-reservation-sync.test.js](tests/unit/s115.daily-reservation-sync.test.js), [s30.job-cancellation.test.js](tests/unit/s30.job-cancellation.test.js), [s78.operator-scope-handlers.test.js](tests/unit/s78.operator-scope-handlers.test.js) |
+| 검증 | [s36.cleaning-integration.test.js](tests/unit/s36.cleaning-integration.test.js), [s115.daily-reservation-sync.test.js](tests/unit/s115.daily-reservation-sync.test.js), [s30.job-cancellation.test.js](tests/unit/s30.job-cancellation.test.js), [s78.operator-scope-handlers.test.js](tests/unit/s78.operator-scope-handlers.test.js) |
 | 문서 갭 | [MD-R01](refactoring_mdfile.md#md-r01): 외부 예약 원천과 내부 운영 원장, [MD-R08](refactoring_mdfile.md#md-r08): Google 인증 방식, [MD-R18](refactoring_mdfile.md#md-r18): 청소 상태 복제 |
 
 ### TR-04 · 청소 담당자 알림
