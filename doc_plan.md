@@ -1,0 +1,163 @@
+# PROPOS 통합 도큐멘테이션 유지보수 계획
+
+> 상태: DP-00~DP-07 완료  
+> 최초 작성: 2026-11-16 · 중복 제거 갱신: 2026-11-17 (Asia/Seoul)  
+> 목적: 완성 문서의 내용을 복제하지 않고, 문서 소유권·작업 순서·검증 결과만 관리한다.  
+> 단일 시작점: [design_overview.md](design_overview.md)  
+> 문서 충돌·중복 대장: [refactoring_mdfile.md](refactoring_mdfile.md)  
+> 실제 소스 리팩터링 상태: `docs/refactoring.md` — 이 계획의 수정 대상이 아님  
+> 검색 키워드: `[DOC-PLAN]` `[OWNER]` `[PHASE]` `[VALIDATION]` `[DP-07]`
+
+---
+
+<a id="plan-goal"></a>
+
+## 1. 목표 [DOC-PLAN]
+
+처음 보는 사람은 다음 순서로 이해한다.
+
+```text
+사람과 목적 → 화면과 행동 → 시스템 협업 → 데이터 → 코드 → 오류·운영 근거
+```
+
+이 파일은 위 내용을 설명하지 않는다. 각 내용을 소유하는 문서와 유지보수 순서만 정한다.
+
+---
+
+<a id="ownership"></a>
+
+## 2. 문서 소유권 [OWNER]
+
+| 정보 | 유일한 상세 소유 문서 | 다른 문서의 허용 내용 |
+| --- | --- | --- |
+| 전체 메뉴·상위 구조·문서 색인 | [design_overview.md](design_overview.md) | 시작 링크만 제공 |
+| 액터·권한·UI·사용 시나리오 | [actor_ui_scenarios.md](actor_ui_scenarios.md) | 시나리오 ID와 링크만 제공 |
+| API·외부 인터페이스·Sequence·cron | [runtime_interfaces_and_collaboration.md](runtime_interfaces_and_collaboration.md) | 상위 경계와 링크만 제공 |
+| 예외·재시도·로그·Slack·마스킹 | [error_observability.md](error_observability.md) | 오류 계약 링크만 제공 |
+| 정책→코드→데이터→테스트 근거 | [documentation_traceability.md](documentation_traceability.md) | TR ID와 링크만 제공 |
+| 문서 충돌·중복·모호성 | [refactoring_mdfile.md](refactoring_mdfile.md) | MD-R ID와 링크만 제공 |
+| 문서 작업 단계·검증 이력 | [doc_plan.md](doc_plan.md) | 진행 상태를 다른 문서에 복제하지 않음 |
+| 소스 리팩터링 작업 상태 | `docs/refactoring.md` | 통합 문서는 링크만 제공 |
+
+### 중복 판정 기준
+
+다음 중 하나면 중복 후보로 본다.
+
+1. 같은 상태표·시나리오·API 계약·Sequence가 둘 이상의 문서에 존재한다.
+2. 같은 코드·테스트 매핑 표가 상세 문서와 추적 문서에 함께 존재한다.
+3. 허브가 상세 문서의 본문을 다시 설명한다.
+4. 계획서가 완성 문서의 목차·요구사항·체크리스트를 계속 보존한다.
+5. 날짜·커밋·테스트 수 같은 시점 값이 여러 문서에서 현재값처럼 반복된다.
+
+중복처럼 보여도 데이터 원장과 외부 원천, 인증 역할과 업무 역할처럼 의미가 다른 구조는 합치지 않는다.
+
+---
+
+<a id="boundary"></a>
+
+## 3. 작업 경계
+
+### 수정 가능
+
+- `design_overview.md`
+- `actor_ui_scenarios.md`
+- `runtime_interfaces_and_collaboration.md`
+- `error_observability.md`
+- `documentation_traceability.md`
+- `refactoring_mdfile.md`
+- `doc_plan.md`
+
+### 수정 금지
+
+- 제품 소스·테스트·설정·DB
+- Claude가 작업하는 `docs/refactoring.md`
+- 기존 분야별 Markdown
+- 제품 동작·정책·UI 문구
+
+기존 분야별 Markdown의 중복은 [MD-R16~20](refactoring_mdfile.md#duplicates)에서 기록만 하고, 별도 승인 전에는 수정하지 않는다.
+
+---
+
+<a id="phases"></a>
+
+## 4. 실행 단계 [PHASE]
+
+| 단계 | 결과 | 상태 |
+| --- | --- | --- |
+| DP-00 | 저장소·문서·코드·다이어그램 인벤토리 | 완료 |
+| DP-01 | 액터·권한·UI·시나리오 문서 | 완료 |
+| DP-02 | 런타임 인터페이스·협업 문서 | 완료 |
+| DP-03 | 오류·재시도·관측 문서 | 완료 |
+| DP-04 | 추적성·MD-R 연결 | 완료 |
+| DP-05 | 단일 허브 조립 | 완료 |
+| DP-06 | 링크·앵커·Mermaid·범위 검증 | 완료 |
+| DP-07 | 통합 문서 중복 제거·소유권 고정 | 완료 |
+
+### DP-07 · 2026-11-17
+
+수행 내용:
+
+1. 허브의 상세 Sequence, S01~S05 구현 목록, 명령 목록을 제거하고 소유 문서 링크로 바꿨다.
+2. 액터·런타임·오류 문서의 단계 완료 체크리스트와 반복 테스트 근거표를 제거했다.
+3. 런타임 문서의 데이터 계보 복제본을 제거하고 허브의 상위 계보를 참조하게 했다.
+4. 이 계획서를 완성 문서의 장문 명세에서 소유권·단계·검증 기록 중심으로 축소했다.
+5. [MD-R29](refactoring_mdfile.md#md-r29)에 통합 문서 중복의 판정과 정리 결과를 기록했다.
+
+기존 분야별 Markdown은 수정하지 않았다. 남은 구조 중복은 MD-R16~20의 승인 대상이다.
+
+---
+
+<a id="maintenance-flow"></a>
+
+## 5. 이후 유지보수 순서
+
+```text
+변경 사실 확인
+  → 상세 소유 문서 1개 수정
+    → documentation_traceability.md의 관련 TR 갱신
+      → 충돌이 생긴 경우에만 refactoring_mdfile.md에 MD-R 추가
+        → design_overview.md 메뉴·링크 검증
+```
+
+- 같은 내용을 다른 문서에 붙여 넣지 않는다.
+- 요약이 필요하면 한 문장과 링크만 둔다.
+- 테스트 목록은 추적성 문서가, 실행 명령은 README/package.json이 소유한다.
+- 완료 체크리스트는 이 계획의 단계 기록에만 둔다.
+- 구현·배포·운영 관측·제안을 서로 다른 근거로 표시한다.
+
+---
+
+<a id="validation"></a>
+
+## 6. 검증 기준 [VALIDATION]
+
+매 문서 변경 후 다음을 확인한다.
+
+1. 로컬 파일 링크와 Markdown fragment가 존재한다.
+2. 명시적 앵커와 H1이 중복되지 않는다.
+3. Mermaid fence·diagram type·괄호와 화살표 방향이 맞는다.
+4. 동일 표·다이어그램·체크리스트가 다른 통합 문서에 다시 생기지 않았다.
+5. `CURRENT`, 정책, 날짜가 붙은 운영 관측, `TARGET · 미구현`이 섞이지 않았다.
+6. 허용된 Markdown 외 파일을 수정하지 않았다.
+
+### 최신 검증 기준점
+
+| 항목 | 값 |
+| --- | --- |
+| 저장소 | `1f51a45b11231bf1ce11bb93cc9cf1466123b2ca` · 2026-11-17 00:27:32 +09:00 |
+| 검증일 | 2026-11-17 (Asia/Seoul) |
+| Markdown 인벤토리 | 43개 · `.git`, `node_modules`, 보조 도구 `venv`, 생성·시험 디렉터리 제외 |
+| Mermaid renderer | 저장소에 없음 · 정적 문법 검토만 수행 |
+| 변경 범위 | 통합 문서 7개만 수정 |
+
+실제 배포 환경값·외부 계정·실기 수신 상태는 별도 운영 근거 없이는 확정하지 않는다.
+
+---
+
+<a id="next-action"></a>
+
+## 7. 다음 작업
+
+통합 문서 내부 중복 제거는 완료됐다. 다음 후보는 기존 분야별 문서의 [MD-R16~20](refactoring_mdfile.md#duplicates)이지만, 현재 수정 금지 범위이므로 승인 전에는 실행하지 않는다.
+
+새 코드·정책 변경이 생기면 [5. 이후 유지보수 순서](#maintenance-flow)에 따라 상세 소유 문서 하나부터 갱신한다.
