@@ -700,7 +700,7 @@ Calendar API 블로커 이벤트 생성/삭제, Calendar Webhook 등록, Gmail W
 
 1. Google Cloud Console → OAuth 2.0 클라이언트 ID 생성 (Desktop 또는 Web 유형)
 2. Google Calendar API + Gmail API + Pub/Sub API 활성화
-3. OAuth 동의 화면 설정 — 권한: 캘린더 계정 `calendar`, Gmail 계정 `gmail.metadata`(메일 머리글만 — 2026-11-19 재발급부터). **게시 상태를 "프로덕션"으로** — "테스트" 상태면 로그인 토큰이 7일마다 만료된다
+3. OAuth 동의 화면 설정 — 권한: 캘린더 계정 `calendar`, Gmail 계정 `gmail.readonly`(Airbnb 게스트 답장 본문 판별용 — 원문은 저장하지 않음). **게시 상태를 "프로덕션"으로** — "테스트" 상태면 로그인 토큰이 7일마다 만료된다
 4. Access Token 최초 발급 후 **Refresh Token** 보관 → 이후 자동 갱신
 5. Google Calendar → 공유 설정 → OAuth 계정 이메일에 **편집 권한** 부여
 6. 각 값을 Vercel 환경변수로 등록 (`propos-project-v2` 프로젝트)

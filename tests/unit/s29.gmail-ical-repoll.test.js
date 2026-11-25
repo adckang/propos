@@ -292,7 +292,7 @@ describe("Calendar Webhook — updatedMin 기반 감지", () => {
 
 describe("Gmail/Calendar 토큰 분리 아키텍처", () => {
   // getGoogleToken → GOOGLE_CALENDAR_REFRESH_TOKEN (bnb.paju, calendar scope)
-  // getGmailToken  → GOOGLE_REFRESH_TOKEN          (nam5821, gmail.metadata scope)
+  // getGmailToken  → GOOGLE_REFRESH_TOKEN          (nam5821, gmail.readonly scope)
 
   function resolveCalendarRefreshToken(env) {
     return env.GOOGLE_CALENDAR_REFRESH_TOKEN ?? env.GOOGLE_REFRESH_TOKEN;
