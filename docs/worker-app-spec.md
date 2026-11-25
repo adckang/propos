@@ -52,10 +52,10 @@
 - 별도 채팅 인프라 없음 — 일반 SMS로 직접 소통
 
 ### 3-4. 로그인 / 최초 등록
-- 전화번호 입력 → OTP 자동 수신 → 인증 완료 (앱에서 폰번호 자동 읽기 불가 — 직접 입력)
-- 이메일 입력 (필수) — Google Calendar 예약 시 입력하는 이메일과 **반드시 동일**해야 함
+- 관리자가 PROPOS에 미리 저장한 전화번호와 이메일을 앱에 직접 입력
+- 서버에서 두 값이 모두 같은 기존 담당자를 확인한 뒤 앱 알림 기기를 연결
   - 이유: Calendar Webhook → attendee email → `cleaners.email` 매핑으로 배정 감지
-- 전화번호 = Firebase Auth ID / 이메일 = 배정 매핑 키
+- 전화번호와 이메일 = 관리자가 미리 등록한 담당자 확인값 / 이메일 = 배정 매핑 키
 
 ---
 
@@ -65,7 +65,7 @@
 |------|------|------|
 | 프레임워크 | React Native (Android 우선) | 기존 PROPOS React 스택과 동일 |
 | 푸시 알림 | Firebase Cloud Messaging (FCM) | 무료, Google 표준 |
-| 인증 | Firebase Auth (Phone) | OTP 자동 수신 (무료 한도 규모에 따라 확인 필요) |
+| 최초 연결 확인 | 기존 담당자의 전화번호 + 이메일 일치 | 문자·메일 발송과 연락처 권한 없이 단순하게 확인 |
 | 채팅 | 없음 (기본 SMS 앱 딥링크) | 인프라 불필요, 친숙한 UX |
 | API | 기존 PROPOS Vercel API 재사용 + `/api/workers/*` 신규 추가 | 아래 섹션 참고 |
 
@@ -112,9 +112,9 @@ Worker App 오픈
 // POST /api/workers/register 요청 바디
 { phone: '010-1234-5678', email: 'worker@gmail.com', fcm_token: 'eXXX...' }
 // email은 필수 — Google Calendar 예약 시 입력하는 이메일과 동일해야 배정 감지 가능
-// → cleaners 테이블: phone 기준 upsert
-//   신규 → name=null(호스트가 나중에 입력), tier='BULK', active=false, fcm_status='active'
-//   기존 → email, fcm_token, fcm_token_at, app_installed_at, fcm_status='active' 갱신
+// → 관리자가 미리 만든 cleaners 행의 phone + email이 모두 일치할 때만 앱 기기 연결
+//   신규 담당자 행은 만들지 않음
+//   기존 담당자의 name, phone, email, tier, active는 바꾸지 않음
 
 // POST /api/workers/heartbeat 요청 바디
 { fcm_token: 'eXXX...' }
@@ -122,10 +122,9 @@ Worker App 오픈
 ```
 
 > **직원 등록 흐름**:
-> - 직원이 앱에서 등록하면 `active=false` + `tier` 미정 상태로 저장
-> - 호스트가 PROPOS 대시보드에서 이름·tier·active 승인 후 배정 대상에 포함됨
-> - 현재 `POST /api/cleaning/cleaners`는 name·email·tier 필수이므로
->   자가 등록용 `/api/workers/register`는 별도 로직으로 구현
+> - 호스트가 먼저 PROPOS 대시보드에서 담당자의 이름·전화번호·이메일·등급·활성 여부를 저장
+> - 담당자가 앱에 같은 전화번호와 이메일을 입력하면 FCM 알림 기기만 연결
+> - 두 값 중 하나라도 다르거나 사전 등록된 담당자가 없으면 연결하지 않음
 
 ---
 
@@ -170,24 +169,20 @@ await sendPush(fcmToken, {
 ```
 Worker App 최초 실행
     ↓
-전화번호 입력 + OTP 인증 (Firebase Auth)
-    ↓
-이메일 입력 (Google Calendar 예약 시 쓰는 이메일 — 배정 매핑 키)
+관리자가 미리 저장한 전화번호 + 이메일 입력
     ↓
 FCM 토큰 자동 발급
     ↓
 POST /api/workers/register  { phone, email, fcm_token }
-→ cleaners 테이블: phone 기준 upsert
-  신규 → name=null, active=false, tier='BULK', fcm_status='active' 로 삽입
+→ cleaners 테이블: phone + email이 같은 기존 담당자만 확인
+  신규 행은 만들지 않음
   기존 → 쓸 수 있는 토큰이 없을 때만 fcm_token·fcm_token_at·fcm_status='active' 갱신
-         (토큰 없음 · 옛 토큰이 unregistered/invalid · 같은 토큰 재시도).
+         (토큰 없음 · 옛 토큰이 unregistered · 같은 토큰 재시도).
          살아 있어 보이면 등록 때 알림 서버에 시험 발송(validate only)으로 확인 — 없어졌으면 unregistered 표시 후 갱신,
          살아 있거나 확인 불가면 409, 아무것도 안 바꿈. 번호는 010-0000-0000 형식만, 다른 번호에 붙은 기기 토큰이면 409
          email은 바꾸지 않는다(배정 매핑 키 — 변경은 대시보드에서). D-033·DEC-08·DEC-09
     ↓
-호스트가 PROPOS 대시보드에서 확인
-  → name 입력, tier 지정, active=true 승인
-  → 배정 대상에 포함됨
+기존 담당자 정보와 승인 상태는 그대로 유지
 ```
 
 ---
@@ -268,9 +263,8 @@ WHERE fcm_status = 'active'
 - [ ] iOS 지원 여부 (Android 우선, 이후 검토)
 - [ ] Play Store 배포 vs 직접 APK 배포
 - [x] 거절 API — 앱용 JSON 응답: `GET /api/cleaning/d?token=…&format=api`로 구현됨(별도 `POST /api/workers/decline`은 만들지 않음)
-- [ ] 직원 자가 등록 시 보안 — 현재 phone만 있으면 등록 가능. 호스트 사전 초대 링크 방식 고려
+- [x] 앱 최초 연결 — 호스트가 미리 저장한 phone + email이 모두 같은 기존 담당자만 FCM 기기 연결
 - [ ] FCM 미전달 시 재발송 정책 (FCM은 전달 보장 안 함 — 최대 4주 보관 후 폐기)
-- [ ] Firebase Auth Phone 무료 한도 확인 (직원 수 규모에 따라 Blaze 플랜 필요 가능)
 
 ---
 
@@ -278,7 +272,7 @@ WHERE fcm_status = 'active'
 
 1. DB 마이그레이션 — `cleaners` 테이블에 FCM 컬럼 추가 (섹션 9-1 SQL 참고)
 2. `api/workers/[...slug].js` 신규 엔드포인트 구현 (register / heartbeat / token)
-3. Firebase 프로젝트 생성 + FCM + Phone Auth 설정
+3. Firebase 프로젝트 생성 + FCM 설정
 4. React Native 프로젝트 초기화
 5. FCM 토큰 발급 + `/api/workers/register` 연동
 6. 수락(Calendar WebView) / 거절 / 협의 필요 버튼 구현

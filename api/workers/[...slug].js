@@ -43,16 +43,18 @@ function normalizePhone(raw) {
 
 /**
  * POST /api/workers/register
- * 앱 최초 설치 시 전화번호 + 이메일 + FCM 토큰 등록
+ * 앱 최초 설치 시 관리자가 저장한 전화번호·이메일을 확인하고 FCM 토큰 연결
  *
- * 전화번호가 이미 있는 담당자(D-033 남은 노출, DEC-08): 전화번호만 알면 남의 푸시 토큰·이메일을 바꿀 수 있었다.
+ * 관리자가 미리 만든 담당자의 전화번호와 이메일이 모두 일치해야 한다. 앱 등록으로 담당자를 새로 만들거나
+ * 이메일·승인·등급을 바꾸지 않는다. 별도 문자·메일 인증은 사용하지 않는다.
  *  - 토큰은 그 담당자에게 쓸 수 있는 토큰이 없을 때만 받는다 — 토큰 없음(관리자가 만든 담당자의 첫 설치), 알림 서버가
  *    그 토큰을 "등록 안 됨"으로 알려 옴(unregistered — 발송 실패 표시는 그 토큰일 때만 남는다), 같은 토큰(앱의 재시도 — 상태는 그대로).
  *    invalid는 발송 내용 오류에서도 생길 수 있어 근거로 쓰지 않고 아래 시험 발송으로 다시 묻는다.
  *  - 살아 있어 보이는 토큰이 있으면 그 자리에서 알림 서버에 시험 발송으로 묻는다(기기에는 아무것도 안 감). 없어진 토큰이면
  *    평소 발송 실패 때처럼 unregistered로 표시하고 같은 규칙으로 한 번 더 — 앱을 지우고 다시 설치한 담당자는 바로 복구된다(DEC-09).
  *    살아 있거나 확인할 수 없으면 409이고 아무것도 바꾸지 않는다.
- *  - 이메일은 바꾸지 않는다 — 캘린더 배정이 이메일로 담당자를 찾는다. 이메일 변경은 관리자 화면에서. 응답에도 저장된 이메일을 싣지 않는다.
+ *  - 이메일은 비교만 하고 바꾸지 않는다 — 캘린더 배정이 이메일로 담당자를 찾는다. 이메일 변경은 관리자 화면에서.
+ *    응답에도 저장된 이메일을 싣지 않는다.
  *  - 번호는 휴대폰 형식(010-0000-0000)만 받는다 — 같은 번호가 다른 표기로 두 담당자가 되지 않게(DEC-08 "전화번호는 유일").
  *  - 이 기기 토큰이 이미 다른 번호의 담당자에게 있으면 409 — 한 토큰이 두 담당자에게 붙으면 토큰 갱신이 막힌다.
  */
@@ -68,45 +70,46 @@ async function handleRegister(req, res) {
   const normalizedPhone = normalizePhone(phone);
   const normalizedEmail = email.toLowerCase().trim();
   if (!/^\d{3}-\d{4}-\d{4}$/.test(normalizedPhone)) {
-    // 휴대폰 형식이 아니면 새 담당자로 만들지 않는다. 관리자가 그 표기 그대로 저장해 둔 번호면 그 담당자로 등록한다
-    const { rows: stored } = await db.query(`SELECT 1 FROM cleaners WHERE phone = $1 LIMIT 1`, [normalizedPhone]);
-    if (!stored.length) return sendJson(res, 400, { error: "전화번호 형식이 올바르지 않습니다" });
+    return sendJson(res, 400, { error: "전화번호 형식이 올바르지 않습니다" });
+  }
+
+  const { rows: registered } = await db.query(
+    `SELECT id FROM cleaners WHERE phone = $1 AND lower(trim(email)) = $2 LIMIT 1`,
+    [normalizedPhone, normalizedEmail]);
+  if (!registered.length) {
+    return sendJson(res, 404, { error: "등록된 담당자 정보와 전화번호 또는 이메일이 일치하지 않습니다. 호스트에게 확인해 주세요" });
   }
 
   const { rows: holders } = await db.query(
     `SELECT id FROM cleaners WHERE fcm_token = $1 AND phone <> $2 LIMIT 1`, [fcm_token, normalizedPhone]);
   if (holders.length) return sendJson(res, 409, { error: "이 기기는 다른 번호로 이미 등록돼 있습니다" });
 
-  const upsert = async () => (await db.query(
-    `INSERT INTO cleaners (phone, email, tier, active, fcm_token, fcm_token_at, app_installed_at, last_seen_at, fcm_status)
-     VALUES ($1, $2, 'BULK', false, $3, NOW(), NOW(), NOW(), 'active')
-     ON CONFLICT (phone) DO UPDATE SET
-       fcm_token      = EXCLUDED.fcm_token,
-       fcm_token_at   = CASE WHEN cleaners.fcm_token = EXCLUDED.fcm_token THEN cleaners.fcm_token_at ELSE NOW() END,
+  const attach = async () => (await db.query(
+    `UPDATE cleaners SET
+       fcm_token      = $3,
+       fcm_token_at   = CASE WHEN fcm_token = $3 THEN fcm_token_at ELSE NOW() END,
+       app_installed_at = COALESCE(app_installed_at, NOW()),
        last_seen_at   = NOW(),
        -- 같은 토큰의 재시도는 상태를 되살리지 않는다(알림 서버가 죽었다고 한 토큰이 다시 active가 되지 않게)
-       fcm_status     = CASE WHEN cleaners.fcm_token = EXCLUDED.fcm_token THEN cleaners.fcm_status ELSE 'active' END
-     WHERE cleaners.fcm_token IS NULL
-        OR cleaners.fcm_token = EXCLUDED.fcm_token
-        OR cleaners.fcm_status = 'unregistered'
+       fcm_status     = CASE WHEN fcm_token = $3 THEN fcm_status ELSE 'active' END
+     WHERE phone = $1
+       AND lower(trim(email)) = $2
+       AND (fcm_token IS NULL OR fcm_token = $3 OR fcm_status = 'unregistered')
      RETURNING id, phone, tier, active, fcm_status, app_installed_at`,
     [normalizedPhone, normalizedEmail, fcm_token]
   )).rows[0];
 
   let worker;
-  try {
-    worker = await upsert();
-    if (!worker) {
-      // 살아 있어 보이는 토큰 — 정말 쓰이는지 알림 서버에 묻는다. 없어졌으면 평소 발송 실패와 같은 표시 후 한 번 더
-      const { rows: [current] } = await db.query(`SELECT id, fcm_token FROM cleaners WHERE phone = $1`, [normalizedPhone]);
-      if (current?.fcm_token && await probeToken(current.fcm_token) === "dead") {
-        await db.query(`UPDATE cleaners SET fcm_status = 'unregistered' WHERE id = $1 AND fcm_token = $2`, [current.id, current.fcm_token]);
-        worker = await upsert();
-      }
+  worker = await attach();
+  if (!worker) {
+    // 살아 있어 보이는 토큰 — 정말 쓰이는지 알림 서버에 묻는다. 없어졌으면 평소 발송 실패와 같은 표시 후 한 번 더
+    const { rows: [current] } = await db.query(
+      `SELECT id, fcm_token FROM cleaners WHERE phone = $1 AND lower(trim(email)) = $2`,
+      [normalizedPhone, normalizedEmail]);
+    if (current?.fcm_token && await probeToken(current.fcm_token) === "dead") {
+      await db.query(`UPDATE cleaners SET fcm_status = 'unregistered' WHERE id = $1 AND fcm_token = $2`, [current.id, current.fcm_token]);
+      worker = await attach();
     }
-  } catch (e) {
-    if (e?.code === "23505" && /email/.test(e?.constraint ?? "")) return sendJson(res, 409, { error: "이미 다른 담당자가 쓰는 이메일입니다" });
-    throw e;
   }
   if (!worker) {
     console.warn("[workers/register] 이미 다른 기기가 쓰는 번호로 등록 시도 — 바꾸지 않음");

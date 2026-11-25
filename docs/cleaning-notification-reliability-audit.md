@@ -250,7 +250,7 @@ node --test tests/unit/s108.cleaning-delivery-results.test.js
 
 | 단계 | 실제 구현·의미 |
 | --- | --- |
-| 앱 최초 등록 | [App.tsx](../worker-app/App.tsx#L28)에서 FCM 토큰을 받아 [registerWorker](../worker-app/src/services/api.ts#L3) 호출. [운영 API](../api/workers/%5B...slug%5D.js#L59)가 전화번호 기준으로 토큰·상태를 저장. 기존 담당자의 업무 승인 `active`는 유지하며, 신규 담당자는 별도 승인 필요 |
+| 앱 최초 등록 | [App.tsx](../worker-app/App.tsx#L28)에서 FCM 토큰을 받아 [registerWorker](../worker-app/src/services/api.ts#L3) 호출. [운영 API](../api/workers/%5B...slug%5D.js#L59)는 관리자가 미리 저장한 전화번호와 이메일이 모두 같은 기존 담당자에만 토큰·상태를 연결한다. 신규 담당자 행을 만들지 않고 기존 업무 승인 `active`를 유지한다. |
 | 앱 토큰 갱신 | [initFcm](../worker-app/src/services/fcm.ts#L55)·[갱신 리스너](../worker-app/src/services/fcm.ts#L71) → [updateFcmToken](../worker-app/src/services/api.ts#L43) → [서버 토큰 갱신](../api/workers/%5B...slug%5D.js#L116) |
 | 장기 미접속·복귀 | [헬스체크](../api/cron/%5B...slug%5D.js#L371)는 30일 미접속을 inactive로 전환. [앱 홈](../worker-app/src/screens/HomeScreen.tsx#L15)의 heartbeat에 서버 저장 토큰이 일치하면 [inactive 복구](../api/workers/%5B...slug%5D.js#L92). 30일은 이 서비스의 활동 상태 정책이며 Google 토큰 만료일이 아님 |
 | 청소 요청 발송 | [채널 선택](../server/cleaning/_notify.js#L41)은 active 상태·토큰이면 FCM. [SDK 호출](../server/cleaning/_push.js#L24)은 Firebase Admin SDK에 요청. ACT-11의 접수 저장·조건부 단계 전환과 앱 기기의 실제 수신 여부는 구분 |

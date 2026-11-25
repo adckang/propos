@@ -80,7 +80,6 @@ export async function workerFcmFixture({ stored = 'fixture-old', token = 'fixtur
   const stubs = {
     '@react-native-firebase/messaging': `const m=()=>globalThis[${JSON.stringify(key)}].sdk; m.AuthorizationStatus={AUTHORIZED:1,PROVISIONAL:2}; export default m;`,
     '@react-native-async-storage/async-storage': `export default globalThis[${JSON.stringify(key)}].storage;`,
-    '@react-native-firebase/auth': `const auth=()=>({signInWithPhoneNumber:async()=>({confirm:async()=>({})})}); export default auth;`,
     react: `
       const ui=globalThis[${JSON.stringify(key)}].ui;
       export const createElement=(...args)=>ui.createElement(...args);
@@ -148,6 +147,7 @@ export async function workerFcmFixture({ stored = 'fixture-old', token = 'fixtur
     loadNavigation: () => load('worker-app/src/navigation/index.tsx'),
     loadHome: () => load('worker-app/src/screens/HomeScreen.tsx'),
     loadJob: () => load('worker-app/src/screens/JobScreen.tsx'),
+    loadRegistration: () => load('worker-app/src/screens/PhoneAuthScreen.tsx'),
     render: (Component, props) => ui.render(Component, props),
     async emitToken(value) { io.token = value; return Promise.all([...listeners].map(fn => fn(value))); },
     async emitForeground(message) { return Promise.all([...foregroundListeners].map(fn => fn(message))); },

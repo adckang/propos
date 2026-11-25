@@ -6,8 +6,9 @@ export async function registerWorker(phone: string, email: string, fcmToken: str
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ phone, email, fcm_token: fcmToken }),
   });
-  if (!res.ok) throw new Error(`register failed: ${res.status}`);
-  return res.json() as Promise<{ ok: boolean; worker: { id: string; active: boolean }; message: string }>;
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(body?.error ?? `register failed: ${res.status}`);
+  return body as { ok: boolean; worker: { id: string; active: boolean }; message: string };
 }
 
 export async function sendHeartbeat(fcmToken: string) {

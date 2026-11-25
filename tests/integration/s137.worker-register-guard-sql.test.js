@@ -1,8 +1,7 @@
 // PGLITE_TEST_ROOT=<pglite 설치 폴더> node --test tests/integration/s137.worker-register-guard-sql.test.js
 //
-// D-033 남은 노출(DEC-08) — 담당자 앱 등록이 이미 있는 번호의 살아 있는 푸시 토큰·이메일을 덮어쓰지 않는지, 실제 핸들러의 SQL을
-// 격리 DB(PGlite 또는 격리 로컬 DB)에서 그대로 실행해 확인한다. 운영 DB·외부 요청 없음.
-// 담당자 이름은 비워 둘 수 있다(운영과 같게, RF-50) — 앱 등록은 이름 없이 담당자를 만든다.
+// 담당자 앱 등록이 관리자가 미리 저장한 전화번호·이메일에만 기기를 연결하고 기존 신원·승인을 바꾸지 않는지,
+// 실제 핸들러의 SQL을 격리 DB(PGlite 또는 격리 로컬 DB)에서 그대로 실행해 확인한다. 운영 DB·외부 요청 없음.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -13,7 +12,7 @@ const PHONE = '010-9876-5432';
 
 async function registerSql() {
   const source = await readFile(new URL('../../api/workers/[...slug].js', import.meta.url), 'utf8');
-  const sql = source.match(/db\.query\(\s*`(INSERT INTO cleaners \(phone, email[\s\S]*?)`,/)?.[1];
+  const sql = source.match(/db\.query\(\s*`(UPDATE cleaners SET\s+fcm_token[\s\S]*?RETURNING id, phone, tier, active, fcm_status, app_installed_at)`,/)?.[1];
   assert.ok(sql, 'actual register SQL');
   return sql;
 }
@@ -28,14 +27,24 @@ const cases = [
   ['same token again after FCM said unregistered (status is not revived)', 'new-token', 'unregistered', true],
 ];
 
-test('SQL: a new number is inserted as a pending BULK worker with the given email', { skip: !enabled }, async t => {
+test('SQL: a number not pre-registered by the host is not created', { skip: !enabled }, async t => {
   const sql = await createCleaningSqlFixture();
   t.after(() => sql.close());
   const { rows } = await sql.pool.query(await registerSql(), [PHONE, 'new@example.invalid', 'new-token']);
-  assert.equal(rows.length, 1);
-  assert.equal(Object.hasOwn(rows[0], 'email'), false, '저장된 이메일은 돌려주지 않는다');
-  const { rows: [saved] } = await sql.pool.query('SELECT email, tier, active, fcm_status FROM cleaners WHERE phone=$1', [PHONE]);
-  assert.deepEqual([saved.email, saved.tier, saved.active, saved.fcm_status], ['new@example.invalid', 'BULK', false, 'active']);
+  assert.equal(rows.length, 0);
+  const { rows: saved } = await sql.pool.query('SELECT id FROM cleaners WHERE phone=$1', [PHONE]);
+  assert.equal(saved.length, 0);
+});
+
+test('SQL: a wrong email cannot attach to a pre-registered phone', { skip: !enabled }, async t => {
+  const sql = await createCleaningSqlFixture();
+  t.after(() => sql.close());
+  await sql.pool.query(
+    `INSERT INTO cleaners (name, phone, email, tier, active) VALUES ('Owner', $1, 'owner@example.invalid', 'VIP_1', true)`, [PHONE]);
+  const { rows } = await sql.pool.query(await registerSql(), [PHONE, 'wrong@example.invalid', 'new-token']);
+  assert.equal(rows.length, 0);
+  const { rows: [after] } = await sql.pool.query('SELECT fcm_token, app_installed_at FROM cleaners WHERE phone=$1', [PHONE]);
+  assert.deepEqual([after.fcm_token, after.app_installed_at], [null, null]);
 });
 
 for (const [label, token, status, accepted] of cases) {
@@ -45,13 +54,14 @@ for (const [label, token, status, accepted] of cases) {
     await sql.pool.query(
       `INSERT INTO cleaners (name, phone, email, tier, active, fcm_token, fcm_status)
        VALUES ('Owner', $1, 'owner@example.invalid', 'VIP_1', true, $2, $3)`, [PHONE, token, status]);
-    const { rows } = await sql.pool.query(await registerSql(), [PHONE, 'someone-else@example.invalid', 'new-token']);
+    const { rows } = await sql.pool.query(await registerSql(), [PHONE, 'owner@example.invalid', 'new-token']);
     assert.equal(rows.length, accepted ? 1 : 0);
-    const { rows: [after] } = await sql.pool.query('SELECT email, tier, active, fcm_token, fcm_status FROM cleaners WHERE phone=$1', [PHONE]);
+    const { rows: [after] } = await sql.pool.query('SELECT email, tier, active, fcm_token, fcm_status, app_installed_at FROM cleaners WHERE phone=$1', [PHONE]);
     assert.equal(after.email, 'owner@example.invalid');
     assert.equal(after.tier, 'VIP_1');
     assert.equal(after.active, true);
     assert.equal(after.fcm_token, accepted ? 'new-token' : token);
+    assert.equal(after.app_installed_at !== null, accepted);
     // 같은 토큰의 재시도는 상태를 그대로 둔다(죽었다고 표시된 토큰을 되살리지 않는다)
     assert.equal(after.fcm_status, accepted && token !== 'new-token' ? 'active' : status);
   });

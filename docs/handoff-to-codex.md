@@ -167,7 +167,7 @@ propos-project-v2/
 
 ### 2-5. Worker App (React Native)
 
-- Phone OTP → FCM → register API 연동, HomeScreen/JobScreen 완성, APK 빌드·갤럭시 설치 완료
+- 사전 등록된 전화번호·이메일 확인 → FCM → register API 연동, HomeScreen/JobScreen 완성. 기존 APK 설치 이력은 있으나 새 최초 연결 화면은 다시 빌드·설치해야 함
 - Firebase: `worker-app/package.json` 기준 `@react-native-firebase/*` **^20.0.0** (이전 문서의 "21.14.0" 표기는 package.json 과 불일치 — 설치본 버전은 이 환경에 node_modules 가 없어 확인 못 함). **v26 사용 금지**(default export 없음).
 
 ---

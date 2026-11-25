@@ -42,6 +42,11 @@ function findNode(node, predicate) {
   }
   return null;
 }
+function findNodes(node, predicate, found = []) {
+  if (node && typeof node === 'object' && predicate(node)) found.push(node);
+  for (const child of children(node)) findNodes(child, predicate, found);
+  return found;
+}
 function press(tree, label) {
   const button = findNode(tree, node => node.type === 'TouchableOpacity' && textContent(node).includes(label));
   assert.ok(button, `button not found: ${label}`);
@@ -87,10 +92,10 @@ describe('actual Worker App API client', () => {
     });
   });
 
-  test('registerWorker rejects a non-2xx receipt with the actual status', async t => {
+  test('registerWorker exposes the server registration reason', async t => {
     const f = await actualWorkerApp(t, { answer: () => response(503, { error: 'unavailable' }) });
     const { registerWorker } = await f.loadApi();
-    await assert.rejects(registerWorker('01012345678', 'user@example.com', 'fixture-fcm'), /register failed: 503/);
+    await assert.rejects(registerWorker('01012345678', 'user@example.com', 'fixture-fcm'), /unavailable/);
   });
 
   test('sendHeartbeat posts the stored token and intentionally swallows a network failure', async t => {
@@ -101,6 +106,24 @@ describe('actual Worker App API client', () => {
       url: 'https://www.proposonline.com/api/workers/heartbeat', method: 'POST',
       body: { fcm_token: 'fixture-fcm' }, headers: { 'Content-Type': 'application/json' }, signal: undefined,
     });
+  });
+});
+
+describe('actual Worker App registration screen', () => {
+  test('submits the entered phone and email without an OTP step', async t => {
+    const f = await actualWorkerApp(t);
+    const { default: RegistrationScreen } = await f.loadRegistration();
+    const completed = [];
+    const props = { onComplete: async (phone, email) => completed.push({ phone, email }) };
+    let tree = f.render(RegistrationScreen, props);
+    assert.equal(textContent(tree).includes('인증번호'), false);
+    const inputs = findNodes(tree, node => node.type === 'TextInput');
+    assert.equal(inputs.length, 2);
+    inputs[0].props.onChangeText('010 1234 5678');
+    inputs[1].props.onChangeText('WORKER@EXAMPLE.INVALID ');
+    tree = f.render(RegistrationScreen, props);
+    await press(tree, '등록하기');
+    assert.deepEqual(completed, [{ phone: '010-1234-5678', email: 'worker@example.invalid' }]);
   });
 });
 
