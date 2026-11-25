@@ -19,7 +19,8 @@ export function getPeriodRange(period, referenceDate = new Date()) {
 
 /**
  * 체류중(OCCUPIED) 숙소의 "이상" 서브 상태. 현재 레포트·리스트 긴급 표시·체류중 이상 감지가
- * 모두 이 정의를 공유한다 (report-architecture §6-1: 체류 중 민원·에너지낭비는 이상, 공실 에너지낭비는 별도 카운터).
+ * 모두 이 정의를 공유한다. 자동화 개선율의 정본 5가지와는 별도인 현재 상태 카운터이며,
+ * 공실 에너지 낭비는 `vacantEnergyWaste`로 따로 센다.
  */
 export const OCCUPIED_ISSUE_SUB_STATUSES = new Set([
   "ISSUE_COMPLAINT",
