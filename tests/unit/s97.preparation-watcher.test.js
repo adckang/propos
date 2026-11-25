@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 process.env.PROPOS_HA_BASE_URL = 'http://ha.test';
 process.env.PROPOS_HA_TOKEN = 'test-token';
 process.env.PROPOS_PI_SECRET = 'fixture-pi-secret';
+process.env.PROPOS_EVENT_API_URL = 'https://events.fixture.invalid/api/events/write';
 const { setRoomState, setMonitoringConfig, getMonitoringState, stopWatcher } = await import('../../server/occupancyWatcher.js');
 
 test('DEC-01 regression: reaching T−20 minutes with no sensor/configuration cannot emit completion', async () => {
@@ -81,6 +82,7 @@ test('actual watcher wiring: fresh sensor samples finish preparation after arriv
 test('sensor preparation delivery retries preserve occurrence timestamps and provenance', async () => {
   const previous = global.fetch;
   const bodies = []; let acceptsWrites = false;
+  const deliveryWatcher = await import('../../server/occupancyWatcher.js?preparation-delivery');
   global.fetch = async (url, options = {}) => {
     if (url.includes('/api/events/write')) {
       bodies.push(JSON.parse(options.body));
@@ -90,16 +92,16 @@ test('sensor preparation delivery retries preserve occurrence timestamps and pro
   };
   try {
     const cfg = { areaName: 'fixture-delivery-property', optimization: {}, reservation: { uid: 'delivery-reservation', checkIn: new Date(Date.now() + 20 * 60_000).toISOString() } };
-    setRoomState({ mainStatus: 'VACANT', subStatus: 'CLEANING_FINISHED' });
-    setMonitoringConfig(cfg); await new Promise(resolve => setTimeout(resolve, 50));
-    assert.ok(getMonitoringState().preparationDeliveryPending > 0);
+    deliveryWatcher.setRoomState({ mainStatus: 'VACANT', subStatus: 'CLEANING_FINISHED' });
+    deliveryWatcher.setMonitoringConfig(cfg); await new Promise(resolve => setTimeout(resolve, 50));
+    assert.ok(deliveryWatcher.getMonitoringState().preparationDeliveryPending > 0);
     const first = bodies[0];
     acceptsWrites = true;
-    setMonitoringConfig(cfg); await new Promise(resolve => setTimeout(resolve, 50));
-    assert.equal(getMonitoringState().preparationDeliveryPending, 0);
+    deliveryWatcher.setMonitoringConfig(cfg); await new Promise(resolve => setTimeout(resolve, 50));
+    assert.equal(deliveryWatcher.getMonitoringState().preparationDeliveryPending, 0);
     const retries = bodies.filter(body => body.source_ref === first.source_ref);
     assert.ok(retries.length >= 2);
     assert.ok(retries.every(body => body.device_time === first.device_time));
     assert.ok(retries.every(body => body.property_id === first.property_id));
-  } finally { stopWatcher(); global.fetch = previous; }
+  } finally { deliveryWatcher.stopWatcher(); global.fetch = previous; }
 });

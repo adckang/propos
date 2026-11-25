@@ -8,6 +8,7 @@ process.env.PROPOS_HA_BASE_URL = 'http://ha.test';
 process.env.PROPOS_HA_WS_URL = 'ws://ha.test/api/websocket';
 process.env.PROPOS_HA_TOKEN = 'fixture-token';
 process.env.PROPOS_PI_SECRET = 'fixture-secret';
+process.env.PROPOS_EVENT_API_URL = 'https://events.fixture.invalid/api/events/write';
 
 test('occupied Pi restart preserves the stay without preparation, device commands or notifications', async () => {
   const previousFetch = global.fetch, previousWs = global.WebSocket;

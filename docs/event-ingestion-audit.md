@@ -8,7 +8,7 @@
 
 **운영자가 기대하는 동작:** 파주201에서 실제 입실·청소·입실 준비가 발생하면, 로컬·운영 화면이 같은 저장 기록을 사용하고, 중복 전송으로 이벤트나 알림이 늘어나지 않아야 한다. 전송 실패와 준비 실패는 구분돼야 한다.
 
-현재 Pi의 일반 이벤트와 센서 기반 준비 이벤트는 모두 **`/api/events/write`**로 전송한다. 일반 이벤트는 한 번 전송하고, `sensor-v1` 준비 이벤트는 상태 파일의 outbox에 보관한 뒤 성공 응답까지 재전송한다. 소스에서 기본 주소는 비-www이며 승인된 인증 검사는 앞서 canonical www에서 수행했다. 이번 감사에서는 실제 Pi POST의 리다이렉트·헤더 전달을 추가로 검증하지 않았다. [발행 구현](../server/occupancyWatcher.js#L411), [준비 이벤트 전송 계약](pre-stay-optimization.md#L89)
+현재 Pi의 일반 이벤트와 센서 기반 준비 이벤트는 모두 **`/api/events/write`**로 전송한다. 두 종류 모두 상태 파일의 outbox에 보관한 뒤 성공 응답까지 재전송한다. 전체 수신 주소는 Pi 비공개 환경파일의 `PROPOS_EVENT_API_URL`에서만 읽고 코드 기본값은 없다. 워처 종료 시 진행 중 전송을 중단하며 큐는 다음 시작까지 보존한다. [발행 구현](../server/occupancyWatcher.js), [준비 이벤트 전송 계약](pre-stay-optimization.md#L89)
 
 같은 서버 파일에는 별도로 **기본 수신 분기 `/api/events`**가 남아 있다. 두 분기는 같은 INSERT 함수를 사용하지만 같은 처리 파이프라인은 아니다. [수신 구현](../api/events/%5B...slug%5D.js#L54)
 
@@ -229,7 +229,7 @@ Pi 복구 자료는 `/config/propos/.rollout/rf06-20261109T084329111Z-435f45f/`�
 
 ## 10. 2026-11-14 사용 경로 재검토와 RF-06.4 분류
 
-현재 Pi의 실행 코드 발행은 `/api/events/write`이며, 일반 이벤트와 준비 이벤트가 같은 영속 전송 큐를 사용한다. 구형 `processEvent` 호출자는 기본 API 분기 하나다. `scripts/outbox.mjs`에는 파일 큐 함수가 있으며 HTTP 발행 기동부는 없다. 로컬 화면은 운영 API로 연결된다. [Pi 발행](../server/occupancyWatcher.js#L416), [구형 입구](../api/events/%5B...slug%5D.js#L75), [큐 도구](../scripts/outbox.mjs), [Vite 연결](../vite.config.mjs)
+현재 Pi의 실행 코드 발행은 환경파일에 지정한 `/api/events/write` 전체 주소이며, 일반 이벤트와 준비 이벤트가 같은 영속 전송 큐를 사용한다. 구형 `processEvent` 호출자는 기본 API 분기 하나다. `scripts/outbox.mjs`에는 파일 큐 함수가 있으며 HTTP 발행 기동부는 없다. 로컬 화면은 운영 API로 연결된다. [Pi 발행](../server/occupancyWatcher.js), [구형 입구](../api/events/%5B...slug%5D.js#L75), [큐 도구](../scripts/outbox.mjs), [Vite 연결](../vite.config.mjs)
 
 운영에 인증정보 없는 GET을 보내 기본 `/api/events` 404, `/api/events/write` 401, `/api/events/history` 401을 다시 확인했다. 저장소의 catch-all API·rewrite 정의도 대조했다. 현재 제공되는 일반 Pi 경로의 수신·보고서 계약을 복구 작업의 기준으로 삼는다.
 

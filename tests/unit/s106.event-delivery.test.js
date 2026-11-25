@@ -9,6 +9,7 @@ process.env.PROPOS_HA_BASE_URL = 'http://ha.test';
 process.env.PROPOS_HA_WS_URL = 'ws://ha.test/api/websocket';
 process.env.PROPOS_HA_TOKEN = 'fixture-token';
 process.env.PROPOS_PI_SECRET = 'fixture-key';
+process.env.PROPOS_EVENT_API_URL = 'https://events.fixture.invalid/api/events/write';
 let sequence = 0;
 const settle = async () => { await new Promise(setImmediate); await new Promise(setImmediate); };
 async function until(predicate) {
@@ -59,6 +60,14 @@ async function fixture() {
   };
 }
 
+test('event delivery URL has no code fallback and accepts only an explicit write endpoint', async () => {
+  const { resolveEventApiUrl } = await import(`../../server/occupancyWatcher.js?event-url=${++sequence}`);
+  assert.equal(resolveEventApiUrl({}), null);
+  assert.equal(resolveEventApiUrl({ PROPOS_EVENT_API_URL: 'https://events.test/api/events' }), null);
+  assert.equal(resolveEventApiUrl({ PROPOS_EVENT_API_URL: 'https://user:secret@events.test/api/events/write' }), null);
+  assert.equal(resolveEventApiUrl({ PROPOS_EVENT_API_URL: '  https://events.test/api/events/write/  ' }), 'https://events.test/api/events/write');
+});
+
 for (const status of [401, 500]) {
   test(`ordinary event survives HTTP ${status}, retries unchanged, and accepts duplicate acknowledgement`, async () => {
     const f = await fixture();
@@ -73,6 +82,7 @@ for (const status of [401, 500]) {
       await f.tick();
       await until(() => f.stored().preparationOutbox.length === 0);
       assert.deepEqual(f.calls[1].body, first);
+      assert.equal(f.calls[1].url, process.env.PROPOS_EVENT_API_URL);
       assert.equal(f.calls[1].options.headers['x-pi-secret'], 'fixture-key');
       assert.ok(f.calls[1].options.signal instanceof AbortSignal);
     } finally { f.cleanup(); }
@@ -123,6 +133,26 @@ test('concurrent ordinary events use one sender and preserve FIFO occurrence pay
     await until(() => f.stored().preparationOutbox.length === 0);
     assert.deepEqual(f.calls.map(call => call.body.type), ['cleaning_finished', 'maintenance_started']);
   } finally { release(); await settle(); f.cleanup(); }
+});
+
+test('stopping the watcher aborts an in-flight delivery and keeps its durable queue for restart', async () => {
+  const f = await fixture();
+  let aborted = false;
+  try {
+    f.respond(call => new Promise((resolve, reject) => {
+      call.options.signal.addEventListener('abort', () => {
+        aborted = true;
+        reject(call.options.signal.reason);
+      }, { once: true });
+    }));
+    await f.emit();
+    await until(() => f.calls.length === 1 && f.stored().preparationOutbox.length === 1);
+
+    f.watcher.stopWatcher();
+    await until(() => aborted);
+    assert.equal(f.calls.length, 1);
+    assert.equal(f.stored().preparationOutbox.length, 1);
+  } finally { f.cleanup(); }
 });
 
 test('pre-existing preparation queue format is restored without changing its timestamp or source', async () => {

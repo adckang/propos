@@ -221,6 +221,7 @@ process.env.PROPOS_HA_BASE_URL = 'http://ha.test';
 process.env.PROPOS_HA_WS_URL = 'ws://ha.test/api/websocket';
 process.env.PROPOS_HA_TOKEN = 'fixture-token';
 process.env.PROPOS_PI_SECRET = 'fixture-key';
+process.env.PROPOS_EVENT_API_URL = 'https://events.fixture.invalid/api/events/write';
 
 let sequence = 0;
 async function until(predicate) {

@@ -51,9 +51,22 @@ const STATE_FILE        = join(DATA_DIR, 'monitoring-state.json');
 const CONFIG_FILE       = join(DATA_DIR, 'monitoring-config.json');
 const SNAPSHOT_LOG_FILE = join(DATA_DIR, 'snapshotLog.json');
 
-// Vercel 이벤트 리포트 설정
-const VERCEL_URL              = 'https://proposonline.com';
-const PI_SECRET               = process.env.PROPOS_PI_SECRET ?? null;
+// 이벤트 수신 주소와 인증은 Pi 환경파일에서만 받는다. 주소가 없거나 잘못되면
+// 발생 기록은 내구성 큐에 남고 외부 전송은 하지 않는다.
+export function resolveEventApiUrl(env = process.env) {
+  const raw = typeof env.PROPOS_EVENT_API_URL === 'string' ? env.PROPOS_EVENT_API_URL.trim() : '';
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) return null;
+    if (url.pathname.replace(/\/+$/, '') !== '/api/events/write') return null;
+    url.pathname = '/api/events/write';
+    return url.toString();
+  } catch { return null; }
+}
+
+const EVENT_API_URL = resolveEventApiUrl();
+const PI_SECRET     = process.env.PROPOS_PI_SECRET ?? null;
 
 // 스냅샷 파일 보관 기간 (10일)
 const HA_SNAPSHOT_DIR         = '/config/www/snapshots';
@@ -70,6 +83,9 @@ const snapshotLog  = [];  // { path, ts, roomState } — CCTV 출입 스냅샷
 let preparationOutbox = [];
 let eventDeliveryRejected = [];
 let flushingPreparationOutbox = false;
+let eventDeliveryEnabled = true;
+let eventDeliveryGeneration = 0;
+let eventDeliveryAbortController = null;
 let statePersistenceFailed = false;
 let lastWaitPersistAt = 0;
 const WAIT_PERSIST_MS = 2 * 60_000;
@@ -623,16 +639,24 @@ function recordSnapshot(path) {
 // Keep the persisted queue name for existing Pi state files. All event types
 // now share its durable, single-sender delivery path; API side effects stay unchanged.
 async function flushPreparationOutbox() {
-  if (!PI_SECRET || flushingPreparationOutbox || !preparationOutbox.length) return;
+  if (!EVENT_API_URL || !PI_SECRET || !eventDeliveryEnabled || flushingPreparationOutbox || !preparationOutbox.length) return;
   flushingPreparationOutbox = true;
+  const generation = eventDeliveryGeneration;
+  const controller = new AbortController();
+  eventDeliveryAbortController = controller;
   try {
     while (preparationOutbox.length) {
+      if (!eventDeliveryEnabled || generation !== eventDeliveryGeneration) return;
       if (!persistState()) return; // never transmit an occurrence not yet durable
       const payload = preparationOutbox[0];
-      const response = await fetch(`${VERCEL_URL}/api/events/write`, {
+      const response = await fetch(EVENT_API_URL, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-pi-secret': PI_SECRET },
-        body: JSON.stringify(payload), signal: AbortSignal.timeout(PREPARATION_POLICY.requestTimeoutMs),
+        body: JSON.stringify(payload), signal: AbortSignal.any([
+          controller.signal,
+          AbortSignal.timeout(PREPARATION_POLICY.requestTimeoutMs),
+        ]),
       });
+      if (!eventDeliveryEnabled || generation !== eventDeliveryGeneration) return;
       if (!response.ok) {
         if (![400, 422].includes(response.status)) return;
         // Preserve invalid payloads for inspection without blocking later events.
@@ -700,7 +724,10 @@ async function flushPreparationOutbox() {
       if (!persistState()) { preparationOutbox.unshift(payload); return; }
     }
   } catch { /* retain original payloads on network/timeout/invalid response */ }
-  finally { flushingPreparationOutbox = false; }
+  finally {
+    if (eventDeliveryAbortController === controller) eventDeliveryAbortController = null;
+    flushingPreparationOutbox = false;
+  }
 }
 
 async function reportEventToVercel(type, isSoft, data = null, occurredAt = Date.now()) {
@@ -965,6 +992,7 @@ export function getMonitoringState() {
     preparationDeliveryPending: preparationOutbox.filter(event => event.data?.preparationPolicy === 'sensor-v1').length,
     eventDeliveryPending: preparationOutbox.length,
     eventDeliveryRejectedCount: eventDeliveryRejected.length,
+    eventDeliveryConfigured: Boolean(EVENT_API_URL && PI_SECRET),
     statePersistenceFailed,
   };
 }
@@ -1031,6 +1059,8 @@ export function startWatcher() {
   if (ws || reconnectTimer || calendarTimer) return;
   watcherStopped = false;
   const generation = ++watcherGeneration;
+  eventDeliveryEnabled = true;
+  eventDeliveryGeneration++;
   preparationShuttingDown = false;
 
   roomState = loadPersistedState();
@@ -1063,6 +1093,9 @@ export function startWatcher() {
 export function stopWatcher() {
   watcherStopped = true;
   watcherGeneration++;
+  eventDeliveryEnabled = false;
+  eventDeliveryGeneration++;
+  eventDeliveryAbortController?.abort();
   ws?.close();
   ws = null;
   if (reconnectTimer)       { clearTimeout(reconnectTimer);         reconnectTimer       = null; }

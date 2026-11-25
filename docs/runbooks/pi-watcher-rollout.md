@@ -36,6 +36,7 @@ Pi의 대화형 셸에서 `set -e`를 직접 켜 두지 않는다. 읽기 전용
 - 교체하거나 새로 추가할 런타임 파일 목록
 - 각 새 파일의 SHA-256
 - 새 롤아웃 디렉터리 이름: `작업ID-UTC시각-짧은커밋`
+- Pi 비공개 환경파일의 `PROPOS_EVENT_API_URL` — 전체 운영 수신 주소 `https://www.proposonline.com/api/events/write`. 코드 기본값은 없으며 값이 없거나 다른 경로면 큐만 보존하고 전송하지 않는다
 
 예시:
 
@@ -96,7 +97,7 @@ pgrep -af "node .*occupancy-watcher-standalone.mjs"
   curl -fsS \
     -H "x-pi-secret: $PROPOS_PI_SECRET" \
     http://127.0.0.1:3001/api/monitoring/state |
-  node -e 'let x="";process.stdin.on("data",d=>x+=d).on("end",()=>{const s=JSON.parse(x);console.log(JSON.stringify({roomState:s.roomState,wsConnected:s.wsConnected,isReplaying:s.isReplaying,preparation:s.preparation,eventDeliveryPending:s.eventDeliveryPending,eventDeliveryRejectedCount:s.eventDeliveryRejectedCount,statePersistenceFailed:s.statePersistenceFailed,lastError:s.lastError??null},null,2))})'
+  node -e 'let x="";process.stdin.on("data",d=>x+=d).on("end",()=>{const s=JSON.parse(x);console.log(JSON.stringify({roomState:s.roomState,wsConnected:s.wsConnected,isReplaying:s.isReplaying,preparation:s.preparation,eventDeliveryConfigured:s.eventDeliveryConfigured,eventDeliveryPending:s.eventDeliveryPending,eventDeliveryRejectedCount:s.eventDeliveryRejectedCount,statePersistenceFailed:s.statePersistenceFailed,lastError:s.lastError??null},null,2))})'
 )
 ```
 
@@ -106,6 +107,7 @@ pgrep -af "node .*occupancy-watcher-standalone.mjs"
 - `wsConnected`가 `false`
 - `isReplaying`이 `true`
 - `preparation.run`이 `null`이 아님
+- `eventDeliveryConfigured`가 `false`
 - 대기·거절 이벤트가 있음
 - `statePersistenceFailed`가 `true`
 - `lastError`가 있음
