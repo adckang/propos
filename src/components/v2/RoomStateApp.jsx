@@ -15,6 +15,12 @@ import { canonicalPropertyId, planPropertyIdentity, validatePropertyName } from 
 import { DATA_PROFILE, normalizeDataProfile } from '../../config/dataProfile.js';
 import { measuredPreparationState } from '../../domain/preStayOptimizationDomain.js';
 import { toMonitoringReservation, usableReservations } from '../../domain/monitoringReservationDomain.js';
+import {
+  configuredDeviceEntities,
+  DEVICE_MAINTENANCE_HOURS,
+  normalizeDeviceMaintenanceUntil,
+  setDeviceMaintenanceHours,
+} from '../../domain/deviceMaintenanceDomain.js';
 
 const APP_DATA_PROFILE = normalizeDataProfile(import.meta.env.VITE_PROPOS_DATA_PROFILE, DATA_PROFILE.HYBRID);
 const USE_DEMO_DATA = APP_DATA_PROFILE === DATA_PROFILE.DEMO;
@@ -147,14 +153,19 @@ function cloudRowToLiveProperty(row) {
 // Pi에는 워처 메타데이터만 저장한다. 실제 숙소·예약·iCal 값은 보내지 않는다.
 async function putProperties(list) {
   try {
-    const watcherProperties = list.map(property => ({
-      id: property.id,
-      name: property.name,
-      district: property.district || '',
-      watcherId: property.watcherId ?? null,
-      devices: property.devices && typeof property.devices === 'object' ? property.devices : {},
-      ...(property.optimization ? { optimization: property.optimization } : {}),
-    }));
+    const watcherProperties = list.map(property => {
+      const devices = property.devices && typeof property.devices === 'object' ? property.devices : {};
+      const deviceMaintenanceUntil = normalizeDeviceMaintenanceUntil(property.deviceMaintenanceUntil, devices);
+      return {
+        id: property.id,
+        name: property.name,
+        district: property.district || '',
+        watcherId: property.watcherId ?? null,
+        devices,
+        ...(Object.keys(deviceMaintenanceUntil).length ? { deviceMaintenanceUntil } : {}),
+        ...(property.optimization ? { optimization: property.optimization } : {}),
+      };
+    });
     await fetch('/api/properties', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -196,6 +207,7 @@ function SettingsModal({ config, onSave, onClose }) {
     checkOutHour: 11,
     cleaningDurationHours: 2.5,
     devices: {},
+    deviceMaintenanceUntil: {},
   };
   const [form, setForm] = useState({
     ...initial,
@@ -203,9 +215,36 @@ function SettingsModal({ config, onSave, onClose }) {
   });
   const [loadingServer, setLoadingServer] = useState(false);
   const [showDevices, setShowDevices] = useState(false);
+  const [maintenanceEntity, setMaintenanceEntity] = useState('');
+  const [maintenanceHours, setMaintenanceHours] = useState(DEVICE_MAINTENANCE_HOURS[0]);
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
   const setDevice = (role, val) =>
     setForm(f => ({ ...f, _uiDevices: { ...f._uiDevices, [role]: val } }));
+  const uiDeviceMap = parseDeviceMap(form._uiDevices);
+  const maintenanceEntities = configuredDeviceEntities(uiDeviceMap);
+  const selectedMaintenanceEntity = maintenanceEntities.includes(maintenanceEntity)
+    ? maintenanceEntity
+    : maintenanceEntities[0] ?? '';
+  const activeMaintenance = normalizeDeviceMaintenanceUntil(form.deviceMaintenanceUntil, uiDeviceMap);
+
+  const addMaintenance = () => {
+    if (!selectedMaintenanceEntity) return;
+    setForm(f => ({
+      ...f,
+      deviceMaintenanceUntil: setDeviceMaintenanceHours(
+        f.deviceMaintenanceUntil,
+        parseDeviceMap(f._uiDevices),
+        selectedMaintenanceEntity,
+        maintenanceHours,
+      ),
+    }));
+  };
+
+  const removeMaintenance = (entityId) => setForm(f => {
+    const next = { ...normalizeDeviceMaintenanceUntil(f.deviceMaintenanceUntil, parseDeviceMap(f._uiDevices)) };
+    delete next[entityId];
+    return { ...f, deviceMaintenanceUntil: next };
+  });
 
   async function handleLoadServer() {
     setLoadingServer(true);
@@ -225,6 +264,7 @@ function SettingsModal({ config, onSave, onClose }) {
       district: watcher?.district ?? saved.district,
       watcherId: watcher?.watcherId ?? saved.watcherId,
       devices: watcher?.devices ?? saved.devices,
+      deviceMaintenanceUntil: watcher?.deviceMaintenanceUntil ?? saved.deviceMaintenanceUntil,
       optimization: watcher?.optimization ?? saved.optimization,
     };
     setForm(f => ({ ...f, ...merged, _uiDevices: formatDeviceMap(merged.devices ?? {}) }));
@@ -340,6 +380,29 @@ function SettingsModal({ config, onSave, onClose }) {
                   />
                 </div>
               ))}
+              {maintenanceEntities.length > 0 && (
+                <div style={{ borderTop: '1px solid #e2e8f0', marginTop: 10, paddingTop: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#4a5568', marginBottom: 6 }}>
+                    정기 재시작·펌웨어 작업 중 오프라인 감지 제외
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <select value={selectedMaintenanceEntity} onChange={e => setMaintenanceEntity(e.target.value)} style={{ minWidth: 0, flex: 1, fontSize: 11, border: '1px solid #cbd5e0', borderRadius: 7, padding: '5px 6px' }}>
+                      {maintenanceEntities.map(entityId => <option key={entityId} value={entityId}>{entityId}</option>)}
+                    </select>
+                    <select value={maintenanceHours} onChange={e => setMaintenanceHours(Number(e.target.value))} style={{ fontSize: 11, border: '1px solid #cbd5e0', borderRadius: 7, padding: '5px 6px' }}>
+                      {DEVICE_MAINTENANCE_HOURS.map(hours => <option key={hours} value={hours}>{hours}시간</option>)}
+                    </select>
+                    <button type="button" onClick={addMaintenance} style={{ border: '1px solid #cbd5e0', borderRadius: 7, background: '#fff', fontSize: 11, padding: '5px 8px', cursor: 'pointer' }}>적용</button>
+                  </div>
+                  {Object.entries(activeMaintenance).map(([entityId, until]) => (
+                    <div key={entityId} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 6, fontSize: 10, color: '#718096' }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entityId} · {new Date(until).toLocaleString('ko-KR')}까지</span>
+                      <button type="button" onClick={() => removeMaintenance(entityId)} style={{ border: 0, background: 'none', color: '#718096', padding: 0, cursor: 'pointer', flexShrink: 0 }}>해제</button>
+                    </div>
+                  ))}
+                  <div style={{ fontSize: 10, color: '#a0aec0', marginTop: 6 }}>종료 시각이 지나면 자동으로 다시 감시합니다.</div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -359,7 +422,8 @@ function SettingsModal({ config, onSave, onClose }) {
           }}>취소</button>
           <button onClick={() => {
             const { _uiDevices, ...rest } = form;
-            onSave({ ...rest, devices: parseDeviceMap(_uiDevices) });
+            const devices = parseDeviceMap(_uiDevices);
+            onSave({ ...rest, devices, deviceMaintenanceUntil: normalizeDeviceMaintenanceUntil(rest.deviceMaintenanceUntil, devices) });
           }} style={{
             flex: 2, border: '2px solid #2563eb', borderRadius: 10, padding: '10px 0',
             background: '#2563eb', fontSize: 14, fontWeight: 700, color: '#fff',
@@ -560,6 +624,7 @@ export default function RoomStateApp({ onBack }) {
           district: piCfg?.district ?? '',
           watcherId: piCfg?.watcherId ?? null,
           devices: piCfg?.devices ?? {},
+          deviceMaintenanceUntil: piCfg?.deviceMaintenanceUntil ?? {},
           optimization: piCfg?.optimization,
         }
         : null;
@@ -793,6 +858,7 @@ export default function RoomStateApp({ onBack }) {
     // Pi 워처에도 설정 전달 (areaName + district + devices) — 이벤트 property_id 도 이 이름으로 쌓인다
     postMonitoringConfig(
       { areaName: withId.name, district: withId.district, devices: withId.devices,
+        deviceMaintenanceUntil: withId.deviceMaintenanceUntil,
         ...(withId.optimization ? { optimization: withId.optimization } : {}) },
       withId.watcherId ?? null,
     );

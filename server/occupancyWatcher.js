@@ -35,11 +35,13 @@ import {
 } from '../src/domain/room-state/roomStateDomain.js';
 import { planMonitoringReservationUpdate } from '../src/domain/monitoringReservationDomain.js';
 import {
+  DEVICE_OFFLINE_ANOMALY_EVENT_TYPES,
   NOISE_ANOMALY_EVENT_TYPES,
   VACANT_ENERGY_SIGNAL_EVENT_TYPES,
 } from '../src/config/eventTypes.js';
 import { duePrechecks, handoffAlertMessage, latestPresenceEvidence, offDetectionSensors, offEntryDetectionSensors,
   precheckAlertMessage, precheckEventTime, upcomingTimes } from '../src/domain/sensorHealthDomain.js';
+import { buildDeviceAvailability } from '../src/domain/deviceMaintenanceDomain.js';
 
 const __dir    = dirname(fileURLToPath(import.meta.url));
 // 테스트는 PROPOS_DATA_DIR 로 임시 폴더를 지정해 실제 운영 기록(data/)을 덮어쓰지 않는다
@@ -530,6 +532,9 @@ async function processNow(now = Date.now()) {
     }
     const snap        = buildSnapshotFromStates(entityStateMap, now);
     const vacantEnergySources = buildVacantEnergySources(entityStateMap, config?.devices);
+    const deviceAvailability = buildDeviceAvailability(
+      entityStateMap, config?.devices, config?.deviceMaintenanceUntil, now,
+    );
     const reservation = buildReservation();
     const sensorsOff  = offDetectionSensors(entityStateMap);
     const entrySensorsOff = offEntryDetectionSensors(entityStateMap);
@@ -537,6 +542,7 @@ async function processNow(now = Date.now()) {
       snap, roomState, reservation, now, sensorsOff, entrySensorsOff,
       cleaning: config?.cleaning ?? null,
       vacantEnergySources,
+      deviceAvailability,
     });
 
     for (const event of events) {
@@ -551,6 +557,8 @@ async function processNow(now = Date.now()) {
       } else if (NOISE_ANOMALY_EVENT_TYPES.has(event.type)) {
         handleAnomalySignal(event);
       } else if (VACANT_ENERGY_SIGNAL_EVENT_TYPES.has(event.type)) {
+        handleAnomalySignal(event);
+      } else if (DEVICE_OFFLINE_ANOMALY_EVENT_TYPES.has(event.type)) {
         handleAnomalySignal(event);
       } else if (event.type === 'vacant_energy_waste_resolved' && !isValidTransition(roomState, event.type)) {
         // 입실 준비 등으로 객실 상태가 먼저 바뀌었어도 서버의 해결 기록은 잃지 않는다.
@@ -663,6 +671,16 @@ async function flushPreparationOutbox() {
             ? payload.device_time
             : Date.parse(payload.device_time),
           abandon: anomaly.abandon === true,
+        });
+      } else if (payload.type === 'device_online_normal') {
+        const anomaly = acknowledgement.anomaly;
+        if (typeof anomaly?.complete !== 'boolean' || typeof anomaly?.entityId !== 'string') return;
+        if (!anomaly.complete && !Number.isFinite(Date.parse(anomaly.eligibleAt))) return;
+        monitor.acknowledgeDeviceOnline({
+          entityId: anomaly.entityId,
+          normalStartedAt: Date.parse(payload.data?.normalStartedAt),
+          complete: anomaly.complete,
+          eligibleAt: anomaly.eligibleAt,
         });
       }
       // Retrying the original occurrence timestamp preserves the existing DB

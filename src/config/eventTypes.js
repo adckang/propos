@@ -38,6 +38,11 @@ export const EVENT_TYPES = Object.freeze({
   NOISE_THRESHOLD_SUSTAINED: "noise_threshold_sustained",
   NOISE_THRESHOLD_NORMAL: "noise_threshold_normal",
   NOISE_TRACKING_ENDED: "noise_tracking_ended",
+  // RF-25 기기 오프라인 정본 신호 — 옛 감지 센서 사전 점검과 별도
+  DEVICE_OFFLINE_DETECTED: "device_offline_detected",
+  DEVICE_OFFLINE_RECURRED: "device_offline_recurred",
+  DEVICE_ONLINE_NORMAL: "device_online_normal",
+  DEVICE_OFFLINE_TRACKING_REMOVED: "device_offline_tracking_removed",
   CHECKIN_PREP_TIME_REACHED: "checkin_prep_time_reached",
   OPTIMIZATION_FINISHED: "optimization_finished",
   OPTIMIZATION_FAILED: "optimization_failed",
@@ -76,6 +81,13 @@ export const VACANT_ENERGY_SIGNAL_EVENT_TYPES = new Set([
   "vacant_energy_waste_recurred",
   "vacant_energy_waste_normal",
   "vacant_energy_tracking_ended",
+]);
+
+export const DEVICE_OFFLINE_ANOMALY_EVENT_TYPES = new Set([
+  "device_offline_detected",
+  "device_offline_recurred",
+  "device_online_normal",
+  "device_offline_tracking_removed",
 ]);
 
 export const SOFT_EVENT_TYPES = new Set([

@@ -7,6 +7,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { normalizeDeviceMaintenanceUntil } from '../src/domain/deviceMaintenanceDomain.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.PROPOS_DATA_DIR || join(__dir, '..', 'data');
@@ -35,12 +36,15 @@ function toWatcherProperty(property) {
   const id = String(property.id ?? property.property_id ?? '').trim();
   const name = String(property.name ?? id).trim();
   if (!id && !name) return null;
+  const devices = property.devices && typeof property.devices === 'object' ? property.devices : {};
+  const deviceMaintenanceUntil = normalizeDeviceMaintenanceUntil(property.deviceMaintenanceUntil, devices);
   return {
     id: id || name,
     name: name || id,
     district: String(property.district ?? '').trim(),
     watcherId: property.watcherId ?? property.watcher_id ?? null,
-    devices: property.devices && typeof property.devices === 'object' ? property.devices : {},
+    devices,
+    ...(Object.keys(deviceMaintenanceUntil).length ? { deviceMaintenanceUntil } : {}),
     ...(property.optimization && typeof property.optimization === 'object' ? { optimization: property.optimization } : {}),
   };
 }

@@ -184,4 +184,33 @@ describe('actual SettingsModal — "load server defaults"', () => {
     button('저장 및 동기화').props.onClick();
     assert.equal(saves[0].name, '내 숙소', 'the form still holds the blank defaults');
   });
+
+  test('keeps the time-bounded restart/firmware exclusion inside the folded HA settings', async t => {
+    const f = await roomStateAppFixture({ route: server({}) });
+    t.after(() => f.restore());
+    const saves = [];
+    const props = {
+      config: { name: '파주201', district: '파주', watcherId: 'watcher1', airbnbIcalUrl: ICAL,
+        checkInHour: 15, checkOutHour: 10, cleaningDurationHours: 3,
+        devices: { LIGHT_LIVING: 'light.a' }, deviceMaintenanceUntil: {} },
+      onSave: cfg => saves.push(cfg), onClose: () => {},
+    };
+    const button = (tree, label) => nodes(tree).find(n => n.type === 'button' && text(n).includes(label));
+    let tree = f.renderModal(props);
+    assert.ok(!text(tree).includes('펌웨어 작업 중 오프라인 감지 제외'), 'collapsed by default');
+    button(tree, 'HA 기기 매핑').props.onClick();
+    tree = f.renderModal(props);
+    assert.ok(text(tree).includes('펌웨어 작업 중 오프라인 감지 제외'));
+    const selects = nodes(tree).filter(n => n.type === 'select');
+    assert.equal(selects[0].props.value, 'light.a');
+    selects[1].props.onChange({ target: { value: '4' } });
+    tree = f.renderModal(props);
+    const before = Date.now();
+    button(tree, '적용').props.onClick();
+    tree = f.renderModal(props);
+    assert.ok(text(tree).includes('light.a'));
+    button(tree, '저장 및 동기화').props.onClick();
+    const until = Date.parse(saves[0].deviceMaintenanceUntil['light.a']);
+    assert.ok(until >= before + 4 * 60 * 60_000 && until <= Date.now() + 4 * 60 * 60_000);
+  });
 });

@@ -19,12 +19,14 @@ import { notifyEvent } from "../../server/slackNotifier.js";
 import { hasWatcherSecret } from "../../server/watcherAuth.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 import {
+  DEVICE_OFFLINE_ANOMALY_EVENT_TYPES,
   NOISE_ANOMALY_EVENT_TYPES,
   OPERATOR_ALERT_EVENT_TYPES,
   VACANT_ENERGY_ANOMALY_EVENT_TYPES,
 } from "../../src/config/eventTypes.js";
 import { reconcileNoiseSignal } from "../../server/noiseAnomalies.js";
 import { reconcileVacantEnergySignal } from "../../server/vacantEnergyAnomalies.js";
+import { reconcileDeviceOfflineSignal } from "../../server/deviceOfflineAnomalies.js";
 
 import { requireScope } from "../../server/auth/operatorAuth.js";
 import { canAccessProperty, scopeQueryIds } from "../../server/auth/operatorAccounts.js";
@@ -121,7 +123,8 @@ export default async function handler(req, res) {
       let anomalyResult = null;
       let storedEventId = result.id;
       const isAnomalySignal = NOISE_ANOMALY_EVENT_TYPES.has(type)
-        || VACANT_ENERGY_ANOMALY_EVENT_TYPES.has(type);
+        || VACANT_ENERGY_ANOMALY_EVENT_TYPES.has(type)
+        || DEVICE_OFFLINE_ANOMALY_EVENT_TYPES.has(type);
       if (isAnomalySignal) {
         if (!storedEventId) {
           const { rows: [stored] } = await db.query(
@@ -133,7 +136,9 @@ export default async function handler(req, res) {
         if (!storedEventId) throw new Error("저장된 이상 신호를 찾을 수 없습니다");
         const reconcile = NOISE_ANOMALY_EVENT_TYPES.has(type)
           ? reconcileNoiseSignal
-          : reconcileVacantEnergySignal;
+          : VACANT_ENERGY_ANOMALY_EVENT_TYPES.has(type)
+            ? reconcileVacantEnergySignal
+            : reconcileDeviceOfflineSignal;
         anomalyResult = await reconcile(db, {
           eventId: storedEventId,
           propertyId: property_id,
