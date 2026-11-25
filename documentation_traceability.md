@@ -101,11 +101,11 @@ flowchart LR
 
 | 구분 | 연결 근거 |
 | --- | --- |
-| 정책·설계 | [report-architecture.md](docs/report-architecture.md), [reporting-feature-design.md](docs/reporting-feature-design.md), [D-026](.claude/rules/decisions.md) |
+| 정책·설계 | DEC-02·RF-26([docs/refactoring.md 6절](docs/refactoring.md#rules)), [report-architecture.md 6-1](docs/report-architecture.md#safety-index), [reporting-feature-design.md](docs/reporting-feature-design.md), 표 문구의 출발점 [D-026](.claude/rules/decisions.md) |
 | 실행 코드 | [stats API](api/stats.js), [reportingService.js](src/application/reportingService.js), [reportingDomain.js](src/domain/reportingDomain.js), [operationalMetricsDomain.js](src/domain/operationalMetricsDomain.js) |
 | 데이터·외부 | Postgres `events`, `cleaning_jobs`, `property_reservations` |
-| 검증 | [s23.stats-service.test.js](tests/unit/s23.stats-service.test.js), [s48.current-state-from-events.test.js](tests/unit/s48.current-state-from-events.test.js), [s62.operational-metrics-summary.test.js](tests/unit/s62.operational-metrics-summary.test.js) |
-| 문서 갭 | [MD-R05](refactoring_mdfile.md#md-r05): 현재 7개 운영 지표 평균과 과거 자동 해결률, [MD-R10](refactoring_mdfile.md#md-r10): 월간 범위, [MD-R20](refactoring_mdfile.md#md-r20): 계산 규칙 중복 |
+| 검증 | [s23.stats-service.test.js](tests/unit/s23.stats-service.test.js), [s48.current-state-from-events.test.js](tests/unit/s48.current-state-from-events.test.js), [s62.operational-metrics-summary.test.js](tests/unit/s62.operational-metrics-summary.test.js), [s124.rf26-rate-eligibility.test.js](tests/unit/s124.rf26-rate-eligibility.test.js) |
+| 문서 갭 | [MD-R05](refactoring_mdfile.md#md-r05) 종결(DEC-02 — 판정 기록이 없는 4개 지표 제외, 자동화 개선율은 별도), [MD-R10](refactoring_mdfile.md#md-r10): 월간 범위, [MD-R20](refactoring_mdfile.md#md-r20): 계산 규칙 중복 |
 
 ### TR-06 · 인증과 숙소 권한
 
@@ -115,7 +115,7 @@ flowchart LR
 | 실행 코드 | [operatorAuth.js](server/auth/operatorAuth.js), [operatorAccounts.js](server/auth/operatorAccounts.js), `requireScope`, `guardAdmin` 호출 API |
 | 데이터·외부 | 운영자 계정·숙소 범위 테이블, 서명 세션 쿠키, `PROPOS_AUTH_MODE` 환경 설정 |
 | 검증 | [s76.operator-auth.test.js](tests/unit/s76.operator-auth.test.js), [s78.operator-scope-handlers.test.js](tests/unit/s78.operator-scope-handlers.test.js), [s79.operator-device-scope.test.js](tests/unit/s79.operator-device-scope.test.js) |
-| 문서 갭 | [MD-R13](refactoring_mdfile.md#md-r13): 단일 관리자 가정, [MD-R26](refactoring_mdfile.md#md-r26): 구현된 권한과 운영 강제 여부 구분 |
+| 문서 갭 | [MD-R13](refactoring_mdfile.md#md-r13): 단일 관리자 가정, [MD-R26](refactoring_mdfile.md#md-r26): 운영 관측(2026-11-10~14)상 `enforce` — 날짜 없는 “강제됨” 표현은 피함 |
 
 ### TR-07 · 운영 스케줄과 하위 작업
 
@@ -158,7 +158,7 @@ flowchart LR
 | 실행 코드 | [main.jsx](src/main.jsx), [App.jsx](src/components/App.jsx), [AuthGate.jsx](src/components/AuthGate.jsx), [RoomStateApp.jsx](src/components/v2/RoomStateApp.jsx), [worker-app](worker-app) |
 | API·데이터 | `/api/auth/*`, `/api/stats*`, `/api/cleaning/*`, `/api/workers/*`, 운영자·숙소 scope와 Room State read model |
 | 검증 | [s76.operator-auth.test.js](tests/unit/s76.operator-auth.test.js), [s79.operator-device-scope.test.js](tests/unit/s79.operator-device-scope.test.js), [s31.worker-app-flow.test.js](tests/unit/s31.worker-app-flow.test.js) |
-| 운영 근거 한계 | 저장소의 화면·권한 구현을 설명하며, 실제 `PROPOS_AUTH_MODE`·설치 앱·외부 연결 상태는 별도 날짜 근거가 필요 |
+| 운영 근거 한계 | 저장소의 화면·권한 구현을 설명하며, 설치 앱·외부 연결 상태는 별도 날짜 근거가 필요. 인증 모드는 [MD-R26](refactoring_mdfile.md#md-r26)의 2026-11-10~14 관측 |
 | 문서 갭 | [MD-R13](refactoring_mdfile.md#md-r13): 관리자 수, [MD-R26](refactoring_mdfile.md#md-r26): 인증 강제 여부, [MD-R28](refactoring_mdfile.md#md-r28): 수락·예약·ASSIGNED 의미 |
 
 <a id="tr-11"></a>
@@ -195,9 +195,9 @@ flowchart LR
 
 | 우선순위 | 갭 | 다음 판정 위치 |
 | --- | --- | --- |
-| 1 | FCM 운영 정책과 SMS 선택 가능 코드, 날짜별 활성 채널 관측을 한 문장으로 섞으면 안 됨 | [MD-R07](refactoring_mdfile.md#md-r07) |
-| 2 | 현재 안심지수 구현과 `안심지수`라는 제품 명칭의 최종 의미는 별도 문제임 | [MD-R05](refactoring_mdfile.md#md-r05), `docs/refactoring.md` DEC-02 |
-| 3 | 인증 기능 존재와 운영 `enforce` 활성은 별도 증거가 필요함 | [MD-R26](refactoring_mdfile.md#md-r26) |
+| 1 | 정책은 앱 푸시만(ACT-11)인데 코드에 SMS 선택 경로가 남은 정책-구현 불일치. 날짜별 활성 채널 관측과도 섞지 않음 | [MD-R07](refactoring_mdfile.md#md-r07) |
+| 2 | ~~현재 안심지수 구현과 제품 명칭의 최종 의미~~ — 종결: DEC-02로 정의 확정, 자동화 개선율은 별도 | [MD-R05](refactoring_mdfile.md#md-r05) |
+| 3 | 인증 기능 존재와 운영 `enforce` 활성은 별도 증거가 필요함 — 2026-11-10~14 운영 관측 있음 | [MD-R26](refactoring_mdfile.md#md-r26) |
 | 4 | 등록된 cron 두 개와 handler 내부의 여러 작업을 같은 주기로 설명하면 안 됨 | [MD-R09](refactoring_mdfile.md#md-r09) |
 | 5 | 외부 예약 원천과 내부 Postgres 원장의 정본 범위를 구분해야 함 | [MD-R01](refactoring_mdfile.md#md-r01) |
 | 6 | 현재 API 오류 형식과 아직 구현되지 않은 공통 오류·로그 목표를 같은 표준처럼 설명하면 안 됨 | [MD-R27](refactoring_mdfile.md#md-r27) |

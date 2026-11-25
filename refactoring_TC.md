@@ -1,6 +1,6 @@
 # PROPOS Test Case Refactoring Plan
 
-> 상태: 계획 수립 완료 · 테스트 리팩터링 미실행  
+> 상태: 계획 · 일부 선행 처리됨 — 테스트 안전(RF-23·42·43)과 로직 복사·소스 글자 검사 교체(ACT-08)는 `docs/refactoring.md` 작업으로 끝났다. 구조 정리(TC ID·수준 분류·gate)는 미실행. 상태 동기화 2026-11-26([sync_md.md](sync_md.md))  
 > 작성일: 2026-11-17 (Asia/Seoul)  
 > 목적: 현재 TC와 자동화 테스트를 사용자 시나리오·인터페이스·데이터·오류 구조에 맞춰 찾기 쉽고 안전한 체계로 재구성한다.  
 > 대상 독자: 개발자, QA, 기획자, 운영 담당자  
@@ -82,7 +82,8 @@ TC를 다음 순서로 추적할 수 있게 만든다.
 | `npm test` | unit 123 + functional 5, Node test runner, production fetch trap | integration·browser·live 제외 |
 | `npm run test:integration` | `tests/integration/*.test.js` | 환경이 없으면 일부 suite skip; CI 기본 gate 아님 |
 | `npm run test:smoke` | Playwright + preview server + fixture API | CI와 `verify:all`에 포함 |
-| `npm run test:e2e` | Playwright + dev server + `tests/e2e` | CI와 `verify:all`에 미포함; live Node 파일과 discovery 충돌 |
+| `npm run test:e2e` | Playwright + 데모 전용 dev server(5174, 기존 서버 재사용 안 함) + `tests/e2e/*.spec.js` | CI와 `verify:all`에 미포함. 실제 HA 시험(E2E-003)은 `RUN_LIVE_HA=1` 등을 명시할 때만 |
+| `npm run test:connectivity` | s37 Node 외부 연결 시험(DB·Google·KV·Slack·운영 웹훅) | `RUN_LIVE_CONNECTIVITY=1` 없으면 요청 없이 전부 skip. KV·Slack·웹훅 쓰기 포함. CI·`verify:all` 미포함 |
 | `npm run verify:scenarios` | S01~S05 registry→컴포넌트·서비스·UML·functional·smoke 연결 | 현재 SCN-01~07 전체를 포괄하지 않음 |
 | `npm run verify:all` | unit+functional, scenario, deploy, dist, smoke | 이름과 달리 integration·E2E·live는 포함하지 않음 |
 | GitHub CI | `npm test`, scenario, deploy, dist, smoke | integration·E2E 실행 없음 |
@@ -93,7 +94,9 @@ TC를 다음 순서로 추적할 수 있게 만든다.
 - 저장 파일을 쓰는 watcher 시험은 [isolateDataDir.js](tests/helpers/isolateDataDir.js)로 임시 경로를 사용한다.
 - integration HA helper는 기본적으로 fixture 호스트만 허용하고 `RUN_LIVE_HA=1`일 때만 실제 연결을 선택한다.
 - smoke는 모든 `/api/*` 요청을 fixture 응답 또는 read-only 403으로 가로챈다.
-- 하지만 이 안전장치가 모든 runner와 live test에 동일하게 적용되는 것은 아니다.
+- e2e 화면 시험은 데모 전용 dev 서버에서 돌고, 브라우저에서도 운영 주소·쓰기 요청을 막는다(RF-43 `86afce1`).
+- s37 외부 연결 시험과 실제 HA 화면 시험은 명시적 허락 변수 없이는 켜지지 않는다. [s128](tests/unit/s128.test-runner-classification.test.js)이 두 실행기가 섞이지 않는지 실제로 실행해 확인한다(RF-42 `c58fbdd`).
+- 다만 `npm run test:integration`에는 운영 주소 차단 장치가 걸리지 않는 등, 모든 runner에 같은 정책이 적용되는 것은 아니다(TC-R06).
 
 ---
 
@@ -103,18 +106,18 @@ TC를 다음 순서로 추적할 수 있게 만든다.
 
 ### 4.1 P0 · 먼저 해결할 안전·gate 문제 [SAFETY]
 
-| ID | 발견 | 위험 | 목표 |
-| --- | --- | --- | --- |
-| TC-R01 | [s37.live-connectivity.test.js](tests/e2e/s37.live-connectivity.test.js)는 Node `node:test` 기반 live probe인데 Playwright `testDir` 안에 있음 | Playwright discovery가 파일을 import하면서 외부 검사를 실행할 수 있음 | live probe를 일반 discovery에서 완전히 분리 |
-| TC-R02 | `npx playwright test --list --config playwright.e2e.config.mjs` 실행만으로 s37 suite가 로드되어 프로덕션 GET/POST를 시도함 | 목록 조회가 side effect를 일으키며 안전한 dry-run이 아님 | `--list`·test discovery는 외부 I/O 0 보장 |
-| TC-R03 | s37은 “읽기 전용”이라고 설명하지만 KV SET/DEL, Slack POST, webhook POST가 포함됨 | 문서와 실제 외부 효과가 다름 | read-only probe와 write probe를 분리하고 write는 별도 승인·cleanup 필요 |
-| TC-R04 | `verify:all`과 CI가 integration·E2E를 실행하지 않음 | 전체 검증 통과가 전체 테스트 통과로 오해됨 | gate 이름과 실제 범위를 일치시키거나 `verify:full` 신설 |
-| TC-R05 | integration은 환경이 없으면 여러 suite가 skip됨 | exit 0만 보고 실제 SQL·실연동 검증이 실행됐다고 오해 | 실행·통과·skip 수와 이유를 gate 결과에 표시 |
-| TC-R06 | production fetch trap은 `npm test`에만 적용됨 | runner별 외부 호출 정책이 다르고 신규 테스트가 잘못된 gate에 들어갈 수 있음 | isolated gate 공통 network deny, live만 allowlist |
+| ID | 발견 | 위험 | 목표 | 상태(2026-11-26) |
+| --- | --- | --- | --- | --- |
+| TC-R01 | [s37.live-connectivity.test.js](tests/e2e/s37.live-connectivity.test.js)는 Node `node:test` 기반 live probe인데 Playwright `testDir` 안에 있음 | Playwright discovery가 파일을 import하면서 외부 검사를 실행할 수 있음 | live probe를 일반 discovery에서 완전히 분리 | 해결 · RF-42 `c58fbdd` — Playwright는 `*.spec.js`만 수집. 파일 위치는 그대로 |
+| TC-R02 | `npx playwright test --list --config playwright.e2e.config.mjs` 실행만으로 s37 suite가 로드되어 프로덕션 GET/POST를 시도함 | 목록 조회가 side effect를 일으키며 안전한 dry-run이 아님 | `--list`·test discovery는 외부 I/O 0 보장 | 해결 · RF-42 — s128이 실제 실행으로 확인 |
+| TC-R03 | s37은 “읽기 전용”이라고 설명하지만 KV SET/DEL, Slack POST, webhook POST가 포함됨 | 문서와 실제 외부 효과가 다름 | read-only probe와 write probe를 분리하고 write는 별도 승인·cleanup 필요 | 부분 · 설명은 “쓰기 포함”으로 정정, `RUN_LIVE_CONNECTIVITY=1` 없이는 안 돎. 읽기·쓰기 분리는 아직 |
+| TC-R04 | `verify:all`과 CI가 integration·E2E를 실행하지 않음 | 전체 검증 통과가 전체 테스트 통과로 오해됨 | gate 이름과 실제 범위를 일치시키거나 `verify:full` 신설 | 유효 |
+| TC-R05 | integration은 환경이 없으면 여러 suite가 skip됨 | exit 0만 보고 실제 SQL·실연동 검증이 실행됐다고 오해 | 실행·통과·skip 수와 이유를 gate 결과에 표시 | 유효 |
+| TC-R06 | production fetch trap은 `npm test`에만 적용됨 | runner별 외부 호출 정책이 다르고 신규 테스트가 잘못된 gate에 들어갈 수 있음 | isolated gate 공통 network deny, live만 allowlist | 부분 · e2e는 브라우저 차단 추가(RF-43). integration은 차단 없음 |
 
-#### 2026-11-17 관측
+#### 2026-11-17 관측 (과거 — RF-42에서 해결)
 
-`npx playwright test --list --config playwright.e2e.config.mjs`는 Playwright TC 4개만 목록에 표시했지만, 목록 작성 과정에서 s37의 Node suite를 실행하고 프로덕션 API 요청을 시도했다. 이 관측은 TC-R01~03의 재현 근거이며 같은 명령을 안전장치 없이 반복하지 않는다.
+`npx playwright test --list --config playwright.e2e.config.mjs`는 Playwright TC 4개만 목록에 표시했지만, 목록 작성 과정에서 s37의 Node suite를 실행하고 프로덕션 API 요청을 시도했다. 이 관측은 TC-R01~03의 재현 근거였다. RF-42 이후에는 목록 조회가 s37을 불러오지 않는다.
 
 ### 4.2 P1 · 식별·분류·유지보수 문제 [ID] [LAYER]
 
@@ -126,6 +129,8 @@ TC를 다음 순서로 추적할 수 있게 만든다.
 | TC-R10 | `tests/e2e`에 browser E2E와 live connectivity가 혼재 | runner와 안전 정책 충돌 | browser와 live 디렉터리·명령 분리 |
 | TC-R11 | 큰 테스트 파일이 여러 업무 계약을 함께 소유 | 한 변경이 넓은 fixture와 긴 파일 탐색을 요구 | 계약 경계에 따라 점진 분리 |
 | TC-R12 | source 문자열·정규식 검사와 실행 동작 검사가 같은 “unit”으로 보임 | 구현 모양 검사가 실제 동작 보장처럼 읽힘 | `static contract`와 `behavior`를 명시 |
+
+**2026-11-26:** TC-R09·R12는 ACT-08(2026-11-17~19)로 일부 해소됐다 — 로직을 복사한 시험과 소스 글자 검사 일부를 실제 코드를 실행하는 시험으로 바꿨다. 남은 소스 글자 검사는 TCR-03에서 T0로 분류한다.
 
 대표 대형 파일:
 
@@ -319,6 +324,8 @@ TCR-02에서 별도 승인을 받아 machine-readable registry를 만든다. 이
 
 목표: 일반 test discovery와 실제 외부 연결을 분리한다.
 
+**상태(2026-11-26): 대부분 끝남.** 1번(Playwright·일반 glob에서 제외)과 5번(목록 조회 외부 I/O 0 회귀 시험 [s128](tests/unit/s128.test-runner-classification.test.js))은 RF-42 `c58fbdd`, 화면 시험의 데모 전용 서버는 RF-43 `86afce1`에서 처리했다. 2번은 전용 명령(`test:connectivity`)만 생기고 파일은 `tests/e2e`에 그대로다. 남은 것은 3·4번(읽기/쓰기 분리, 쓰기 대상·정리 확인)과 6번(실행·skip·정리 결과 기록)이다.
+
 작업:
 
 1. s37을 Playwright `testDir`과 일반 test glob에서 제외한다.
@@ -393,6 +400,8 @@ TCR-02에서 별도 승인을 받아 machine-readable registry를 만든다. 이
 ### TCR-05 · 중복 제거와 대형 suite 분리
 
 목표: 같은 계약의 반복을 줄이고 실패 위치를 선명하게 한다.
+
+참고: ACT-08(2026-11-17~19)이 이 단계의 일부를 먼저 했다 — 로직을 복사한 시험을 실제 코드 시험으로 바꾸고, 바꾼 시험이 결함을 잡는지 변형 검사로 확인했다.
 
 작업:
 
@@ -473,14 +482,14 @@ TCR-02에서 별도 승인을 받아 machine-readable registry를 만든다. 이
 
 | 순서 | 항목 | 이유 | 선행 조건 |
 | ---: | --- | --- | --- |
-| 1 | TC-R01~03 · s37 discovery 격리 | 목록 조회만으로 외부 호출 가능 | 사용자 승인 후 test/config 수정 |
+| 1 | ~~TC-R01~03 · s37 discovery 격리~~ — R01·02 해결(RF-42), R03은 읽기/쓰기 분리만 남음 | 목록 조회만으로 외부 호출 가능했음 | — |
 | 2 | TC-R04~06 · gate·skip·network 정책 확정 | “전체 통과” 의미부터 고정해야 함 | 현재 명령 baseline |
 | 3 | TC-R07~10 · ID와 level 부여 | 이후 이동·분리의 기준 | registry schema 승인 |
 | 4 | env/network/DB helper 통합 | 순서 의존·운영 접근 예방 | level 분류 |
 | 5 | 대형 suite·중복 TC 정리 | 안전한 분류 뒤에 해야 회귀 손실을 막음 | TC ID와 대체 근거 |
 | 6 | CI·artifact·문서 연결 | 구조가 안정된 뒤 최종 gate 적용 | 명령과 registry 완성 |
 
-첫 구현 단위는 **TCR-00 + TCR-01**이 적절하다. 파일 전체 이름 변경이나 144개 TC 재배치는 첫 작업으로 하지 않는다.
+첫 구현 단위는 **TCR-00 + TCR-01의 남은 부분(s37 읽기/쓰기 분리)**이 적절하다. 파일 전체 이름 변경이나 144개 TC 재배치는 첫 작업으로 하지 않는다.
 
 ---
 
@@ -497,7 +506,8 @@ TCR-02에서 별도 승인을 받아 machine-readable registry를 만든다. 이
 7. 파일 이동 전 전체 링크와 `docs/refactoring.md`의 근거 링크 영향을 조사한다.
 8. 테스트 수·통과 수 같은 시점 값은 자동 artifact 한 곳에서만 관리한다.
 9. TC 설명은 registry가, 대표 추적은 `documentation_traceability.md`가 소유한다.
-10. 이 계획의 진행 상태는 이 파일에서만 관리하고 소스 리팩터링 상태와 섞지 않는다.
+10. 이 계획(구조 정리)의 진행 상태는 이 파일에서 관리한다. 테스트가 운영에 닿는 것 같은 안전 결함은 발견 즉시 `docs/refactoring.md`의 RF로 고친다(RF-23·42·43처럼).
+11. 테스트는 실제 코드를 실행한다. 테스트 안에 업무 로직을 복사하지 않는다(`docs/refactoring.md` 7절).
 
 ---
 
@@ -525,11 +535,11 @@ TCR-02에서 별도 승인을 받아 machine-readable registry를 만든다. 이
 
 ## 11. 다음 작업
 
-다음 단계는 **TCR-00 기준점 고정과 TCR-01 live probe 격리 설계**다.
+다음 단계는 **TCR-00 기준점 고정과 TCR-01의 남은 부분(s37 읽기/쓰기 분리)**이다.
 
 실행 전 결정할 것:
 
-1. live probe 파일 이동과 Playwright config 수정 허용 여부
+1. live probe 파일을 `tests/e2e`에서 별도 위치로 옮길지 (Playwright config 수정은 RF-42에서 이미 했다)
 2. live write(KV·Slack·webhook)를 계속 유지할지, read-only로 바꿀지
 3. 새 TC registry 형식을 YAML로 할지 JSON으로 할지
 4. `verify:all`을 확장할지 `verify:pr`/`verify:full`로 나눌지

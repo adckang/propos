@@ -25,7 +25,7 @@ PROPOS에서 `ADMIN`과 `OPERATOR`는 서버가 식별하는 **인증 역할**�
 | 업무 역할 | 청소 담당자 | Worker App에서 요청을 받고 예약·거절·협의를 수행 | 웹 `OPERATOR`와 다른 앱·인증·업무 흐름 |
 | 업무 역할 | 게스트 | 예약·체크인·체류·체크아웃의 대상이자 이벤트 발생 주체 | 운영 웹이나 Worker App의 로그인 사용자가 아님 |
 
-현재 인증 동작은 `PROPOS_AUTH_MODE`에 의존한다. `off`·`log`에서는 전체 scope를 허용하고, `enforce`일 때 세션 인증이 실제 접근을 막는다. 따라서 코드에 로그인 화면이 있다는 사실만으로 특정 배포에서 인증이 강제된다고 단정하지 않는다. 근거: [operatorAuth.js](server/auth/operatorAuth.js), [AuthGate.jsx](src/components/AuthGate.jsx).
+현재 인증 동작은 `PROPOS_AUTH_MODE`에 의존한다. `off`·`log`에서는 전체 scope를 허용하고, `enforce`일 때 세션 인증이 실제 접근을 막는다. 따라서 코드에 로그인 화면이 있다는 사실만으로 특정 배포에서 인증이 강제된다고 단정하지 않는다. 운영(`www.proposonline.com`)은 2026-11-10~14 관측에서 로그인 없는 API 호출이 401로 거절돼 그 시점에 `enforce`였다([MD-R26](refactoring_mdfile.md#md-r26)). 근거: [operatorAuth.js](server/auth/operatorAuth.js), [AuthGate.jsx](src/components/AuthGate.jsx).
 
 ---
 
@@ -454,7 +454,7 @@ flowchart LR
 
 | ID | 항목 | 현재 처리 |
 | --- | --- | --- |
-| LIMIT-01 | 실제 배포에서 `PROPOS_AUTH_MODE`가 무엇인지 | 운영 환경 근거 없이는 확정하지 않음 |
+| LIMIT-01 | 실제 배포에서 `PROPOS_AUTH_MODE`가 무엇인지 | 운영 관측(2026-11-10~14): 로그인 없는 호출 401 → `enforce`. 환경변수 값 자체는 확인하지 않음([MD-R26](refactoring_mdfile.md#md-r26)) |
 | LIMIT-02 | host를 별도 계정 역할로 둘지 | 현재 구현에 없으므로 제품 결정으로 남김 |
 | LIMIT-03 | Worker “수락”의 내부 확정 시점 | [런타임 SEQ-03](runtime_interfaces_and_collaboration.md#seq-03)에서 단계별로 구분 |
 | LIMIT-04 | UI v1/v2의 최종 유지 범위 | 현재 공존 상태만 기록하고 임의 통합하지 않음 |

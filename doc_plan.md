@@ -1,6 +1,6 @@
 # PROPOS 통합 도큐멘테이션 유지보수 계획
 
-> 상태: DP-00~DP-07 완료  
+> 상태: DP-00~DP-07 완료 · DP-08(2026-11-17 이후 변경 동기화) 진행 중 — [sync_md.md](sync_md.md)  
 > 최초 작성: 2026-11-16 · 중복 제거 갱신: 2026-11-17 (Asia/Seoul)  
 > 목적: 완성 문서의 내용을 복제하지 않고, 문서 소유권·작업 순서·검증 결과만 관리한다.  
 > 단일 시작점: [design_overview.md](design_overview.md)  
@@ -65,13 +65,15 @@
 - `error_observability.md`
 - `documentation_traceability.md`
 - `refactoring_mdfile.md`
+- `refactoring_TC.md`
 - `doc_plan.md`
+- `sync_md.md` (DP-08 동안만 두는 임시 작업 목록)
 
 ### 수정 금지
 
 - 제품 소스·테스트·설정·DB
 - Claude가 작업하는 `docs/refactoring.md`
-- 기존 분야별 Markdown
+- 기존 분야별 Markdown — 정정은 `docs/refactoring.md`의 작업으로 한다(ACT-08 QA-01 1~4차, 2026-11-19가 그렇게 했다). 예외: 통합 문서가 따르는 규칙의 정본이 틀렸을 때만 최소로 고친다(DP-08의 SM-04 — `room-state-machine.md` 0절의 Pi 반영 표시)
 - 제품 동작·정책·UI 문구
 
 기존 분야별 Markdown의 중복은 [MD-R16~20](refactoring_mdfile.md#duplicates)에서 기록만 하고, 별도 승인 전에는 수정하지 않는다.
@@ -92,6 +94,7 @@
 | DP-05 | 단일 허브 조립 | 완료 |
 | DP-06 | 링크·앵커·Mermaid·범위 검증 | 완료 |
 | DP-07 | 통합 문서 중복 제거·소유권 고정 | 완료 |
+| DP-08 | 2026-11-17 이후 리팩토링 결과와 통합 문서 동기화 | 진행 중 · [sync_md.md](sync_md.md) |
 
 ### DP-07 · 2026-11-17
 
@@ -158,6 +161,6 @@
 
 ## 7. 다음 작업
 
-통합 문서 내부 중복 제거는 완료됐다. 다음 후보는 기존 분야별 문서의 [MD-R16~20](refactoring_mdfile.md#duplicates)이지만, 현재 수정 금지 범위이므로 승인 전에는 실행하지 않는다.
+지금은 DP-08을 [sync_md.md](sync_md.md)의 단계 순서대로 진행한다. 통합 문서 내부 중복 제거는 완료됐다. 그다음 후보는 기존 분야별 문서의 [MD-R16~20](refactoring_mdfile.md#duplicates)이지만, 현재 수정 금지 범위이므로 승인 전에는 실행하지 않는다.
 
 새 코드·정책 변경이 생기면 [5. 이후 유지보수 순서](#maintenance-flow)에 따라 상세 소유 문서 하나부터 갱신한다.

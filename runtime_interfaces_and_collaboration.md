@@ -305,7 +305,7 @@ DEMO profile에서는 HA·monitoring·camera 운영 접근이 403이다. OPERATO
 | IF-EXT04 | Home Assistant | state·history·template 결과 | service·state·template 요청 | HA URL/token은 서버 환경 | area scope 확인 실패와 HA 연결 실패를 403/503으로 구분하는 route 존재 | [haProxy](server/haProxy.js), [ha route](api/ha/%5B...slug%5D.js) |
 | IF-EXT05 | Pi watcher | state·snapshot·metadata | config·event·state·properties relay | watcher ID·URL map·서버 간 auth header | OPERATOR는 숙소→watcher→실제 URL 연결까지 확인 | [watcherScope](server/auth/watcherScope.js), [monitoring](api/monitoring/%5B...slug%5D.js) |
 | IF-EXT06 | Firebase·FCM | token·delivery 결과 | 청소 push | service account·FCM token | provider 접수와 실기 표시·사용자 확인은 다름 | [_push.js](server/cleaning/_push.js), [fcm.ts](worker-app/src/services/fcm.ts) |
-| IF-EXT07 | SMS | 없음 또는 provider 결과 | fallback·완료 안내 | 전화번호·provider 설정 | push fallback과 중복 전송 방지 규칙을 delivery 계층에서 관리 | [_sms.js](server/cleaning/_sms.js), [_notify.js](server/cleaning/_notify.js) |
+| IF-EXT07 | SMS | 없음 또는 provider 결과 | fallback·완료 안내 | 전화번호·provider 설정 | 정책상 쓰지 않는다(ACT-11 — 앱 푸시만). 코드에는 선택·전환 경로가 남아 있어 게이트웨이 설정이 있으면 보낼 수 있다([MD-R07](refactoring_mdfile.md#md-r07)). push fallback과 중복 전송 방지 규칙은 delivery 계층에서 관리 | [_sms.js](server/cleaning/_sms.js), [_notify.js](server/cleaning/_notify.js) |
 | IF-EXT08 | Slack | 운영자가 메시지 확인 | 브리핑·실패·배정 알림 | webhook URL | Slack은 알림 채널이며 DB 상태·로그 정본이 아님 | [_slack.js](server/cleaning/_slack.js), [slackNotifier](server/slackNotifier.js) |
 | IF-EXT09 | Vercel cron | 정해진 UTC schedule로 HTTP GET | `{ok,ran}` 또는 결과 | platform auth + 선택 `CRON_SECRET` | 등록된 schedule과 handler 내부 하위 작업을 구분 | [vercel.json](vercel.json), [cron API](api/cron/%5B...slug%5D.js) |
 
@@ -538,7 +538,7 @@ sequenceDiagram
 
 - 보여주는 것: 등록 schedule 두 개와 각 handler가 실행하는 하위 작업.
 - 보여주지 않는 것: 별도 외부 스케줄러 여부. 저장소에서 확인된 것은 Vercel 두 schedule뿐이다.
-- 관련 테스트: cron 관련 테스트는 실제 handler를 검증하는지 각 파일의 레이어를 확인해야 한다. [s34](tests/unit/s34.cron-tick.test.js)는 기존 문서에서 자기 재구현 검증 한계가 지적돼 있다.
+- 관련 테스트: [s34](tests/unit/s34.cron-tick.test.js)는 실제 morning/evening handler를 가짜 DB·외부 호출로 실행해 경로·인증·하위 작업을 검증한다(ACT-08에서 로직 복사 시험을 교체).
 
 ---
 
@@ -624,11 +624,10 @@ API·외부 인터페이스→코드·데이터·테스트의 대표 매핑은 [
 
 | ID | 한계 | 문서 처리 |
 | --- | --- | --- |
-| IF-L01 | 실제 배포의 auth/data profile/secret 설정값 미확인 | 저장소 구현과 분리 |
+| IF-L01 | 실제 배포의 data profile·secret 설정값 미확인. 인증은 운영 관측(2026-11-10~14)상 로그인 없는 호출이 401(`enforce`) | 저장소 구현과 분리, 인증은 [MD-R26](refactoring_mdfile.md#md-r26) |
 | IF-L02 | 일부 API가 body·query의 FCM token을 실질 자격정보로 사용 | 실제 token을 문서·로그에 남기지 않음 |
 | IF-L03 | API 오류 body·status·HTML/JSON 형식이 통일돼 있지 않음 | 현재 계약은 이 문서, 통일 목표는 [오류·관측 문서](error_observability.md#target-model)에서 분리 |
 | IF-L04 | cron 개별 action은 존재하지만 실제 등록은 morning/evening 두 개 | 등록과 내부 action을 분리 |
-| IF-L05 | `s34.cron-tick`은 실제 handler 검증 여부에 과거 한계 기록이 있음 | 테스트 존재만으로 cron 전체 보장이라 쓰지 않음 |
 | IF-L06 | 외부 API 접수 성공이 실기·사용자 확인을 뜻하지 않음 | FCM·SMS·Slack·Google 결과 단계를 구분 |
 
 문서 간 충돌과 용어 모호성은 [refactoring_mdfile.md](refactoring_mdfile.md)에 기록하고, 실제 소스 리팩터링 상태는 이 문서에 복제하지 않는다.
