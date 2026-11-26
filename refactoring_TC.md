@@ -4,7 +4,7 @@
 > 작성일: 2026-11-17 (Asia/Seoul)  
 > 목적: 현재 TC와 자동화 테스트를 사용자 시나리오·인터페이스·데이터·오류 구조에 맞춰 찾기 쉽고 안전한 체계로 재구성한다.  
 > 대상 독자: 개발자, QA, 기획자, 운영 담당자  
-> 분석 기준: `1f51a45b11231bf1ce11bb93cc9cf1466123b2ca` 작업 트리 관측. 실행 시작 시 TCR-00에서 다시 측정한다.  
+> 분석 기준: 2026-11-17 작업 트리 관측, 2026-11-26 상태 동기화(DP-08, [doc_plan.md](doc_plan.md#phases)). 파일 수 같은 시점 숫자는 적지 않고, 실행 시작 시 TCR-00에서 다시 측정한다.  
 > 문서 시작점: [design_overview.md](design_overview.md)  
 > 시나리오: [actor_ui_scenarios.md](actor_ui_scenarios.md) · 인터페이스: [runtime_interfaces_and_collaboration.md](runtime_interfaces_and_collaboration.md) · 오류: [error_observability.md](error_observability.md) · 추적성: [documentation_traceability.md](documentation_traceability.md)  
 > 범위: 이 파일은 **계획만 기록**한다. 이번 작업에서 테스트·소스·설정·CI는 수정하지 않는다.  
@@ -63,23 +63,24 @@ TC를 다음 순서로 추적할 수 있게 만든다.
 
 ### 3.1 파일 인벤토리
 
-| 영역 | 테스트 파일 | 현재 역할 |
-| --- | ---: | --- |
-| `tests/unit/` | 123 | 순수 도메인, API handler, source contract, UI 구조, 운영 안전 검사가 혼재 |
-| `tests/functional/` | 5 | [S01~S05](docs/scenarios.yaml) 서비스 시나리오 |
-| `tests/integration/` | 13 | 격리 SQL/PGlite, fake HA, 선택적 실제 DB·HA·Google 검사 |
-| `tests/e2e/` | 2 | Playwright 브라우저 E2E와 Node 기반 실연동 검사가 혼재 |
-| `tests/smoke/` | 1 | fixture API를 사용한 preview 브라우저 smoke |
-| 공통·integration helper | 16 | API 호출, fixture, 시간, 저장 경로, 네트워크·HA 격리 |
-| 합계 | 160 | 테스트 파일 144개 + helper 16개 |
+| 영역 | 현재 역할 |
+| --- | --- |
+| `tests/unit/` | 순수 도메인, API handler, source contract, UI 구조, 운영 안전 검사가 혼재 |
+| `tests/functional/` | [S01~S05](docs/scenarios.yaml) 서비스 시나리오 |
+| `tests/integration/` | 격리 SQL/PGlite, fake HA, 선택적 실제 DB·HA·Google 검사 |
+| `tests/e2e/` | Playwright 브라우저 E2E(`*.spec.js`)와 Node 기반 실연동 검사(s37)가 같은 폴더에 있음 |
+| `tests/smoke/` | fixture API를 사용한 preview 브라우저 smoke |
+| `tests/helpers/`·`tests/integration/helpers/` | API 호출, fixture, 시간, 저장 경로, 네트워크·HA 격리 |
 
-이 숫자는 테스트 케이스 수가 아니라 파일 수다. 반복문으로 TC를 생성하거나 한 `test()`에서 여러 계약을 검증하는 파일이 있어 정적 호출 수를 TC 수로 사용하면 안 된다.
+파일 수는 시점마다 달라 적지 않는다. 필요하면 `find tests -name '*.test.js' -o -name '*.spec.js' | wc -l`로 다시 센다(TCR-00).
+
+파일 수는 테스트 케이스 수가 아니다. 반복문으로 TC를 생성하거나 한 `test()`에서 여러 계약을 검증하는 파일이 있어 정적 호출 수를 TC 수로 사용하면 안 된다.
 
 ### 3.2 현재 실행 경로
 
 | 명령·gate | 실제 포함 범위 | 현재 제외·주의 |
 | --- | --- | --- |
-| `npm test` | unit 123 + functional 5, Node test runner, production fetch trap | integration·browser·live 제외 |
+| `npm test` | unit + functional, Node test runner, production fetch trap | integration·browser·live 제외 |
 | `npm run test:integration` | `tests/integration/*.test.js` | 환경이 없으면 일부 suite skip; CI 기본 gate 아님 |
 | `npm run test:smoke` | Playwright + preview server + fixture API | CI와 `verify:all`에 포함 |
 | `npm run test:e2e` | Playwright + 데모 전용 dev server(5174, 기존 서버 재사용 안 함) + `tests/e2e/*.spec.js` | CI와 `verify:all`에 미포함. 실제 HA 시험(E2E-003)은 `RUN_LIVE_HA=1` 등을 명시할 때만 |
@@ -124,7 +125,7 @@ TC를 다음 순서로 추적할 수 있게 만든다.
 | ID | 발견 | 영향 | 목표 |
 | --- | --- | --- | --- |
 | TC-R07 | 숫자 `sNN`이 시나리오·작성 순번·관련 unit/integration 묶음으로 동시에 사용됨 | 파일 번호만으로 요구사항·수준을 알 수 없음 | 안정적 TC ID와 파일명을 분리 |
-| TC-R08 | 서로 다른 파일이 같은 숫자를 쓰는 그룹이 20개 | 링크·대화에서 `s30`, `s40`만 말하면 모호함 | 전체 경로 또는 TC ID로 식별 |
+| TC-R08 | 서로 다른 파일이 같은 숫자를 쓰는 묶음이 여럿 있음(unit과 integration이 같은 번호를 나눠 쓰는 경우 포함) | 링크·대화에서 `s30`, `s40`만 말하면 모호함 | 전체 경로 또는 TC ID로 식별 |
 | TC-R09 | unit 안에 순수 계산, source text 검사, handler+fake DB, component 구조 검사가 혼재 | 실행 비용·신뢰 수준·실패 원인을 구분하기 어려움 | contract/unit/handler 분류를 메타데이터로 먼저 부여 |
 | TC-R10 | `tests/e2e`에 browser E2E와 live connectivity가 혼재 | runner와 안전 정책 충돌 | browser와 live 디렉터리·명령 분리 |
 | TC-R11 | 큰 테스트 파일이 여러 업무 계약을 함께 소유 | 한 변경이 넓은 fixture와 긴 파일 탐색을 요구 | 계약 경계에 따라 점진 분리 |
@@ -134,13 +135,16 @@ TC를 다음 순서로 추적할 수 있게 만든다.
 
 대표 대형 파일:
 
-| 파일 | 관측 줄 수 | 우선 검토 이유 |
-| --- | ---: | --- |
-| [s54.violation-detail.test.js](tests/unit/s54.violation-detail.test.js) | 약 680 | 상세 계산·표현 계약 다수 |
-| [s79.operator-device-scope.test.js](tests/unit/s79.operator-device-scope.test.js) | 약 680 | auth·HA·watcher·camera scope 혼재 |
-| [s36.cleaning-integration.test.js](tests/unit/s36.cleaning-integration.test.js) (11-18 integration → unit 이동) | 약 630 | 청소 API·DB 계약이 넓음 |
-| [s44.future-week-report.test.js](tests/unit/s44.future-week-report.test.js) | 약 580 | 미래 기간·레포트 계약 다수 |
-| [s29.gmail-ical-repoll.test.js](tests/unit/s29.gmail-ical-repoll.test.js) | 약 560 | Gmail·iCal·재조회 흐름 혼재 |
+| 파일 | 우선 검토 이유 |
+| --- | --- |
+| [s54.violation-detail.test.js](tests/unit/s54.violation-detail.test.js) | 상세 계산·표현 계약 다수 |
+| [s79.operator-device-scope.test.js](tests/unit/s79.operator-device-scope.test.js) | auth·HA·watcher·camera scope 혼재 |
+| [s30.job-cancellation.test.js](tests/unit/s30.job-cancellation.test.js) | 청소 취소·후속 처리 계약 다수 |
+| [s36.cleaning-integration.test.js](tests/unit/s36.cleaning-integration.test.js) (11-18 integration → unit 이동) | 청소 API·DB 계약이 넓음 |
+| [s44.future-week-report.test.js](tests/unit/s44.future-week-report.test.js) | 미래 기간·레포트 계약 다수 |
+| [s29.gmail-ical-repoll.test.js](tests/unit/s29.gmail-ical-repoll.test.js) | Gmail·iCal·재조회 흐름 혼재 |
+
+줄 수는 적지 않는다. 대상을 고를 때 `wc -l`로 다시 잰다.
 
 파일 크기만으로 나누지 않는다. 공통 fixture가 같고 하나의 계약을 설명하면 유지할 수 있으며, 서로 다른 실패 원인과 소유 문서가 섞일 때만 분리한다.
 
@@ -308,7 +312,7 @@ TCR-02에서 별도 승인을 받아 machine-readable registry를 만든다. 이
 
 작업:
 
-1. 최신 HEAD에서 144개 테스트 파일·16개 helper 인벤토리를 다시 생성한다.
+1. 최신 HEAD에서 테스트 파일·helper 인벤토리를 다시 생성한다.
 2. 각 현재 명령의 실행 대상, pass/fail/skip, 시간, 외부 I/O를 기록한다.
 3. `--list`·discovery·dry-run 중 외부 I/O가 발생하지 않아야 한다는 계약을 정한다.
 4. 현재 실패·skip·flaky를 리팩터링 실패와 분리한다.
@@ -347,9 +351,9 @@ TCR-02에서 별도 승인을 받아 machine-readable registry를 만든다. 이
 
 작업:
 
-1. 144개 파일을 domain·level·mode·gate로 분류한다.
+1. 모든 테스트 파일을 domain·level·mode·gate로 분류한다.
 2. 현재 test/describe를 업무 계약 단위로 묶고 TC ID를 부여한다.
-3. 중복 `sNN` 20개 그룹을 `legacy_ids`로 보존한다.
+3. 같은 번호를 쓰는 `sNN` 묶음을 `legacy_ids`로 보존한다.
 4. SCN/TR/IF/ERR와 TC를 연결한다.
 5. registry schema와 누락·중복 ID 검증기를 만든다.
 
@@ -489,7 +493,7 @@ TCR-02에서 별도 승인을 받아 machine-readable registry를 만든다. 이
 | 5 | 대형 suite·중복 TC 정리 | 안전한 분류 뒤에 해야 회귀 손실을 막음 | TC ID와 대체 근거 |
 | 6 | CI·artifact·문서 연결 | 구조가 안정된 뒤 최종 gate 적용 | 명령과 registry 완성 |
 
-첫 구현 단위는 **TCR-00 + TCR-01의 남은 부분(s37 읽기/쓰기 분리)**이 적절하다. 파일 전체 이름 변경이나 144개 TC 재배치는 첫 작업으로 하지 않는다.
+첫 구현 단위는 **TCR-00 + TCR-01의 남은 부분(s37 읽기/쓰기 분리)**이 적절하다. 파일 전체 이름 변경이나 전체 TC 재배치는 첫 작업으로 하지 않는다.
 
 ---
 
@@ -515,7 +519,7 @@ TCR-02에서 별도 승인을 받아 machine-readable registry를 만든다. 이
 
 ## 10. 최종 완료 기준
 
-- [ ] 144개 테스트 파일이 owner domain과 test level을 가진다.
+- [ ] 모든 테스트 파일이 owner domain과 test level을 가진다.
 - [ ] 모든 active suite가 안정적인 TC/suite ID를 가진다.
 - [ ] 같은 TC ID가 둘 이상 존재하지 않는다.
 - [ ] `S01~S05`와 일반 `sNN` 파일 번호를 혼동하지 않는다.

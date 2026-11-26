@@ -1,6 +1,6 @@
 # PROPOS Documentation Traceability
 
-> 작성일: 2026-11-13 · 통합 문서 연결 보강·재검증: 2026-11-17 (Asia/Seoul)  
+> 작성일: 2026-11-13 · 통합 문서 연결 보강·재검증: 2026-11-17 · 마지막 동기화: 2026-11-26 (DP-08) (Asia/Seoul)  
 > 목적: 제품 결정과 설계 문서가 실제 코드·API·데이터·테스트·운영 근거로 어떻게 이어지는지 추적  
 > 프로젝트·문서 탐색: [design_overview.md](design_overview.md)  
 > 사람·화면·시나리오: [actor_ui_scenarios.md](actor_ui_scenarios.md)  

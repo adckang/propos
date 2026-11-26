@@ -3,8 +3,7 @@
 > 목적: 현재 코드가 실패를 어떻게 표현·전파·응답·재시도·기록하는지 설명하고, 앞으로의 권장 규칙은 별도 구역에서 명확히 분리한다.  
 > 대상 독자: 개발자, 운영 담당자, 보안·개인정보 검토자, 테스트 담당자  
 > 읽는 순서: [1. 실패 분류](#failure-taxonomy) → [2. 현재 구현](#current-error-model) → [4. 재시도·개입](#retry-intervention) → [5. 현재 로그](#current-observability) → [7. 권장 목표](#target-model)  
-> 기준일: 2026-11-17 (Asia/Seoul)  
-> 저장소 기준: [doc_plan.md의 최신 검증 기준점](doc_plan.md#validation)  
+> 마지막 동기화: 2026-11-26 (Asia/Seoul) — DP-08, 검증 기준은 [doc_plan.md](doc_plan.md#validation)  
 > 사실 범위: `현재 구현`과 `권장 목표·미구현`을 절대 섞지 않는다. 이 문서는 코드 변경을 수행하지 않는다.  
 > 선행 문서: [runtime_interfaces_and_collaboration.md](runtime_interfaces_and_collaboration.md) · 상위 문서: [design_overview.md](design_overview.md)  
 > 검색 키워드: `[ERR-]` `[CURRENT]` `[TARGET]` `[RETRY]` `[LOG]` `[PII]` `[SLACK]`
@@ -239,17 +238,7 @@ flowchart TD
 
 ### 5.1 코드 관측 인벤토리
 
-2026-11-16 작업 트리의 `console.log|warn|error|info|debug` 호출 수:
-
-| 영역 | 호출 수 |
-| --- | ---: |
-| `src` | 6 |
-| `server` | 71 |
-| `api` | 44 |
-| `scripts` | 91 |
-| `worker-app` | 0 |
-
-수치는 호출 위치의 정적 개수이며 실제 로그 발생량이 아니다.
+`console.*` 호출은 `server`·`api`·`scripts`에 주로 있고 `src`에는 적으며 `worker-app`에는 없다. 개수는 시점마다 달라 적지 않는다. 필요하면 `grep -rEo "console\.(log|warn|error|info|debug)" src server api scripts worker-app --exclude-dir=node_modules | cut -d/ -f1 | sort | uniq -c`로 다시 센다. 이 수는 호출 위치의 정적 개수이며 실제 로그 발생량이 아니다.
 
 현재 확인 결과:
 

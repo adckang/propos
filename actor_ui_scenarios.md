@@ -3,8 +3,7 @@
 > 목적: 사람이 PROPOS를 **누가 왜 쓰는지**부터 이해한 뒤, 실제 화면·행동·시스템 연결까지 내려가도록 안내한다.  
 > 대상 독자: 운영 책임자, 호스트, 청소 담당자, 기획자, 개발자, 테스트 담당자  
 > 읽는 순서: [1. 역할 구분](#actor-role-boundary) → [2. 액터 지도](#actor-map) → [4. UI 트리](#ui-navigation) → [6. 시나리오](#actor-scenarios) → [8. 남은 결정](#evidence-index)  
-> 기준일: 2026-11-17 (Asia/Seoul)  
-> 저장소 기준: [doc_plan.md의 최신 검증 기준점](doc_plan.md#validation)  
+> 마지막 동기화: 2026-11-26 (Asia/Seoul) — DP-08, 검증 기준은 [doc_plan.md](doc_plan.md#validation)  
 > 사실 범위: 현재 저장소 구현을 설명한다. 배포·환경·실기 상태는 날짜가 붙은 운영 근거 없이는 확정하지 않는다.  
 > 상위 문서: [design_overview.md](design_overview.md) · 계획: [doc_plan.md](doc_plan.md)  
 > 검색 키워드: `[AC-]` `[UI-]` `[SCN-]` `[MAP-]` `[CURRENT]` `[LIMIT]`
@@ -86,7 +85,7 @@ flowchart LR
 - 보여주는 것: 사람의 진입 채널과 외부 시스템의 상위 협업 관계.
 - 보여주지 않는 것: API method·path, 요청 필드, 재시도 규칙.
 - 구현 근거: [웹 루트](src/main.jsx), [Worker App 루트](worker-app/App.tsx), [API 진입점](api), [청소 서버 모듈](server/cleaning).
-- 미검증 범위: 기준일의 실제 배포 환경변수, 외부 계정 연결 상태, 실기 수신 상태.
+- 미검증 범위: 실제 배포 환경변수 값(인증 모드는 [MD-R26](refactoring_mdfile.md#md-r26)의 날짜 붙은 관측만), 외부 계정 연결 상태, 실기 수신 상태.
 
 <a id="actor-hierarchy"></a>
 

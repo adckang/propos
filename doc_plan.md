@@ -1,7 +1,7 @@
 # PROPOS 통합 도큐멘테이션 유지보수 계획
 
 > 상태: DP-00~DP-07 완료 · DP-08(2026-11-17 이후 변경 동기화) 진행 중 — [sync_md.md](sync_md.md)  
-> 최초 작성: 2026-11-16 · 중복 제거 갱신: 2026-11-17 (Asia/Seoul)  
+> 최초 작성: 2026-11-16 · 중복 제거 갱신: 2026-11-17 · 동기화(DP-08): 2026-11-26 (Asia/Seoul)  
 > 목적: 완성 문서의 내용을 복제하지 않고, 문서 소유권·작업 순서·검증 결과만 관리한다.  
 > 단일 시작점: [design_overview.md](design_overview.md)  
 > 문서 충돌·중복 대장: [refactoring_mdfile.md](refactoring_mdfile.md)  
@@ -147,11 +147,11 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 저장소 | `1f51a45b11231bf1ce11bb93cc9cf1466123b2ca` · 2026-11-17 00:27:32 +09:00 |
-| 검증일 | 2026-11-17 (Asia/Seoul) |
-| Markdown 인벤토리 | 43개 · `.git`, `node_modules`, 보조 도구 `venv`, 생성·시험 디렉터리 제외 |
+| 대조한 코드 | `f6a5017` · 2026-11-26 (DP-08 — 이 시점 코드와 문서를 대조. 이전 기준 `1f51a45`, 2026-11-17) |
+| 검증일 | 2026-11-26 (Asia/Seoul) |
+| Markdown 인벤토리 | 45개 · `.git`, `node_modules`, 보조 도구 `venv`, 생성·시험 디렉터리 제외 (11-17 이후 `refactoring_TC.md`·`docs/runbooks/pi-watcher-rollout.md` 추가) |
 | Mermaid renderer | 저장소에 없음 · 정적 문법 검토만 수행 |
-| 변경 범위 | 통합 문서 7개만 수정 |
+| 변경 범위 | DP-08: 통합 문서 8개 + `docs/room-state-machine.md` 0절(SM-04 예외) |
 
 실제 배포 환경값·외부 계정·실기 수신 상태는 별도 운영 근거 없이는 확정하지 않는다.
 

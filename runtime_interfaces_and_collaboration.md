@@ -3,8 +3,7 @@
 > 목적: 화면·API·서버 모듈·외부 시스템·데이터 저장소가 실제 실행 중 어떤 계약과 순서로 협업하는지 설명한다.  
 > 대상 독자: 개발자, 운영 담당자, 테스트 담당자, 설계 검토자  
 > 읽는 순서: [1. 런타임 지도](#runtime-map) → [3. API 계약](#api-contracts) → [4. 외부 인터페이스](#external-interfaces) → [5. 주요 시퀀스](#collaboration-sequences) → [6. cron 구조](#cron-hierarchy)  
-> 기준일: 2026-11-17 (Asia/Seoul)  
-> 저장소 기준: [doc_plan.md의 최신 검증 기준점](doc_plan.md#validation)  
+> 마지막 동기화: 2026-11-26 (Asia/Seoul) — DP-08, 검증 기준은 [doc_plan.md](doc_plan.md#validation)  
 > 사실 범위: 현재 저장소 구현. 운영 배포·외부 계정·환경변수 값은 별도 운영 근거 없이는 확정하지 않는다.  
 > 선행 문서: [actor_ui_scenarios.md](actor_ui_scenarios.md) · 상위 문서: [design_overview.md](design_overview.md)  
 > 검색 키워드: `[IF-]` `[SEQ-]` `[CRON-]` `[AUTH-]` `[IDEMPOTENCY]` `[DATA-PROFILE]`
@@ -380,7 +379,7 @@ sequenceDiagram
 ```
 
 - 보여주는 것: UI 선택 범위와 서버 권한 범위가 교차되는 위치.
-- 미검증 범위: 기준일 운영 DB 데이터의 완전성.
+- 미검증 범위: 운영 DB 데이터의 완전성.
 - 관련 테스트: [s23.stats-service](tests/unit/s23.stats-service.test.js), [s43.multi-property-stats](tests/unit/s43.multi-property-stats.test.js), [s45.report-scope-audit](tests/unit/s45.report-scope-audit.test.js), [s92.report-contract](tests/unit/s92.report-contract.test.js).
 
 <a id="seq-reservation-cleaning"></a>

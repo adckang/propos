@@ -4,7 +4,7 @@
 > 목적: 비개발자가 사람의 사용 시나리오부터 이해하고, 개발자가 UI·인터페이스·데이터·코드·오류 근거까지 내려가는 단일 시작점  
 > 대상 독자: 운영자, 호스트, 청소 담당자, 기획자, 개발자, 테스트·운영 담당자  
 > 권장 읽기 순서: 이 문서 → [액터·UI·시나리오](actor_ui_scenarios.md) → [런타임 인터페이스](runtime_interfaces_and_collaboration.md) → [오류·관측](error_observability.md) → [추적성](documentation_traceability.md)  
-> 기준일: 2026-11-17 (Asia/Seoul) · 저장소 구현과 운영 배포 상태는 구분  
+> 마지막 동기화: 2026-11-26 — 2026-11-17 이후 리팩토링 결과 반영(DP-08, [doc_plan.md](doc_plan.md#phases)) · 저장소 구현과 운영 배포 상태는 구분  
 > 문서 정합성 문제와 리팩터링 제안: [refactoring_mdfile.md](refactoring_mdfile.md)  
 > 테스트 케이스 리팩터링 계획: [refactoring_TC.md](refactoring_TC.md)  
 > 실제 소스 리팩터링 상태: [docs/refactoring.md](docs/refactoring.md#sec-02)  
