@@ -220,6 +220,12 @@ flowchart TD
 | morning cron | 하위 단계별 실패 격리 | 실패한 단계만 `ran`에서 빠짐 | console/Slack 근거로 수동 재실행 판단 |
 | evening cron | iCal sync만 실패 격리; followup 실패는 결산까지 영향 가능 | 상위 500 | 운영자가 결산·followup 상태 확인 |
 | HA·Pi polling | UI interval에서 다음 poll이 자연 재시도 | 이전 값 유지 또는 inactive 표시 | 장기 장애 시 watcher·HA 연결 확인 |
+| Pi 일정 시각의 확인(퇴실·입실·청소) | 재시도하지 않음 — 퇴실은 유예 20분 안의 퇴장 신호만 기다림 | 확인 전엔 해당 기기 제어를 하지 않음. 센서 꺼짐·감시 멈춤이면 지연·미감지로 단정하지 않고 `확인 불가` | 운영자가 직접 판단·제어(Slack + HA 앱, DEC-11·16) |
+| 감지 센서 상태 | 반복 알림 없음(30분 꺼짐 알림은 없앰) | 퇴실·입실 하루 전·2시간 전에 미리 점검 | 꺼져 있으면 운영자 사전 알림(DEC-12) |
+| IR 냉방 토글(입실 준비) | 근거 있는 복구 1회만 — 거실 온도 추세로 작동 여부 판단(기본 20분·0.3°C, 설정 가능) | 정지 미확인·재시작·무반응에는 반복 토글하지 않음 | 실패 기록·운영자 알림(ACT-21). 겨울에는 입실 준비 자동화를 켜지 않음(DEC-19) |
+| 이상 기록(RF-25) | 재시도 개념 없음 — 같은 신호·요청·판정은 한 번만 기록 | 조건이 풀리면 안정화 대기, 재발하면 진행 중. 끝난 이상은 다시 열지 않고 새 이상으로 | 관리자·운영자의 해결 행동만 개입으로 기록(DEC-23) |
+| 청소 취소 | — | 상태를 되돌리지 않고 `청소 미배정(취소)` 문제 1건 | 담당자 구글 일정을 못 지우면 운영자 Slack 한 줄(DEC-14·15) |
+| 내일 청소 담당자 알림 | 하루 한 번(밤 10시 정기 작업) | — | 못 보내면 운영자 Slack "직접 연락해 주세요"(ACT-18) |
 
 재시도 판단에서 가장 중요한 원칙은 “실패”와 “응답을 못 받은 것”을 구분하는 것이다. 외부 서비스가 요청을 접수했는데 응답만 유실된 경우 자동 재발송은 중복 작업을 만들 수 있다.
 
@@ -252,7 +258,8 @@ flowchart TD
 - `console.error`, `console.warn`, `console.log`가 영역별 문자열 prefix와 함께 사용된다.
 - 업무에 중요한 청소 최초 발송은 DB의 `initial_delivery_state`, `initial_delivery_data`, `initial_accepted_at`에 내구성 있는 상태를 저장한다.
 - watch 갱신 시각·중복 알림 억제 등 일부 운영 메타데이터는 Vercel KV에 저장한다.
-- Slack은 일일 브리핑·결산·배정 실패·watch 상태·앱 설치 등 운영 알림에 사용된다.
+- Slack은 일일 브리핑·결산·배정 실패·watch 상태·앱 설치 등 운영 알림에 사용된다. Pi가 운영자에게 넘기는 문제(퇴실 지연·입실 미감지·확인 불가·청소 미감지·센서 점검)는 서버가 처음 저장할 때 한 번 Slack으로 알리고, Pi는 같은 내용을 HA 앱 알림으로도 보낸다(DEC-16).
+- Pi 워처 로그는 줄마다 한국 시각을 남긴다(RF-30).
 
 <a id="observability-flow"></a>
 
@@ -264,6 +271,8 @@ flowchart LR
   Worker[Worker App] --> Alert[Alert·화면 상태]
   API[API·server] --> Console[console.*]
   Pi[Pi watcher] --> PiLog[프로세스 로그·상태 API]
+  Pi --> HAApp[HA 앱 운영자 알림]
+  Pi --> API
   API --> DB[(Postgres 업무 상태)]
   API --> KV[(KV watch·중복 억제)]
   API --> Slack[Slack 운영 알림]
@@ -280,7 +289,7 @@ flowchart LR
 
 | 채널 | 현재 사용 | 정본 여부 |
 | --- | --- | --- |
-| Postgres | 예약·이벤트·청소 job·notif·운영자·scope·delivery receipt | 업무 상태의 주 근거 |
+| Postgres | 예약·이벤트·청소 job·notif·운영자·scope·delivery receipt, 내부 숙박·청소 의무, 배정 이력(추가 전용), 이상 기록(열림·안정화·해결과 그때 적용한 안정화 기준) | 업무 상태의 주 근거 |
 | KV | watch 갱신·만료·중복 알림 억제 등 단기 운영 메타데이터 | 제한된 운영 상태 근거 |
 | console | 함수·route·외부 호출 실패 진단 | 보존·검색·형식은 실행 환경에 의존 |
 | Slack | 사람이 알아야 할 브리핑·배정 실패·복구·staleness | 알림 채널; 업무 원장·상세 로그 아님 |

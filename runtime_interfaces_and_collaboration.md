@@ -510,6 +510,7 @@ sequenceDiagram
   participant Vercel as Vercel cron
   participant Cron as /api/cron/*
   participant Airbnb as Airbnb iCal
+  participant Pi as Pi watcher
   participant DB as Postgres
   participant Cleaning as cleaning followup
   participant Google as Google APIs
@@ -518,6 +519,7 @@ sequenceDiagram
 
   Vercel->>Cron: GET /morning · 23:00 UTC
   Cron->>Airbnb: 모든 REAL 숙소 iCal sync
+  Cron->>Pi: 예약·다음 청소 일정
   Cron->>DB: 일일 통계·Worker health
   Cron->>Slack: 08:00 KST briefing
   opt KST 15일
@@ -531,7 +533,9 @@ sequenceDiagram
 
   Vercel->>Cron: GET /evening · 13:00 UTC
   Cron->>Airbnb: 모든 REAL 숙소 iCal sync
+  Cron->>Pi: 예약·다음 청소 일정
   Cron->>Cleaning: dispatch/followup
+  Cron->>Cleaning: 내일 청소 담당자 하루 전 알림
   Cron->>DB: 오늘 event·현재 통계
   Cron->>Slack: 22:00 KST result
 ```
@@ -539,6 +543,43 @@ sequenceDiagram
 - 보여주는 것: 등록 schedule 두 개와 각 handler가 실행하는 하위 작업.
 - 보여주지 않는 것: 별도 외부 스케줄러 여부. 저장소에서 확인된 것은 Vercel 두 schedule뿐이다.
 - 관련 테스트: [s34](tests/unit/s34.cron-tick.test.js)는 실제 morning/evening handler를 가짜 DB·외부 호출로 실행해 경로·인증·하위 작업을 검증한다(ACT-08에서 로직 복사 시험을 교체).
+
+<a id="seq-handoff"></a>
+
+### SEQ-07 · 일정 시각에 Pi가 확인하고, 안 되면 운영자에게 넘김
+
+```mermaid
+sequenceDiagram
+  participant Cron as /api/cron/*
+  participant Pi as Pi watcher
+  participant HA as Home Assistant
+  participant API as /api/events/write
+  participant Slack as Slack
+  actor Operator as 운영자
+
+  Cron->>Pi: 예약·다음 청소 일정 (하루 두 번)
+  Note over Pi: 퇴실·입실 하루 전·2시간 전
+  Pi->>HA: 감지 센서(문·움직임) 상태 확인
+  opt 센서가 꺼져 있음
+    Pi->>HA: HA 앱 알림(사전 점검)
+    Pi->>API: 사전 점검 기록
+    API->>Slack: 처음 저장 때 한 번
+  end
+  Note over Pi: 퇴실 시각 → 청소대기 (상태 = 일정)
+  Pi->>HA: 퇴장 신호 확인(유예 20분)
+  alt 퇴장 확인
+    Pi->>HA: 청소 모드 기기 제어
+  else 확인 안 됨
+    Pi->>HA: HA 앱 알림 · 기기 제어는 하지 않음
+    Pi->>API: 퇴실 지연(센서 꺼짐이면 확인 불가) 기록
+    API->>Slack: 처음 저장 때 한 번
+    Slack-->>Operator: 직접 판단·제어
+  end
+```
+
+- 보여주는 것: 상태는 일정 시각에 바뀌고 확인은 따로 한다. 확인하지 못하면 자동 제어 없이 사람에게 넘긴다(DEC-10·11·12·16). 입실(그날 자정까지 미확인이면 `입실 미감지`)과 청소(배정된 청소에 아무도 안 오면 `청소 미감지`)도 같은 모양이다.
+- 정본: [room-state-machine.md 0절](docs/room-state-machine.md).
+- 관련 테스트: [s134 예정 퇴실](tests/unit/s134.rf29-scheduled-checkout.test.js), [s141 예정 입실](tests/unit/s141.scheduled-checkin.test.js), [s142 센서 사전 점검](tests/unit/s142.sensor-precheck.test.js), [s144 청소 일정](tests/unit/s144.scheduled-cleaning.test.js).
 
 ---
 
@@ -552,8 +593,8 @@ sequenceDiagram
 
 | 등록 path | UTC cron | KST | 상위 목적 |
 | --- | --- | --- | --- |
-| `/api/cron/morning` | `0 23 * * *` | 매일 08:00 | 예약 최신화, 아침 브리핑, health, 월간 준비, 청소 followup, watch 관리 |
-| `/api/cron/evening` | `0 13 * * *` | 매일 22:00 | 예약 최신화, 청소 followup, 하루 결산 |
+| `/api/cron/morning` | `0 23 * * *` | 매일 08:00 | 예약 최신화, Pi 일정 전달, 아침 브리핑, health, 월간 준비, 청소 followup, watch 관리 |
+| `/api/cron/evening` | `0 13 * * *` | 매일 22:00 | 예약 최신화, Pi 일정 전달, 청소 followup, 담당자 하루 전 알림, 하루 결산 |
 
 정본: [vercel.json](vercel.json). 주석이나 과거 설계에 있는 개별 cron이 실제 등록됐다고 가정하지 않는다.
 
@@ -564,6 +605,7 @@ sequenceDiagram
 ```text
 /api/cron/morning
 ├─ syncAllPropertiesIcal                    매일 · 먼저 실행 · 실패 격리
+├─ pushCurrentReservationsToWatchers        매일 · Pi에 예약·다음 청소 일정 전달(RF-27·52) · 실패 격리
 ├─ handleDailyPlan                          매일 · Slack 아침 브리핑 · 실패 격리
 ├─ handleWorkerHealthCheck                  매일 · 장기 미접속 상태 점검 · 실패 격리
 ├─ handleMonthlyClean                       KST 15일만 · 실패 격리
@@ -572,6 +614,8 @@ sequenceDiagram
 │  ├─ cleaning_jobs 조건부 생성
 │  └─ dispatch_after가 된 PENDING job 보정
 ├─ handleCleaningFollowup                   매일 · 실패 격리
+│  ├─ 청소 미배정 이상 기록·해결            다음 체크인 12시간 전부터, 배정 이력 기준(RF-25·DEC-24)
+│  ├─ 청소 시작 시각에 담당자 없음 문제 기록  청소 1건에 1번(RF-32)
 │  ├─ 미확정 최초 전달 복구
 │  ├─ dispatch_after 도달 job 요청
 │  ├─ VIP 후속 단계
@@ -583,7 +627,9 @@ sequenceDiagram
 
 /api/cron/evening
 ├─ syncAllPropertiesIcal                    실패 격리
-├─ handleCleaningFollowup                   실패 시 상위 catch로 종료
+├─ pushCurrentReservationsToWatchers        Pi에 예약·다음 청소 일정 전달 · 실패 격리
+├─ handleCleaningFollowup                   실패 시 상위 catch로 종료 (하위 작업은 morning과 같음)
+├─ remindTomorrowCleanings                  내일(한국 날짜) 배정된 청소를 담당자에게 한 번 알림(ACT-18) · 못 보내면 운영자 Slack
 └─ handleDailyResult                        Slack 저녁 결산
 ```
 
@@ -598,7 +644,9 @@ sequenceDiagram
 | morning 핵심 5단계 | 단계별 `try/catch` | 하나가 실패해도 다음 단계 계속 |
 | morning watch 갱신 | 종류별 `try/catch` + token failure 보고 | Gmail 실패가 Calendar·staleness를 막지 않음 |
 | evening iCal sync | 자체 `try/catch` | 이전 원장 기준으로 followup 계속 가능 |
-| evening cleaning followup | 상위 catch | 실패하면 daily result까지 못 갈 수 있음 |
+| Pi 예약 전달(morning·evening) | 자체 `try/catch`, 보낸 워처가 있을 때만 완료로 기록 | 실패해도 다음 단계 계속. Pi는 직전 예약 기준으로 동작 |
+| evening cleaning followup | 상위 catch | 실패하면 하루 전 알림·daily result까지 못 갈 수 있음 |
+| evening 하루 전 알림 | 자체 `try/catch` + 운영자 Slack("직접 연락해 주세요") | 실패해도 daily result는 나감 |
 | 개별 action | 상위 catch | 500 `{error}` |
 | DEMO | 상위에서 차단 | 403, DB·외부 쓰기 없음 |
 

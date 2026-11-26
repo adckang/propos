@@ -61,10 +61,10 @@ flowchart LR
 
 | 구분 | 연결 근거 |
 | --- | --- |
-| 정책·설계 | [room-state-machine.md](docs/room-state-machine.md), [event-detection-design.md](docs/event-detection-design.md) |
-| 실행 코드 | [roomStateDomain.js](src/domain/room-state/roomStateDomain.js), [eventTypes.js](src/config/eventTypes.js) |
-| 데이터·외부 | Postgres `events`, Pi occupancy watcher, Home Assistant 센서 |
-| 검증 | [s11.room-state.test.js](tests/unit/s11.room-state.test.js), [s17.event-types.test.js](tests/unit/s17.event-types.test.js), [s30.watcher-ha.test.js](tests/integration/s30.watcher-ha.test.js) |
+| 정책·설계 | DEC-10·11·16·17(상태 = 일정, 확인 못 하면 운영자에게 — [room-state-machine.md 0절](docs/room-state-machine.md)), [room-state-machine.md](docs/room-state-machine.md), [event-detection-design.md](docs/event-detection-design.md) |
+| 실행 코드 | [roomStateDomain.js](src/domain/room-state/roomStateDomain.js), [eventTypes.js](src/config/eventTypes.js), Pi 워처 [occupancyWatcher.js](server/occupancyWatcher.js) |
+| 데이터·외부 | 서버가 보내는 예약·다음 청소 일정 → Pi occupancy watcher, Home Assistant 센서, Postgres `events` |
+| 검증 | [s11.room-state.test.js](tests/unit/s11.room-state.test.js), [s17.event-types.test.js](tests/unit/s17.event-types.test.js), [s30.watcher-ha.test.js](tests/integration/s30.watcher-ha.test.js), [s134 예정 퇴실](tests/unit/s134.rf29-scheduled-checkout.test.js), [s141 예정 입실](tests/unit/s141.scheduled-checkin.test.js), [s144 청소 일정](tests/unit/s144.scheduled-cleaning.test.js) |
 | 문서 갭 | [MD-R02](refactoring_mdfile.md#md-r02): 10/12개 상태 복제와 코드 주석 버전, [MD-R03](refactoring_mdfile.md#md-r03): VACANT 에너지 상태 |
 
 ### TR-02 · 센서 이벤트 수신과 상태 재건
@@ -91,10 +91,10 @@ flowchart LR
 
 | 구분 | 연결 근거 |
 | --- | --- |
-| 정책·설계 | [cleaning-automation-design.md](docs/cleaning-automation-design.md), [worker-app-spec.md](docs/worker-app-spec.md), [cleaning-notification-reliability-audit.md](docs/cleaning-notification-reliability-audit.md) |
+| 정책·설계 | ACT-11 규칙(앱 푸시만, 문자 안 씀)·DEC-09(앱 다시 설치 시 복구)·DEC-13(하루 전 알림) — [docs/refactoring.md 6절](docs/refactoring.md#rules), [cleaning-automation-design.md](docs/cleaning-automation-design.md), [worker-app-spec.md](docs/worker-app-spec.md), [cleaning-notification-reliability-audit.md](docs/cleaning-notification-reliability-audit.md) |
 | 실행 코드 | [_notify.js](server/cleaning/_notify.js), [_push.js](server/cleaning/_push.js), [_sms.js](server/cleaning/_sms.js), [_slack.js](server/cleaning/_slack.js), [workers API](api/workers/[...slug].js) |
 | 데이터·외부 | `cleaners`, `cleaning_notifs`, Firebase FCM, SMS gateway 인터페이스, Slack webhook |
-| 검증 | [s26.cleaning-notify-channel.test.js](tests/unit/s26.cleaning-notify-channel.test.js), [s108.cleaning-delivery-results.test.js](tests/unit/s108.cleaning-delivery-results.test.js), [s109.cleaning-initial-delivery.test.js](tests/integration/s109.cleaning-initial-delivery.test.js) |
+| 검증 | [s26.cleaning-notify-channel.test.js](tests/unit/s26.cleaning-notify-channel.test.js), [s108.cleaning-delivery-results.test.js](tests/unit/s108.cleaning-delivery-results.test.js), [s109.cleaning-initial-delivery.test.js](tests/integration/s109.cleaning-initial-delivery.test.js), [s137 앱 최초 연결](tests/integration/s137.worker-register-guard-sql.test.js), [s139 하루 전 알림](tests/unit/s139.act18-day-before-reminder.test.js) |
 | 문서 갭 | [MD-R06](refactoring_mdfile.md#md-r06): Worker App 현재 상태, [MD-R07](refactoring_mdfile.md#md-r07): FCM 정책·SMS 코드·시점별 운영 관측, [MD-R11](refactoring_mdfile.md#md-r11): Slack 역할 |
 
 ### TR-05 · 레포트와 안심지수
@@ -123,15 +123,15 @@ flowchart LR
 | --- | --- |
 | 정책·설계 | [cleaning-automation-design.md](docs/cleaning-automation-design.md), [report-architecture.md](docs/report-architecture.md) |
 | 실행 코드 | [vercel.json](vercel.json), [cron API](api/cron/[...slug].js) |
-| 데이터·외부 | Vercel morning/evening 스케줄, 예약 동기화·보고·청소 후속·Watch 갱신 하위 작업 |
-| 검증 | [s34.cron-tick.test.js](tests/unit/s34.cron-tick.test.js), [s115.daily-reservation-sync.test.js](tests/unit/s115.daily-reservation-sync.test.js), [s80.token-health.test.js](tests/unit/s80.token-health.test.js) |
+| 데이터·외부 | Vercel morning/evening 스케줄, 예약 동기화·Pi 일정 전달(RF-27·52)·보고·청소 후속·하루 전 알림(ACT-18)·Watch 갱신 하위 작업 |
+| 검증 | [s34.cron-tick.test.js](tests/unit/s34.cron-tick.test.js)(실제 handler 실행), [s115.daily-reservation-sync.test.js](tests/unit/s115.daily-reservation-sync.test.js), [s125 Pi 예약 전달](tests/unit/s125.rf27-watcher-reservation-sync.test.js), [s80.token-health.test.js](tests/unit/s80.token-health.test.js) |
 | 문서 갭 | [MD-R09](refactoring_mdfile.md#md-r09): 등록 스케줄·호출 가능한 handler·내부 하위 작업 혼용 |
 
 ### TR-08 · 센서 기반 입실 준비
 
 | 구분 | 연결 근거 |
 | --- | --- |
-| 정책·설계 | [pre-stay-optimization.md](docs/pre-stay-optimization.md), [pre-stay-field-review.md](docs/pre-stay-field-review.md), [room-state-machine.md](docs/room-state-machine.md#10-센서-기반-입실-준비--2026-11-06) |
+| 정책·설계 | DEC-01(센서 기반 판정)·DEC-19(겨울에는 켜지 않음)·ACT-20·21(가상 플로우 점검, IR 토글을 거실 온도 추세로 확인) — [docs/refactoring.md](docs/refactoring.md#rules), [pre-stay-optimization.md](docs/pre-stay-optimization.md), [pre-stay-field-review.md](docs/pre-stay-field-review.md), [room-state-machine.md](docs/room-state-machine.md#10-센서-기반-입실-준비--2026-11-06) |
 | 실행 코드 | `src/application/preStayOptimizationController.js`, `src/domain/preStayOptimizationDomain.js`, Pi preparation watcher·outbox |
 | 데이터·외부 | 예약·센서·날씨·HA 장치 → 준비 실행 → Postgres `events` |
 | 검증 | [s94.pre-stay-consistency.test.js](tests/unit/s94.pre-stay-consistency.test.js), [s96.sensor-preparation.test.js](tests/unit/s96.sensor-preparation.test.js), [s95.pre-stay-context.test.js](tests/integration/s95.pre-stay-context.test.js) |
@@ -188,6 +188,20 @@ flowchart LR
 | 검증 | [s108.cleaning-delivery-results.test.js](tests/unit/s108.cleaning-delivery-results.test.js), [s110.worker-token-recovery.test.js](tests/unit/s110.worker-token-recovery.test.js), [s111.worker-token-sql.test.js](tests/integration/s111.worker-token-sql.test.js), [s122.watcher-auth.test.js](tests/unit/s122.watcher-auth.test.js) |
 | 운영 근거 한계 | 코드의 console/Slack 경로는 확인했으나 로그 보존·검색 설정과 실제 수신 상태는 확인하지 않음 |
 | 문서 갭 | [MD-R11](refactoring_mdfile.md#md-r11): Slack 책임, [MD-R27](refactoring_mdfile.md#md-r27): 현재 오류·로그와 목표 규칙 혼용 |
+
+<a id="tr-13"></a>
+
+### TR-13 · 이상 감지와 자동화 개선율 (RF-25)
+
+| 구분 | 연결 근거 |
+| --- | --- |
+| 정책·설계 | DEC-02(안심지수와 별도 지표), DEC-21(안정화 시간 마스터·숙소별 설정), DEC-22(내부 숙박·청소 의무), DEC-23(이상 상태·중복 방지), DEC-24(배정 이력으로 미배정 측정) — [docs/refactoring.md 6절](docs/refactoring.md#rules), 계산 정본 [report-architecture 6-1-1](docs/report-architecture.md#automation-rate) |
+| 실행 코드 | 감지기 [noiseAnomalies.js](server/noiseAnomalies.js), [vacantEnergyAnomalies.js](server/vacantEnergyAnomalies.js), [deviceOfflineAnomalies.js](server/deviceOfflineAnomalies.js), [guestComplaintAnomalies.js](server/guestComplaintAnomalies.js), [_unassignedAnomalies.js](server/cleaning/_unassignedAnomalies.js) · 기록 [anomalyRepository.js](server/anomalyRepository.js) · 설정 [anomalyPolicySettings.js](server/anomalyPolicySettings.js) |
+| 진입점 | 이벤트 저장(`/api/events/write`) 때 센서 이상 판정, Gmail 웹훅에서 게스트 불만 분류, 정기 작업 청소 후속에서 청소 미배정, 관리자 설정 `/api/cleaning/anomaly-policy` |
+| 데이터·외부 | `automation_anomalies`·`automation_anomaly_history`·`automation_open_incidents`, `automation_policy_versions`·`automation_policy_values`, `property_stays`·`cleaning_obligations`, `cleaning_assignment_history`, `guest_complaint_signals`(원문 없음) — [migrate-automation-anomalies.sql](data/migrate-automation-anomalies.sql) |
+| 검증 | 정책 [s147](tests/unit/s147.rf25-anomaly-policy.test.js), 기록 [s149](tests/unit/s149.rf25-anomaly-recording.test.js)·[s149 SQL](tests/integration/s149.rf25-anomaly-recording-sql.test.js), 청소 미배정 [s152](tests/unit/s152.rf25-cleaning-unassigned-detector.test.js), 소음 [s153](tests/unit/s153.rf25-noise-detector.test.js), 빈방 에너지 [s154](tests/unit/s154.rf25-vacant-energy-detector.test.js), 기기 오프라인 [s155](tests/unit/s155.rf25-device-offline-detector.test.js), 게스트 불만 [s156](tests/unit/s156.rf25-guest-complaint-sensor.test.js) — 감지기마다 `tests/integration/`에 같은 번호의 SQL 시험이 있다 |
+| 운영 근거 한계 | 정본 5가지 측정 연결은 2026-11-25 완료([docs/refactoring.md 5절](docs/refactoring.md#done)). 실제 숙소에서 각 감지기가 발생·해결을 기록하는지는 날짜가 붙은 운영 관측이 따로 필요 |
+| 문서 갭 | 없음 — 통합 문서에는 2026-11-26 반영 |
 
 <a id="cross-cutting-gaps"></a>
 

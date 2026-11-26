@@ -64,7 +64,7 @@ design_overview.md                         ← 모든 독자의 단일 시작점
 ├─ refactoring_mdfile.md                   Markdown 중복·충돌·모호성·정리 순서
 ├─ refactoring_TC.md                       TC 구조·안전·ID·gate 리팩터링 계획
 ├─ doc_plan.md                             통합 문서 소유권·유지보수 계획
-└─ docs/refactoring.md                     실제 소스 리팩터링 상태·결정·감사 기록
+└─ docs/refactoring.md                     실제 소스 리팩터링의 할 일·완료·정해진 규칙(DEC) 목록
 ```
 
 세 리팩터링 문서의 책임은 다르다. `docs/refactoring.md`는 실제 소스 작업, `refactoring_mdfile.md`는 Markdown 품질, `refactoring_TC.md`는 테스트 구조 계획을 관리한다. 서로의 진행 상태나 상세 내용을 복제하지 않고 링크로만 연결한다.
@@ -133,21 +133,32 @@ flowchart LR
     SERVICES <--> GOOGLE
     SERVICES --> FCM
     SERVICES --> SLACK
-    SERVICES <--> PI
+    SERVICES -- 예약·다음 청소 일정 --> PI
+    PI -- 이벤트·문제 기록 --> API
     PI <--> HA
+    HA -. HA 앱 알림 .-> OPERATOR
 ```
 
 이 도식에서 `ADMIN`·`OPERATOR`는 인증 역할이고, `host`·청소 담당자·게스트는 업무 역할이다. host 전용 session role이 구현됐다는 뜻이 아니다. 자세한 권한 계층은 [액터·권한 하이어라키](actor_ui_scenarios.md#actor-hierarchy)를 본다.
 
+### 운영 원칙 (`CLAUDE.md`, 2026-11-22 사용자 지시)
+
+- **상태 = 일정.** 숙소 상태는 예약·청소 일정이 정하고, 센서 감지는 그 구간에서 기대한 일이 일어났는지 확인해 안 되면 문제로 남긴다.
+- **예외는 사람에게.** 기대한 일이 확인되지 않으면 기기 제어·판정을 자동으로 밀어붙이지 않고 운영자에게 넘긴다(Slack + HA 앱).
+- **알림은 필요할 때.** 시간 간격으로 반복하지 않고, 퇴실·입실 하루 전·2시간 전에 센서를 미리 점검한다.
+- 정본: [room-state-machine.md 0절](docs/room-state-machine.md), 결정 DEC-10~12·16([docs/refactoring.md 6절](docs/refactoring.md#rules)).
+
 ### 핵심 경계
 
+- 서버 정기 작업이 예약 동기화 직후 숙소를 맡은 Pi에 예약과 다음 청소 일정을 보낸다(RF-27·52). Pi는 그 일정대로 상태를 바꾸고, 이벤트·문제를 `/api/events/write`로 보낸다. 운영자에게 넘길 문제는 서버가 처음 저장할 때 Slack으로 알린다(DEC-16).
 - 브라우저는 Home Assistant를 직접 호출하지 않고 `/api/ha/*` 또는 모니터링 API를 거친다.
 - 예약·청소 작업·이벤트의 운영 원장은 Postgres다. Pi 상태 파일, KV, 브라우저 캐시는 역할과 수명이 다른 보조 저장소다.
 - REAL과 SIMULATED는 같은 DB 구조를 사용하고 `data_origin`으로 구분한다. DEMO는 명시적으로 선택하는 fixture 프로필이다.
 - `dist/`는 `src/`에서 생성되는 빌드 결과이므로 직접 수정하지 않는다.
 - 운영 스케줄은 `vercel.json`의 morning/evening cron이 실행 기준이다.
-- 인증·숙소 범위 기능은 구현되어 있으나 실제 강제 여부는 배포 환경의 `PROPOS_AUTH_MODE`에 따른다.
-- 청소 담당자 알림은 FCM·SMS 선택 코드와 운영 정책·시점별 관측을 분리해 읽는다. 상세 구분은 [MD-R07](refactoring_mdfile.md#md-r07)과 [외부 인터페이스](runtime_interfaces_and_collaboration.md#external-interfaces)를 본다.
+- 인증·숙소 범위 기능은 구현되어 있으나 실제 강제 여부는 배포 환경의 `PROPOS_AUTH_MODE`에 따른다. 운영은 2026-11-10~14 관측에서 `enforce`였다([MD-R26](refactoring_mdfile.md#md-r26)).
+- 청소 담당자 알림은 앱 푸시(FCM)만 쓰는 것이 정책이다(ACT-11). 코드에 남은 SMS 선택 경로와 시점별 관측은 [MD-R07](refactoring_mdfile.md#md-r07)과 [외부 인터페이스](runtime_interfaces_and_collaboration.md#external-interfaces)를 본다.
+- 모든 응답에 CSP가 차단 모드로 붙는다(RF-47, 2026-11-21). 새 외부 스크립트·폰트·연결 출처를 쓰려면 정책부터 넓혀야 한다.
 
 <a id="repository-architecture"></a>
 
@@ -167,11 +178,13 @@ propos-project-v2/
 │  ├─ styles/              전역 스타일
 │  └─ main.jsx             브라우저 진입점
 ├─ api/                    Vercel serverless HTTP 진입점
-├─ server/                 API가 호출하는 서버 도메인·외부 연동
+├─ server/                 API가 호출하는 서버 도메인·외부 연동 + 집 Pi에서 도는 워처 코드
 │  ├─ auth/                관리자/운영자 인증과 숙소 범위
-│  └─ cleaning/            청소 배정·알림·캘린더·동기화
+│  ├─ cleaning/            청소 배정·알림·캘린더·동기화·청소 미배정 이상
+│  ├─ occupancyWatcher.js 등  Pi 워처 런타임 (Vercel이 아니라 Pi에서 실행)
+│  └─ *Anomalies.js·anomaly*  이상 감지(소음·빈방 에너지·기기 오프라인·게스트 불만)와 이상 기록·안정화 설정
 ├─ data/                   Postgres 스키마와 마이그레이션 SQL
-├─ scripts/                검증·마이그레이션·seed·ERD·운영 도구
+├─ scripts/                검증·마이그레이션·seed·ERD·운영 도구, Pi 워처 시작 파일
 ├─ tests/                  unit/functional/integration/e2e/smoke
 ├─ worker-app/             React Native 청소 담당자 앱
 ├─ docs/                   설계·감사·인수인계 문서
@@ -192,6 +205,8 @@ propos-project-v2/
 ├─ refactoring_TC.md       TC 구조·안전·추적성 리팩터링 계획
 └─ doc_plan.md             통합 문서 작업 단계·검증 계획
 ```
+
+**Pi 워처 코드는 Vercel 배포로 바뀌지 않는다.** `scripts/occupancy-watcher-standalone.mjs`가 `server/occupancyWatcher.js` 등과 `src/application`·`src/domain`의 일부를 불러 집 Pi에서 실행한다. Pi에는 [Pi 워처 배포 절차](docs/runbooks/pi-watcher-rollout.md)대로 런타임 파일만 따로 교체하고, 반영 순서는 Pi → Vercel API·화면 → 로컬이다([docs/refactoring.md 8절](docs/refactoring.md)).
 
 ### 생성물·외부 영역
 
@@ -267,10 +282,10 @@ flowchart LR
 
 | HTTP 영역 | 진입 파일 | 서버 책임 |
 | --- | --- | --- |
-| `/api/cleaning/*` | `api/cleaning/[...slug].js` | 숙소 설정, 예약 동기화, 청소 작업, 배정, 블로커, 관리자 기능 |
+| `/api/cleaning/*` | `api/cleaning/[...slug].js` | 숙소 설정, 예약 동기화, 청소 작업, 배정, 블로커, 관리자 기능, 이상 해결 안정화 시간 설정(`anomaly-policy`, 관리자 전용), Gmail 웹훅의 게스트 온습도 불만 분류(원문은 저장하지 않음) |
 | `/api/workers/*` | `api/workers/[...slug].js` | Worker App 등록·heartbeat·FCM token |
-| `/api/events/*` | `api/events/[...slug].js` | Pi 이벤트 인증·검증·저장·조회 |
-| `/api/cron/*` | `api/cron/[...slug].js` | 아침·저녁 보고와 청소 후속 처리 |
+| `/api/events/*` | `api/events/[...slug].js` | Pi 이벤트 인증·검증·저장·조회. 저장할 때 소음·빈방 에너지·기기 오프라인·게스트 불만 교차 확인 이상을 함께 판정하고, 운영자에게 넘길 문제는 처음 저장 때 Slack으로 알림. Pi는 `/api/events/write`만 쓴다(기본 주소는 운영 404) |
+| `/api/cron/*` | `api/cron/[...slug].js` | 아침·저녁: 예약 동기화 → Pi에 예약·다음 청소 일정 전달 → 보고·청소 후속(청소 미배정 이상 기록 포함). 저녁에는 내일 청소 담당자 하루 전 알림 |
 | `/api/stats*` | `api/stats.js` | 기간별 레포트·캘린더·드릴다운 |
 | `/api/ha/*` | `api/ha/[...slug].js` | HA 상태·서비스 프록시와 권한 범위 |
 | `/api/monitoring/*` | `api/monitoring/[...slug].js` | Pi 워처 상태·설정·업무 이벤트 중계 |
@@ -280,7 +295,8 @@ flowchart LR
 | `/api/ical`, `/api/weather` | 개별 파일 | iCal·날씨 서버 중계 |
 
 - `server/auth/`는 계정·세션·숙소 범위·HA/워처 권한을 관리한다.
-- `server/cleaning/`은 청소 상태 전이, 최초 요청 선점, 알림 인터페이스, Calendar/Gmail 동기화를 담당한다.
+- `server/cleaning/`은 청소 상태 전이, 최초 요청 선점, 알림 인터페이스, Calendar/Gmail 동기화, 배정 이력·청소 미배정 이상 기록을 담당한다.
+- `server/*Anomalies.js`는 이상 감지기, `server/anomalyRepository.js`는 이상의 열림·안정화·해결 기록을 맡는다(RF-25, DEC-21~24).
 - method·path·호출자·인증·요청·응답·멱등성은 [runtime_interfaces_and_collaboration.md의 API 계약](runtime_interfaces_and_collaboration.md#api-contracts)을 본다.
 
 ### 4.4 데이터·운영 스크립트
@@ -333,8 +349,11 @@ flowchart LR
     end
     subgraph Ledger[Postgres 내부 운영 원장]
         Reservation[(property_reservations)]
+        Stay[(property_stays·cleaning_obligations<br/>내부 숙박·청소 의무)]
         Cleaning[(cleaning_jobs·cleaning_notifs)]
+        AssignHist[(cleaning_assignment_history<br/>배정 이력)]
         Events[(events)]
+        Anomaly[(automation_anomalies·이력<br/>이상 기록)]
         Access[(operators·operator_properties)]
     end
     subgraph Use[사람이 보는 결과]
@@ -357,9 +376,19 @@ flowchart LR
     Events --> Report
     Access --> Room
     Cleaning --> Alert
+    Reservation --> Stay
+    Stay --> Cleaning
+    Cleaning --> AssignHist
+    Events --> Anomaly
+    Google -. 게스트 불만 메일 .-> Anomaly
+    AssignHist --> Anomaly
+    Anomaly -- 자동화 개선율 --> Report
+    Anomaly --> Alert
+    Reservation -. 예약·다음 청소 일정 .-> Pi
+    Cleaning -.-> Pi
 ```
 
-숙소 상태(공실·입실전·체류중·청소대기·청소중)는 예약·청소 일정이 정한다. 이벤트는 그 일정 구간에서 기대한 일이 실제로 일어났는지와, 일어나지 않았을 때의 문제를 보여줄 뿐 상태를 바꾸지 않는다(DEC-10, [room-state-machine.md 0절](docs/room-state-machine.md)). Pi의 watcher 상태·snapshot과 HA live sensor는 화면에 합쳐질 수 있지만 예약·청소 원장과 같은 데이터는 아니다. 상세 데이터 협업은 [런타임 데이터 흐름](runtime_interfaces_and_collaboration.md#data-collaboration), 테이블 관계는 [요약 ERD](myPlantUML/PROPOS_DB_ERD_summary.png)를 본다.
+숙소 상태(공실·입실전·체류중·청소대기·청소중)는 예약·청소 일정이 정한다. 이벤트는 그 일정 구간에서 기대한 일이 실제로 일어났는지와, 일어나지 않았을 때의 문제를 보여줄 뿐 상태를 바꾸지 않는다(DEC-10, [room-state-machine.md 0절](docs/room-state-machine.md)). 내부 숙박·청소 의무는 예약을 처음 받아들일 때 PROPOS가 붙이는 자체 번호다(외부 iCal UID는 별칭, DEC-22). 배정 이력은 추가만 하는 기록이고(DEC-24), 이상 기록은 이상의 열림·안정화·해결을 남겨 자동화 개선율의 근거가 된다(DEC-23). Pi의 watcher 상태·snapshot과 HA live sensor는 화면에 합쳐질 수 있지만 예약·청소 원장과 같은 데이터는 아니다. 상세 데이터 협업은 [런타임 데이터 흐름](runtime_interfaces_and_collaboration.md#data-collaboration), 테이블 관계는 [요약 ERD](myPlantUML/PROPOS_DB_ERD_summary.png)를 본다.
 
 ### 5.1 상세 흐름의 소유 문서
 
@@ -379,7 +408,7 @@ flowchart LR
 
 | 종류 | 기준 | 의미 |
 | --- | --- | --- |
-| 제품 정책·결정 | [.claude/rules/decisions.md](.claude/rules/decisions.md), `docs/refactoring.md`의 후속 DEC | 승인된 의도·선택·폐기안 |
+| 제품 정책·결정 | `CLAUDE.md` 운영 원칙, [.claude/rules/decisions.md](.claude/rules/decisions.md), `docs/refactoring.md`의 후속 DEC | 승인된 의도·선택·폐기안 |
 | 저장소 구현 | `src/`, `api/`, `server/`, 스키마·`vercel.json` | 현재 작업 트리가 구현한 동작과 설정. 배포·활성 상태를 자동으로 뜻하지 않음 |
 | 배포·운영 관측 | 날짜가 붙은 audit, 배포·DB·환경·실기 확인 | 특정 시점과 범위에서 관측한 상태. 이후 현재 상태로 일반화하지 않음 |
 | 외부 원천 | Airbnb iCal, Google Calendar/Gmail, Home Assistant | 예약·청소 확정·물리 센서 관측의 외부 입력 |
@@ -411,12 +440,14 @@ flowchart LR
 | 문서 | 역할 | 읽을 때 주의 |
 | --- | --- | --- |
 | [README.md](README.md) | 실행·빌드·보안·검증 시작점 | 세부 운영 상태는 최신 감사와 대조 |
-| [CLAUDE.md](CLAUDE.md) | 에이전트 코딩 규칙과 오래된 운영 메모 | 2026-08-06 이후 구조와 충돌하는 부분 존재 |
+| [CLAUDE.md](CLAUDE.md) | 에이전트 코딩 규칙·운영 원칙(2026-11-22)·작업 방식·배포 현황 | 2026-11-19 QA-01에서 대부분 정정. iCal 주소 저장 위치 한 줄은 아직 다름([MD-R01](refactoring_mdfile.md#md-r01)) |
 | [design_overview.md](design_overview.md) | 전체 문서의 단일 시작점 | 상세 내용을 복제하지 않고 각 문서로 연결 |
 | [actor_ui_scenarios.md](actor_ui_scenarios.md) | 액터·권한·웹/Worker UI·사용 시나리오 | 인증 역할과 업무 역할을 구분 |
 | [runtime_interfaces_and_collaboration.md](runtime_interfaces_and_collaboration.md) | API·외부 인터페이스·sequence·cron | 저장소 계약과 실제 배포 상태를 구분 |
 | [error_observability.md](error_observability.md) | 예외·업무 실패·HTTP·재시도·로그·Slack | `CURRENT`와 `TARGET · 미구현`을 구분 |
-| [docs/refactoring.md](docs/refactoring.md) | 현재 작업·사용자 시나리오·감사·결정 연결 | 현재 상태는 SEC-02부터 확인 |
+| [docs/refactoring.md](docs/refactoring.md) | 할 일·사용자 결정·현장 확인·완료·정해진 규칙(DEC) 목록 | 목록만 둔다. 경위는 커밋 메시지, 2026-11-19 이전 상세는 `git show ca41eb4:docs/refactoring.md` |
+| [docs/runbooks/pi-watcher-rollout.md](docs/runbooks/pi-watcher-rollout.md) | Pi 워처 런타임 파일 교체·확인·되돌리기 절차(사람용) | Git/Vercel 배포로 바뀌지 않는 Pi만 다룸 |
+| [sync_md.md](sync_md.md) | 통합 문서 동기화 임시 작업 목록(DP-08) | 끝나면 남은 항목을 `refactoring_mdfile.md`로 옮기고 삭제 |
 | [documentation_traceability.md](documentation_traceability.md) | 정책·설계·코드·데이터·테스트 연결 | 작업 상태나 새 제품 정본으로 사용하지 않음 |
 | [refactoring_mdfile.md](refactoring_mdfile.md) | Markdown 충돌·중복·용어·정리 순서 | 실제 구현 작업 상태는 `docs/refactoring.md`에서 확인 |
 | [refactoring_TC.md](refactoring_TC.md) | TC 안전·ID·계층·gate·추적성 리팩터링 계획 | 계획 문서이며 테스트 수정 상태로 해석하지 않음 |
@@ -429,7 +460,7 @@ flowchart LR
 
 | 문서 | 역할 |
 | --- | --- |
-| [.claude/rules/decisions.md](.claude/rules/decisions.md) | D-001~D-035 활성·폐기 결정 |
+| [.claude/rules/decisions.md](.claude/rules/decisions.md) | D-001~D-035 활성·폐기 결정. 그 뒤 결정은 [docs/refactoring.md 6절](docs/refactoring.md#rules)의 DEC-01~24 |
 | [docs/content-guide.md](docs/content-guide.md) | 운영 UI 제목·버튼·상태·오류 문구 |
 | `docs/scenarios.yaml` | Markdown은 아니지만 S01~S05와 코드·테스트의 매핑 정본 |
 
@@ -440,7 +471,7 @@ flowchart LR
 | [docs/room-state-machine.md](docs/room-state-machine.md) | 숙소 상태 전환 정본 |
 | [docs/event-detection-design.md](docs/event-detection-design.md) | EXIT/ENTRY·의심 추적·soft 이벤트 감지 |
 | [docs/data-architecture-and-simulator.md](docs/data-architecture-and-simulator.md) | 데이터 출처·관계·검수기 |
-| [docs/data-storage-design.md](docs/data-storage-design.md) | 이벤트 스키마·outbox·KV/Blob·보존 설계 |
+| [docs/data-storage-design.md](docs/data-storage-design.md) | 이벤트 스키마·outbox·KV·보존 설계 (Blob은 구현하지 않음 — D-014 현재 상태) |
 | [docs/event-ingestion-audit.md](docs/event-ingestion-audit.md) | 이벤트 수신 경로 감사·수정·운영 반영 이력 |
 
 ### 7.4 청소 자동화·Worker App
@@ -527,7 +558,7 @@ S01~S05는 기존 단계별 제품·데모 시나리오다. 세부 경로·서�
 | `SEC-02` | 최신 작업 상태 |
 | `D-0` / `DEC-0` | 과거 결정 / 후속 결정 |
 | `RF-` / `ACT-` | 감사 항목 / 실행 작업 |
-| `TR-01`~`TR-12` | 정책·문서·코드·데이터·테스트 추적 |
+| `TR-01`~`TR-13` | 정책·문서·코드·데이터·테스트 추적 |
 | `MD-R01`~`MD-R29` | 문서 충돌·중복·형식 검토 항목 |
 | `SCN-01`~`SCN-07` | 현재 액터·UI·시스템 사용 시나리오 |
 | `AC-01`~`AC-05` / `AC-S01`~`AC-S08` | 사람 액터 / 시스템 액터 ([actor_ui_scenarios.md](actor_ui_scenarios.md#actor-catalog)). `ACT-`는 `docs/refactoring.md`의 실행 작업 번호 |
@@ -540,6 +571,8 @@ S01~S05는 기존 단계별 제품·데모 시나리오다. 세부 경로·서�
 | `sNN` | 테스트 스위트 |
 | `REAL`, `SIMULATED`, `DEMO`, `HYBRID` | 데이터 프로필 |
 | `VACANT`, `PRE_STAY_READY`, `OCCUPIED`, `CLEANING` | 숙소 상태 |
+| `퇴실 지연`, `입실 미감지`, `확인 불가`, `청소 미감지`, `청소 미배정(취소)` | 일정 안에서 기대한 일이 안 된 문제 ([room-state-machine.md 0절](docs/room-state-machine.md)) |
+| `자동화 개선율`, `automation_anomalies` | 이상 기록과 그 비율 (RF-25, 안심지수와 별개) |
 | `PENDING`, `ASSIGNED`, `COMPLETED`, `CANCELLED` | 청소 작업 상태 |
 | `iCal`, `reservation_uid`, `checkout_at` | 숙박 예약·청소 작업 연결 |
 | `FCM`, `SMS`, `NotificationService` | 청소 알림 |
