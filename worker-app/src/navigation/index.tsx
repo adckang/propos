@@ -4,10 +4,11 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import HomeScreen from '../screens/HomeScreen';
 import JobScreen from '../screens/JobScreen';
 import type { JobPayload } from '../services/fcm';
+import type { CleaningRequest } from '../services/api';
 
 export type RootStackParamList = {
   Home: undefined;
-  Job: { payload: JobPayload };
+  Job: { payload: JobPayload } | { request: CleaningRequest };
 };
 
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
@@ -29,8 +30,10 @@ export default function Navigation({ initialPayload }: Props) {
   return (
     <NavigationContainer ref={navigationRef} onReady={handleReady}>
       <Stack.Navigator screenOptions={{ headerStyle: { backgroundColor: '#fff' }, headerTintColor: '#1a1a2e' }}>
-        <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'PROPOS Worker' }} />
-        <Stack.Screen name="Job"  component={JobScreen}  options={{ title: '새 요청' }} />
+        <Stack.Screen name="Home" component={HomeScreen} options={{ title: '청소 요청 내역' }} />
+        <Stack.Screen name="Job" component={JobScreen} options={({ route }) => ({
+          title: 'request' in route.params ? '청소 요청' : '새 요청',
+        })} />
       </Stack.Navigator>
     </NavigationContainer>
   );

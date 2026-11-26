@@ -344,7 +344,7 @@ describe('발송 전 확인 — 퇴실이 없어진 날만 막는다', () => {
   // 2026-11-11 리뷰 3차: 단체 요청을 모두 거절한 경우·화면이 열릴 때 도는 후속 처리의 "배정 실패 — 수동 처리 필요" 넘김도 같은 규칙으로
   test('단체 요청을 모두 거절해도 퇴실이 없어진 날이면 "배정 실패"로 넘기지 않는다', () => {
     assert.match(api, /j\.status AS job_status, j\.data_origin, j\.property_id, j\.cleaning_start_at, j\.checkout_at, j\.reservation_uid\s+FROM cleaning_notifs n/);
-    assert.match(api, /if \(parseInt\(total\) === parseInt\(declined\) && !\(await isCheckoutCancelled\(db, notif\)\)\) \{\s*await db\.query\(`UPDATE cleaning_jobs SET status='ESCALATED'/);
+    assert.match(api, /if \(parseInt\(total\) === parseInt\(declined\) && !\(await isCheckoutCancelled\(db, notif\)\)\) \{[\s\S]{0,240}?await db\.query\(`UPDATE cleaning_jobs SET status='ESCALATED'/);
   });
 
   test('화면이 열릴 때 도는 후속 처리(runFollowupChecks)도 퇴실이 없어진 날은 "배정 실패"로 넘기지 않는다', () => {

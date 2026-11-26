@@ -14,7 +14,7 @@ export async function workerFcmFixture({ stored = 'fixture-old', token = 'fixtur
   const saved = { fetch: globalThis.fetch, profile: process.env.PROPOS_DATA_PROFILE };
   const key = '__workerFcmFixture_' + randomUUID().replaceAll('-', '');
   const values = storage ?? new Map(stored ? [[TOKEN_KEY, stored]] : []);
-  const listeners = new Set(), foregroundListeners = new Set(), openedListeners = new Set();
+  const listeners = new Set(), foregroundListeners = new Set(), openedListeners = new Set(), appStateListeners = new Set();
   const calls = [], writes = [], slackCalls = [];
   const ui = {
     alerts: [], links: [], navigationCalls: [], componentCalls: [], effects: [], hookStates: [], hookIndex: 0,
@@ -50,7 +50,7 @@ export async function workerFcmFixture({ stored = 'fixture-old', token = 'fixtur
   };
   const probeCalls = [];
   const io = {
-    db, permission: 1, token, initialNotification, ui, probeCalls,
+    db, permission: 1, token, initialNotification, ui, probeCalls, appStateListeners,
     async probeToken(...args) {
       probeCalls.push(args);
       if (probe) return probe(...args);
@@ -85,11 +85,15 @@ export async function workerFcmFixture({ stored = 'fixture-old', token = 'fixtur
       export const createElement=(...args)=>ui.createElement(...args);
       export const useState=(value)=>ui.useState(value);
       export const useEffect=(effect)=>ui.useEffect(effect);
+      export const useCallback=(callback)=>callback;
       export const useRef=(value)=>({current:value});
       export default {createElement};`,
     'react-native': `
       const io=globalThis[${JSON.stringify(key)}], native=(name)=>(props)=>io.ui.native(name,props);
       export const View=native('View'), Text=native('Text'), TextInput=native('TextInput'), TouchableOpacity=native('TouchableOpacity'), ActivityIndicator=native('ActivityIndicator'), KeyboardAvoidingView=native('KeyboardAvoidingView');
+      export const AppState={addEventListener:(_,fn)=>{const listeners=io.appStateListeners;listeners.add(fn);return {remove:()=>listeners.delete(fn)};}};
+      export const FlatList=props=>io.ui.native('FlatList',{...props,children:props.data.length
+        ? props.data.map((item,index)=>props.renderItem({item,index})) : props.ListEmptyComponent});
       export const StyleSheet={create:value=>value};
       export const Platform={OS:'android'};
       export const Linking={openURL:url=>{io.ui.links.push(url);return Promise.resolve();}};
@@ -98,6 +102,7 @@ export async function workerFcmFixture({ stored = 'fixture-old', token = 'fixtur
       const ui=globalThis[${JSON.stringify(key)}].ui;
       export const createNavigationContainerRef=()=>ui.navigationRef;
       export const NavigationContainer=props=>{ui.ready(props.onReady);return ui.native('NavigationContainer',props);};
+      export const useFocusEffect=effect=>ui.useEffect(effect);
       export const useNavigation=()=>ui.navigation;`,
     '@react-navigation/native-stack': `
       const ui=globalThis[${JSON.stringify(key)}].ui, native=name=>props=>ui.native(name,props);
@@ -134,12 +139,14 @@ export async function workerFcmFixture({ stored = 'fixture-old', token = 'fixtur
     const call = { url: String(url), method: options.method ?? 'GET', body, headers: options.headers ?? {}, signal: options.signal };
     calls.push(call);
     if (answer) return answer(call, calls.length);
-    if (call.url !== 'https://www.proposonline.com/api/workers/token') throw new Error('Unexpected external request blocked');
+    const resource = ['token', 'requests'].find(item => call.url === `https://www.proposonline.com/api/workers/${item}`);
+    if (!resource) throw new Error('Unexpected external request blocked');
     if (db) {
       const headers = Object.fromEntries(Object.entries(call.headers).map(([k, v]) => [k.toLowerCase(), v]));
-      const res = await invoke(call.method, body, headers); return response(res.code, res.body);
+      const res = await invoke(call.method, body, headers, { resource }); return response(res.code, res.body);
     }
-    return response(200, call.method === 'GET' ? { ok: true, worker_id: WORKER_ID } : { ok: true });
+    return response(200, resource === 'requests' ? { ok: true, requests: [] }
+      : call.method === 'GET' ? { ok: true, worker_id: WORKER_ID } : { ok: true });
   };
   return { values, calls, writes, slackCalls, probeCalls, io, invoke, loadApi: () => load('worker-app/src/services/api.ts'),
     loadClient: () => load('worker-app/src/services/fcm.ts'),
@@ -152,6 +159,7 @@ export async function workerFcmFixture({ stored = 'fixture-old', token = 'fixtur
     async emitToken(value) { io.token = value; return Promise.all([...listeners].map(fn => fn(value))); },
     async emitForeground(message) { return Promise.all([...foregroundListeners].map(fn => fn(message))); },
     async emitOpened(message) { return Promise.all([...openedListeners].map(fn => fn(message))); },
+    emitAppState(value) { for (const listener of appStateListeners) listener(value); },
     cleanupEffects: () => ui.cleanup(),
     restore() {
       globalThis.fetch = saved.fetch; delete globalThis[key];

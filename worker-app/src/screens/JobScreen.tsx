@@ -6,12 +6,18 @@ import {
 import { WebView } from 'react-native-webview';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { declineJob } from '../services/api';
+import { PROPOS_BASE_URL } from '../config';
 import type { RootStackParamList } from '../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Job'>;
 
 export default function JobScreen({ route, navigation }: Props) {
-  const { payload } = route.params;
+  const { params } = route;
+  const fromHistory = 'request' in params;
+  const body = fromHistory ? `${params.request.propertyName} ${params.request.cleaningAt}` : params.payload.body;
+  const calendarUrl = fromHistory ? `${PROPOS_BASE_URL}${params.request.calendarPath}` : params.payload.calendarUrl;
+  const declineToken = fromHistory ? params.request.declineToken : params.payload.token;
+  const hostPhone = fromHistory ? '' : params.payload.hostPhone;
   const [view, setView]     = useState<'main' | 'calendar'>('main');
   const [declined, setDeclined] = useState(false);
   const [loading, setLoading]   = useState(false);
@@ -25,7 +31,7 @@ export default function JobScreen({ route, navigation }: Props) {
         onPress: async () => {
           setLoading(true);
           try {
-            const result = await declineJob(payload.token);
+            const result = await declineJob(declineToken ?? '', fromHistory);
             if (result.ok) {
               setDeclined(true);
             } else {
@@ -42,7 +48,7 @@ export default function JobScreen({ route, navigation }: Props) {
   }
 
   function handleNegotiate() {
-    Linking.openURL(`sms:${payload.hostPhone}`);
+    Linking.openURL(`sms:${hostPhone}`);
   }
 
   if (view === 'calendar') {
@@ -51,7 +57,7 @@ export default function JobScreen({ route, navigation }: Props) {
         <TouchableOpacity style={s.backBtn} onPress={() => setView('main')}>
           <Text style={s.backBtnText}>← 돌아가기</Text>
         </TouchableOpacity>
-        <WebView source={{ uri: payload.calendarUrl }} style={{ flex: 1 }} />
+        <WebView source={{ uri: calendarUrl }} style={{ flex: 1 }} />
       </View>
     );
   }
@@ -73,24 +79,29 @@ export default function JobScreen({ route, navigation }: Props) {
     <View style={s.wrap}>
       <View style={s.card}>
         <Text style={s.tag}>청소 요청</Text>
-        <Text style={s.title}>{payload.body}</Text>
+        <Text style={s.title}>{body}</Text>
       </View>
 
       <TouchableOpacity style={[s.btn, s.btnAccept]} onPress={() => setView('calendar')} disabled={loading}>
-        <Text style={s.btnText}>✓ 수락 (예약하기)</Text>
+        <Text style={s.btnText}>{fromHistory ? '예약 캘린더 열기' : '✓ 수락 (예약하기)'}</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={[s.btn, s.btnDecline]} onPress={handleDecline} disabled={loading}>
-        {loading
-          ? <ActivityIndicator color="#dc2626" />
-          : <Text style={[s.btnText, s.btnTextDecline]}>✕ 거절</Text>}
-      </TouchableOpacity>
+      {(!fromHistory || declineToken) && (
+        <TouchableOpacity style={[s.btn, s.btnDecline]} onPress={handleDecline} disabled={loading}>
+          {loading
+            ? <ActivityIndicator color="#dc2626" />
+            : <Text style={[s.btnText, s.btnTextDecline]}>✕ 거절</Text>}
+        </TouchableOpacity>
+      )}
 
-      <TouchableOpacity style={[s.btn, s.btnNegotiate]} onPress={handleNegotiate}>
-        <Text style={[s.btnText, s.btnTextNegotiate]}>💬 협의 필요</Text>
-      </TouchableOpacity>
-
-      <Text style={s.hint}>수락을 누르면 Google Calendar 예약 페이지가 열립니다.</Text>
+      {!fromHistory && (
+        <>
+          <TouchableOpacity style={[s.btn, s.btnNegotiate]} onPress={handleNegotiate}>
+            <Text style={[s.btnText, s.btnTextNegotiate]}>💬 협의 필요</Text>
+          </TouchableOpacity>
+          <Text style={s.hint}>수락을 누르면 Google Calendar 예약 페이지가 열립니다.</Text>
+        </>
+      )}
     </View>
   );
 }

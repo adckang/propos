@@ -10,6 +10,7 @@
 import { Pool } from "pg";
 import { postSlack } from "../../server/cleaning/_dispatch.js";
 import { probeToken } from "../../server/cleaning/_push.js";
+import { listWorkerRequests } from "../../server/cleaning/_workerRequests.js";
 import { DATA_PROFILE, resolveServerDataProfile } from "../../src/config/dataProfile.js";
 
 const db = new Pool({ connectionString: process.env.POSTGRES_URL });
@@ -25,6 +26,11 @@ function parseSlug(req) {
 
 function sendJson(res, status, body) {
   res.status(status).json(body);
+}
+
+function bearerToken(req) {
+  const authorization = req.headers?.authorization ?? req.headers?.Authorization;
+  return typeof authorization === 'string' ? authorization.match(/^Bearer (\S+)$/i)?.[1] : null;
 }
 
 async function readBody(req) {
@@ -160,8 +166,7 @@ async function handleHeartbeat(req, res) {
 async function handleTokenUpdate(req, res) {
   if (req.method === 'GET') {
     res.setHeader('Cache-Control', 'private, no-store');
-    const authorization = req.headers?.authorization ?? req.headers?.Authorization;
-    const token = typeof authorization === 'string' ? authorization.match(/^Bearer (\S+)$/i)?.[1] : null;
+    const token = bearerToken(req);
     if (!token) return sendJson(res, 401, { error: 'token required' });
     let rows;
     try { ({ rows } = await db.query('SELECT id FROM cleaners WHERE fcm_token=$1 LIMIT 2', [token])); }
@@ -260,6 +265,20 @@ async function handleProfile(req, res) {
   return sendJson(res, 405, { error: "GET or PATCH only" });
 }
 
+async function handleRequests(req, res) {
+  res.setHeader('Cache-Control', 'private, no-store');
+  if (req.method !== 'GET') return sendJson(res, 405, { error: 'GET only' });
+  const token = bearerToken(req);
+  if (!token) return sendJson(res, 401, { error: 'token required' });
+  try {
+    const { status, requests, error } = await listWorkerRequests(db, token);
+    return sendJson(res, status, status === 200 ? { ok: true, requests } : { error });
+  } catch (err) {
+    console.error('[workers/requests] 조회 실패:', err?.code ?? err?.name);
+    return sendJson(res, 500, { error: '청소 요청 조회 실패' });
+  }
+}
+
 export default async function handler(req, res) {
   if (resolveServerDataProfile(process.env) === DATA_PROFILE.DEMO) {
     return sendJson(res, 403, { error: "demo profile is read-only", dataProfile: "demo" });
@@ -272,6 +291,7 @@ export default async function handler(req, res) {
     if (resource === "heartbeat") return await handleHeartbeat(req, res);
     if (resource === "token")     return await handleTokenUpdate(req, res);
     if (resource === "profile")   return await handleProfile(req, res);
+    if (resource === "requests")  return await handleRequests(req, res);
 
     return sendJson(res, 404, { error: "Not found" });
   } catch (err) {

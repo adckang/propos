@@ -26,6 +26,7 @@ import {
   saveCalendarWatchExpiration,
 } from "../../server/cleaning/_calendar.js";
 import { notify } from "../../server/cleaning/_notify.js";
+import { APP_REQUEST_SQL, CAN_DECLINE_REQUEST_SQL } from "../../server/cleaning/_workerRequests.js";
 import { syncAllPropertiesIcal } from "../../server/cleaning/_icalSync.js";
 import { assignFromCalendarEvents } from "../../server/cleaning/_calendarAssign.js";
 import { isCheckoutCancelled, postAssignmentSlack } from "../../server/cleaning/_reservationSync.js";
@@ -508,6 +509,8 @@ async function handleConfirmRedirect(req, res, propertyId) {
 async function handleDecline(req, res, token) {
   if (req.method !== "GET") return res.status(405).end();
   const isApi = req.query?.format === "api";
+  const fromHistory = isApi && req.query?.source === "history";
+  if (fromHistory) res.setHeader("Cache-Control", "private, no-store");
   const respond = (status, title, message) => {
     if (isApi) return res.status(status).json({ ok: status < 400, message });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -525,17 +528,30 @@ async function handleDecline(req, res, token) {
   );
   if (!notif) return respond(404, "링크 오류", "링크를 찾을 수 없습니다.");
   if (notif.data_origin === "SIMULATED") return respond(409, "시뮬레이션 일정", "시뮬레이션 일정은 외부 배정 처리를 하지 않습니다.");
-  if (notif.response) return respond(200, "이미 처리됨", "이미 처리된 링크입니다.");
-  if (notif.job_status === "CANCELLED")
-    return respond(200, "취소된 일정", "해당 청소 일정은 이미 취소됐습니다. 감사합니다.");
-  if (["ASSIGNED", "COMPLETED"].includes(notif.job_status)) {
-    await db.query(`UPDATE cleaning_notifs SET response='DECLINED_AFTER_ASSIGNED',response_at=NOW() WHERE token=$1`, [t]);
-    return respond(200, "배정 완료", "이미 배정 완료된 건입니다. 감사합니다.");
+  if (fromHistory) {
+    // 목록을 열어 둔 동안 다음 단계로 넘어간 요청은 다시 응답할 수 없다.
+    const { rows: [current] } = await db.query(`WITH current_request AS (
+      SELECT j.id, j.status FROM cleaning_jobs j JOIN cleaning_notifs n ON n.job_id=j.id
+      WHERE n.token=$1 AND ${APP_REQUEST_SQL} AND ${CAN_DECLINE_REQUEST_SQL}
+      FOR UPDATE OF j
+    ) UPDATE cleaning_notifs n SET response='DECLINED',response_at=NOW()
+      FROM current_request WHERE n.token=$1 AND n.job_id=current_request.id AND n.response IS NULL
+      RETURNING current_request.status`, [t]);
+    if (!current) return respond(409, "응답 종료", "현재 응답할 수 없는 요청입니다.");
+    notif.job_status = current.status;
+  } else {
+    if (notif.response) return respond(200, "이미 처리됨", "이미 처리된 링크입니다.");
+    if (notif.job_status === "CANCELLED")
+      return respond(200, "취소된 일정", "해당 청소 일정은 이미 취소됐습니다. 감사합니다.");
+    if (["ASSIGNED", "COMPLETED"].includes(notif.job_status)) {
+      await db.query(`UPDATE cleaning_notifs SET response='DECLINED_AFTER_ASSIGNED',response_at=NOW() WHERE token=$1`, [t]);
+      return respond(200, "배정 완료", "이미 배정 완료된 건입니다. 감사합니다.");
+    }
+    await db.query(`UPDATE cleaning_notifs SET response='DECLINED',response_at=NOW() WHERE token=$1`, [t]);
   }
-  await db.query(`UPDATE cleaning_notifs SET response='DECLINED',response_at=NOW() WHERE token=$1`, [t]);
   if (["NOTIFYING_VIP_1","NOTIFYING_VIP_2","NOTIFYING_VIP_3"].includes(notif.job_status)) {
     const { rows: [job] } = await db.query(`SELECT * FROM cleaning_jobs WHERE id=$1`, [notif.job_id]);
-    if (job) await advanceJob(db, job);
+    if (job && (!fromHistory || job.status === notif.job_status)) await advanceJob(db, job);
   } else if (["NOTIFYING_BULK","BULK_REMINDED"].includes(notif.job_status)) {
     const { rows } = await db.query(
       `SELECT COUNT(*) AS total, COUNT(CASE WHEN response='DECLINED' THEN 1 END) AS declined FROM cleaning_notifs WHERE job_id=$1`,
@@ -544,9 +560,13 @@ async function handleDecline(req, res, token) {
     const { total, declined } = rows[0];
     // RF-16: 그날 퇴실이 없어졌으면 "배정 실패 — 수동 처리"로 넘기지 않는다(크론의 넘김과 같은 규칙). 운영자 알림은 동기화가 보낸다
     if (parseInt(total) === parseInt(declined) && !(await isCheckoutCancelled(db, notif))) {
-      await db.query(`UPDATE cleaning_jobs SET status='ESCALATED',updated_at=NOW() WHERE id=$1`, [notif.job_id]);
-      const date = toKstDateKey(notif.cleaning_start_at);
-      await postSlack(`[PROPOS] 🚨 ${notif.property_id} ${date} 청소 배정 실패 (전원 거절). 수동 처리 필요.`);
+      const stillNotifying = fromHistory ? " AND status IN ('NOTIFYING_BULK','BULK_REMINDED')" : "";
+      const { rowCount } = await db.query(`UPDATE cleaning_jobs SET status='ESCALATED',updated_at=NOW() WHERE id=$1${stillNotifying}`,
+        [notif.job_id]);
+      if (!fromHistory || rowCount) {
+        const date = toKstDateKey(notif.cleaning_start_at);
+        await postSlack(`[PROPOS] 🚨 ${notif.property_id} ${date} 청소 배정 실패 (전원 거절). 수동 처리 필요.`);
+      }
     }
   }
   return respond(200, "거절 처리 완료", "거절 처리됐습니다. 감사합니다.");

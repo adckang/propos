@@ -24,6 +24,10 @@ const remoteMessage = {
   data: { jobId: payload.jobId, token: payload.token, calendarUrl: payload.calendarUrl, hostPhone: payload.hostPhone },
   notification: { title: payload.title, body: payload.body },
 };
+const historyRequest = {
+  id: 'fixture-request', propertyName: 'Fixture Property', cleaningAt: '2026-12-06 11:00',
+  calendarPath: '/c/fixture-property', declineToken: null,
+};
 
 function children(node) {
   if (!node || typeof node !== 'object') return [];
@@ -212,7 +216,7 @@ describe('actual Worker App navigation and Home screen', () => {
     const { default: HomeScreen } = await f.loadHome();
     f.render(HomeScreen);
     await flushPromises();
-    assert.deepEqual(f.calls, [{
+    assert.deepEqual(f.calls.filter(call => call.url.endsWith('/heartbeat')), [{
       url: 'https://www.proposonline.com/api/workers/heartbeat', method: 'POST',
       body: { fcm_token: 'fixture-stored-token' }, headers: { 'Content-Type': 'application/json' }, signal: undefined,
     }]);
@@ -221,6 +225,25 @@ describe('actual Worker App navigation and Home screen', () => {
     assert.deepEqual(f.io.ui.navigationCalls, [
       { screen: 'Job', params: { payload } }, { screen: 'Job', params: { payload } },
     ]);
+  });
+
+  test('HomeScreen can reopen a server-side request without receiving a push', async t => {
+    let requests = [];
+    const f = await actualWorkerApp(t, { answer: call => response(200, call.url.endsWith('/requests')
+      ? { ok: true, requests } : { ok: true }) });
+    const { default: HomeScreen } = await f.loadHome();
+    f.render(HomeScreen);
+    await flushPromises();
+    const received = f.calls.find(call => call.url.endsWith('/requests'));
+    assert.equal(received.method, 'GET');
+    assert.equal(received.headers.Authorization, 'Bearer fixture-old');
+    requests = [historyRequest];
+    f.emitAppState('active');
+    await flushPromises();
+    const tree = f.render(HomeScreen);
+    assert.match(textContent(tree), /Fixture Property2026-12-06 11:00/);
+    press(tree, 'Fixture Property');
+    assert.deepEqual(f.io.ui.navigationCalls, [{ screen: 'Job', params: { request: historyRequest } }]);
   });
 
   test('HomeScreen skips heartbeat without a stored token and removes both message listeners', async t => {
@@ -238,6 +261,27 @@ describe('actual Worker App navigation and Home screen', () => {
 });
 
 describe('actual Worker App Job screen', () => {
+  test('History opens the existing reservation calendar and has no booking state', async t => {
+    const f = await actualWorkerApp(t);
+    const { default: JobScreen } = await f.loadJob();
+    const props = { route: { params: { request: historyRequest } }, navigation: { goBack() {} } };
+    const tree = f.render(JobScreen, props);
+    assert.doesNotMatch(textContent(tree), /선점|배정|거절/);
+    await press(tree, '예약 캘린더 열기');
+    const calendar = findNode(f.render(JobScreen, props), node => node.type === 'WebView');
+    assert.equal(calendar.props.source.uri, 'https://www.proposonline.com/c/fixture-property');
+    assert.equal(f.calls.length, 0);
+  });
+
+  test('A decline from history uses the guarded path', async t => {
+    const f = await actualWorkerApp(t, { answer: () => response(200, { ok: true }) });
+    const { default: JobScreen } = await f.loadJob();
+    const props = { route: { params: { request: { ...historyRequest, declineToken: 'OPEN01' } } }, navigation: { goBack() {} } };
+    press(f.render(JobScreen, props), '거절');
+    await f.io.ui.alerts[0].actions[1].onPress();
+    assert.equal(f.calls[0].url, 'https://www.proposonline.com/api/cleaning/d?token=OPEN01&format=api&source=history');
+  });
+
   test('a confirmed successful decline switches to the actual completed state', async t => {
     const f = await actualWorkerApp(t, { answer: () => response(200, { ok: true, message: '거절 처리 완료' }) });
     const { default: JobScreen } = await f.loadJob();
