@@ -219,7 +219,10 @@ async function handleTokenUpdate(req, res) {
 
 /**
  * GET  /api/workers/profile?fcm_token=...
- * PATCH /api/workers/profile  { fcm_token, name, email }
+ * PATCH /api/workers/profile  { fcm_token, name }
+ *
+ * ACT-11 ②(사용자 결정, 2026-11-26): 앱에서는 이름만 바꾼다. 번호·이메일은 관리자 화면에서만 — 이메일은 캘린더 배정이 담당자를
+ * 찾는 열쇠이고, 앱 연결도 관리자가 저장한 번호·이메일로 확인한다(4ea6801). 저장된 값과 다른 번호·이메일이 오면 아무것도 바꾸지 않고 403.
  */
 async function handleProfile(req, res) {
   if (req.method === "GET") {
@@ -235,23 +238,24 @@ async function handleProfile(req, res) {
   if (req.method === "PATCH") {
     const { fcm_token, name, email, phone } = await readBody(req);
     if (!fcm_token) return sendJson(res, 400, { error: "fcm_token 필수" });
-    const normalizedPhone = phone ? normalizePhone(phone) : null;
-    try {
-      const { rows } = await db.query(
-        `UPDATE cleaners
-         SET name  = COALESCE($2, name),
-             email = COALESCE($3, email),
-             phone = COALESCE($4, phone)
-         WHERE fcm_token = $1
-         RETURNING id, name, phone, email, tier, active`,
-        [fcm_token, name ?? null, email ? email.toLowerCase().trim() : null, normalizedPhone]
-      );
-      if (!rows.length) return sendJson(res, 404, { error: "등록되지 않은 토큰" });
-      return sendJson(res, 200, { ok: true, worker: rows[0] });
-    } catch (err) {
-      if (err.code === "23505") return sendJson(res, 409, { error: "이미 사용 중인 전화번호입니다" });
-      throw err;
+    const { rows: [current] } = await db.query(
+      `SELECT id, phone, email FROM cleaners WHERE fcm_token = $1`, [fcm_token]);
+    if (!current) return sendJson(res, 404, { error: "등록되지 않은 토큰" });
+    const changesPhone = typeof phone === "string" && phone.trim() !== "" && normalizePhone(phone) !== current.phone;
+    const changesEmail = typeof email === "string" && email.trim() !== ""
+      && email.toLowerCase().trim() !== String(current.email ?? "").toLowerCase().trim();
+    if (changesPhone || changesEmail) {
+      return sendJson(res, 403, { error: "전화번호·이메일은 관리자가 바꿉니다. 호스트에게 요청해 주세요" });
     }
+    const { rows } = await db.query(
+      `UPDATE cleaners
+       SET name = COALESCE($2, name)
+       WHERE id = $1 AND fcm_token = $3
+       RETURNING id, name, phone, email, tier, active`,
+      [current.id, name ?? null, fcm_token]
+    );
+    if (!rows.length) return sendJson(res, 404, { error: "등록되지 않은 토큰" });
+    return sendJson(res, 200, { ok: true, worker: rows[0] });
   }
   return sendJson(res, 405, { error: "GET or PATCH only" });
 }

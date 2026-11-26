@@ -244,41 +244,48 @@ describe('actual worker handler — profile', () => {
     assertWorkerReply(await f.send('profile', 'PATCH', { fcm_token, name: 'Fixture' }), 400, { error: 'fcm_token 필수' });
     assert.deepEqual(f.queries, []);
   });
-  for (const [phone, expected] of [
-    ['010-1234-5678', '010-1234-5678'], ['01012345678', '010-1234-5678'],
-    ['+821012345678', '010-1234-5678'], ['821012345678', '010-1234-5678'],
-    ['010 1234 5678', '010-1234-5678'], ['12345', '12345'],
-  ]) test(`PATCH forwards the current name/email/phone contract (${phone})`, async t => {
-    const { fcm_status, ...updated } = WORKER_ROW;
-    const f = await actualWorker(t, { rows: [updated] });
-    assertWorkerReply(await f.send('profile', 'PATCH', {
-      fcm_token: FIXTURE_TOKEN, name: '  Fixture Worker  ', email: '  WORKER@Example.INVALID  ', phone,
-    }), 200, { ok: true, worker: updated });
-    assert.equal(f.queries.length, 1);
-    // Name whitespace is currently preserved by the API; do not silently add trimming.
-    assert.deepEqual(f.queries[0].params, [FIXTURE_TOKEN, '  Fixture Worker  ', 'worker@example.invalid', expected]);
-  });
-  for (const [label, fields, expected] of [
-    ['omitted fields', {}, [null, null, null]],
-    ['null fields', { name: null, email: null, phone: null }, [null, null, null]],
-    ['empty fields', { name: '', email: '', phone: '' }, ['', null, null]],
-  ]) test(`PATCH ${label} preserves optional update semantics`, async t => {
+  // ACT-11 ②(사용자 결정, 2026-11-26): 번호·이메일은 관리자만 바꾼다 — 이메일은 캘린더 배정의 열쇠이고, 앱 연결도
+  // 관리자가 저장한 번호·이메일로 확인한다(4ea6801). 앱에서는 이름만 바꿀 수 있다.
+  const nameUpdates = f => f.queries.filter(q => /UPDATE cleaners/i.test(q.sql));
+  test('PATCH changes only the name', async t => {
     const f = await actualWorker(t);
-    assert.equal((await f.send('profile', 'PATCH', { fcm_token: FIXTURE_TOKEN, ...fields })).code, 200);
-    assert.deepEqual(f.queries[0].params, [FIXTURE_TOKEN, ...expected]);
-    for (const [field, parameter] of [['name', 2], ['email', 3], ['phone', 4]]) {
-      assert.match(f.queries[0].sql, new RegExp(`\\b${field}\\s*=\\s*COALESCE\\(\\$${parameter},\\s*${field}\\)`, 'i'));
-    }
-    assert.match(f.queries[0].sql, /WHERE fcm_token\s*=\s*\$1/i);
+    assertWorkerReply(await f.send('profile', 'PATCH', { fcm_token: FIXTURE_TOKEN, name: '  Fixture Worker  ' }), 200,
+      { ok: true, worker: WORKER_ROW });
+    const [update] = nameUpdates(f);
+    assert.match(update.sql, /SET name = COALESCE\(\$2, name\)\s+WHERE id = \$1 AND fcm_token = \$3/);
+    assert.doesNotMatch(update.sql, /\bemail\s*=|\bphone\s*=/);
+    // Name whitespace is currently preserved by the API; do not silently add trimming.
+    assert.deepEqual(update.params, [WORKER_ROW.id, '  Fixture Worker  ', FIXTURE_TOKEN]);
+  });
+  for (const [label, fields] of [
+    ['a different phone', { phone: '010-9999-0000' }],
+    ['a different email', { email: 'someone-else@example.invalid' }],
+    ['a name plus a different phone', { name: 'New Name', phone: '01099990000' }],
+  ]) test(`PATCH with ${label} is refused and changes nothing`, async t => {
+    const f = await actualWorker(t);
+    assertWorkerReply(await f.send('profile', 'PATCH', { fcm_token: FIXTURE_TOKEN, ...fields }), 403,
+      { error: '전화번호·이메일은 관리자가 바꿉니다. 호스트에게 요청해 주세요' });
+    assert.deepEqual(nameUpdates(f), []);
+  });
+  for (const [label, fields] of [
+    ['the stored phone in another spelling', { phone: '+821012345678' }],
+    ['the stored email in another case', { email: '  WORKER@Example.INVALID  ' }],
+    ['empty phone and email', { phone: '', email: '' }],
+    ['null phone and email', { phone: null, email: null }],
+  ]) test(`PATCH with ${label} is not a change and is allowed`, async t => {
+    const f = await actualWorker(t);
+    assert.equal((await f.send('profile', 'PATCH', { fcm_token: FIXTURE_TOKEN, name: 'Fixture', ...fields })).code, 200);
+    assert.deepEqual(nameUpdates(f)[0].params, [WORKER_ROW.id, 'Fixture', FIXTURE_TOKEN]);
+  });
+  test('PATCH without a name keeps the name', async t => {
+    const f = await actualWorker(t);
+    assert.equal((await f.send('profile', 'PATCH', { fcm_token: FIXTURE_TOKEN })).code, 200);
+    assert.deepEqual(nameUpdates(f)[0].params, [WORKER_ROW.id, null, FIXTURE_TOKEN]);
   });
   test('PATCH returns 404 for an unregistered token', async t => {
     const f = await actualWorker(t, { rows: [] });
     assertWorkerReply(await f.send('profile', 'PATCH', { fcm_token: FIXTURE_TOKEN, name: 'Fixture' }), 404, { error: '등록되지 않은 토큰' });
-  });
-  test('PATCH translates the DB phone uniqueness error to the existing 409 response', async t => {
-    const f = await actualWorker(t, { query: async () => { throw Object.assign(new Error('fixture duplicate phone'), { code: '23505', constraint: 'cleaners_phone_key' }); } });
-    assertWorkerReply(await f.send('profile', 'PATCH', { fcm_token: FIXTURE_TOKEN, phone: '01012345678' }), 409, { error: '이미 사용 중인 전화번호입니다' });
-    assert.deepEqual(f.queries[0].params, [FIXTURE_TOKEN, null, null, '010-1234-5678']);
+    assert.deepEqual(nameUpdates(f), []);
   });
   for (const method of ['POST', 'PUT', 'DELETE']) test(`profile ${method} is rejected before DB`, async t => {
     const f = await actualWorker(t);

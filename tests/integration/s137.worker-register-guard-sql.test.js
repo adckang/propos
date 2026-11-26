@@ -6,9 +6,49 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createCleaningSqlFixture } from '../helpers/cleaningDeliveryFixture.js';
+import { cleaningDeclineFixture } from '../helpers/cleaningDeclineFixture.js';
+import { createSessionToken } from '../../server/auth/operatorAuth.js';
 
 const enabled = !!(process.env.PGLITE_TEST_ROOT || process.env.CLEANING_TEST_DATABASE_URL);
 const PHONE = '010-9876-5432';
+
+// 실제 청소 API 처리기를 격리 DB에 붙여 관리자 요청을 보낸다
+async function adminCall(t, sql, { method, url, body }) {
+  const forward = (text, params) => sql.pool.query(text, params);
+  const api = await cleaningDeclineFixture({ responses: Array(8).fill(forward) });
+  t.after(() => api.restore());
+  const cookie = 'propos_session=' + createSessionToken(process.env, Date.now(), { role: 'admin' });
+  const res = await api.invoke({ method, url, headers: { cookie, 'content-type': 'application/json' }, body });
+  assert.deepEqual(api.blocked, []);
+  return res;
+}
+
+// ACT-11 ①(사용자 결정, 2026-11-26): 자동 복구가 안 되면 관리자가 담당자를 삭제했다가 다시 추가한다 — 그때 저장된 앱 연결을 비워
+// 새 휴대폰이 연결되게 한다. 옛 휴대폰의 토큰이 살아 있어 보여도(등록이 409로 막히는 경우) 이 방법으로 풀린다.
+test('SQL: deleting and re-adding a cleaner clears the stored app link so a new phone can connect (ACT-11)', { skip: !enabled }, async t => {
+  const sql = await createCleaningSqlFixture();
+  t.after(() => sql.close());
+  await sql.pool.query(`INSERT INTO cleaners (name, phone, email, tier, active, fcm_token, fcm_status, fcm_token_at, app_installed_at)
+    VALUES ('Owner', $1, 'owner@example.invalid', 'VIP_1', true, 'old-phone-token', 'active', NOW(), NOW())`, [PHONE]);
+  const { rows: [{ id }] } = await sql.pool.query('SELECT id FROM cleaners WHERE phone=$1', [PHONE]);
+  // 다시 추가하기 전에는 새 휴대폰이 연결되지 않는다(옛 토큰이 살아 있어 보임)
+  assert.equal((await sql.pool.query(await registerSql(), [PHONE, 'owner@example.invalid', 'new-phone-token'])).rows.length, 0);
+
+  assert.equal((await adminCall(t, sql, { method: 'DELETE', url: `/api/cleaning/cleaners/${id}` })).code, 200);
+  const readd = await adminCall(t, sql, { method: 'POST', url: '/api/cleaning/cleaners',
+    body: { name: 'Owner', phone: PHONE, email: 'owner@example.invalid', tier: 'VIP_1' } });
+  assert.equal(readd.code, 200);
+  const { rows: [after] } = await sql.pool.query(
+    'SELECT id, active, fcm_token, fcm_status, fcm_token_at, app_installed_at FROM cleaners WHERE phone=$1', [PHONE]);
+  assert.equal(after.id, id); // 같은 담당자 — 배정·이력은 그대로 이어진다
+  assert.equal(after.active, true);
+  assert.equal(after.fcm_token, null); assert.equal(after.fcm_status, 'uninstalled');
+  assert.equal(after.fcm_token_at, null); assert.equal(after.app_installed_at, null);
+
+  const { rows } = await sql.pool.query(await registerSql(), [PHONE, 'owner@example.invalid', 'new-phone-token']);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].fcm_status, 'active');
+});
 
 async function registerSql() {
   const source = await readFile(new URL('../../api/workers/[...slug].js', import.meta.url), 'utf8');

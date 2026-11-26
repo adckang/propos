@@ -142,8 +142,12 @@ async function createCleaner(req, res) {
       [normPhone, normEmail]
     );
     if (existing.length && !existing[0].active) {
+      // ACT-11 ①(사용자 결정, 2026-11-26): 삭제 후 다시 추가하면 저장된 앱 연결도 비운다 — 자동 복구가 안 될 때(옛 휴대폰 토큰이
+      // 살아 있어 보이는 등) 관리자가 쓰는 초기화 방법. 담당자가 앱을 다시 열어 같은 번호·이메일로 연결하면 새 휴대폰이 붙는다
       const { rows: reactivated } = await db.query(
-        `UPDATE cleaners SET name=$1,phone=$2,email=$3,tier=$4,notes=$5,active=true WHERE id=$6 RETURNING *`,
+        `UPDATE cleaners SET name=$1,phone=$2,email=$3,tier=$4,notes=$5,active=true,
+           fcm_token=NULL, fcm_status='uninstalled', fcm_token_at=NULL, app_installed_at=NULL
+         WHERE id=$6 RETURNING *`,
         [name, normPhone, normEmail, tier, notes ?? null, existing[0].id]
       );
       return sendJson(res, 200, reactivated[0]);
