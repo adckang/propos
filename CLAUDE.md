@@ -9,7 +9,7 @@
 - `dist/` 직접 수정 금지 → `npm run build`
 - HA 토큰 브라우저 번들 포함 금지 → `/api/ha/*` 프록시만
 - entity ID 하드코딩 금지 → `src/config/publicConfig.js`
-- iCal URL 소스코드 커밋 금지 → localStorage(`propos_calendar_sync`)만
+- iCal URL 소스코드 커밋 금지 → 운영 DB(`property_cleaning_config.ical_url`, 서버 예약 동기화용)와 브라우저 localStorage(`propos_calendar_sync`)에만
 - 다크 색상 재사용 금지: `#02080d` `#030f18` `#00d4ff` `#00ff88`
 - DB/KV/Slack 자격증명 브라우저 번들 포함 금지 → `api/*` 프록시만
 - DB(`pg`)·KV(`@vercel/kv`) 라이브러리는 서버 코드(`api/`·`server/`·`scripts/`)에서만 import — 브라우저 코드(`src/`) 금지

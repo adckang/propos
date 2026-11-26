@@ -1,6 +1,6 @@
 /**
  * roomStateDomain — 숙소 상태 전환 순수 함수
- * 정본: docs/room-state-machine.md v2.2
+ * 정본: docs/room-state-machine.md (버전은 문서 머리말을 본다 — 여기 적으면 낡는다)
  * 외부 의존성 없음. 입력 → 출력만.
  */
 

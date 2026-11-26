@@ -35,7 +35,7 @@
 | 값 | 명칭 | 의미 | 데이터 소스 |
 |----|------|------|------------|
 | `PAST` | 결과 | 닫힌 기간. 모든 데이터 확정. | Postgres events |
-| `ACTIVE` | 진행 | 현재 진행 중인 기간. 완료분 + 실시간 + 남은 예정 혼합. | KV + Postgres + iCal |
+| `ACTIVE` | 진행 | 현재 진행 중인 기간. 완료분 + 실시간 + 남은 예정 혼합. | Postgres(이벤트로 현재 상태 계산) + iCal 동기화 예약 — KV는 쓰지 않는다 |
 | `NOW` | 실시간 | 이 순간의 스냅샷. H 단위에서만 순수 성립. ACTIVE의 Hour 특수케이스. | Postgres 이벤트 기록(현재 상태 계산) |
 | `FUTURE` | 계획 | 아직 시작하지 않은 기간. 예정/계획만 존재. | iCal + cleaning_jobs |
 
@@ -88,18 +88,20 @@
 
 ## 3. 데이터 포함관계 (Containment Hierarchy)
 
-### 3-1. Room State Tree (10개 상태 — room-state-machine.md 정본)
+### 3-1. Room State Tree (12개 상태 — room-state-machine.md 2절 정본)
 
 ```
 Room State
 │
 ├─ VACANT
 │   ├─ CLEANING_FINISHED          초기/정상 공실 (초기 상태)
+│   ├─ ENERGY_WASTE               공실 중 에너지 낭비 (7절)
 │   └─ MAINTENANCE                정비 중 (수동 Pi·현재 상태 복원)
 │
 ├─ PRE_STAY_READY
 │   ├─ OPTIMIZING                 체크인 준비 실행 중
-│   └─ OPTIMIZED                  준비 완료, 체크인 대기
+│   ├─ OPTIMIZED                  준비 완료, 체크인 대기
+│   └─ OPTIMIZATION_FAILED        중요 센서·장치 실패·안전 중단
 │
 ├─ OCCUPIED
 │   ├─ GOOD_CONDITION             정상 체류 (진입 초기 상태)
@@ -114,7 +116,7 @@ Room State
 
 **주의:**
 - `CHECKIN_INQUIRY`는 room-state-machine.md에 없는 Sub-State였다 — 가짜 데이터에서도 제거됐다(아래 표 H-1, 2026-11-19 코드에 없음 확인).
-- State Matrix (Template-C)는 위 10개 상태만 집계 대상으로 삼는다.
+- State Matrix (Template-C)는 위 12개 상태만 집계 대상으로 삼는다. 상태 목록을 바꿀 때는 room-state-machine.md 2절이 먼저다.
 
 ### 3-2. 이벤트 분류표
 
@@ -166,7 +168,7 @@ LIFECYCLE/OPERATIONS는 발생 사실(fact)이므로 resolution 개념 없음. A
 #### All-Properties 형식
 
 ```
-실시간 상태 스냅샷 — N개 숙소 (KV 기준)
+실시간 상태 스냅샷 — N개 숙소 (이벤트 기록 기준)
 ┌────────────────┬──────────────────────────┬───────┬──────────────┐
 │ Main State     │ Sub State                │ Count │ Flag         │
 ├────────────────┼──────────────────────────┼───────┼──────────────┤
@@ -177,16 +179,18 @@ LIFECYCLE/OPERATIONS는 발생 사실(fact)이므로 resolution 개념 없음. A
 ├────────────────┼──────────────────────────┼───────┼──────────────┤
 │ PRE_STAY  (N)  │ OPTIMIZING               │   N   │              │
 │                │ OPTIMIZED                │   N   │ · 체크인대기  │
+│                │ OPTIMIZATION_FAILED      │   N   │ ❌ 준비 실패  │
 ├────────────────┼──────────────────────────┼───────┼──────────────┤
 │ CLEANING  (N)  │ CLEANING_PENDING         │   N   │ · 배정필요   │
 │                │ CLEANING_IN_PROGRESS     │   N   │              │
 ├────────────────┼──────────────────────────┼───────┼──────────────┤
 │ VACANT    (N)  │ CLEANING_FINISHED        │   N   │              │
-│                │ MAINTENANCE              │   N   │ (미구현)     │
+│                │ ENERGY_WASTE             │   N   │ ⚠            │
+│                │ MAINTENANCE              │   N   │              │
 ├────────────────┼──────────────────────────┼───────┼──────────────┤
 │ TOTAL     (N)  │                          │   N   │              │
 └────────────────┴──────────────────────────┴───────┴──────────────┘
-[Soft 활성] no_show_suspected: N건 미확인 ⚠   ← State와 별도 표시
+[문제] 입실 미감지: N건 ⚠   ← State와 별도 표시 (옛 no_show_suspected를 대체, DEC-16)
 ```
 
 #### Single-Property 형식
@@ -682,9 +686,9 @@ Pi 불만 기록 중 연기·실내 온습도·문 열림은 정본 5가지 어�
 |------|-----------|
 | ISSUE_AND_ENERGY 상태 숙소 존재 | State Matrix 해당 행 배경 `#fef2f2`, `❌` |
 | Pending anomaly(진행 중 이상) > 0 | 자동화 개선율 옆 진행 중 건수 빨강, 해당 이벤트 행 `⚠` |
-| 안심지수 < 70% | 안심지수 전체 구간 빨강 강조 |
+| 안심지수 < 75% | 안심지수 전체 구간 빨강 강조 (90 이상 초록 · 75 이상 주황 · 75 미만 빨강 — DEC-20, 요약 배너가 빨개지는 기준과 같다) |
 | CLEANING_PENDING 건수 > 0 (체크인 12h 이내) | Template-F 해당 행 `⚠ 미배정` |
-| no_show_suspected 미확인 | Template-C 하단 Soft 섹션 `⚠ N건 미확인` |
+| 입실 미감지(`checkin_not_detected`) 있음 | Template-C 하단 문제 줄 `⚠ N건` (옛 no_show_suspected 대체, DEC-16) |
 | iCal 마지막 동기화 > 2시간 경과 | Template-F 상단 동기화 시각 강조 |
 
 ### 6-3. 요약 문장 연결

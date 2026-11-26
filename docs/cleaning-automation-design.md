@@ -18,7 +18,7 @@
 | 청소자 일정 등록 | 예약 시 청소자 구글 캘린더에 자동 등록 | Google이 처리 |
 | 배정 감지 | Google Calendar Webhook → 이메일로 cleaner 매핑 | |
 | 구글 예약 캘린더 양식 | 이메일 필드 (무료 기본 필드) | 전화번호 필드는 유료 |
-| Google OAuth | 서비스 계정 (캘린더 편집 권한) | Gmail Watch + Calendar Webhook + 블로커 이벤트 모두 필요 |
+| Google OAuth | OAuth2 refresh token — Gmail용·Calendar용 계정별(`GOOGLE_REFRESH_TOKEN`·`GOOGLE_CALENDAR_REFRESH_TOKEN`). 설계 초안의 서비스 계정에서 바뀜(13절) | Gmail Watch + Calendar Webhook + 블로커 이벤트 모두 필요 |
 | VIP 창 만료 후 뒤늦은 수락 | 블로커 삭제 후 오픈된 슬롯을 다른 사람이 이미 예약했으면 자동 차단 | |
 | 블로커 생성 타이밍 | **매월 15일** 배치에서 다음 달 전체 블로커 일괄 생성 | iCal 폴링과 동일 크론에서 처리 |
 | 문제 기준 (2026-11-22) | **청소 일정은 스케줄이다.** 그 스케줄 안에서 배정·시작이 처리됐는지를 보고, 안 됐으면 레포트 문제로 남긴다(상태는 되돌리지 않음) | `room-state-machine.md` 0절 |

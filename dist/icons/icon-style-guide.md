@@ -1,5 +1,7 @@
 # Scene-1 SVG Graphic Asset Guide
 
+> 적용 범위: 랜딩페이지(마케팅) 장면 그래픽(`HeroScene`, `Scene2~5` 컴포넌트)용이다. 아래 어두운 카드 배경은 그 장면들에만 쓰고, 운영 화면의 라이트 테마 원칙(`CLAUDE.md` UI 원칙)에는 적용하지 않는다.
+
 ## 공통 스타일
 - 배경: 투명 SVG, UI에서 필요 시 `bg-slate-950/50 + backdrop-blur` 원형 카드 안에 배치
 - 기본 선색: `#F8FAFC` 또는 `#FFFFFF`

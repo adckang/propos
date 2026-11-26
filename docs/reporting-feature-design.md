@@ -1,5 +1,5 @@
-claude# PROPOS Reporting Feature 설계
-> 버전 v1.2.1 | 작성 2026-08-04 | 업데이트 2026-11-14 · 정비 처리 경로의 적용 범위 보완
+# PROPOS Reporting Feature 설계
+> 버전 v1.2.2 | 작성 2026-08-04 | 업데이트 2026-11-26 · 현재 상태 데이터 소스·Slack 알림 종류·월 단위 구현·자동화 개선율 표시 상태 정정
 > 구현 기준 문서 — 이 파일과 data-storage-design.md를 축으로 삼아 reporting 코드를 작성·수정한다.
 > 저장소 설계: `data-storage-design.md` / 이벤트 감지: `event-detection-design.md` / 상태 기계: `room-state-machine.md`
 
@@ -94,7 +94,7 @@ PROPOS: **다중 데이터 교차 분석 → 맥락 있는 판단**
 | 인앱 대시보드 | List View 상단, Detail View 상단 | 기간별 KPI 수치 + 필터 |
 | 알림 (Slack) | PC·모바일 | 이벤트 발생 시 "볼 것 있음" 신호 |
 
-알림은 내용을 담지 않는다. `proposonline.com/events/{id}` 링크만 보낸다.
+이벤트 알림은 `[숙소] 한 줄 설명 → proposonline.com/events/{id}` 형식이다 — 무엇이 일어났고 무엇을 해 달라는지 한 줄과 링크만 담는다(`server/slackNotifier.js`). 정기 보고(아침·저녁, 11절)와 운영 알림(배정 실패·Watch 상태·하루 전 알림 실패 등)은 짧은 본문을 담는다.
 실제 데이터는 항상 앱이 정본이다.
 
 ---
@@ -102,7 +102,7 @@ PROPOS: **다중 데이터 교차 분석 → 맥락 있는 판단**
 ## 2. 뷰 계층 구조 (확정)
 
 각 단위는 **데이터 단위이자 필터** 역할을 동시에 수행한다.
-월 단위는 현재 UI 범위 외 — 향후 별도 월 캘린더 뷰로 구현 예정.
+월 단위는 대시보드(MonthlyView)의 지난달·이번달·다음달 캘린더·레포트로 구현됐다(D-021·D-025). List View=주/일, Detail View=일/시 구조는 그대로다.
 
 ```
 List View  (한눈에 = 1주일)
@@ -148,8 +148,7 @@ Detail View (한눈에 = 하루)
 | `now` | 실시간 (범위 없음) | Detail 시 모드 (기본) |
 | `next_hour` | 다음 1시간 | Detail 시 모드 |
 
-> 월 단위 키(`last_month`, `this_month`, `next_month`)는 API에 구현되어 있으나
-> 현재 UI에서는 사용하지 않음. 향후 월 캘린더 뷰 구현 시 활성화.
+> 월 단위 키(`last_month`, `this_month`, `next_month`)는 대시보드(MonthlyView)의 기간 네비게이터가 쓴다(D-025).
 
 ### Navigation-Drives-Content 원칙
 
@@ -228,7 +227,7 @@ ISSUE_AND_ENERGY > ISSUE_COMPLAINT > ENERGY_WASTE > GOOD_CONDITION
 | 필터 | 성격 | 타일 | 데이터 소스 |
 |------|------|------|------------|
 | 어제 (`yesterday`) | 결과 | 체크인 완료 / 체크아웃 완료 / 이상감지 / 에너지낭비 | events DB |
-| 오늘 (`today`) | 실시간+혼합 | 입실 중 / 공실 / 청소 중 (실시간) + 오늘 남은 예정 체크인/아웃 | KV + events DB + iCal |
+| 오늘 (`today`) | 실시간+혼합 | 입실 중 / 공실 / 청소 중 (실시간) + 오늘 남은 예정 체크인/아웃 | events DB(현재 상태 계산) + iCal 동기화 예약 |
 | 내일 (`tomorrow`) | 계획 | 예정 체크인 / 예정 체크아웃 / 청소 예정 건수 | iCal |
 
 - `today`는 오전에는 남은 예정이 많고, 오후로 갈수록 완료 건수가 늘어나는 혼합 뷰.
@@ -242,7 +241,7 @@ ISSUE_AND_ENERGY > ISSUE_COMPLAINT > ENERGY_WASTE > GOOD_CONDITION
 | 필터 | 성격 | 타일 | 데이터 소스 |
 |------|------|------|------------|
 | 한시간 전 (`last_hour`) | 결과 | 직전 1시간 발생 이벤트 목록 + 건수 | events DB |
-| 지금 (`now`) | 실시간 | IoT 센서 상태 (온도/습도/소음/전력/모션) + 룸 상태 | KV + HA |
+| 지금 (`now`) | 실시간 | IoT 센서 상태 (온도/습도/소음/전력/모션) + 룸 상태 | 룸 상태: events DB(현재 상태 계산) · 센서값: HA(화면이 `/api/ha` 경유로 조회) |
 | 한시간 후 (`next_hour`) | 예측 | iCal 기반 다음 1시간 예정 이벤트 | iCal |
 
 - 시간 단위는 Detail View에서만 사용 (List View에는 없음).
