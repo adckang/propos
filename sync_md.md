@@ -51,16 +51,16 @@
 
 | ID | 문서 | 고칠 것 | 근거 | 상태 |
 | --- | --- | --- | --- | --- |
-| SM-20 | design_overview 2절 | 운영 원칙 3개(상태=일정·예외는 사람에게·알림은 필요할 때) 한 줄+링크, Pi→운영자 넘김(Slack + HA 앱), 서버→Pi 예약·청소 일정 전달, CSP 차단 모드 | DEC-10~12·16 · RF-27·52 · RF-47 | 할 일 |
-| SM-21 | design_overview 3절 | `server/`에 Pi에서 도는 워처 코드(`occupancyWatcher.js` 등, 시작은 `scripts/occupancy-watcher-standalone.mjs`)와 이상 감지 모듈이 함께 있음 — Pi 반영은 따로 | RF-25 · refactoring.md 8절 | 할 일 |
-| SM-22 | design_overview 4.3 | `/api/cleaning/anomaly-policy`, 이벤트 저장 때 이상 감지, Gmail 웹훅의 게스트 불만 분류, 저녁 정기 작업의 담당자 하루 전 알림 | RF-25 · DEC-21 · ACT-18 | 할 일 |
-| SM-23 | design_overview 5.0 | 원장에 숙박·청소 의무, 배정 이력, 이상 기록 추가 | DEC-22·23·24 | 할 일 |
-| SM-24 | design_overview 7절 | `docs/runbooks/pi-watcher-rollout.md` 추가. CLAUDE.md 줄(MD-R01만 남음), refactoring.md 줄(목록만, 11-19 이전 상세는 `ca41eb4`), data-storage 줄(Blob 미구현), decisions 줄(이후 결정은 DEC-01~24) | D-014 현재 상태 | 할 일 |
-| SM-25 | runtime 6.2·5절 | 정기 작업 트리에 Pi 예약 전달(아침·저녁)·하루 전 알림(저녁)·청소 미배정 이상 기록. 새 흐름 2개: Pi가 확인 못 함→운영자, 서버→Pi 일정 | RF-27·52 · ACT-18 · DEC-11·16 | 할 일 |
-| SM-26 | error 4.2·5.3 | 재시도·개입 표에 확인 안 되면 기기 제어 없이 운영자에게·센서 사전 점검·IR 토글 복구 1회·이상 중복 방지. 업무 기록 표에 이상 기록·배정 이력 | DEC-11·12·23 · ACT-21 | 할 일 |
-| SM-27 | traceability | RF-25 이상 감지 TR 신설, TR-01에 DEC-10, TR-04에 DEC-09·ACT-11, TR-08에 ACT-20·21·DEC-19 | — | 할 일 |
-| SM-28 | refactoring_mdfile 용어표 | "노쇼 의심"→"입실 미감지", 새 문제 이름(퇴실 지연·확인 불가·청소 미감지·청소 미배정(취소)), 안심지수 vs 자동화 개선율 | DEC-15~17 · DEC-02 | 할 일 |
-| SM-29 | actor_ui SCN-06 | 운영 시나리오 실제 범위 연결(입·퇴실 감지는 현관 센서 고장으로 지금 불가) | DEC-04 | 할 일 |
+| SM-20 | design_overview 2절 | 운영 원칙 3개(상태=일정·예외는 사람에게·알림은 필요할 때) 한 줄+링크, Pi→운영자 넘김(Slack + HA 앱), 서버→Pi 예약·청소 일정 전달, CSP 차단 모드 | DEC-10~12·16 · RF-27·52 · RF-47 | 완료 · `11202c2` |
+| SM-21 | design_overview 3절 | `server/`에 Pi에서 도는 워처 코드(`occupancyWatcher.js` 등, 시작은 `scripts/occupancy-watcher-standalone.mjs`)와 이상 감지 모듈이 함께 있음 — Pi 반영은 따로 | RF-25 · refactoring.md 8절 | 완료 · `11202c2` |
+| SM-22 | design_overview 4.3 | `/api/cleaning/anomaly-policy`, 이벤트 저장 때 이상 감지, Gmail 웹훅의 게스트 불만 분류, 저녁 정기 작업의 담당자 하루 전 알림 | RF-25 · DEC-21 · ACT-18 | 완료 · `11202c2` |
+| SM-23 | design_overview 5.0 | 원장에 숙박·청소 의무, 배정 이력, 이상 기록 추가 | DEC-22·23·24 | 완료 · `11202c2` |
+| SM-24 | design_overview 7절 | `docs/runbooks/pi-watcher-rollout.md` 추가. CLAUDE.md 줄(MD-R01만 남음), refactoring.md 줄(목록만, 11-19 이전 상세는 `ca41eb4`), data-storage 줄(Blob 미구현), decisions 줄(이후 결정은 DEC-01~24) | D-014 현재 상태 | 완료 · `11202c2` |
+| SM-25 | runtime 6.2·5절 | 정기 작업 트리에 Pi 예약 전달(아침·저녁)·하루 전 알림(저녁)·청소 미배정 이상 기록. 새 흐름 2개: Pi가 확인 못 함→운영자, 서버→Pi 일정 | RF-27·52 · ACT-18 · DEC-11·16 | 완료 · `11202c2` |
+| SM-26 | error 4.2·5.3 | 재시도·개입 표에 확인 안 되면 기기 제어 없이 운영자에게·센서 사전 점검·IR 토글 복구 1회·이상 중복 방지. 업무 기록 표에 이상 기록·배정 이력 | DEC-11·12·23 · ACT-21 | 완료 · `11202c2` |
+| SM-27 | traceability | RF-25 이상 감지 TR 신설, TR-01에 DEC-10, TR-04에 DEC-09·ACT-11, TR-08에 ACT-20·21·DEC-19 | — | 완료 · `11202c2` |
+| SM-28 | refactoring_mdfile 용어표 | "노쇼 의심"→"입실 미감지", 새 문제 이름(퇴실 지연·확인 불가·청소 미감지·청소 미배정(취소)), 안심지수 vs 자동화 개선율 | DEC-15~17 · DEC-02 | 완료 · `11202c2` |
+| SM-29 | actor_ui SCN-06 | 운영 시나리오 실제 범위 연결(입·퇴실 감지는 현관 센서 고장으로 지금 불가) | DEC-04 | 완료 · `11202c2` |
 
 ## 단계 4 · 시점 숫자 지우기
 
