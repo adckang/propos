@@ -208,7 +208,7 @@ flowchart TD
 
 | 영역 | 자동 재시도 | 보류·중지 | 운영자 개입 |
 | --- | --- | --- | --- |
-| 최초 청소 요청 | `RETRYABLE`, 최대 3회, 최소 시도 수×1분 또는 provider `retryAfter` | `UNKNOWN`, recipient/job 변경, REAL 아님 | `FAILED`·retry limit은 운영자가 본다. 닿을 경로가 없으면(앱 연결 없음 + 문자 설정 없음, 번호 오류, 토큰 폐기 확정) 기다리지 않고 다음 담당자·단계로 넘기고 운영자에게 Slack 한 줄(RF-56) |
+| 최초 청소 요청 | `RETRYABLE`, 최대 3회, 최소 시도 수×1분 또는 provider `retryAfter` | `UNKNOWN`, recipient/job 변경, REAL 아님 | `FAILED`·retry limit은 운영자가 본다. 닿을 경로가 없으면(앱 연결 없음 + 문자 설정 없음, 번호 오류, 토큰 폐기 확정) 기다리지 않고 다음 담당자·단계로 넘기고 운영자에게 Slack 한 줄(RF-56; 단체 단계에서도 받을 사람이 없으면 바로 `ESCALATED`) |
 | FCM | quota 계열은 retryable; `UNREGISTERED`·`INVALID_ARGUMENT`은 확정 실패 후 문자 설정이 있으면 SMS 전환, 없으면 다음 담당자로(RF-56; 운영에는 문자 설정이 없다 — ACT-11, [MD-R07](refactoring_mdfile.md#md-r07)) | 응답 불명은 SMS 자동 fallback 금지 | token 재등록·앱 재설치 |
 | SMS | detailed 초기 발송은 429만 retryable, 다른 5xx/네트워크는 UNKNOWN | 접수 여부 불명은 중복 방지 | 전달 확인·연락처 점검 |
 | legacy SMS helper | 함수 내부 최대 3회·2초 간격 경로 존재 | 3회 실패 후 false | 채널·전화번호 확인 |

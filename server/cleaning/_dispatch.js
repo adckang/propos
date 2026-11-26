@@ -277,14 +277,21 @@ async function dispatchBulk(db, job, propertyName, propCfg) {
     }
   }
 
+  // 받을 수 있는 사람이 한 명도 없으면 기다릴 응답이 없다 — 전원 거절과 같이 바로 배정 실패(수동배정 필요)로.
+  // 단체 요청 기록이 없으면 3시간 뒤 실패로 넘기는 크론도 이 청소를 찾지 못해 "배정 요청중"에 계속 남는다
+  const nobody = reachable.length === 0;
   const updated = await db.query(
-    `UPDATE cleaning_jobs SET status='NOTIFYING_BULK', updated_at=NOW() WHERE id=$1 AND status=$2
+    `UPDATE cleaning_jobs SET status=$6, updated_at=NOW() WHERE id=$1 AND status=$2
       AND checkout_at=$3 AND cleaning_start_at=$4 AND property_id=$5
       AND data_origin='REAL' AND EXISTS (SELECT 1 FROM property_cleaning_config p
         WHERE p.property_id=cleaning_jobs.property_id AND p.data_origin='REAL') RETURNING id`,
-    [job.id, job.status, job.checkout_at, job.cleaning_start_at, job.property_id]
+    [job.id, job.status, job.checkout_at, job.cleaning_start_at, job.property_id, nobody ? 'ESCALATED' : 'NOTIFYING_BULK']
   );
   if (!updated.rows.length) return { ok: false, state: 'CANCELLED', errorCode: 'JOB_STATE_CHANGED' };
+  if (nobody && !unreachable.length) {
+    await sendSlack(`[PROPOS] 🚨 ${propertyName} ${toKstDateKey(job.cleaning_start_at)} 청소 배정 실패. 수동 처리 필요.`)
+      .catch(error => console.error('[dispatch] 배정 실패 Slack 실패:', error?.message ?? error));
+  }
   if (unreachable.length) {
     const names = unreachable.map(cleanerLabel).join(', ');
     const message = reachable.length

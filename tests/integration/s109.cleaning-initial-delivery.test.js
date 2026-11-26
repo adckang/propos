@@ -55,16 +55,17 @@ const slackLines = io => io.calls.slack.map(([message]) => message);
 test('SQL: a cleaner with no app and no SMS settings is skipped instead of stopping the request (RF-56)', { skip: !enabled }, () => run({}, async (f, io, advance) => {
   noSms();
   await advance(await f.currentJob());
-  // 아무에게도 보내지 않았으니 "보낸 것처럼 보이는" 요청 기록도 없다. VIP 단계에 보낼 사람이 없어 단체 단계로 넘어갔다
+  // 아무에게도 보내지 않았으니 "보낸 것처럼 보이는" 요청 기록도 없다. VIP 단계에 보낼 사람이 없고 단체 담당자도 없어 바로 배정 실패
   assert.equal((await f.notifications()).length, 0);
-  assert.equal((await f.currentJob()).status, 'NOTIFYING_BULK');
+  assert.equal((await f.currentJob()).status, 'ESCALATED');
   assert.equal((await dispatch.getVipFollowupJobs(f.pool)).rows.length, 0);
   assert.equal(io.calls.push.length, 0); assert.equal(io.calls.sms.length, 0);
-  assert.equal(io.calls.slack.length, 1);
+  assert.equal(io.calls.slack.length, 2);
   assert.match(slackLines(io)[0], /Fixture Cleaner 담당자.*앱 알림/);
   assert.doesNotMatch(slackLines(io)[0], /0100000000/); // 이름만 — 전화번호는 싣지 않는다(RF-57)
+  assert.match(slackLines(io)[1], /청소 배정 실패\. 수동 처리 필요\./);
   await advance(await f.currentJob());
-  assert.equal(io.calls.slack.length, 1, 'later runs do not alert again');
+  assert.equal(io.calls.slack.length, 2, 'later runs do not alert again');
 }));
 
 test('SQL: a request already stuck on missing SMS settings moves on to the next VIP_1 cleaner who has the app (RF-56)', { skip: !enabled }, () => run({}, async (f, io, advance) => {
@@ -94,7 +95,7 @@ test('SQL: a definite FCM rejection with no SMS route is skipped and the same cl
   noSms();
   await advance(await f.currentJob());
   assert.equal(io.calls.push.length, 1); assert.equal(io.calls.sms.length, 0);
-  assert.equal((await f.currentJob()).status, 'NOTIFYING_BULK');
+  assert.equal((await f.currentJob()).status, 'ESCALATED');
   assert.ok(slackLines(io).some(message => /Fixture Cleaner 담당자.*앱 알림/.test(message)));
   assert.equal((await f.notifications())[0].initial_delivery_state, 'FAILED');
 }));
@@ -105,7 +106,7 @@ test('SQL: a cleaner who looked reachable but could not be reached is not picked
   await advance(await f.currentJob());
   assert.equal(io.calls.sms.length, 0);
   assert.equal((await f.notifications())[0].initial_delivery_data.result.errorCode, 'SMS_INPUT_INVALID');
-  assert.equal((await f.currentJob()).status, 'NOTIFYING_BULK');
+  assert.equal((await f.currentJob()).status, 'ESCALATED');
   assert.ok(slackLines(io).some(message => /Fixture Cleaner 담당자/.test(message)));
 }));
 
@@ -130,6 +131,10 @@ test('SQL: when no bulk cleaner can be reached the operator is told to contact s
   assert.equal(io.calls.push.length, 0); assert.equal(io.calls.sms.length, 0);
   assert.equal(io.calls.slack.length, 1);
   assert.match(slackLines(io)[0], /직접 연락/); assert.match(slackLines(io)[0], /Fixture Cleaner/);
+  // 받을 수 있는 사람이 없으니 기다리지 않고 바로 배정 실패(수동배정 필요) — 전원 거절과 같은 규칙. 알림은 위의 한 줄뿐
+  assert.equal((await f.currentJob()).status, 'ESCALATED');
+  await advance(await f.currentJob());
+  assert.equal(io.calls.slack.length, 1);
 }));
 
 test('SQL: concurrent calls deliver once and share one notification row', { skip: !enabled }, () => run({}, async (f, io, advance) => {
@@ -263,10 +268,13 @@ test('SQL: fresh token collisions retry inside a transaction without aborting it
   assert.equal(saved.initial_delivery_state, 'ACCEPTED');
 }));
 
-test('SQL: no VIP recipients retains the existing bulk fallback and opens its slot once', { skip: !enabled }, () => run({}, async (f, io) => {
+test('SQL: with no cleaners at all the job opens its slot once and goes straight to manual handling', { skip: !enabled }, () => run({}, async (f, io) => {
   await f.pool.query('DELETE FROM cleaners'); let opened = 0;
   await dispatch.advanceJob(f.pool, await f.currentJob(), { deleteBlocker: async () => { opened++; } });
-  assert.equal(opened, 1); assert.equal((await f.currentJob()).status, 'NOTIFYING_BULK'); assert.equal(io.calls.sms.length, 0);
+  assert.equal(opened, 1); assert.equal((await f.currentJob()).status, 'ESCALATED'); assert.equal(io.calls.sms.length, 0);
+  assert.deepEqual(slackLines(io), ['[PROPOS] 🚨 Fixture Property 2026-11-10 청소 배정 실패. 수동 처리 필요.']);
+  await dispatch.advanceJob(f.pool, await f.currentJob(), { deleteBlocker: async () => { opened++; } });
+  assert.equal(opened, 1); assert.equal(io.calls.slack.length, 1, 'a manual-handling job is not processed again');
 }));
 
 test('SQL: response clock uses acceptance for tracked requests and sent_at only for legacy', { skip: !enabled }, () => run({}, async (f, io, advance) => {
