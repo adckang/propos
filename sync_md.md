@@ -1,6 +1,6 @@
 # 통합 문서 동기화 작업 목록 (임시)
 
-> 만든 날: 2026-11-26 · **임시 문서 — 다 끝나면 남은 항목만 `refactoring_mdfile.md`로 옮기고 이 파일은 지운다.**
+> 만든 날: 2026-11-26 · **완료(2026-11-26) — SM-00~33 모두 끝났다. 이 파일은 다음 커밋에서 지우고, 기록은 `doc_plan.md`의 DP-08에 남긴다.**
 > 대상: 루트 통합 문서 8개(`design_overview` `refactoring_mdfile` `refactoring_TC` `actor_ui_scenarios` `runtime_interfaces_and_collaboration` `error_observability` `documentation_traceability` `doc_plan`). 모두 2026-11-17 시점 사진이라 그 뒤의 리팩토링이 반영돼 있지 않다.
 > 다른 세션에서 이어받을 때: 이 파일부터 읽고, 상태가 `할 일`인 가장 앞 단계부터 한다.
 
@@ -66,7 +66,7 @@
 
 | ID | 문서 | 고칠 것 | 상태 |
 | --- | --- | --- | --- |
-| SM-30 | refactoring_TC 3.1·4.2·10절 | 파일 수·줄 수·중복 번호 수·"144개" 삭제, 다시 세는 방법만 | 할 일 |
-| SM-31 | error 5.1 | console 호출 개수 표 삭제 | 할 일 |
-| SM-32 | 8개 문서 머리말 · doc_plan 6절 | "기준일 2026-11-17"·기준 커밋 → "마지막 동기화: 날짜 · 이 파일" 한 줄 | 할 일 |
-| SM-33 | 마무리 | 남은 `확인 필요` 항목을 refactoring_mdfile.md로 옮기고 이 파일 삭제 | 할 일 |
+| SM-30 | refactoring_TC 3.1·4.2·10절 | 파일 수·줄 수·중복 번호 수·"144개" 삭제, 다시 세는 방법만 | 완료 · `4ad1abb` |
+| SM-31 | error 5.1 | console 호출 개수 표 삭제 | 완료 · `4ad1abb` |
+| SM-32 | 8개 문서 머리말 · doc_plan 6절 | "기준일 2026-11-17"·기준 커밋 → "마지막 동기화: 날짜 · 이 파일" 한 줄 | 완료 · `4ad1abb` |
+| SM-33 | 마무리 | 남은 `확인 필요` 항목을 refactoring_mdfile.md로 옮기고 이 파일 삭제 | 완료 · 남은 `확인 필요` 항목 없음, 다음 커밋에서 이 파일 삭제 |
