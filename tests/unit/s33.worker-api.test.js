@@ -174,10 +174,15 @@ describe('actual worker handler — register', () => {
     assert.equal(f.slackCalls.length, shouldNotify ? 1 : 0);
     if (shouldNotify) {
       assert.equal(f.slackCalls[0].length, 1);
-      assert.match(f.slackCalls[0][0], /신규 직원 앱 설치/);
-      assert.ok(f.slackCalls[0][0].includes('010-1234-5678'));
-      assert.ok(f.slackCalls[0][0].includes('worker@example.invalid'));
+      // RF-57(사용자 결정): 이름만 — 관리자가 이름·등급을 이미 저장했으니 지정 안내도, 전화번호·이메일도 싣지 않는다
+      assert.equal(f.slackCalls[0][0], '[PROPOS] 📱 Fixture Worker 담당자 앱 연결됨');
     }
+  });
+  for (const [label, name] of [['null', null], ['empty', ''], ['blank', '   ']]) test(`new-install Slack: ${label} name → "이름 없음", still no phone or email`, async t => {
+    t.mock.method(Date, 'now', () => now);
+    const f = await actualWorker(t, { query: registerDb({ attaches: [[{ ...WORKER_ROW, name, app_installed_at: new Date(now).toISOString() }]] }) });
+    assert.equal((await f.send('register', 'POST', REGISTER_BODY)).code, 200);
+    assert.deepEqual(f.slackCalls, [['[PROPOS] 📱 이름 없음 담당자 앱 연결됨']]);
   });
   test('Slack failure cannot turn a saved registration into an API error', async t => {
     t.mock.method(Date, 'now', () => now);

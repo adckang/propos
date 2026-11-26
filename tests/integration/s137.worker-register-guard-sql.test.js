@@ -12,7 +12,7 @@ const PHONE = '010-9876-5432';
 
 async function registerSql() {
   const source = await readFile(new URL('../../api/workers/[...slug].js', import.meta.url), 'utf8');
-  const sql = source.match(/db\.query\(\s*`(UPDATE cleaners SET\s+fcm_token[\s\S]*?RETURNING id, phone, tier, active, fcm_status, app_installed_at)`,/)?.[1];
+  const sql = source.match(/db\.query\(\s*`(UPDATE cleaners SET\s+fcm_token[\s\S]*?RETURNING id, name, phone, tier, active, fcm_status, app_installed_at)`,/)?.[1];
   assert.ok(sql, 'actual register SQL');
   return sql;
 }
@@ -56,6 +56,8 @@ for (const [label, token, status, accepted] of cases) {
        VALUES ('Owner', $1, 'owner@example.invalid', 'VIP_1', true, $2, $3)`, [PHONE, token, status]);
     const { rows } = await sql.pool.query(await registerSql(), [PHONE, 'owner@example.invalid', 'new-token']);
     assert.equal(rows.length, accepted ? 1 : 0);
+    // RF-57: 첫 연결 Slack은 관리자가 저장한 이름만 쓴다 — 연결 SQL이 그 이름을 돌려줘야 한다
+    if (accepted) assert.equal(rows[0].name, 'Owner');
     const { rows: [after] } = await sql.pool.query('SELECT email, tier, active, fcm_token, fcm_status, app_installed_at FROM cleaners WHERE phone=$1', [PHONE]);
     assert.equal(after.email, 'owner@example.invalid');
     assert.equal(after.tier, 'VIP_1');

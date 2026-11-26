@@ -249,7 +249,7 @@ Pi는 환경파일에 적은 전체 `/api/events/write` 주소로만 보낸다. 
 
 | Method · Path | 요청 식별 | 핵심 요청 → 성공 응답 | 오류·멱등성 | 데이터 |
 | --- | --- | --- | --- | --- |
-| `POST /api/workers/register` | body의 전화번호·이메일이 관리자가 미리 저장한 담당자와 둘 다 일치(문자 인증 없음) | `{phone,email,fcm_token}` → worker·승인 상태 | 불일치 404, 이미 다른 기기가 쓰는 번호·다른 번호에 붙은 기기 409. 새 담당자를 만들지 않고 이메일·승인·등급을 바꾸지 않는다. 살아 있는 토큰은 덮어쓰지 않는다(DEC-09). 같은 토큰 재시도는 조건부 멱등; 첫 연결은 Slack 알림 | `cleaners` |
+| `POST /api/workers/register` | body의 전화번호·이메일이 관리자가 미리 저장한 담당자와 둘 다 일치(문자 인증 없음) | `{phone,email,fcm_token}` → worker·승인 상태 | 불일치 404, 이미 다른 기기가 쓰는 번호·다른 번호에 붙은 기기 409. 새 담당자를 만들지 않고 이메일·승인·등급을 바꾸지 않는다. 살아 있는 토큰은 덮어쓰지 않는다(DEC-09). 같은 토큰 재시도는 조건부 멱등; 첫 연결은 Slack에 담당자 이름만 알림(RF-57) | `cleaners` |
 | `POST /api/workers/heartbeat` | `fcm_token` | last_seen·inactive 복구 → `{ok,fcm_status}` | 반복 안전; 미등록 404 | `cleaners` |
 | `GET /api/workers/token` | `Bearer <current token>` | token 소유자 → `{ok,worker_id}` | 읽기; 401·404·409 | `cleaners` |
 | `POST /api/workers/token` | old/new token + 선택 `worker_id` | token 교체 또는 lost-ACK 확인 → `{ok:true}` | advisory lock·row lock·소유권 검사 · 조건부 멱등 | `cleaners` |

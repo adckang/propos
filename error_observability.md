@@ -293,7 +293,7 @@ flowchart LR
 | 지점 | 현재 관측 | 위험 |
 | --- | --- | --- |
 | SMS 오류 로그 | 전화번호를 포함한 `console.error` | 로그에 개인 연락처 노출 |
-| 신규 Worker Slack | 전화번호와 이메일을 Slack 본문에 포함 | 광범위한 운영 채널에 PII 노출 가능 |
+| 담당자 앱 첫 연결 Slack | 2026-11-26부터 이름만 싣는다(RF-57). 전에는 전화번호·이메일을 넣었다 | 해소 — 다른 Slack 경로(FCM 토큰 오류 안내 등)는 이름이 없으면 전화번호로 대신 쓴다 |
 | FCM token | Worker API body/query/Bearer에 사용 | URL·body dump·오류 detail에 남으면 자격정보 노출 |
 | iCal URL | 환경·DB에 저장, `/api/config`·proxy에서 사용 | URL 자체가 비밀 토큰을 포함할 수 있음 |
 | Google OAuth 오류 | 일부 `JSON.stringify`·provider detail | token·provider 세부정보가 섞일 가능성 |

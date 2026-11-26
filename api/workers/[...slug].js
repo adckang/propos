@@ -95,7 +95,7 @@ async function handleRegister(req, res) {
      WHERE phone = $1
        AND lower(trim(email)) = $2
        AND (fcm_token IS NULL OR fcm_token = $3 OR fcm_status = 'unregistered')
-     RETURNING id, phone, tier, active, fcm_status, app_installed_at`,
+     RETURNING id, name, phone, tier, active, fcm_status, app_installed_at`,
     [normalizedPhone, normalizedEmail, fcm_token]
   )).rows[0];
 
@@ -117,10 +117,9 @@ async function handleRegister(req, res) {
   }
   const isNew = worker.app_installed_at && new Date(worker.app_installed_at) > new Date(Date.now() - 5000);
 
+  // RF-57(사용자 결정): 관리자가 이름·등급을 이미 저장했으므로 이름만 알린다 — 전화번호·이메일은 Slack에 싣지 않는다
   if (isNew) {
-    await postSlack(
-      `[PROPOS] 📱 신규 직원 앱 설치\n전화: ${normalizedPhone} | 이메일: ${normalizedEmail}\n대시보드에서 이름·등급 지정 필요`
-    ).catch(() => {});
+    await postSlack(`[PROPOS] 📱 ${worker.name?.trim() || "이름 없음"} 담당자 앱 연결됨`).catch(() => {});
   }
 
   return sendJson(res, 200, {
