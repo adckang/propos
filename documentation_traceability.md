@@ -95,7 +95,7 @@ flowchart LR
 | 실행 코드 | [_notify.js](server/cleaning/_notify.js), [_push.js](server/cleaning/_push.js), [_sms.js](server/cleaning/_sms.js), [_slack.js](server/cleaning/_slack.js), [workers API](api/workers/[...slug].js) |
 | 데이터·외부 | `cleaners`, `cleaning_notifs`, Firebase FCM, SMS gateway 인터페이스, Slack webhook |
 | 검증 | [s26.cleaning-notify-channel.test.js](tests/unit/s26.cleaning-notify-channel.test.js), [s108.cleaning-delivery-results.test.js](tests/unit/s108.cleaning-delivery-results.test.js), [s109.cleaning-initial-delivery.test.js](tests/integration/s109.cleaning-initial-delivery.test.js), [s137 앱 최초 연결](tests/integration/s137.worker-register-guard-sql.test.js), [s139 하루 전 알림](tests/unit/s139.act18-day-before-reminder.test.js) |
-| 문서 갭 | [MD-R07](refactoring_mdfile.md#md-r07): 정책은 앱 푸시만인데 코드에 문자 경로(RF-56) (MD-R06·11 종결) |
+| 문서 갭 | [MD-R07](refactoring_mdfile.md#md-r07): 문자 코드 경로는 남아 있으나 운영 설정이 없어 쓰이지 않음 — 닿지 않는 담당자는 건너뛰고 운영자에게(RF-56) (MD-R06·11 종결) |
 
 ### TR-05 · 레포트와 안심지수
 
@@ -209,7 +209,7 @@ flowchart LR
 
 | 우선순위 | 갭 | 다음 판정 위치 |
 | --- | --- | --- |
-| 1 | 정책은 앱 푸시만(ACT-11)인데 코드에 SMS 선택 경로가 남은 정책-구현 불일치. 날짜별 활성 채널 관측과도 섞지 않음 | [MD-R07](refactoring_mdfile.md#md-r07) |
+| 1 | 정책은 앱 푸시만(ACT-11). 코드에 SMS 경로가 남았지만 운영 설정이 없어 쓰이지 않고, 닿지 않는 담당자는 건너뛰고 운영자에게 알린다(RF-56). 날짜별 활성 채널 관측과도 섞지 않음 | [MD-R07](refactoring_mdfile.md#md-r07) |
 | 2 | ~~현재 안심지수 구현과 제품 명칭의 최종 의미~~ — 종결: DEC-02로 정의 확정, 자동화 개선율은 별도 | [MD-R05](refactoring_mdfile.md#md-r05) |
 | 3 | 인증 기능 존재와 운영 `enforce` 활성은 별도 증거가 필요함 — 2026-11-10~14 운영 관측 있음 | [MD-R26](refactoring_mdfile.md#md-r26) |
 | 4 | 등록된 cron 두 개와 handler 내부의 여러 작업을 같은 주기로 설명하면 안 됨 | [MD-R09](refactoring_mdfile.md#md-r09) |
