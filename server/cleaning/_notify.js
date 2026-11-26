@@ -13,7 +13,7 @@
  */
 
 import { sendPush } from "./_push.js";
-import { sendSms } from "./_sms.js";
+import { sendSms, isSmsConfigured } from "./_sms.js";
 import { postSlack } from "./_slack.js";
 
 // 실패한 그 토큰일 때만 표시한다 — 그사이 앱이 토큰을 바꿨으면 새 토큰은 살아 있다. 이 표시는 앱 재등록(DEC-09)이
@@ -44,6 +44,15 @@ export function selectChannel(cleaner) {
   if (cleaner.fcm_status === "active" && cleaner.fcm_token) return "FCM";
   if (cleaner.phone) return "SMS";
   return "NONE";
+}
+
+/**
+ * 이 담당자에게 청소 요청이 실제로 닿을 수 있는가(RF-56, 사용자 결정 c) — 살아 있는 앱 연결이 있거나, 문자 설정이 있고 번호가 있을 때.
+ * 닿을 수 없는 담당자는 요청 대상에서 건너뛰고 운영자에게 알린다. 운영에는 문자 설정이 없으니 앱 연결이 없으면 건너뛴다.
+ */
+export function canReachInitially(cleaner, env = process.env) {
+  const channel = selectChannel(cleaner);
+  return channel === "FCM" || (channel === "SMS" && isSmsConfigured(env));
 }
 
 /**

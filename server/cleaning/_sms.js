@@ -3,6 +3,11 @@
 
 const GW_BASE = "https://api.sms-gate.app/3rdparty/v1";
 
+/** 문자 게이트웨이 설정이 다 있는가 — 운영에는 없다(ACT-11 "문자는 쓰지 않는다"). 청소 요청 대상 고르기가 이 값을 본다(RF-56) */
+export function isSmsConfigured(env = process.env) {
+  return Boolean(env.PROPOS_SMS_GW_ID && env.PROPOS_SMS_GW_PWD);
+}
+
 export function toE164(phone) {
   const digits = phone.replace(/\D/g, "");
   if (digits.startsWith("82")) return `+${digits}`;

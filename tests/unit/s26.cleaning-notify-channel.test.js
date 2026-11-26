@@ -5,7 +5,7 @@
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { selectChannel } from '../../server/cleaning/_notify.js';
+import { selectChannel, canReachInitially } from '../../server/cleaning/_notify.js';
 import { toE164 } from '../../server/cleaning/_sms.js';
 import { actualCleaningModule, installDeliveryIO } from '../helpers/cleaningDeliveryFixture.js';
 
@@ -58,6 +58,22 @@ describe('actual selectChannel — recipient state', () => {
     ['no reachable channel', { ...ACTIVE, fcm_status: 'uninstalled', fcm_token: null, phone: null }, 'NONE'],
   ]) test(`${label} selects ${expected}`, () => {
     assert.equal(selectChannel(cleaner), expected);
+  });
+});
+
+// RF-56(사용자 결정 c): 청소 요청은 실제로 보낼 경로가 있는 담당자에게만 — 운영에는 문자 설정이 없다
+describe('actual canReachInitially — a request can actually reach this cleaner', () => {
+  const SMS_ON = { PROPOS_SMS_GW_ID: 'fixture', PROPOS_SMS_GW_PWD: 'fixture' };
+  for (const [label, cleaner, env, expected] of [
+    ['live app, no SMS settings', ACTIVE, {}, true],
+    ['live app, SMS settings', ACTIVE, SMS_ON, true],
+    ['no app but phone, SMS settings', { ...ACTIVE, fcm_status: 'uninstalled', fcm_token: null }, SMS_ON, true],
+    ['no app but phone, no SMS settings (production today)', { ...ACTIVE, fcm_status: 'uninstalled', fcm_token: null }, {}, false],
+    ['inactive app, no SMS settings', { ...ACTIVE, fcm_status: 'inactive' }, {}, false],
+    ['half of the SMS settings', { ...ACTIVE, fcm_status: 'uninstalled', fcm_token: null }, { PROPOS_SMS_GW_ID: 'fixture' }, false],
+    ['nothing at all', { ...ACTIVE, fcm_status: 'uninstalled', fcm_token: null, phone: null }, SMS_ON, false],
+  ]) test(`${label} → ${expected}`, () => {
+    assert.equal(canReachInitially(cleaner, env), expected);
   });
 });
 

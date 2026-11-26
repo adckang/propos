@@ -43,21 +43,93 @@ test('SQL: failed SMS leaves the job pending and records a failed request', { sk
   assert.equal(io.calls.sms.length, 1);
 }));
 
-test('SQL: an uninstalled app and missing SMS configuration cannot start the response clock', { skip: !enabled }, () => run({}, async (f, io, advance) => {
-  delete process.env.PROPOS_SMS_GW_ID;
-  delete process.env.PROPOS_SMS_GW_PWD;
-  const result = await advance(await f.currentJob());
-  const [notification] = await f.notifications();
-  assert.equal(result.ok, false); assert.equal(result.state, 'FAILED');
-  assert.equal(result.errorCode, 'SMS_CONFIG_MISSING');
-  assert.equal(notification.initial_delivery_data.result.errorCode, 'SMS_CONFIG_MISSING');
-  assert.equal(notification.initial_accepted_at, null); assert.equal(notification.channel, null);
-  assert.equal((await f.currentJob()).status, 'PENDING');
-  assert.equal((await dispatch.getVipFollowupJobs(f.pool)).rows.length, 0);
-  await dispatch.recoverInitialDeliveries(f.pool);
+// RF-56(사용자 결정 c, 2026-11-26): 앱 알림이 없고 문자 설정도 없는 담당자는 기다리지 않고 건너뛴다 — 운영자에게는 Slack 한 번.
+// 예전 계약("응답 시계를 시작하지 않고 멈춘다")은 운영에서 11-29·12-06 청소 요청을 조용히 멈춰 세웠다.
+const noSms = () => { delete process.env.PROPOS_SMS_GW_ID; delete process.env.PROPOS_SMS_GW_PWD; };
+const addCleaner = (f, { name, tier = 'VIP_1', token = null }) => f.pool.query(
+  `INSERT INTO cleaners(id,name,phone,email,tier,active,fcm_status,fcm_token,created_at)
+   VALUES($1,$2,'01099998888',$3,$4,true,$5,$6,NOW()+INTERVAL '1 minute')`,
+  [randomUUID(), name, `${randomUUID()}@example.invalid`, tier, token ? 'active' : 'uninstalled', token]);
+const slackLines = io => io.calls.slack.map(([message]) => message);
+
+test('SQL: a cleaner with no app and no SMS settings is skipped instead of stopping the request (RF-56)', { skip: !enabled }, () => run({}, async (f, io, advance) => {
+  noSms();
   await advance(await f.currentJob());
-  assert.equal((await f.notifications()).length, 1);
+  // 아무에게도 보내지 않았으니 "보낸 것처럼 보이는" 요청 기록도 없다. VIP 단계에 보낼 사람이 없어 단체 단계로 넘어갔다
+  assert.equal((await f.notifications()).length, 0);
+  assert.equal((await f.currentJob()).status, 'NOTIFYING_BULK');
+  assert.equal((await dispatch.getVipFollowupJobs(f.pool)).rows.length, 0);
   assert.equal(io.calls.push.length, 0); assert.equal(io.calls.sms.length, 0);
+  assert.equal(io.calls.slack.length, 1);
+  assert.match(slackLines(io)[0], /Fixture Cleaner 담당자.*앱 알림/);
+  assert.doesNotMatch(slackLines(io)[0], /0100000000/); // 이름만 — 전화번호는 싣지 않는다(RF-57)
+  await advance(await f.currentJob());
+  assert.equal(io.calls.slack.length, 1, 'later runs do not alert again');
+}));
+
+test('SQL: a request already stuck on missing SMS settings moves on to the next VIP_1 cleaner who has the app (RF-56)', { skip: !enabled }, () => run({}, async (f, io, advance) => {
+  noSms();
+  const job = await f.currentJob();
+  // 운영의 실제 상태: 앱 없는 VIP_1에게 간 요청이 이 수정 전 "문자 설정 없음"으로 실패해 있다
+  const stuck = await dispatch.createNotif(f.pool, { jobId: f.jobId, cleanerId: f.cleanerId, tier: 'VIP_1', initialDelivery: {
+    kind: 'INITIAL_REQUEST', expectedStatus: 'PENDING', nextStatus: 'NOTIFYING_VIP_1', propertyId: job.property_id,
+    checkoutAt: job.checkout_at, cleaningStartAt: job.cleaning_start_at, attempts: 1, payload: {},
+    cleaner: { id: f.cleanerId, name: 'Fixture Cleaner', tier: 'VIP_1', active: true, phone: '01000000000', fcm_token: null, fcm_status: 'uninstalled' } } });
+  await f.pool.query(`UPDATE cleaning_notifs SET initial_delivery_state='FAILED', initial_delivery_data=initial_delivery_data ||
+    '{"result":{"outcome":"FAILED","provider":"SMS","errorCode":"SMS_CONFIG_MISSING"}}'::jsonb WHERE id=$1`, [stuck.id]);
+  await addCleaner(f, { name: 'App Cleaner', token: 'app-token' });
+  await advance(await f.currentJob());
+  assert.equal(io.calls.sms.length, 0);
+  assert.deepEqual(io.calls.push.map(message => message.token), ['app-token']);
+  assert.equal((await f.currentJob()).status, 'NOTIFYING_VIP_1');
+  assert.equal(io.calls.slack.length, 1);
+  assert.match(slackLines(io)[0], /Fixture Cleaner 담당자/);
+  assert.doesNotMatch(slackLines(io)[0], /App Cleaner/);
+  assert.equal((await f.notifications()).length, 2); // 실패 기록은 그대로 남는다
+}));
+
+test('SQL: a definite FCM rejection with no SMS route is skipped and the same cleaner is not picked again (RF-56)', { skip: !enabled }, () => run({ fcm: true, io: {
+  push: async () => { throw Object.assign(new Error('Fixture token gone'), { code: 'messaging/registration-token-not-registered' }); },
+} }, async (f, io, advance) => {
+  noSms();
+  await advance(await f.currentJob());
+  assert.equal(io.calls.push.length, 1); assert.equal(io.calls.sms.length, 0);
+  assert.equal((await f.currentJob()).status, 'NOTIFYING_BULK');
+  assert.ok(slackLines(io).some(message => /Fixture Cleaner 담당자.*앱 알림/.test(message)));
+  assert.equal((await f.notifications())[0].initial_delivery_state, 'FAILED');
+}));
+
+test('SQL: a cleaner who looked reachable but could not be reached is not picked again, so the request does not stop (RF-56)', { skip: !enabled }, () => run({}, async (f, io, advance) => {
+  // 문자 설정은 있지만 번호가 잘못됐다 — 고를 때는 닿을 것처럼 보이지만 보내 보면 닿지 않는다
+  await f.pool.query("UPDATE cleaners SET phone='0' WHERE id=$1", [f.cleanerId]);
+  await advance(await f.currentJob());
+  assert.equal(io.calls.sms.length, 0);
+  assert.equal((await f.notifications())[0].initial_delivery_data.result.errorCode, 'SMS_INPUT_INVALID');
+  assert.equal((await f.currentJob()).status, 'NOTIFYING_BULK');
+  assert.ok(slackLines(io).some(message => /Fixture Cleaner 담당자/.test(message)));
+}));
+
+test('SQL: the bulk stage leaves out cleaners without the app and names them once (RF-56)', { skip: !enabled }, () => run({}, async (f, io, advance) => {
+  noSms();
+  await f.pool.query("UPDATE cleaners SET tier='BULK'");
+  await addCleaner(f, { name: 'Bulk App', tier: 'BULK', token: 'bulk-token' });
+  await f.pool.query("UPDATE cleaning_jobs SET status='NOTIFYING_VIP_3' WHERE id=$1", [f.jobId]);
+  await advance(await f.currentJob());
+  assert.equal((await f.currentJob()).status, 'NOTIFYING_BULK');
+  assert.deepEqual(io.calls.push.map(message => message.token), ['bulk-token']); assert.equal(io.calls.sms.length, 0);
+  assert.equal((await f.notifications()).length, 1);
+  assert.equal(io.calls.slack.length, 1);
+  assert.match(slackLines(io)[0], /Fixture Cleaner/); assert.doesNotMatch(slackLines(io)[0], /Bulk App/);
+}));
+
+test('SQL: when no bulk cleaner can be reached the operator is told to contact someone directly (RF-56)', { skip: !enabled }, () => run({}, async (f, io, advance) => {
+  noSms();
+  await f.pool.query("UPDATE cleaners SET tier='BULK'");
+  await f.pool.query("UPDATE cleaning_jobs SET status='NOTIFYING_VIP_3' WHERE id=$1", [f.jobId]);
+  await advance(await f.currentJob());
+  assert.equal(io.calls.push.length, 0); assert.equal(io.calls.sms.length, 0);
+  assert.equal(io.calls.slack.length, 1);
+  assert.match(slackLines(io)[0], /직접 연락/); assert.match(slackLines(io)[0], /Fixture Cleaner/);
 }));
 
 test('SQL: concurrent calls deliver once and share one notification row', { skip: !enabled }, () => run({}, async (f, io, advance) => {

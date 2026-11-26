@@ -3,7 +3,8 @@
  * Vercel 함수 수에 포함되지 않도록 server/ 아래에 둔다.
  */
 
-import { notify } from "./_notify.js";
+import { notify, canReachInitially } from "./_notify.js";
+import { postSlack as sendSlack } from "./_slack.js";
 import { isCheckoutCancelled } from "./_reservationSync.js";
 import { createNotif, prepareInitialDelivery, maySendInitialDelivery,
   recordInitialResult, projectAcceptedDelivery, findInitialDelivery, getInitialRecoveryJobs } from './_initialDelivery.js';
@@ -23,6 +24,33 @@ export { sendSms, toE164 } from "./_sms.js";
 
 // RF-16: 그날 퇴실이 없어져 요청을 보내지 않음 — 다른 "보내지 않음" 결과와 같은 모양(호출부 변경 없음)
 const RESERVATION_CANCELLED = Object.freeze({ ok: false, state: 'CANCELLED', errorCode: 'RESERVATION_CANCELLED' });
+
+// RF-56(사용자 결정 c, 2026-11-26): 이 담당자에게 닿을 경로가 없어서 실패한 최초 요청 — 기다리지 않고 다음 담당자로 넘긴다.
+// 앱 연결이 없거나(문자 설정 없음·번호 오류·채널 없음) 알림 서버가 토큰 폐기를 확정했는데 문자로도 못 보낸 경우다.
+// 그 밖의 실패(재시도 한도·받는 사람 정보 변경 등)는 ACT-11대로 그 자리에 두고 운영자가 본다.
+const UNREACHABLE_CODES = Object.freeze(['SMS_CONFIG_MISSING', 'SMS_INPUT_INVALID', 'DELIVERY_CHANNEL_UNAVAILABLE', 'UNREGISTERED', 'INVALID_ARGUMENT']);
+const UNREACHABLE_SQL = UNREACHABLE_CODES.map(code => `'${code}'`).join(',');
+function isUnreachableFailure(request) {
+  if (!request) return false;
+  const state = request.state ?? request.initial_delivery_state;
+  const code = request.errorCode ?? request.initial_delivery_data?.result?.errorCode;
+  return state === 'FAILED' && UNREACHABLE_CODES.includes(code);
+}
+const cleanerLabel = cleaner => cleaner?.name?.trim() || '이름 없음'; // 이름만 — 전화번호는 싣지 않는다(RF-57)
+function addPassedOver(list, cleaner) {
+  if (cleaner && !list.some(c => c.id === cleaner.id)) list.push(cleaner);
+  return list;
+}
+// 운영자에게 한 번만 알린다 — 작업이 실제로 다음 담당자·다음 단계로 넘어간 뒤에 부른다. Slack이 실패해도 요청 흐름은 계속한다
+async function alertPassedOver(propertyName, job, passedOver, { movedToNextTier }) {
+  if (!passedOver.length) return;
+  const names = passedOver.map(cleanerLabel).join(', ');
+  const next = movedToNextTier
+    ? '건너뛰었어요. 이 단계에 보낼 수 있는 담당자가 없어 다음 단계로 넘깁니다'
+    : '건너뛰고 다음 담당자에게 보냈어요';
+  await sendSlack(`[PROPOS] ⚠️ ${propertyName} ${fmtDate(job.cleaning_start_at)} 청소 요청 — ${names} 담당자는 앱 알림이 연결돼 있지 않아 ${next}. 앱 연결을 확인해 주세요.`)
+    .catch(error => console.error('[dispatch] 건너뛴 담당자 Slack 실패:', error?.message ?? error));
+}
 
 // ── SMS 메시지 빌더 ───────────────────────────────────────
 
@@ -78,7 +106,7 @@ export { postSlack } from "./_slack.js";
  * job 현재 상태에서 다음 VIP/BULK 단계로 전환하고 발송.
  * @param {object} [opts.deleteBlocker] - PENDING → 첫 알림 전 블로커 삭제 콜백 (async fn(job))
  */
-export async function advanceJob(db, job, { deleteBlocker } = {}) {
+export async function advanceJob(db, job, { deleteBlocker, passedOver = [] } = {}) {
   // 시뮬레이션 일정은 실제 청소자·SMS·FCM·Slack·Google 캘린더를 절대 건드리지 않는다.
   // 데이터 구조와 상태는 동일하게 유지하되 외부 부작용만 차단한다.
   if (job?.data_origin === "SIMULATED") {
@@ -105,13 +133,24 @@ export async function advanceJob(db, job, { deleteBlocker } = {}) {
   }
 
   const tier = nextStatus.replace("NOTIFYING_", ""); // VIP_1 | VIP_2 | VIP_3
-  const savedRequest = await findInitialDelivery(db, job);
+  const passed = [...passedOver];
+  let savedRequest = await findInitialDelivery(db, job);
+  // RF-56: 닿을 경로가 없어 실패한 요청은 이어받지 않는다 — 그 담당자는 건너뛰고 같은 단계의 다음 담당자를 고른다
+  if (isUnreachableFailure(savedRequest)) {
+    addPassedOver(passed, savedRequest.initial_delivery_data.cleaner);
+    savedRequest = null;
+  }
   // 이미 접수된 요청(ACCEPTED)의 상태 반영은 보내는 일이 아니라서 그대로 한다
   if (savedRequest?.initial_delivery_state !== 'ACCEPTED' && await isCheckoutCancelled(db, job)) return RESERVATION_CANCELLED;
-  const cleaner = savedRequest?.initial_delivery_data.cleaner ?? await getAvailableVip(db, job, tier);
+  let cleaner = savedRequest?.initial_delivery_data.cleaner;
+  if (!cleaner) {
+    const pick = await getAvailableVip(db, job, tier);
+    cleaner = pick.cleaner;
+    pick.passedOver.forEach(c => addPassedOver(passed, c));
+  }
 
   if (!cleaner) {
-    // 해당 VIP 없거나 이미 다른 job으로 바쁨 → 다음 단계로 재귀
+    // 해당 VIP 없거나·닿을 수 없거나·이미 다른 job으로 바쁨 → 다음 단계로 재귀
     const updated = await db.query(
       `UPDATE cleaning_jobs SET status=$1, updated_at=NOW() WHERE id=$2 AND status=$3
        AND checkout_at=$4 AND cleaning_start_at=$5 AND property_id=$6
@@ -120,6 +159,7 @@ export async function advanceJob(db, job, { deleteBlocker } = {}) {
       [nextStatus, job.id, job.status, job.checkout_at, job.cleaning_start_at, job.property_id]
     );
     if (!updated.rows.length) return { ok: false, state: 'CANCELLED', errorCode: 'JOB_STATE_CHANGED' };
+    await alertPassedOver(propertyName, job, passed, { movedToNextTier: true });
     if (job.status === 'PENDING' && typeof deleteBlocker === 'function') {
       await deleteBlocker(job).catch(e => console.error('[dispatch] 블로커 삭제 실패:', e.code ?? e.name));
     }
@@ -135,6 +175,8 @@ export async function advanceJob(db, job, { deleteBlocker } = {}) {
   }) });
   if (notif.state === 'ACCEPTED') return projectAcceptedDelivery(db, notif);
   if (notif.state !== 'CLAIMED') return notif;
+  // 이 담당자에게 처음 보낼 때 한 번 — 이어받은 요청의 재시도에는 건너뛴 사람이 없다
+  await alertPassedOver(propertyName, job, passed, { movedToNextTier: false });
   const saved = notif.initial_delivery_data;
   if (job.status === 'PENDING' && typeof deleteBlocker === 'function') {
     await deleteBlocker({ ...job, property_id: saved.propertyId, checkout_at: saved.checkoutAt,
@@ -147,7 +189,11 @@ export async function advanceJob(db, job, { deleteBlocker } = {}) {
   try { result = await notify(db, saved.cleaner, { ...saved.payload, deliveryId: notif.id, deliveryFallbackCode: saved.result?.fcmFailureCode }); }
   catch { result = { ok: false, outcome: 'UNKNOWN', channel: 'NONE', errorCode: 'DELIVERY_OUTCOME_UNKNOWN' }; }
   const receipt = await recordInitialResult(db, notif, result);
-  return receipt.state === 'ACCEPTED' ? projectAcceptedDelivery(db, receipt) : receipt;
+  if (receipt.state === 'ACCEPTED') return projectAcceptedDelivery(db, receipt);
+  // RF-56: 보내 보니 닿지 않았다(토큰 폐기 확정 + 문자 경로 없음) — 같은 단계를 다시 골라 다음 담당자로. 이 담당자는 실패 기록 때문에 다시 뽑히지 않는다
+  // 앞서 건너뛴 사람은 위에서 이미 알렸으니 이번에 닿지 않은 담당자만 넘긴다
+  if (isUnreachableFailure(receipt)) return advanceJob(db, job, { deleteBlocker, passedOver: [saved.cleaner] });
+  return receipt;
 }
 
 export async function recoverInitialDeliveries(db) {
@@ -160,13 +206,23 @@ export async function recoverInitialDeliveries(db) {
   return recovered;
 }
 
-/** 중복 발송 방지: 해당 날짜에 이미 해당 VIP가 다른 job의 NOTIFYING 상태인지 */
+/**
+ * 이 단계에서 요청을 보낼 담당자 하나 — 먼저 등록된 순서로, 닿을 수 없는 담당자는 건너뛴다(RF-56).
+ * 이 작업에서 이미 "닿을 경로 없음"으로 실패한 담당자는 다시 고르지 않는다(같은 사람을 되풀이해 고르지 않게).
+ * 중복 발송 방지: 고른 담당자가 같은 날 다른 job의 NOTIFYING 상태면 이 단계는 비운다(기존 규칙 그대로).
+ * @returns {Promise<{ cleaner: object|null, passedOver: object[] }>} passedOver = 앞에서 건너뛴 닿을 수 없는 담당자
+ */
 async function getAvailableVip(db, job, tier) {
-  const { rows: [cleaner] } = await db.query(
-    `SELECT * FROM cleaners WHERE tier=$1 AND active=true AND (fcm_token IS NOT NULL OR phone IS NOT NULL) ORDER BY created_at ASC LIMIT 1`,
-    [tier]
+  const { rows: candidates } = await db.query(
+    `SELECT * FROM cleaners WHERE tier=$1 AND active=true AND (fcm_token IS NOT NULL OR phone IS NOT NULL)
+       AND NOT EXISTS (SELECT 1 FROM cleaning_notifs n WHERE n.job_id=$2 AND n.cleaner_id=cleaners.id
+         AND n.initial_delivery_state='FAILED' AND n.initial_delivery_data->'result'->>'errorCode' IN (${UNREACHABLE_SQL}))
+     ORDER BY created_at ASC`,
+    [tier, job.id]
   );
-  if (!cleaner) return null;
+  const passedOver = [];
+  const cleaner = candidates.find(c => canReachInitially(c) || (passedOver.push(c), false)) ?? null;
+  if (!cleaner) return { cleaner: null, passedOver };
 
   // "같은 날"은 한국 날짜로 — 양쪽을 DB가 같은 규칙으로 계산한다(RF-51)
   const { rows } = await db.query(
@@ -179,7 +235,7 @@ async function getAvailableVip(db, job, tier) {
      LIMIT 1`,
     [cleaner.id, job.checkout_at, job.id]
   );
-  return rows.length ? null : cleaner;
+  return { cleaner: rows.length ? null : cleaner, passedOver };
 }
 
 async function dispatchBulk(db, job, propertyName, propCfg) {
@@ -203,7 +259,10 @@ async function dispatchBulk(db, job, propertyName, propCfg) {
     [job.checkout_at, job.id]
   );
 
-  for (const cleaner of cleaners) {
+  // RF-56: 닿을 수 없는 담당자(앱 연결 없음 + 문자 설정 없음)에게는 보내지 않고, 상태가 넘어간 뒤 운영자에게 한 번 알린다
+  const reachable = cleaners.filter(c => canReachInitially(c));
+  const unreachable = cleaners.filter(c => !canReachInitially(c));
+  for (const cleaner of reachable) {
     try {
       const notif = await createNotif(db, { jobId: job.id, cleanerId: cleaner.id, tier: "BULK", dataOrigin: job.data_origin });
       await notify(db, cleaner, {
@@ -225,7 +284,15 @@ async function dispatchBulk(db, job, propertyName, propCfg) {
         WHERE p.property_id=cleaning_jobs.property_id AND p.data_origin='REAL') RETURNING id`,
     [job.id, job.status, job.checkout_at, job.cleaning_start_at, job.property_id]
   );
-  return updated.rows.length ? { ok: true } : { ok: false, state: 'CANCELLED', errorCode: 'JOB_STATE_CHANGED' };
+  if (!updated.rows.length) return { ok: false, state: 'CANCELLED', errorCode: 'JOB_STATE_CHANGED' };
+  if (unreachable.length) {
+    const names = unreachable.map(cleanerLabel).join(', ');
+    const message = reachable.length
+      ? `[PROPOS] ⚠️ ${propertyName} ${dt} 단체 요청 — ${names} 담당자는 앱 알림이 연결돼 있지 않아 받지 못했어요. 앱 연결을 확인해 주세요.`
+      : `[PROPOS] ⚠️ ${propertyName} ${dt} 청소 요청 — 앱 알림이 연결된 단체 담당자가 없어 아무에게도 보내지 못했어요(앱 연결 없음: ${names}). 직접 연락해 주세요.`;
+    await sendSlack(message).catch(error => console.error('[dispatch] 단체 요청 Slack 실패:', error?.message ?? error));
+  }
+  return { ok: true };
 }
 
 /** 배정 완료 시 나머지 청소자들에게 완료 알림 발송 (FCM + SMS 듀얼 모드) */
