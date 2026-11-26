@@ -115,7 +115,7 @@ flowchart LR
 | 실행 코드 | [operatorAuth.js](server/auth/operatorAuth.js), [operatorAccounts.js](server/auth/operatorAccounts.js), `requireScope`, `guardAdmin` 호출 API |
 | 데이터·외부 | 운영자 계정·숙소 범위 테이블, 서명 세션 쿠키, `PROPOS_AUTH_MODE` 환경 설정 |
 | 검증 | [s76.operator-auth.test.js](tests/unit/s76.operator-auth.test.js), [s78.operator-scope-handlers.test.js](tests/unit/s78.operator-scope-handlers.test.js), [s79.operator-device-scope.test.js](tests/unit/s79.operator-device-scope.test.js) |
-| 문서 갭 | [MD-R13](refactoring_mdfile.md#md-r13): 단일 관리자 가정 — 정정했지만 파일이 git에 없음, [MD-R26](refactoring_mdfile.md#md-r26): 운영 관측(2026-11-10~14)상 `enforce` — 날짜 없는 “강제됨” 표현은 피함 |
+| 문서 갭 | [MD-R26](refactoring_mdfile.md#md-r26): 운영 관측(2026-11-10~14)상 `enforce` — 날짜 없는 “강제됨” 표현은 피함 |
 
 ### TR-07 · 운영 스케줄과 하위 작업
 
@@ -125,7 +125,7 @@ flowchart LR
 | 실행 코드 | [vercel.json](vercel.json), [cron API](api/cron/[...slug].js) |
 | 데이터·외부 | Vercel morning/evening 스케줄, 예약 동기화·Pi 일정 전달(RF-27·52)·보고·청소 후속·하루 전 알림(ACT-18)·Watch 갱신 하위 작업 |
 | 검증 | [s34.cron-tick.test.js](tests/unit/s34.cron-tick.test.js)(실제 handler 실행), [s115.daily-reservation-sync.test.js](tests/unit/s115.daily-reservation-sync.test.js), [s125 Pi 예약 전달](tests/unit/s125.rf27-watcher-reservation-sync.test.js), [s80.token-health.test.js](tests/unit/s80.token-health.test.js) |
-| 문서 갭 | [MD-R09](refactoring_mdfile.md#md-r09): 정정했지만 해당 파일(`cleaning-scenario-matrix.md`)이 git에 없음 |
+| 문서 갭 | 없음 — MD-R09 종결(`6ed5a88`) |
 
 ### TR-08 · 센서 기반 입실 준비
 
@@ -159,7 +159,7 @@ flowchart LR
 | API·데이터 | `/api/auth/*`, `/api/stats*`, `/api/cleaning/*`, `/api/workers/*`, 운영자·숙소 scope와 Room State read model |
 | 검증 | [s76.operator-auth.test.js](tests/unit/s76.operator-auth.test.js), [s79.operator-device-scope.test.js](tests/unit/s79.operator-device-scope.test.js), [s31.worker-app-flow.test.js](tests/unit/s31.worker-app-flow.test.js) |
 | 운영 근거 한계 | 저장소의 화면·권한 구현을 설명하며, 설치 앱·외부 연결 상태는 별도 날짜 근거가 필요. 인증 모드는 [MD-R26](refactoring_mdfile.md#md-r26)의 2026-11-10~14 관측 |
-| 문서 갭 | [MD-R13](refactoring_mdfile.md#md-r13): 관리자 수(로컬 사본만 정정), [MD-R26](refactoring_mdfile.md#md-r26): 인증 강제 여부, [MD-R28](refactoring_mdfile.md#md-r28): 수락·예약·ASSIGNED 의미 |
+| 문서 갭 | [MD-R26](refactoring_mdfile.md#md-r26): 인증 강제 여부, [MD-R28](refactoring_mdfile.md#md-r28): 수락·예약·ASSIGNED 의미 |
 
 <a id="tr-11"></a>
 
@@ -173,7 +173,7 @@ flowchart LR
 | API·데이터 | 12개 Vercel API 진입점, Postgres·KV, Airbnb·Google·HA·Pi·FCM·Slack |
 | 검증 | [s78.operator-scope-handlers.test.js](tests/unit/s78.operator-scope-handlers.test.js), [s105.event-ingestion-contract.test.js](tests/unit/s105.event-ingestion-contract.test.js), [s109.cleaning-initial-delivery.test.js](tests/integration/s109.cleaning-initial-delivery.test.js), [s115.reservation-changes-sql.test.js](tests/integration/s115.reservation-changes-sql.test.js) |
 | 운영 근거 한계 | 저장소 interface 계약과 실제 외부 접수·전달·사용자 확인은 분리 |
-| 문서 갭 | [MD-R07](refactoring_mdfile.md#md-r07): 채널·운영 상태 (MD-R08 종결, MD-R09는 로컬 사본만 정정) |
+| 문서 갭 | [MD-R07](refactoring_mdfile.md#md-r07): 채널·운영 상태 (MD-R08·09 종결) |
 
 <a id="tr-12"></a>
 
@@ -200,7 +200,7 @@ flowchart LR
 | 진입점 | 이벤트 저장(`/api/events/write`) 때 센서 이상 판정, Gmail 웹훅에서 게스트 불만 분류, 정기 작업 청소 후속에서 청소 미배정, 관리자 설정 `/api/cleaning/anomaly-policy` |
 | 데이터·외부 | `automation_anomalies`·`automation_anomaly_history`·`automation_open_incidents`, `automation_policy_versions`·`automation_policy_values`, `property_stays`·`cleaning_obligations`, `cleaning_assignment_history`, `guest_complaint_signals`(원문 없음) — [migrate-automation-anomalies.sql](data/migrate-automation-anomalies.sql) |
 | 검증 | 정책 [s147](tests/unit/s147.rf25-anomaly-policy.test.js), 기록 [s149](tests/unit/s149.rf25-anomaly-recording.test.js)·[s149 SQL](tests/integration/s149.rf25-anomaly-recording-sql.test.js), 청소 미배정 [s152](tests/unit/s152.rf25-cleaning-unassigned-detector.test.js), 소음 [s153](tests/unit/s153.rf25-noise-detector.test.js), 빈방 에너지 [s154](tests/unit/s154.rf25-vacant-energy-detector.test.js), 기기 오프라인 [s155](tests/unit/s155.rf25-device-offline-detector.test.js), 게스트 불만 [s156](tests/unit/s156.rf25-guest-complaint-sensor.test.js) — 감지기마다 `tests/integration/`에 같은 번호의 SQL 시험이 있다 |
-| 운영 근거 한계 | 정본 5가지 측정 연결(이상 기록)은 2026-11-25 완료([docs/refactoring.md 5절](docs/refactoring.md#done)). 그 기록으로 비율을 계산·표시하는 코드는 아직 없다([RF-58](docs/refactoring.md#decide)). 실제 숙소에서 각 감지기가 발생·해결을 기록하는지는 날짜가 붙은 운영 관측이 따로 필요 |
+| 운영 근거 한계 | 정본 5가지 측정 연결(이상 기록)은 2026-11-25 완료([docs/refactoring.md 5절](docs/refactoring.md#done)). 그 기록으로 비율을 계산·표시하는 코드는 아직 없다([RF-58](docs/refactoring.md#rules)). 실제 숙소에서 각 감지기가 발생·해결을 기록하는지는 날짜가 붙은 운영 관측이 따로 필요 |
 | 문서 갭 | 없음 — 통합 문서에는 2026-11-26 반영 |
 
 <a id="cross-cutting-gaps"></a>
