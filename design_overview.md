@@ -440,7 +440,7 @@ flowchart LR
 | 문서 | 역할 | 읽을 때 주의 |
 | --- | --- | --- |
 | [README.md](README.md) | 실행·빌드·보안·검증 시작점 | 세부 운영 상태는 최신 감사와 대조 |
-| [CLAUDE.md](CLAUDE.md) | 에이전트 코딩 규칙·운영 원칙(2026-11-22)·작업 방식·배포 현황 | 2026-11-19 QA-01에서 대부분 정정. iCal 주소 저장 위치 한 줄은 아직 다름([MD-R01](refactoring_mdfile.md#md-r01)) |
+| [CLAUDE.md](CLAUDE.md) | 에이전트 코딩 규칙·운영 원칙(2026-11-22)·작업 방식·배포 현황 | 2026-11-19 QA-01, 2026-11-26 MD-R01(iCal 주소 저장 위치)에서 정정 |
 | [design_overview.md](design_overview.md) | 전체 문서의 단일 시작점 | 상세 내용을 복제하지 않고 각 문서로 연결 |
 | [actor_ui_scenarios.md](actor_ui_scenarios.md) | 액터·권한·웹/Worker UI·사용 시나리오 | 인증 역할과 업무 역할을 구분 |
 | [runtime_interfaces_and_collaboration.md](runtime_interfaces_and_collaboration.md) | API·외부 인터페이스·sequence·cron | 저장소 계약과 실제 배포 상태를 구분 |

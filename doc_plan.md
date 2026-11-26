@@ -73,7 +73,7 @@
 
 - 제품 소스·테스트·설정·DB
 - Claude가 작업하는 `docs/refactoring.md`
-- 기존 분야별 Markdown — 정정은 `docs/refactoring.md`의 작업으로 한다(ACT-08 QA-01 1~4차, 2026-11-19가 그렇게 했다). 예외: 통합 문서가 따르는 규칙의 정본이 틀렸을 때만 최소로 고친다(DP-08의 SM-04 — `room-state-machine.md` 0절의 Pi 반영 표시)
+- 기존 분야별 Markdown의 구조 변경·중복 정리(MD-R16~20 등) — 확인받고 한다. 작고 사실을 맞추는 정정은 바로 고치고 경위는 커밋 메시지에 남긴다(2026-11-26 사용자 지시 — 예: `ef5d5bf`). 단, git에 없는 파일은 고쳐도 저장소에 올리기 전에 확인받는다
 - 제품 동작·정책·UI 문구
 
 기존 분야별 Markdown의 중복은 [MD-R16~20](refactoring_mdfile.md#duplicates)에서 기록만 하고, 별도 승인 전에는 수정하지 않는다.
