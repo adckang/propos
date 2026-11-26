@@ -1,6 +1,6 @@
 # PROPOS Test Case Refactoring Plan
 
-> 상태: 계획 · 일부 선행 처리됨 — 테스트 안전(RF-23·42·43)과 로직 복사·소스 글자 검사 교체(ACT-08)는 `docs/refactoring.md` 작업으로 끝났다. 구조 정리(TC ID·수준 분류·gate)는 미실행. 상태 동기화 2026-11-26([sync_md.md](sync_md.md))  
+> 상태: 계획 · 일부 선행 처리됨 — 테스트 안전(RF-23·42·43)과 로직 복사·소스 글자 검사 교체(ACT-08)는 `docs/refactoring.md` 작업으로 끝났다. 구조 정리(TC ID·수준 분류·gate)는 미실행. 상태 동기화 2026-11-26(DP-08, [doc_plan.md](doc_plan.md#phases))  
 > 작성일: 2026-11-17 (Asia/Seoul)  
 > 목적: 현재 TC와 자동화 테스트를 사용자 시나리오·인터페이스·데이터·오류 구조에 맞춰 찾기 쉽고 안전한 체계로 재구성한다.  
 > 대상 독자: 개발자, QA, 기획자, 운영 담당자  

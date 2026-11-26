@@ -1,6 +1,6 @@
 # PROPOS Markdown Refactoring Review
 
-> 작성일: 2026-11-12 · 검토 보강·재검증: 2026-11-17 · 상태 동기화: 2026-11-26 ([sync_md.md](sync_md.md)) (Asia/Seoul)  
+> 작성일: 2026-11-12 · 검토 보강·재검증: 2026-11-17 · 상태 동기화: 2026-11-26 (DP-08, [doc_plan.md](doc_plan.md#phases)) (Asia/Seoul)  
 > 목적: 기존 Markdown의 중복·충돌·모호한 용어·검색성 문제와 정리 순서만 관리  
 > 전체 문서 메뉴와 프로젝트 파일·폴더 아키텍처: [design_overview.md](design_overview.md)  
 > 액터·화면·시나리오: [actor_ui_scenarios.md](actor_ui_scenarios.md)  
@@ -411,6 +411,6 @@
 - 두 dev-tunnel skill 파일은 파일 크기와 SHA-1이 완전히 같음을 확인했다.
 - Markdown 로컬 링크 대상 누락은 발견되지 않았다.
 - 2026-11-17 작성 시점에는 기존 분야별 Markdown을 수정하지 않았다. 그 뒤 ACT-08 QA-01 1~4차(2026-11-19, `5f132f3` `36a2153` `43497b7` `1390a3e`)가 `docs/refactoring.md` 작업으로 분야별 문서를 정정했다.
-- 2026-11-26 상태 동기화: MD-R05·12·14 종결, MD-R07·26 판정 갱신, 남은 항목의 문장이 분야별 문서에 그대로 있는지 다시 확인했다(`11-26 그대로`). 진행 목록은 [sync_md.md](sync_md.md).
+- 2026-11-26 상태 동기화: MD-R05·12·14 종결, MD-R07·26 판정 갱신, 남은 항목의 문장이 분야별 문서에 그대로 있는지 다시 확인했다(`11-26 그대로`). 작업 목록은 `git show 09c582e:sync_md.md`, 단계별 커밋은 [doc_plan.md DP-08](doc_plan.md#phases).
 - 전체 안내는 `design_overview.md`, 사람·화면은 `actor_ui_scenarios.md`, 실행 협업은 `runtime_interfaces_and_collaboration.md`, 오류·관측은 `error_observability.md`, 문서 정합성 문제는 이 파일, 정책부터 테스트까지의 연결은 `documentation_traceability.md`로 분리했다.
 - 외부 서비스의 현재 가격·제한은 인터넷으로 재검증하지 않았다.

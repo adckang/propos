@@ -446,9 +446,7 @@ flowchart LR
 | [runtime_interfaces_and_collaboration.md](runtime_interfaces_and_collaboration.md) | API·외부 인터페이스·sequence·cron | 저장소 계약과 실제 배포 상태를 구분 |
 | [error_observability.md](error_observability.md) | 예외·업무 실패·HTTP·재시도·로그·Slack | `CURRENT`와 `TARGET · 미구현`을 구분 |
 | [docs/refactoring.md](docs/refactoring.md) | 할 일·사용자 결정·현장 확인·완료·정해진 규칙(DEC) 목록 | 목록만 둔다. 경위는 커밋 메시지, 2026-11-19 이전 상세는 `git show ca41eb4:docs/refactoring.md` |
-| [docs/runbooks/pi-watcher-rollout.md](docs/runbooks/pi-watcher-rollout.md) | Pi 워처 런타임 파일 교체·확인·되돌리기 절차(사람용) | Git/Vercel 배포로 바뀌지 않는 Pi만 다룸 |
-| [sync_md.md](sync_md.md) | 통합 문서 동기화 임시 작업 목록(DP-08) | 끝나면 남은 항목을 `refactoring_mdfile.md`로 옮기고 삭제 |
-| [documentation_traceability.md](documentation_traceability.md) | 정책·설계·코드·데이터·테스트 연결 | 작업 상태나 새 제품 정본으로 사용하지 않음 |
+| [docs/runbooks/pi-watcher-rollout.md](docs/runbooks/pi-watcher-rollout.md) | Pi 워처 런타임 파일 교체·확인·되돌리기 절차(사람용) | Git/Vercel 배포로 바뀌지 않는 Pi만 다룸 || [documentation_traceability.md](documentation_traceability.md) | 정책·설계·코드·데이터·테스트 연결 | 작업 상태나 새 제품 정본으로 사용하지 않음 |
 | [refactoring_mdfile.md](refactoring_mdfile.md) | Markdown 충돌·중복·용어·정리 순서 | 실제 구현 작업 상태는 `docs/refactoring.md`에서 확인 |
 | [refactoring_TC.md](refactoring_TC.md) | TC 안전·ID·계층·gate·추적성 리팩터링 계획 | 계획 문서이며 테스트 수정 상태로 해석하지 않음 |
 | [doc_plan.md](doc_plan.md) | 통합 문서 작업 단계·검증 기준 | 제품 설계 정본이 아니라 작업 계획 |
