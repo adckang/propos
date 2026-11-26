@@ -373,7 +373,7 @@ flowchart LR
 | 선행 조건 | 관리자가 PROPOS에 담당자의 이름·전화번호·이메일을 먼저 저장한다. 앱 등록으로 새 담당자가 생기지 않는다 |
 | 정상 흐름 | 전화번호·이메일 입력 → FCM 토큰 획득 → `/api/workers/register` → 서버가 두 값이 모두 맞는 기존 담당자를 확인하고 기기 연결 → 등록 상태 저장 → Home |
 | 성공 기준 | 서버 등록 성공 뒤 로컬 `registered`가 저장되고 token refresh 감시가 시작됨 |
-| 예외 흐름 | 번호 형식 오류·두 값 중 하나 불일치·이미 다른 기기에 연결된 번호·FCM token 없음 → 등록 완료로 전환하지 않음 |
+| 예외 흐름 | 번호 형식 오류·두 값 중 하나 불일치·이미 다른 기기에 연결된 번호·FCM token 없음 → 등록 완료로 전환하지 않음. 휴대폰을 바꿨는데 옛 연결이 살아 있어 막히면 관리자가 담당자를 삭제 후 다시 추가하고(앱 연결 초기화), 담당자는 앱을 새로 설치하거나 앱 데이터를 지운 뒤 같은 번호·이메일로 연결한다(ACT-11) |
 | 현재 한계 | 문자 인증이 없어 두 값을 아는 사람이 대신 연결할 수 있다(사용자가 감수하기로 함). 앱 연결과 실제 업무 승인 `active`는 같은 의미가 아님. 설치용 앱(APK)에는 아직 반영되지 않음 — [docs/refactoring.md 3절](docs/refactoring.md) |
 | 구현 근거 | [Worker App](worker-app/App.tsx), [PhoneAuthScreen](worker-app/src/screens/PhoneAuthScreen.tsx), [Worker API](api/workers/%5B...slug%5D.js) |
 

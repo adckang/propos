@@ -209,7 +209,7 @@ Pi는 환경파일에 적은 전체 `/api/events/write` 주소로만 보낸다. 
 | `GET /api/cleaning/properties` | RoomState·관리 UI | ADMIN 전체 / OPERATOR scope | `view?` → 숙소·예약·청소 상태 | 읽기 |
 | `POST /api/cleaning/properties` | 숙소 설정 | ADMIN | 숙소·iCal·시간·연락처 설정 → upsert row | 조건부 멱등; 이름 충돌 409 |
 | `GET /api/cleaning/cleaners` | 청소 관리 | ADMIN / OPERATOR scope에 필요한 담당자만 | 담당자 목록 | 읽기 |
-| `POST /api/cleaning/cleaners` | 청소 관리 | ADMIN | 담당자 생성·기존 비활성 계정 복구 가능 | phone/email unique·upsert 성격 |
+| `POST /api/cleaning/cleaners` | 청소 관리 | ADMIN | 담당자 생성·기존 비활성 계정 복구 가능. 복구(삭제 후 다시 추가) 때 저장된 앱 연결을 비운다 — 자동 복구가 안 될 때의 초기화 방법(ACT-11) | phone/email unique·upsert 성격 |
 | `PATCH /api/cleaning/cleaners/:id` | 청소 관리 | ADMIN | 이름·연락처·tier·active 변경 | 같은 body 반복은 대체로 안정적 |
 | `DELETE /api/cleaning/cleaners/:id` | 청소 관리 | ADMIN | hard delete가 아니라 `active=false` | 조건부 멱등 |
 | `GET /api/cleaning/operators` | OperatorManager | 실제 ADMIN session | 운영자·숙소 배정 목록 | 읽기 |
@@ -254,7 +254,7 @@ Pi는 환경파일에 적은 전체 `/api/events/write` 주소로만 보낸다. 
 | `GET /api/workers/token` | `Bearer <current token>` | token 소유자 → `{ok,worker_id}` | 읽기; 401·404·409 | `cleaners` |
 | `POST /api/workers/token` | old/new token + 선택 `worker_id` | token 교체 또는 lost-ACK 확인 → `{ok:true}` | advisory lock·row lock·소유권 검사 · 조건부 멱등 | `cleaners` |
 | `GET /api/workers/profile` | query `fcm_token` | worker profile | 읽기; token 노출 방식 주의 | `cleaners` |
-| `PATCH /api/workers/profile` | body `fcm_token` | name·email·phone 갱신 | same body 안정; phone 중복 409 | `cleaners` |
+| `PATCH /api/workers/profile` | body `fcm_token` | 이름만 갱신. 번호·이메일은 관리자만 — 저장값과 다르면 403, 아무것도 안 바뀜(ACT-11) | same body 안정 | `cleaners` |
 
 현재 Worker API는 운영 웹 session 역할을 사용하지 않는다. FCM token이 실질적인 식별자·자격정보처럼 사용되는 경로가 있으므로 URL·로그·문서 예시에 실제 token을 남기면 안 된다.
 
