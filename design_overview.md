@@ -382,13 +382,13 @@ flowchart LR
     Events --> Anomaly
     Google -. 게스트 불만 메일 .-> Anomaly
     AssignHist --> Anomaly
-    Anomaly -- 자동화 개선율 --> Report
+    Anomaly -. 자동화 개선율 근거(계산은 아직) .-> Report
     Anomaly --> Alert
     Reservation -. 예약·다음 청소 일정 .-> Pi
     Cleaning -.-> Pi
 ```
 
-숙소 상태(공실·입실전·체류중·청소대기·청소중)는 예약·청소 일정이 정한다. 이벤트는 그 일정 구간에서 기대한 일이 실제로 일어났는지와, 일어나지 않았을 때의 문제를 보여줄 뿐 상태를 바꾸지 않는다(DEC-10, [room-state-machine.md 0절](docs/room-state-machine.md)). 내부 숙박·청소 의무는 예약을 처음 받아들일 때 PROPOS가 붙이는 자체 번호다(외부 iCal UID는 별칭, DEC-22). 배정 이력은 추가만 하는 기록이고(DEC-24), 이상 기록은 이상의 열림·안정화·해결을 남겨 자동화 개선율의 근거가 된다(DEC-23). Pi의 watcher 상태·snapshot과 HA live sensor는 화면에 합쳐질 수 있지만 예약·청소 원장과 같은 데이터는 아니다. 상세 데이터 협업은 [런타임 데이터 흐름](runtime_interfaces_and_collaboration.md#data-collaboration), 테이블 관계는 [요약 ERD](myPlantUML/PROPOS_DB_ERD_summary.png)를 본다.
+숙소 상태(공실·입실전·체류중·청소대기·청소중)는 예약·청소 일정이 정한다. 이벤트는 그 일정 구간에서 기대한 일이 실제로 일어났는지와, 일어나지 않았을 때의 문제를 보여줄 뿐 상태를 바꾸지 않는다(DEC-10, [room-state-machine.md 0절](docs/room-state-machine.md)). 내부 숙박·청소 의무는 예약을 처음 받아들일 때 PROPOS가 붙이는 자체 번호다(외부 iCal UID는 별칭, DEC-22). 배정 이력은 추가만 하는 기록이고(DEC-24), 이상 기록은 이상의 열림·안정화·해결을 남겨 자동화 개선율의 근거가 된다(DEC-23). 그 비율을 계산해 레포트·Slack에 보이는 코드는 아직 없다(RF-58). Pi의 watcher 상태·snapshot과 HA live sensor는 화면에 합쳐질 수 있지만 예약·청소 원장과 같은 데이터는 아니다. 상세 데이터 협업은 [런타임 데이터 흐름](runtime_interfaces_and_collaboration.md#data-collaboration), 테이블 관계는 [요약 ERD](myPlantUML/PROPOS_DB_ERD_summary.png)를 본다.
 
 ### 5.1 상세 흐름의 소유 문서
 
@@ -570,7 +570,7 @@ S01~S05는 기존 단계별 제품·데모 시나리오다. 세부 경로·서�
 | `REAL`, `SIMULATED`, `DEMO`, `HYBRID` | 데이터 프로필 |
 | `VACANT`, `PRE_STAY_READY`, `OCCUPIED`, `CLEANING` | 숙소 상태 |
 | `퇴실 지연`, `입실 미감지`, `확인 불가`, `청소 미감지`, `청소 미배정(취소)` | 일정 안에서 기대한 일이 안 된 문제 ([room-state-machine.md 0절](docs/room-state-machine.md)) |
-| `자동화 개선율`, `automation_anomalies` | 이상 기록과 그 비율 (RF-25, 안심지수와 별개) |
+| `자동화 개선율`, `automation_anomalies` | 이상 기록(RF-25)과 그 비율(계산·표시는 RF-58로 남음, 안심지수와 별개) |
 | `PENDING`, `ASSIGNED`, `COMPLETED`, `CANCELLED` | 청소 작업 상태 |
 | `iCal`, `reservation_uid`, `checkout_at` | 숙박 예약·청소 작업 연결 |
 | `FCM`, `SMS`, `NotificationService` | 청소 알림 |

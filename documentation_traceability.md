@@ -200,7 +200,7 @@ flowchart LR
 | 진입점 | 이벤트 저장(`/api/events/write`) 때 센서 이상 판정, Gmail 웹훅에서 게스트 불만 분류, 정기 작업 청소 후속에서 청소 미배정, 관리자 설정 `/api/cleaning/anomaly-policy` |
 | 데이터·외부 | `automation_anomalies`·`automation_anomaly_history`·`automation_open_incidents`, `automation_policy_versions`·`automation_policy_values`, `property_stays`·`cleaning_obligations`, `cleaning_assignment_history`, `guest_complaint_signals`(원문 없음) — [migrate-automation-anomalies.sql](data/migrate-automation-anomalies.sql) |
 | 검증 | 정책 [s147](tests/unit/s147.rf25-anomaly-policy.test.js), 기록 [s149](tests/unit/s149.rf25-anomaly-recording.test.js)·[s149 SQL](tests/integration/s149.rf25-anomaly-recording-sql.test.js), 청소 미배정 [s152](tests/unit/s152.rf25-cleaning-unassigned-detector.test.js), 소음 [s153](tests/unit/s153.rf25-noise-detector.test.js), 빈방 에너지 [s154](tests/unit/s154.rf25-vacant-energy-detector.test.js), 기기 오프라인 [s155](tests/unit/s155.rf25-device-offline-detector.test.js), 게스트 불만 [s156](tests/unit/s156.rf25-guest-complaint-sensor.test.js) — 감지기마다 `tests/integration/`에 같은 번호의 SQL 시험이 있다 |
-| 운영 근거 한계 | 정본 5가지 측정 연결은 2026-11-25 완료([docs/refactoring.md 5절](docs/refactoring.md#done)). 실제 숙소에서 각 감지기가 발생·해결을 기록하는지는 날짜가 붙은 운영 관측이 따로 필요 |
+| 운영 근거 한계 | 정본 5가지 측정 연결(이상 기록)은 2026-11-25 완료([docs/refactoring.md 5절](docs/refactoring.md#done)). 그 기록으로 비율을 계산·표시하는 코드는 아직 없다([RF-58](docs/refactoring.md#decide)). 실제 숙소에서 각 감지기가 발생·해결을 기록하는지는 날짜가 붙은 운영 관측이 따로 필요 |
 | 문서 갭 | 없음 — 통합 문서에는 2026-11-26 반영 |
 
 <a id="cross-cutting-gaps"></a>

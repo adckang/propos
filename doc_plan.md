@@ -122,11 +122,7 @@
 
 방식: 판정은 `docs/refactoring.md` 5절(완료)·6절(정해진 규칙)만 기준으로 하고, 코드는 그 항목 확인에 필요한 만큼만 봤다. 분야별 문서는 다시 전부 읽지 않았고 SM-04(`room-state-machine.md` 0절의 Pi 반영 표시) 하나만 고쳤다. 다음 동기화도 같은 방식으로 한다 — 임시 목록 → 단계마다 커밋 → 끝나면 목록 삭제, 기록은 DP 항목에.
 
-문서 범위 밖에서 발견해 고치지 않은 것(필요하면 `docs/refactoring.md`에 등록):
-
-- 문자 발송 경로가 코드(`server/cleaning/_notify.js`)에 남아 있다 — 정책은 앱 푸시만(ACT-11). [MD-R07](refactoring_mdfile.md#md-r07)
-- 담당자 앱 첫 연결 때 나가는 Slack 문구가 "대시보드에서 이름·등급 지정 필요"라고 한다. 지금은 관리자가 담당자를 먼저 만들기 때문에 맞지 않는다(외부 발송 문구라 확인 필요).
-- `src/domain/operationalMetricsDomain.js` 주석이 자동화 개선율을 "아직 계산하지 않음"이라고 하지만, RF-25로 정본 5가지 측정 연결이 끝났다.
+문서 범위 밖에서 발견한 것은 `docs/refactoring.md` 2절에 사용자 결정으로 올렸다: RF-56(규칙과 다른 문자 경로), RF-57(앱 연결 Slack 문구), RF-58(자동화 개선율 계산·표시 코드 없음). 처음엔 `operationalMetricsDomain.js`의 "아직 계산하지 않음" 주석을 낡았다고 봤지만, 확인해 보니 주석이 맞고 `reporting-feature-design.md` 0-2의 "지금 표시한다"가 틀려서 그 문장과 이번에 넣은 그림 표시를 고쳤다.
 
 ---
 

@@ -44,7 +44,7 @@ PROPOS 레포트가 보여줘야 하는 것: **PMS가 절대 알 수 없는 것*
 정의·계산·데이터 계약은 [report-architecture 6-1](report-architecture.md#safety-index)(안심지수)과 [6-1-1](report-architecture.md#automation-rate)(자동화 개선율)이 정본이다. 결정 기록은 [DEC-02](refactoring.md#dec02-result)·[RF-25](refactoring.md#rf-25). 이 절은 화면·Slack에 어떻게 보이는지만 정한다.
 
 - 레포트 첫 줄에는 **안심지수**가 나온다. 대표 지표이자 주간 Slack 결산의 주 지표다.
-- **자동화 개선율**은 그 옆 보조 지표다. 지금(2026-11-25)은 [정본 5가지 측정 연결이 완료](report-architecture.md#automation-rate-scope)되어 기간별 실제 비율과 진행 중 건수를 표시한다.
+- **자동화 개선율**은 그 옆 보조 지표다. [정본 5가지 측정 연결](report-architecture.md#automation-rate-scope)은 2026-11-25에 끝나 감지기가 이상의 발생·해결을 기록한다. 그 기록으로 비율과 진행 중 건수를 계산해 화면·Slack에 보이는 코드는 아직 없다(2026-11-26 확인, [RF-58](refactoring.md#decide)). 아래 줄은 만들 때의 표시 규칙이다.
 - "진행 중 N건"과 완료된 측정 범위 `5 / 5`를 함께 보인다.
 - 기간이 끝나기 전에 내는 보고(진행 중 스냅샷)는 "22시 현재"처럼 기준 시각을 붙여, 기간 전체 결과로 보이지 않게 한다 — 판정 규칙은 [report-architecture 보고 종류](report-architecture.md#automation-rate-report-kinds).
 - "자동화로 절약한 시간"(보고 기간 기준 — 주간 결산이면 지난주)은 부가 지표.
