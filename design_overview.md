@@ -24,7 +24,7 @@
 | API·외부 시스템 계약과 cron 구조 | [API 계약](runtime_interfaces_and_collaboration.md#api-contracts) | [cron 하이어라키](runtime_interfaces_and_collaboration.md#cron-hierarchy) |
 | 오류·재시도·로그·Slack 책임 | [오류·관측](error_observability.md) | [현재 구현](error_observability.md#current-error-model), [권장 목표](error_observability.md#target-model) |
 | 프로젝트를 실행하고 검증하는 법 | [9. 실행·검증 명령](#commands) | [README.md](README.md), [package.json](package.json) |
-| 현재 완료·진행·대기 작업 | [docs/refactoring.md](docs/refactoring.md#sec-02) | [docs/handoff-to-claude.md](docs/handoff-to-claude.md) |
+| 현재 완료·진행·대기 작업 | [docs/refactoring.md](docs/refactoring.md#sec-02) | 커밋 메시지(경위·검증) |
 | 테스트 케이스 구조와 리팩터링 계획 | [refactoring_TC.md](refactoring_TC.md) | [실행 단계](refactoring_TC.md#phases), [완료 기준](refactoring_TC.md#definition-of-done) |
 | 전체 Markdown 문서 목록 | [7. 전체 Markdown 가이드](#markdown-guide) | [6. 정본과 근거](#source-of-truth) |
 | 전체 파일·폴더 구조 | [3. 저장소 아키텍처](#repository-architecture) | [4. 계층별 파일 가이드](#folder-guide) |
@@ -451,7 +451,7 @@ flowchart LR
 | [refactoring_TC.md](refactoring_TC.md) | TC 안전·ID·계층·gate·추적성 리팩터링 계획 | 계획 문서이며 테스트 수정 상태로 해석하지 않음 |
 | [doc_plan.md](doc_plan.md) | 통합 문서 작업 단계·검증 기준 | 제품 설계 정본이 아니라 작업 계획 |
 | [docs/current-task.md](docs/current-task.md) | 2026-11-04 청소 시각·담당자 작업 기록 | 현재 할 일이 아니라 스냅샷 |
-| [docs/handoff-to-claude.md](docs/handoff-to-claude.md) | 2026-11-10 인수인계 | 11월 12일 후속은 refactoring 문서 우선 |
+| `docs/handoff-to-claude.md` (로컬 파일, git에 없음) | 2026-11-10 인수인계 스냅샷 | 배포 ID·로컬 경로가 있어 공개 저장소에 올리지 않는다. 현재 상태는 refactoring 문서 |
 | [docs/handoff-to-codex.md](docs/handoff-to-codex.md) | 2026-09-29 과거 인수인계 | 최신 사실로 사용하지 않음 |
 
 ### 7.2 결정·콘텐츠·시나리오
